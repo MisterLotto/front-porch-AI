@@ -308,6 +308,11 @@
 }
 .hub-avatar-frame { position: relative; width: 100%; height: 100%; }
 .hub-tile-img { width: 100%; height: 100%; object-fit: cover; transition: opacity 0.3s; }
+/* A place is a landscape, not a headshot. Characters keep the square avatar
+   frame; worlds get a wide one so their cover art reads the way it was drawn
+   instead of being cropped to a portrait box. */
+.hub-tile-world .hub-tile-art { aspect-ratio: 16 / 10; }
+.hub-tile-world .hub-tile-art::before { content: '🏞️'; }
 .hub-avatar-missing { display: none; }
 .hub-tile-badges { position: absolute; top: 8px; left: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
 .hub-badge {

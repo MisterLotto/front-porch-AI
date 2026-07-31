@@ -160,7 +160,7 @@
       card.nsfw ? el('span', { class: 'hub-badge hub-badge-nsfw' }, '18+') : null,
       card.modPick ? el('span', { class: 'hub-badge hub-badge-pick', title: 'Mod’s Pick' }, '★ Pick') : null,
     ]);
-    return el('a', { class: 'hub-tile', href: '#/card/' + card.id }, [
+    return el('a', { class: 'hub-tile' + (card.type === 'WORLD' ? ' hub-tile-world' : ''), href: '#/card/' + card.id }, [
       el('div', { class: 'hub-tile-art' }, [avatarImg(card.primaryAssetId, card.name, 'hub-tile-img'), badges]),
       el('div', { class: 'hub-tile-body' }, [
         el('div', { class: 'hub-tile-name' }, card.name),
