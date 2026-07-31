@@ -48,7 +48,7 @@ design prose under §1–§3 as “implemented” unless it is marked DONE here.
 | `linkedCharacterName` → `linked_character_id` backfill | **DONE** | v40 |
 | Migrated worlds `inject_description = 0` | **DONE** | single one-shot UPDATE with 39→40 |
 | UUID identity; rename does not cascade | **DONE** | `WorldRepository.renameWorld` |
-| Chat-level attach (1:1 + group session); group list = template | **DONE** | `setChatWorldIds` / `chatWorldIds`; `applyGroupTemplateToChat` |
+| Chat-level attach (1:1 + group session); group list = template | **DONE** | `setChatWorldIds` / `chatWorldIds`; `applyTemplateWorldsToChat` (also seeds 1:1 chats from `character.worldNames`) |
 | Resolution by id (name fallback for legacy) | **DONE** | `resolveWorld`, `world_ref_resolver.dart` |
 | World description injection (budget-capped, gated) | **DONE** | `prompt_injection/world_injection.dart` |
 | `.fpworld` encode/decode + ST bare-lorebook import | **DONE** | Keep-both rename on collision |
@@ -632,7 +632,13 @@ rather than retrofitted, and the app side now exists:
   **cover image is required** and uploads as the card avatar (multipart), so
   every Stoop surface (tiles, hero, detail) displays it via the normal
   `primaryAssetId` asset pipeline, and moderators review the image like any
-  character avatar. No new endpoints; one new enum value server-side.
+  character avatar. No new endpoints. (Validated against the backend
+  2026-07-30: "one new enum value" is concretely a Postgres
+  `ALTER TYPE "CharacterType" ADD VALUE 'WORLD'` migration + prisma
+  generate — the zod schema derives from the Prisma enum, so the migration
+  alone unlocks the upload path, but it is a real deploy step, not a
+  validation-list tweak. The avatar-required gate on `POST /characters`
+  already matches the cover-required contract.)
 - **Moderation:** because uploads go through `POST /characters`, world posts
   land in the SAME `PENDING → mod review → APPROVED` queue as characters and
   are never visible to users before approval. Mine-tab statuses, rejection
@@ -676,7 +682,10 @@ rather than retrofitted, and the app side now exists:
   (worlds are new-upload-only for v1; the Mine-tab Update button is hidden
   for WORLD posts).
 
-### Backend work checklist (everything left; the app is done and gated)
+### Backend work checklist — **IMPLEMENTED + DEPLOYED 2026-07-30.** Items
+1–8 are LIVE on the droplet (migration applied, live API smoke-tested, hub's
+🏞️ Worlds tab verified in-browser as guest). Only item 9 — the app-side flag
+flip + tiny client patch — remains, deliberately deferred to the maintainer.
 
 Work items for the private backend/hub repo, in rollout order. The envelope
 shape to render is `encodeFpWorld` in `lib/models/fp_world_package.dart`:
@@ -684,18 +693,38 @@ top-level `name`, `description`, `cover` (data URL), `lorebook{entries[]}`,
 `biome{displayName, description, feel, …}`, `place_traits{atmosphere?,
 gravity?}`, `meta{author?, createdAt, appVersion?, sourceId?}`.
 
-1. **Accept `WORLD`** as a card type on `POST /characters` (validation +
-   enum + storage). The versions endpoint (`POST /characters/:id/versions`)
-   may reject `WORLD` for now — worlds are new-upload-only v1 and no client
-   calls it.
-2. **Opt-in visibility** on EVERY card-list endpoint (browse, picks,
-   following, creator profiles, `/me/downloads`): never include WORLD items
-   unless the request opts in (`type=world`, plus a new mixed-view param no
-   shipped client has ever sent — see the visibility rule above). This is
-   the hard safety requirement; ship it in the same deploy as #1.
+1. **Accept `WORLD`** as a card type on `POST /characters`: Prisma enum
+   migration (`ALTER TYPE`) + regenerate; zod (`z.nativeEnum(CharacterType)`)
+   follows automatically. **AND raise the per-type card-size cap**: `parseCard`
+   grants the 24 MB cap only when `type === "GROUP"`, so a WORLD payload gets
+   the 256 KB solo cap — and the envelope embeds the cover as a data URL (so
+   a download restores the world exactly), which alone blows past 256 KB for
+   any real cover art. Give WORLD its own cap (the group branch is the
+   pattern; a few MB is plenty). The versions endpoint needs no gate —
+   validated: it has no `type` field at all (type is immutable after create)
+   and no client calls it for worlds v1.
+2. **Opt-in visibility** on EVERY card-list endpoint: never include WORLD
+   items unless the request opts in (`type=world`, plus a new mixed-view
+   param no shipped client has ever sent — see the visibility rule above).
+   This is the hard safety requirement; ship it in the same deploy as #1.
+   Validated specifics (2026-07-30): browse/picks/following are ONE route
+   with the ONLY type-aware `where` in the codebase — but `type=all`
+   currently means **no type predicate at all**, so its default must invert
+   to "solo+group" or worlds leak into every shipped client the moment one
+   is approved. There is no shared query builder: the predicate must also
+   land in the creator-profile card list, `/me/downloads`, and
+   `/me/characters` (Mine tab — was missing from this rule's list), plus
+   the share/OG card page; decide `/mod/queue` deliberately (mods DO want
+   worlds — pairs with #4). Bonus hardening: an unknown `type` value
+   currently throws an unhandled ZodError → HTTP 500 (no error handler
+   registered); return a 400 while in there.
 3. **`tokenCount`** — the server computes it from the card payload; make
-   that computation handle the .fpworld envelope (count description + lore
-   entry contents; don't crash on the non-V2 shape, and null is acceptable).
+   that computation handle the .fpworld envelope. Validated: the counter
+   never crashes (returns 0 on unknown shapes) but reads the lorebook from
+   `character_book.entries[]` — the envelope keys it `lorebook.entries[]`,
+   so today a lorebook-heavy world would display a near-zero count as fact.
+   Map the envelope keys (description + lore entry contents/keys; exclude
+   the base64 `cover` from the count).
 4. **Mod review UI** — render the envelope for reviewers instead of V2
    fields: cover image (already the avatar asset), name, description,
    climate `displayName`/`feel`, traits, and each lore entry's keys +
@@ -704,16 +733,45 @@ gravity?}`, `meta{author?, createdAt, appVersion?, sourceId?}`.
    `type=world`), detail view rendering the envelope sections (about /
    climate / traits / lore), and a download that hands the card JSON as a
    `<name>.fpworld` file (the hub has no importer; the app imports it via
-   Worlds → Import Place). Hub submit form for worlds is out of scope v1
-   (uploads come from the app).
+   Worlds → Import Place). SUPERSEDED 2026-07-30 (maintainer request): the
+   hub ALSO has its own upload path — a distinct "🏞️ Share a world" button
+   on My cards → `#/submit-world` (drop a .fpworld; cover decoded from the
+   envelope for the required avatar; same moderation queue). Worlds-tab,
+   detail, and download-toast all carry a "Rawhide (nightly) builds only for
+   now" warning until stable ships worlds support.
 6. **Reports/NSFW/votes/search** — no changes; they key off the shared card
-   row and post name/tags.
-7. **Flip the flags** — after #1+#2 are live: set `kStoopWorldsLive`
-   (`lib/services/backporch/stoop_card.dart`) and `STOOP_WORLDS_LIVE`
-   (`web_ui/src/stoop/stoopTypes.ts`) to `true` in the same app commit, and
-   have the client's mixed-view browse calls send the new opt-in param
-   chosen in #2 (one small client patch — the param couldn't be wired ahead
-   of time because its name is the backend's call).
+   row and post name/tags. (Validated: WS `cardStats` pushes are id-only and
+   type-blind; shipped clients no-op on ids they never loaded, so world stat
+   frames are safe — as assumed.)
+7. **Re-upload idempotency (new, validated gap)** — the server dedupes
+   re-submissions via `extensions.front_porch.realism_engine.stable_id`
+   inside the card payload; the envelope has no such path, so its origin id
+   is null and **every re-share of the same world creates a brand-new
+   PENDING row** (nulls never collide). Teach the stable-id extractor an
+   envelope fallback (e.g. `meta.sourceId`, which the envelope already
+   carries) — a stable-id hit auto-converts the POST into a new version,
+   which is also the cheapest path to world updates later.
+8. **Dupe-check bot (moderation tooling, before worlds go live)** — the
+   advisory dupe scorer reads only V2 text fields (a world contributes just
+   `description`) and weights shared art at 30%, and nothing partitions
+   candidates by type: worlds get scored against characters, and generic
+   landscape covers + short same-genre setting prose can cross the
+   "duplicate suspected" threshold. Partition comparisons by card type and
+   add the envelope's text fields.
+9. **Flip the flags** (maintainer, after the backend deploy) — set
+   `kStoopWorldsLive` (`lib/services/backporch/stoop_card.dart`) and
+   `STOOP_WORLDS_LIVE` (`web_ui/src/stoop/stoopTypes.ts`) to `true` in the
+   same app commit, plus the small client patch the flip includes:
+   - The opt-in param is **`types=` (CSV: `solo,group,world`)** — implemented
+     2026-07-30 on browse, `/me/downloads`, `/me/characters`, and
+     `/creators/:id`; unknown tokens are ignored, absent → solo+group. The
+     app's mixed-view calls (browse `all`, Mine tab, downloads history,
+     creator profiles) should send it once world-aware.
+   - **Re-share idempotency:** the server dedupes worlds by the envelope's
+     `meta.sourceId`, but `encodeFpWorld` only emits `sourceId` for imported
+     worlds today — the upload path should send a stable id for authored
+     worlds too (e.g. `world.sourceId ?? world.id` in `publishStoopWorld`'s
+     payload), or every re-share creates a new PENDING post.
 
 ## 5. How we would know this worked
 

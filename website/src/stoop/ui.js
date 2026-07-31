@@ -156,6 +156,7 @@
   function cardTile(card) {
     var badges = el('div', { class: 'hub-tile-badges' }, [
       card.type === 'GROUP' ? el('span', { class: 'hub-badge hub-badge-group', title: 'Group cast — Front Porch AI only' }, '👥 Group') : null,
+      card.type === 'WORLD' ? el('span', { class: 'hub-badge hub-badge-world', title: 'World — a Front Porch AI place (.fpworld)' }, '🏞️ World') : null,
       card.nsfw ? el('span', { class: 'hub-badge hub-badge-nsfw' }, '18+') : null,
       card.modPick ? el('span', { class: 'hub-badge hub-badge-pick', title: 'Mod’s Pick' }, '★ Pick') : null,
     ]);
@@ -204,6 +205,7 @@
       progress. Returns a Promise. */
   function downloadCard(item, btn) {
     var isGroup = item.type === 'GROUP';
+    var isWorld = item.type === 'WORLD';
     var label = btn ? btn.textContent : '';
     if (btn) { btn.disabled = true; btn.textContent = 'Packing it up…'; }
     var restore = function () { if (btn) { btn.disabled = false; btn.textContent = label; } };
@@ -213,6 +215,15 @@
       var json = res.card;
       var assetId = res.primaryAssetId || item.primaryAssetId;
       var safe = (item.name || 'character').replace(/[^\w. -]+/g, '_').trim() || 'character';
+      // Worlds ARE their card JSON — the .fpworld envelope already embeds the
+      // cover image, so no PNG assembly: hand it over as <name>.fpworld.
+      if (isWorld) {
+        if (!json) { restore(); toast('That world couldn’t be downloaded.', 'err'); return; }
+        saveFile(JSON.stringify(json, null, 2), safe + '.fpworld', 'application/json');
+        restore();
+        toast('World saved! Import it under Worlds → Import Place — Rawhide (nightly) builds only for now.');
+        return;
+      }
       var done = function () {
         restore();
         toast(isGroup

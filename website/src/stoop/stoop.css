@@ -315,6 +315,7 @@
   padding: 3px 9px; border-radius: 999px; backdrop-filter: blur(6px);
 }
 .hub-badge-group { color: var(--teal-hi); background: rgba(6, 32, 27, 0.75); border: 1px solid rgba(76, 184, 164, 0.45); }
+.hub-badge-world { color: #a9e8b8; background: rgba(9, 34, 16, 0.75); border: 1px solid rgba(112, 200, 132, 0.45); }
 .hub-badge-nsfw { color: #ffb08a; background: rgba(42, 15, 4, 0.75); border: 1px solid rgba(232, 131, 58, 0.5); }
 .hub-badge-pick { color: #241502; background: linear-gradient(180deg, var(--amber-hi), var(--amber)); }
 .hub-tile-body { padding: 13px 15px 14px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
@@ -412,6 +413,8 @@
 
 /* ---- my cards ---- */
 .hub-head-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 22px; }
+.hub-head-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.hub-empty-cta { display: flex; justify-content: center; margin-top: 4px; padding-bottom: 26px; }
 .hub-head-row h2, .hub-h2-space { color: var(--cream); }
 .hub-h2-space { margin: 40px 0 16px; }
 .hub-mylist { display: grid; gap: 14px; }

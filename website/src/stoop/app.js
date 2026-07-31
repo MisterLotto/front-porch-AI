@@ -69,6 +69,7 @@
         return el('a', { class: 'hub-tab-link' + (t.match(h) ? ' on' : ''), href: t.hash }, [t.label, extra]);
       })),
       el('div', { class: 'hub-user' }, [
+        el('a', { class: 'btn btn-ghost hub-share-btn', href: '#/submit-world' }, '🏞️ Share a world'),
         el('a', { class: 'btn btn-amber hub-share-btn', href: '#/submit' }, '+ Share a card'),
         el('span', { class: 'hub-user-name', title: u.email || '' }, u.displayName || ''),
       ])
@@ -104,6 +105,7 @@
     var m;
     if ((m = h.match(/^#\/card\/([\w-]+)/))) return S.viewsBrowse.renderCard(viewMount, m[1]);
     if ((m = h.match(/^#\/creator\/([\w-]+)/))) return S.viewsBrowse.renderCreator(viewMount, m[1]);
+    if (h === '#/submit-world') return S.viewsMy.renderSubmitWorld(viewMount);
     if ((m = h.match(/^#\/submit\/([\w-]+)/))) return S.viewsMy.renderSubmit(viewMount, m[1]);
     if (h.indexOf('#/submit') === 0) return S.viewsMy.renderSubmit(viewMount, null);
     if (h.indexOf('#/mine') === 0) return S.viewsMy.renderMine(viewMount);

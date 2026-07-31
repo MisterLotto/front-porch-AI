@@ -261,4 +261,47 @@ void main() {
       expect(again.name, isNot(imported.name));
     });
   });
+
+  group('WorldRepository.applyTemplateWorldsToChat', () {
+    late AppDatabase db;
+    late WorldRepository repo;
+
+    setUp(() async {
+      _setupPathProviderMock();
+      SharedPreferences.setMockInitialValues({});
+      final storage = StorageService();
+      await storage.initialized;
+      db = AppDatabase.forTesting();
+      repo = WorldRepository(storage, db);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+
+    tearDown(() async {
+      await db.close();
+    });
+
+    test('seeds a chat from names OR ids; unresolved refs dropped', () async {
+      final byName = model.World(
+        name: 'The Cindermaw',
+        lorebook: Lorebook(entries: []),
+      );
+      final byId = model.World(
+        name: 'Green Vale',
+        lorebook: Lorebook(entries: []),
+      );
+      await repo.saveWorld(byName);
+      await repo.saveWorld(byId);
+
+      // Character worldNames are names; group templates carry ids — the
+      // 1:1 new-chat seeding relies on both resolving through this one call.
+      await repo.applyTemplateWorldsToChat('chat-1', [
+        'The Cindermaw', // by name (character attachment)
+        byId.id, // by UUID (group template)
+        'No Such World', // unresolved — dropped, not an error
+      ]);
+
+      final ids = await repo.getChatWorldIds('chat-1');
+      expect(ids, [byName.id, byId.id]);
+    });
+  });
 }

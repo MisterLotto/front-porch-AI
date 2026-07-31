@@ -47,8 +47,15 @@ class WorldRepository extends ChangeNotifier {
       );
 
   WorldRepository(this._storageService, this._db) {
-    loadWorlds();
+    _firstLoad = loadWorlds();
   }
+
+  /// Completes when the initial DB load has filled the in-memory cache.
+  /// Await before resolving refs at times that can race app startup (e.g.
+  /// seeding a brand-new chat's worlds moments after a cold launch) — the
+  /// cache-only resolvers silently drop every ref while the list is empty.
+  late final Future<void> _firstLoad;
+  Future<void> get ready => _firstLoad;
 
   void setCharacterRepository(CharacterRepository repo) {
     _characterRepository = repo;
@@ -505,11 +512,16 @@ class WorldRepository extends ChangeNotifier {
     await setChatWorlds(chatId, [for (final id in ids) if (id != worldId) id]);
   }
 
-  /// Copy group template world ids onto a new chat (session).
-  Future<void> applyGroupTemplateToChat(
+  /// Copy template world refs (group template ids or character world names)
+  /// onto a new chat (session). Refs may be UUIDs or names; unresolved refs
+  /// are dropped with a debug note.
+  Future<void> applyTemplateWorldsToChat(
     String chatId,
     List<String> templateWorldIds,
   ) async {
+    // New-session seeding can fire moments after a cold launch; resolving
+    // against a not-yet-loaded cache would silently seed nothing, permanently.
+    await ready;
     final unresolved = <String>[];
     final ids = resolveWorldRefsToIds(
       refs: templateWorldIds,

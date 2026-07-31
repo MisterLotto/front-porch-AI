@@ -25,7 +25,6 @@ import 'package:front_porch_ai/services/chat/weather_biomes.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/ui/pages/worlds/climate_editor_dialog.dart';
-import 'package:front_porch_ai/ui/pages/import_lorebook_page.dart';
 import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/pages/worlds/place_traits_editor.dart';
@@ -254,15 +253,6 @@ class _WorldManagementPageState extends State<WorldManagementPage>
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  IconButton(
-                    icon: Icon(Icons.download, color: AppColors.formMasterAccent),
-                    tooltip: 'Import Lorebook',
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const ImportLorebookPage(),
-                      ),
-                    ),
-                  ),
                   IconButton(
                     icon: Icon(
                       Icons.travel_explore,

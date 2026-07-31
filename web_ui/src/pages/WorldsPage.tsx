@@ -6,7 +6,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../api/client';
-import { ImportLorebookWizard } from '../components/ImportLorebookWizard';
 import { LoreEntriesEditor, type LoreEntry } from '../components/LoreEntriesEditor';
 import { WorldCard, type WorldSummary } from '../components/WorldCard';
 import '../styles/ws-g.css';
@@ -57,7 +56,6 @@ export function WorldsPage() {
   const [edit, setEdit] = useState<EditState>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [showImport, setShowImport] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   const load = () =>
@@ -193,9 +191,6 @@ export function WorldsPage() {
             onClick={() => fpworldFileRef.current?.click()}
           >
             ⬆ Import .fpworld
-          </button>
-          <button className="ghost" disabled={busy} onClick={() => setShowImport(true)}>
-            ⬆ Import lore
           </button>
           <button
             className="primary"
@@ -412,16 +407,6 @@ export function WorldsPage() {
             </button>
           </div>
         </div>
-      )}
-
-      {showImport && (
-        <ImportLorebookWizard
-          onClose={() => setShowImport(false)}
-          onImported={(msg) => {
-            setToast(msg);
-            void load();
-          }}
-        />
       )}
 
       {toast && <p className="muted small">{toast}</p>}

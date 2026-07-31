@@ -46,6 +46,8 @@ extension ChatServiceSillyTavern on ChatService {
 
       // Create new session for imported chat
       _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
+      // Seed chat worlds like any other new session (Living Worlds).
+      await _seedChatWorldsForNewSession();
       await _saveChat();
       notifyListeners();
     } catch (e) {

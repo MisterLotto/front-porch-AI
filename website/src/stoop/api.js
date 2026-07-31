@@ -260,14 +260,16 @@
     },
 
     /* creators */
-    creator: function (id) { return api('GET', '/creators/' + encodeURIComponent(id)); },
+    // The hub understands worlds — opt in to the mixed view (older API
+    // versions simply ignore the extra param).
+    creator: function (id) { return api('GET', '/creators/' + encodeURIComponent(id) + '?types=solo,group,world'); },
     follow: function (id) { return api('POST', '/creators/' + encodeURIComponent(id) + '/follow', {}); },
     unfollow: function (id) { return api('DELETE', '/creators/' + encodeURIComponent(id) + '/follow'); },
     following: function () { return api('GET', '/me/following'); },
 
     /* own cards */
-    myCharacters: function () { return api('GET', '/me/characters'); },
-    myDownloads: function () { return api('GET', '/me/downloads'); },
+    myCharacters: function () { return api('GET', '/me/characters?types=solo,group,world'); },
+    myDownloads: function () { return api('GET', '/me/downloads?types=solo,group,world'); },
     deleteCharacter: function (id) { return api('DELETE', '/characters/' + encodeURIComponent(id)); },
     uploadCharacter: function (payload, avatarBlob, avatarName) {
       var fd = new FormData();

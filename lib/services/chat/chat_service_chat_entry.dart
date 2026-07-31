@@ -307,9 +307,9 @@ extension ChatServiceChatEntry on ChatService {
         // ensures the baseline check is now correctly false for no-ext cards.
         // Save the initial message session
         _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
-        // 1:1 chats start with no group template; character.worldNames still
-        // feed lore via inherit. Chat-level worlds can be attached later.
-        _chatWorldIds = const [];
+        // Seed chat worlds from the character's attached worlds (Living
+        // Worlds) — a paired world's climate/setting applies from turn one.
+        await _seedChatWorldsForNewSession();
         await _saveChat();
         _activeObjectives = [];
         _messagesSinceLastCheck = 0;

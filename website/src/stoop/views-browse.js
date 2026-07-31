@@ -12,6 +12,7 @@
   var FILTERS = [
     { key: 'solo', label: 'Solo characters', type: 'solo' },
     { key: 'group', label: '👥 Group casts', type: 'group' },
+    { key: 'world', label: '🏞️ Worlds', type: 'world' },
     { key: 'following', label: '☆ Following', type: 'all' },
   ];
   var SORTS = [
@@ -74,6 +75,9 @@
       return {
         sort: browseState.sort,
         type: f.type,
+        // The hub understands worlds, so the personal Following feed opts in
+        // to the mixed view (worlds stay invisible to clients that don't).
+        types: browseState.filter === 'following' ? 'solo,group,world' : undefined,
         following: browseState.filter === 'following' ? 'true' : undefined,
         q: browseState.q || undefined,
         page: p,
@@ -88,7 +92,7 @@
       var f = browseState.filter;
       showcase.replaceChildren();
       if (!browseState.q && f === 'solo') S.viewsPicks.renderPicksShowcase(showcase, 'solo');
-      ui.mountChildren(groupWarn, f === 'group' ? groupWarning() : null);
+      ui.mountChildren(groupWarn, f === 'group' ? groupWarning() : f === 'world' ? worldNote() : null);
     }
 
     function load(p) {
@@ -107,7 +111,12 @@
           status.replaceChildren(ui.emptyState('🪑', 'Nothing here yet',
             browseState.q ? 'No cards match that search. Try @creator or #tag.' :
             browseState.filter === 'following' ? 'Follow some creators and their new cards will show up here.' :
+            browseState.filter === 'world' ? 'No worlds on the porch yet — be the first to share a place.' :
             'Check back soon — the neighbours are still writing.'));
+          if (browseState.filter === 'world' && !browseState.q && Api.state.user) {
+            status.appendChild(el('div', { class: 'hub-empty-cta' },
+              el('a', { class: 'btn btn-amber', href: '#/submit-world' }, '🏞️ Share a world')));
+          }
         }
         moreWrap.classList.toggle('hub-hidden', items.length < TAKE);
         moreBtn.disabled = false;
@@ -197,6 +206,28 @@
     ]);
   }
 
+  // The Worlds tab intro — what a .fpworld is and where it goes after download.
+  function worldNote() {
+    return el('div', { class: 'hub-groupwarn hub-worldnote' }, [
+      el('span', { class: 'hub-groupwarn-ico' }, '🏞️'),
+      el('div', null, [
+        el('strong', null, 'Worlds are complete places for Front Porch AI.'),
+        el('p', null, [
+          'One .fpworld file carries the cover art, lore, custom climate, and place traits. ',
+          'Download one, then import it in the app under ',
+          el('strong', null, 'Worlds → Import Place'),
+          ' and attach it to any character or chat. ',
+          el('a', { href: 'https://frontporchai.app/#get', target: '_blank', rel: 'noopener' }, 'Get the app →'),
+        ]),
+        el('p', null, [
+          '⚠️ ',
+          el('strong', null, 'Rawhide (nightly) builds only for now'),
+          ' — the current stable release can’t import .fpworld files yet. Worlds support reaches stable with the next release.',
+        ]),
+      ]),
+    ]);
+  }
+
   /* ============================== card detail ============================== */
   var REPORT_CATEGORIES = [
     { key: 'SPAM', label: 'Spam' },
@@ -240,10 +271,30 @@
     ]);
   }
 
+  /* .fpworld envelope detail — about / climate / traits / lore. The envelope
+     keys the lorebook `lorebook` (not V2's `character_book`); entry shape is
+     the same, so lorebookSection renders it unchanged. */
+  function worldSections(card) {
+    var biome = card.biome || {};
+    var climate = [biome.displayName, biome.feel, biome.description]
+      .filter(function (v) { return typeof v === 'string' && v.trim(); }).join('\n\n');
+    var traits = card.place_traits || {};
+    var traitBits = ['atmosphere', 'gravity'].filter(function (k) {
+      return typeof traits[k] === 'string' && traits[k].trim();
+    }).map(function (k) { return k + ': ' + traits[k]; }).join('\n');
+    return [
+      textSection('About this place', card.description, true),
+      textSection('Climate', climate, true),
+      textSection('Place traits', traitBits),
+      lorebookSection(card.lorebook),
+    ];
+  }
+
   function renderCard(mount, id) {
     mount.replaceChildren(ui.spinner());
     Api.cardDetail(id).then(function (c) {
       var isGroup = c.type === 'GROUP';
+      var isWorld = c.type === 'WORLD';
       var card = c.card || {};
       var signedIn = !!Api.state.user;
 
@@ -268,7 +319,7 @@
       paintVotes();
 
       /* --- download (everyone, incl. guests) --- */
-      var dlBtn = el('button', { class: 'btn btn-amber', type: 'button' }, '⤓ Download card');
+      var dlBtn = el('button', { class: 'btn btn-amber', type: 'button' }, isWorld ? '⤓ Download world' : '⤓ Download card');
       dlBtn.addEventListener('click', function () {
         ui.downloadCard({ id: id, name: c.name, type: c.type, primaryAssetId: c.primaryAssetId }, dlBtn);
       });
@@ -310,7 +361,20 @@
         ]);
       }
 
-      var caveat = isGroup
+      var caveat = isWorld
+        ? el('div', { class: 'hub-caveat group' }, [
+            el('span', { class: 'hub-caveat-ico' }, '🏞️'),
+            el('div', null, [
+              el('strong', null, 'This is a world for Front Porch AI. '),
+              'The .fpworld file carries the cover art, lore, custom climate, and place traits. ',
+              'Import it in the app under ',
+              el('strong', null, 'Worlds → Import Place'),
+              ', then attach it to any character or chat. ',
+              el('strong', null, '⚠️ Rawhide (nightly) builds only for now'),
+              ' — the current stable release can’t import .fpworld files yet.',
+            ]),
+          ])
+        : isGroup
         ? el('div', { class: 'hub-caveat group' }, [
             el('span', { class: 'hub-caveat-ico' }, '⚠️'),
             el('div', null, [
@@ -343,6 +407,7 @@
           el('div', { class: 'hub-detail-art' }, [ui.avatarImg(c.primaryAssetId, c.name, 'hub-detail-img')]),
           el('div', { class: 'hub-detail-info' }, [
             el('div', { class: 'hub-detail-badges' }, [
+              isWorld ? el('span', { class: 'hub-badge hub-badge-world' }, '🏞️ World') : null,
               isGroup ? el('span', { class: 'hub-badge hub-badge-group' }, '👥 Group cast') : null,
               c.nsfw ? el('span', { class: 'hub-badge hub-badge-nsfw' }, '18+') : null,
               c.modPick ? el('span', { class: 'hub-badge hub-badge-pick' }, '★ Mod’s Pick') : null,
@@ -365,7 +430,7 @@
           ]),
         ]),
         membersBlock,
-        el('div', { class: 'hub-sects' }, [
+        el('div', { class: 'hub-sects' }, isWorld ? worldSections(card) : [
           textSection('Description', card.description, true),
           textSection('Personality', card.personality),
           textSection('Scenario', card.scenario),
