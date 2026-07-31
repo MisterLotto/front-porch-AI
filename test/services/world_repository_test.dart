@@ -262,6 +262,68 @@ void main() {
     });
   });
 
+  group('WorldRepository.applyAddedCharacterWorldsToChats', () {
+    late AppDatabase db;
+    late WorldRepository repo;
+
+    setUp(() async {
+      _setupPathProviderMock();
+      SharedPreferences.setMockInitialValues({});
+      final storage = StorageService();
+      await storage.initialized;
+      db = AppDatabase.forTesting();
+      repo = WorldRepository(storage, db);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+
+    tearDown(() async {
+      await db.close();
+    });
+
+    Future<void> makeSession(String id, String characterId) =>
+        db.into(db.sessions).insert(
+              SessionsCompanion.insert(
+                id: id,
+                characterId: Value(characterId),
+              ),
+            );
+
+    test('back-fills chats with no worlds, leaves chats that have one alone',
+        () async {
+      final world = model.World(name: 'Cindermaw', lorebook: Lorebook(entries: []));
+      final other = model.World(name: 'Green Vale', lorebook: Lorebook(entries: []));
+      await repo.saveWorld(world);
+      await repo.saveWorld(other);
+
+      await makeSession('chat-empty', 'char-1');   // opened before the world existed
+      await makeSession('chat-owned', 'char-1');   // the user sent this one elsewhere
+      await makeSession('chat-other', 'char-2');   // a different character entirely
+      await repo.setChatWorlds('chat-owned', [other.id]);
+
+      final touched = await repo.applyAddedCharacterWorldsToChats(
+        characterId: 'char-1',
+        addedRefs: ['Cindermaw'], // characters store world NAMES
+      );
+
+      expect(touched, ['chat-empty']);
+      expect(await repo.getChatWorldIds('chat-empty'), [world.id]);
+      // A chat with its own attachment is never overridden…
+      expect(await repo.getChatWorldIds('chat-owned'), [other.id]);
+      // …and another character's chats are untouched.
+      expect(await repo.getChatWorldIds('chat-other'), isEmpty);
+    });
+
+    test('no added worlds means no writes at all', () async {
+      await makeSession('chat-x', 'char-9');
+      final touched = await repo.applyAddedCharacterWorldsToChats(
+        characterId: 'char-9',
+        addedRefs: const [],
+      );
+      expect(touched, isEmpty);
+      expect(await repo.getChatWorldIds('chat-x'), isEmpty);
+    });
+  });
+
   group('WorldRepository.applyTemplateWorldsToChat', () {
     late AppDatabase db;
     late WorldRepository repo;

@@ -512,6 +512,51 @@ class WorldRepository extends ChangeNotifier {
     await setChatWorlds(chatId, [for (final id in ids) if (id != worldId) id]);
   }
 
+  /// Attach worlds newly added to a CHARACTER onto that character's existing
+  /// chats that don't have any yet.
+  ///
+  /// Creation-time seeding only covers chats made *after* the character had a
+  /// world, so a chat opened first and given a world later kept its temperate
+  /// default forever — the climate, the Setting prose and the Places panel all
+  /// read chat attachments, not the character's list.
+  ///
+  /// Only [addedRefs] (the diff from this edit) propagate, and only onto chats
+  /// with an EMPTY attachment list. That keeps two things true: editing a
+  /// character for unrelated reasons never re-attaches anything, and a chat the
+  /// user deliberately sent somewhere else is never dragged back.
+  /// Returns the ids of the chats that changed, so a live session can refresh.
+  Future<List<String>> applyAddedCharacterWorldsToChats({
+    required String characterId,
+    required List<String> addedRefs,
+  }) async {
+    if (addedRefs.isEmpty) return const [];
+    await ready;
+    final unresolved = <String>[];
+    final ids = resolveWorldRefsToIds(
+      refs: addedRefs,
+      nameToId: {for (final w in _worlds) w.name: w.id},
+      validIds: {for (final w in _worlds) w.id},
+      unresolved: unresolved,
+    );
+    if (unresolved.isNotEmpty) {
+      debugPrint('[Worlds] unresolved refs on character $characterId: $unresolved');
+    }
+    if (ids.isEmpty) return const [];
+
+    final touched = <String>[];
+    for (final session in await _db.getSessionsForCharacter(characterId)) {
+      final existing = await getChatWorldIds(session.id);
+      if (existing.isNotEmpty) continue; // the chat has its own opinion
+      await setChatWorlds(session.id, ids);
+      touched.add(session.id);
+    }
+    if (touched.isNotEmpty) {
+      debugPrint('[Worlds] character $characterId worlds applied to '
+          '${touched.length} existing chat(s)');
+    }
+    return touched;
+  }
+
   /// Copy template world refs (group template ids or character world names)
   /// onto a new chat (session). Refs may be UUIDs or names; unresolved refs
   /// are dropped with a debug note.

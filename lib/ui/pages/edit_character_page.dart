@@ -108,6 +108,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   late TabController _tabController;
   List<LorebookEntry> _loreEntries = [];
   List<String> _selectedWorldNames = [];
+  List<String> _initialWorldNames = const [];
   List<StyledTextController> _altGreetingControllers = [];
   List<String> _tags = [];
   final _tagController = TextEditingController();
@@ -202,6 +203,9 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     }
 
     _selectedWorldNames = List.from(widget.character.worldNames);
+    // Snapshot for the save-time diff: only worlds ADDED in this edit get
+    // pushed onto the character's existing chats.
+    _initialWorldNames = List.from(widget.character.worldNames);
 
     _altGreetingControllers = widget.character.alternateGreetings
         .map((g) => StyledTextController(text: g, preset: StyledTextPreset.prose))
@@ -517,6 +521,35 @@ class _EditCharacterPageState extends State<EditCharacterPage>
             chatService.refreshEnjoysLowHygieneFromActiveCharacter();
           } catch (_) {
             // ChatService not available in this context — that's fine.
+          }
+        }
+
+        // Worlds added in THIS edit back-fill the character's existing chats
+        // that have none. Creation-time seeding only covers chats made after
+        // the character already had a world, so a chat opened first and given
+        // a world later would otherwise keep its temperate default forever
+        // (climate, Setting prose and the Places panel all read the CHAT's
+        // attachments, never the character's list).
+        final addedWorlds = _selectedWorldNames
+            .where((w) => !_initialWorldNames.contains(w))
+            .toList();
+        final charId = widget.character.dbId;
+        if (addedWorlds.isNotEmpty && charId != null) {
+          try {
+            final worlds = Provider.of<WorldRepository>(context, listen: false);
+            final touched = await worlds.applyAddedCharacterWorldsToChats(
+              characterId: charId,
+              addedRefs: addedWorlds,
+            );
+            if (touched.isNotEmpty && mounted) {
+              final chatService = Provider.of<ChatService>(context, listen: false);
+              if (touched.contains(chatService.currentSessionId)) {
+                await chatService.refreshChatWorlds();
+              }
+            }
+          } catch (_) {
+            // Repository/ChatService not in this context — the chat picks the
+            // world up on its next open regardless.
           }
         }
       }

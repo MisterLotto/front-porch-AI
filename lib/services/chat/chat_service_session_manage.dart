@@ -46,6 +46,15 @@ extension ChatServiceSessionManage on ChatService {
     await _reloadChatWorldIds();
   }
 
+  /// Re-read this chat's attached worlds from the database. Needed when
+  /// something OUTSIDE the chat changes them — adding a world to a character
+  /// back-fills that character's chats that had none, and an already-open
+  /// conversation should pick up the new climate without being reopened.
+  Future<void> refreshChatWorlds() async {
+    await _reloadChatWorldIds();
+    notifyListeners();
+  }
+
   /// Rename a session.
   Future<void> renameSession(String sessionId, String name) async {
     final session = await _db.getSessionById(sessionId);
