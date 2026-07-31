@@ -50,10 +50,11 @@ void main() {
       await db.close();
     });
 
-    test('schema version is 41', () {
+    test('schema version is 42', () {
       // v40: Living Worlds (worlds columns + chat_worlds + chat_biome_spans).
       // v41: worlds.place_traits (atmosphere/gravity JSON).
-      expect(db.schemaVersion, 41);
+      // v42: groups.folder_id (groups movable through folders).
+      expect(db.schemaVersion, 42);
     });
 
     test('journal_memories table exists and round-trips (v35)', () async {
