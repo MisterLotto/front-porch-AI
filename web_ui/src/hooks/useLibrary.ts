@@ -211,6 +211,33 @@ export function useLibrary() {
   );
   const editCharacter = useCallback((id: string) => navigate(`/edit/${id}`), [navigate]);
 
+  /** The personas offered by "Start new chat" step 2 (id/label/active). */
+  const loadPersonas = useCallback(
+    () =>
+      api
+        .get<{ personas: { id: string; label: string; name: string; active: boolean }[] }>(
+          '/api/personas',
+        )
+        .then((r) => r.personas)
+        .catch(() => []),
+    [],
+  );
+
+  /** Open a FRESH chat with a character or group under [personaId]. One
+   *  server call — the desktop-shared ordering (enter, apply persona, then new
+   *  session) lives in ChatService, not here. */
+  const startFreshChat = useCallback(
+    async (target: { characterId?: string; groupId?: string }, personaId: string) => {
+      try {
+        await api.post('/api/chat/start-fresh', { ...target, personaId });
+        navigate('/chat');
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Could not start the chat');
+      }
+    },
+    [navigate],
+  );
+
   // ── Folder CRUD ─────────────────────────────────────────────────────────
   const createFolder = useCallback(
     async (name: string, parentId: string | null) => {
@@ -515,6 +542,8 @@ export function useLibrary() {
     openCharacter,
     openGroup,
     editCharacter,
+    loadPersonas,
+    startFreshChat,
     createFolder,
     renameFolder,
     deleteFolder,

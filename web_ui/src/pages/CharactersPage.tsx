@@ -21,8 +21,10 @@ import {
   ConfirmDialog,
   ImportNameCollisionDialog,
   MoveToFolderDialog,
+  PersonaPickerDialog,
   PromptDialog,
   TypeConfirmDialog,
+  type PickerPersona,
 } from '../components/library/LibraryDialogs';
 
 type Dialog =
@@ -35,6 +37,8 @@ type Dialog =
   | { kind: 'deleteSelected'; ids: string[] }
   | { kind: 'extractGroup'; group: LibGroup }
   | { kind: 'move'; ids: string[] }
+  // Step 2 of "Start new chat": persona choice for a fresh session.
+  | { kind: 'newChat'; subject: string; target: { characterId?: string; groupId?: string } }
   | null;
 
 export function CharactersPage() {
@@ -44,6 +48,9 @@ export function CharactersPage() {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
+  // Personas for "Start new chat" step 2. Fetched once when the dialog is
+  // first opened (not on page load — most visits never need it).
+  const [personas, setPersonas] = useState<PickerPersona[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -60,8 +67,21 @@ export function CharactersPage() {
   const openMenu = (e: MouseEvent, items: CardMenuItem[]) =>
     setMenu({ x: e.clientX, y: e.clientY, items });
 
+  // Refresh the persona list whenever the new-chat dialog opens, so a persona
+  // added on the desktop (or another tab) shows up without a reload.
+  useEffect(() => {
+    if (dialog?.kind !== 'newChat') return;
+    void lib.loadPersonas().then(setPersonas);
+  }, [dialog?.kind, lib]);
+
   // ── Menu item builders (one CardMenu serves every surface) ───────────────
   const charMenu = (c: LibChar): CardMenuItem[] => [
+    {
+      label: 'Start new chat',
+      icon: '💬',
+      onClick: () =>
+        setDialog({ kind: 'newChat', subject: c.name, target: { characterId: c.id } }),
+    },
     { label: 'Edit', icon: '✏️', onClick: () => lib.editCharacter(c.id) },
     { label: 'Duplicate', icon: '⧉', onClick: () => lib.duplicateCharacter(c.id) },
     { label: 'Export PNG', icon: '🖼', onClick: () => lib.exportPng(c.id) },
@@ -95,6 +115,12 @@ export function CharactersPage() {
   ];
 
   const groupMenu = (g: LibGroup): CardMenuItem[] => [
+    {
+      label: 'Start new chat',
+      icon: '💬',
+      onClick: () =>
+        setDialog({ kind: 'newChat', subject: g.name, target: { groupId: g.id } }),
+    },
     { label: 'Export Group PNG', icon: '🖼', onClick: () => lib.exportGroupPng(g) },
     { label: 'Extract characters', icon: '👥', onClick: () => setDialog({ kind: 'extractGroup', group: g }) },
     { label: 'Move to folder…', icon: '📁', onClick: () => setDialog({ kind: 'move', ids: [g.id] }) },
@@ -402,6 +428,17 @@ export function CharactersPage() {
           message={`Copy every member of "${dialog.group.name}" into your library as independent characters?`}
           confirmLabel="Extract"
           onConfirm={() => lib.extractGroup(dialog.group)}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog?.kind === 'newChat' && (
+        <PersonaPickerDialog
+          subject={dialog.subject}
+          personas={personas}
+          onPick={(personaId) => {
+            lib.startFreshChat(dialog.target, personaId);
+            setDialog(null);
+          }}
           onClose={() => setDialog(null)}
         />
       )}

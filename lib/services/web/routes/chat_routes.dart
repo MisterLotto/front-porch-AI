@@ -38,6 +38,7 @@ class WebChatRoutes {
     router.post('/api/personas/<id>', _updatePersona);
     router.post('/api/chat/select', _select);
     router.post('/api/chat/select-group', _selectGroup);
+    router.post('/api/chat/start-fresh', _startFresh);
     router.post('/api/chat/send', _send);
     router.post('/api/chat/chance-time/accept', _acceptChanceTime);
     router.post('/api/chat/stop', _stop);
@@ -169,6 +170,28 @@ class WebChatRoutes {
     if (id == null) return JsonResponse.badRequest('groupId is required');
     final ok = await _facade.selectGroup(id);
     if (!ok) return JsonResponse.error(404, 'Group not found');
+    return JsonResponse.ok({
+      'status': 'ok',
+      'sessionId': _facade.currentSessionId,
+    });
+  }
+
+  /// Start a fresh chat with a character OR group under a chosen persona
+  /// (the library's "Start new chat"). Body: {characterId|groupId, personaId}.
+  Future<shelf.Response> _startFresh(shelf.Request request) async {
+    final body = await _json(request);
+    final characterId = body['characterId']?.toString();
+    final groupId = body['groupId']?.toString();
+    if ((characterId == null || characterId.isEmpty) &&
+        (groupId == null || groupId.isEmpty)) {
+      return JsonResponse.badRequest('characterId or groupId is required');
+    }
+    final ok = await _facade.startFreshChat(
+      characterId: characterId,
+      groupId: groupId,
+      personaId: body['personaId']?.toString() ?? '',
+    );
+    if (!ok) return JsonResponse.error(404, 'Character or group not found');
     return JsonResponse.ok({
       'status': 'ok',
       'sessionId': _facade.currentSessionId,

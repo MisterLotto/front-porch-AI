@@ -21,6 +21,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/ui/pages/home/cards/home_card_menu.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/character_card_grid.dart'
     show kFolderDragHoldDelay;
@@ -433,132 +434,62 @@ class CharacterGridCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     items: [
-                      PopupMenuItem(
+                      // Start-fresh sits first: it's the most common intent
+                      // after "open", and it picks its own persona (never
+                      // inheriting whatever the last chat used).
+                      homeCardMenuItem(
+                        context,
+                        value: 'new_chat',
+                        icon: Icons.add_comment_outlined,
+                        label: 'Start New Chat',
+                        iconColor: AppColors.porchAmberOf(context),
+                      ),
+                      homeCardMenuItem(
+                        context,
                         value: 'edit',
-                        child: ListTile(
-                          leading: Icon(
-                            Icons.edit,
-                            color: AppColors.iconSecondary(context),
-                            size: 20,
-                          ),
-                          title: Text(
-                            'Edit Character',
-                            style: TextStyle(
-                              color: AppColors.textPrimary(context),
-                            ),
-                          ),
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
+                        icon: Icons.edit,
+                        label: 'Edit Character',
                       ),
-                      PopupMenuItem(
+                      homeCardMenuItem(
+                        context,
                         value: 'avatar_gallery',
-                        child: ListTile(
-                          leading: Icon(
-                            Icons.photo_library_outlined,
-                            color: AppColors.iconSecondary(context),
-                            size: 20,
-                          ),
-                          title: Text(
-                            'Avatar Gallery',
-                            style: TextStyle(
-                              color: AppColors.textPrimary(context),
-                            ),
-                          ),
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
+                        icon: Icons.photo_library_outlined,
+                        label: 'Avatar Gallery',
                       ),
-                      PopupMenuItem(
+                      homeCardMenuItem(
+                        context,
                         value: 'duplicate',
-                        child: ListTile(
-                          leading: Icon(
-                            Icons.copy,
-                            color: AppColors.iconSecondary(context),
-                            size: 20,
-                          ),
-                          title: Text(
-                            'Duplicate Character',
-                            style: TextStyle(
-                              color: AppColors.textPrimary(context),
-                            ),
-                          ),
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
+                        icon: Icons.copy,
+                        label: 'Duplicate Character',
                       ),
-                      PopupMenuItem(
+                      homeCardMenuItem(
+                        context,
                         value: 'export',
-                        child: ListTile(
-                          leading: Icon(
-                            Icons.upload,
-                            color: AppColors.iconSecondary(context),
-                            size: 20,
-                          ),
-                          title: Text(
-                            'Export PNG',
-                            style: TextStyle(
-                              color: AppColors.textPrimary(context),
-                            ),
-                          ),
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
+                        icon: Icons.upload,
+                        label: 'Export PNG',
                       ),
-                      PopupMenuItem(
+                      homeCardMenuItem(
+                        context,
                         value: 'export_json',
-                        child: ListTile(
-                          leading: Icon(
-                            Icons.data_object,
-                            color: AppColors.iconSecondary(context),
-                            size: 20,
-                          ),
-                          title: Text(
-                            'Export JSON',
-                            style: TextStyle(
-                              color: AppColors.textPrimary(context),
-                            ),
-                          ),
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
+                        icon: Icons.data_object,
+                        label: 'Export JSON',
                       ),
                       if (activeFolderId != null)
-                        PopupMenuItem(
+                        homeCardMenuItem(
+                          context,
                           value: 'remove_folder',
-                          child: ListTile(
-                            leading: Icon(
-                              Icons.folder_off,
-                              color: AppColors.porchAmberOf(context),
-                              size: 20,
-                            ),
-                            title: Text(
-                              'Remove from Folder',
-                              style: TextStyle(
-                                color: AppColors.porchAmberOf(context),
-                              ),
-                            ),
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                          ),
+                          icon: Icons.folder_off,
+                          label: 'Remove from Folder',
+                          iconColor: AppColors.porchAmberOf(context),
+                          labelColor: AppColors.porchAmberOf(context),
                         ),
-                      PopupMenuItem(
+                      homeCardMenuItem(
+                        context,
                         value: 'delete',
-                        child: ListTile(
-                          leading: Icon(
-                            Icons.delete,
-                            color: AppColors.negativeAccentOf(context),
-                            size: 20,
-                          ),
-                          title: Text(
-                            'Delete',
-                            style: TextStyle(
-                              color: AppColors.negativeAccentOf(context),
-                            ),
-                          ),
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
+                        icon: Icons.delete,
+                        label: 'Delete',
+                        iconColor: AppColors.negativeAccentOf(context),
+                        labelColor: AppColors.negativeAccentOf(context),
                       ),
                     ],
                   ).then((value) {

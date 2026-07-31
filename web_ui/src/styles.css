@@ -1380,6 +1380,12 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 }
 @media (max-width: 768px) { .grp-grid { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); } }
 
+/* "Start new chat" persona picker: marks which persona is currently active. */
+.persona-current {
+  margin-left: auto; font-size: 0.7rem; padding: 1px 6px; border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent);
+}
+
 /* Folder-aware picker (FolderCharacterPicker): folder tiles + breadcrumb. */
 .grp-card.picker-folder .grp-initial { background: transparent; font-size: 2rem; }
 .picker-crumb { display: flex; align-items: center; gap: 8px; margin: 8px 0 2px; }

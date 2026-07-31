@@ -220,8 +220,39 @@ extension _HomePageChrome on _HomePageState {
     }
   }
 
+  /// "Start New Chat" from either card's context menu: ask which persona
+  /// (step 2 — never assumed), then open a fresh session and enter it.
+  /// Cancelling the picker starts nothing. One handler for characters and
+  /// group casts; [ChatService.startFreshChatWith] owns the ordering.
+  Future<void> _startNewChatWith({
+    CharacterCard? character,
+    GroupChat? group,
+  }) async {
+    final subject = character?.name ?? group?.name ?? '';
+    final personaId = await showPersonaPickerDialog(context, subject: subject);
+    if (personaId == null || !mounted) return;
+
+    final chatService = Provider.of<ChatService>(context, listen: false);
+    await chatService.startFreshChatWith(
+      character: character,
+      group: group,
+      groupRepo: group == null
+          ? null
+          : Provider.of<GroupChatRepository>(context, listen: false),
+      personaId: personaId,
+    );
+    if (!mounted) return;
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ChatPage()));
+    _refreshLastActivityCache();
+  }
+
   void _handleContextMenuAction(String action, CharacterCard character) {
     switch (action) {
+      case 'new_chat':
+        _startNewChatWith(character: character);
+        break;
       case 'edit':
         _editCharacter(context, character);
         break;
@@ -265,6 +296,9 @@ extension _HomePageChrome on _HomePageState {
 
   void _handleGroupContextMenuAction(String action, GroupChat group) {
     switch (action) {
+      case 'new_chat':
+        _startNewChatWith(group: group);
+        break;
       case 'edit':
         _editGroup(group);
         break;

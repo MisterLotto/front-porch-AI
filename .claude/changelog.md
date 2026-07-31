@@ -7292,3 +7292,58 @@ on a folder, a character still dropping (no regression from the generic
 drop target), and a short press NOT dragging. The successful drags hold
 for 300 ms: longer than the new delay but SHORTER than the old 500 ms
 stock value, so reverting either fix fails the suite.
+
+## 2026-07-31 (UTC) — "Start New Chat" from card menus, with an explicit persona step
+
+Files: lib/services/chat/chat_service_session_manage.dart,
+lib/ui/dialogs/persona_picker_dialog.dart (new),
+lib/ui/pages/home/cards/home_card_menu.dart (new),
+lib/ui/pages/home/cards/character_grid_card.dart,
+lib/ui/pages/home/cards/group_grid_card.dart,
+lib/ui/pages/home/home_page_chrome.dart, lib/ui/pages/home_page.dart,
+lib/services/web/facade/chat_facade.dart,
+lib/services/web/routes/chat_routes.dart,
+web_ui/src/components/library/LibraryDialogs.tsx,
+web_ui/src/hooks/useLibrary.ts, web_ui/src/pages/CharactersPage.tsx,
+web_ui/src/styles.css,
+test/services/chat/start_fresh_chat_test.dart (new), docs/Rawhide.md
+
+Maintainer request: a "start a new chat" action on the character/group
+card context menu, with a persona picker as a second step — "we can not
+assume what persona the user wants to use for this new chat".
+
+Core: ChatService.startFreshChatWith({character|group, personaId}) —
+ONE implementation shared by the desktop menu and the web card menu.
+Its ordering is load-bearing and commented as such: setActiveCharacter/
+setActiveGroup load the cast's most recent session, and a session load
+RESTORES that session's persona, so the chosen persona must be applied
+AFTER entry and before startNewChat (whose save stamps whatever persona
+is active). An empty personaId (picker cancelled) leaves the active
+persona untouched; no character and no group is a no-op.
+
+Desktop: new persona_picker_dialog.dart (warm dialog, avatar + display
+label + persona blurb, "Current" badge on the active one, cancel starts
+nothing) titled "Start a new chat with <name> as…". Both card menus gain
+'new_chat' as the FIRST entry; one _startNewChatWith handler serves
+characters and groups.
+
+Size-cap compliance: character_grid_card was already 577 lines (over the
+500 cap), so rather than grow it, the ~18-line PopupMenuItem/ListTile
+shape repeated ~14 times across both cards was extracted into
+home_card_menu.dart's homeCardMenuItem(). character_grid_card 577 → 508
+and group_grid_card shrank too, WITH the new entry added — colours
+preserved exactly (default / amber accent / destructive red).
+
+Web parity: POST /api/chat/start-fresh {characterId|groupId, personaId}
+→ ChatFacade.startFreshChat → the same shared ChatService method, so the
+web client never reimplements the ordering. PersonaPickerDialog +
+"Start new chat" on both card menus; personas are fetched when the
+dialog opens (not on page load) so a persona added elsewhere appears.
+
+Tests: start_fresh_chat_test.dart runs the REAL ChatService against an
+in-memory DB — seeds a prior session under persona A, starts fresh under
+persona B, and asserts B survived entry (the exact failure mode of the
+wrong ordering), that the stored session row carries B, that an empty id
+is a no-op, and that no-target is a no-op. Note for future readers: the
+stored-row test gives its card a greeting on purpose — ChatService
+deliberately skips persisting an empty session.

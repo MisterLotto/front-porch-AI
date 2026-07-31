@@ -361,6 +361,39 @@ class ChatFacade {
     return true;
   }
 
+  /// Start a FRESH chat with a character or group under an explicitly chosen
+  /// persona — the web library's "Start new chat" card action. Delegates to
+  /// [ChatService.startFreshChatWith] so the load-bearing ordering (enter,
+  /// then apply persona, then new session) lives in exactly one place, shared
+  /// with the desktop context menu. Returns false when the id doesn't resolve.
+  Future<bool> startFreshChat({
+    String? characterId,
+    String? groupId,
+    required String personaId,
+  }) async {
+    if (characterId != null && characterId.isNotEmpty) {
+      final card = _characters.characters
+          .where((c) => c.dbId == characterId)
+          .firstOrNull;
+      if (card == null) return false;
+      await _chat.startFreshChatWith(character: card, personaId: personaId);
+    } else if (groupId != null && groupId.isNotEmpty) {
+      final groups = _groups;
+      if (groups == null) return false;
+      final group = groups.getById(groupId);
+      if (group == null) return false;
+      await _chat.startFreshChatWith(
+        group: group,
+        groupRepo: groups,
+        personaId: personaId,
+      );
+    } else {
+      return false;
+    }
+    _notify();
+    return true;
+  }
+
   void send(String text) {
     _chat.sendMessage(text);
     _notify();

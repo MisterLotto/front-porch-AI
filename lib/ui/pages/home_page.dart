@@ -45,6 +45,7 @@ import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_dialog.d
 import 'package:front_porch_ai/ui/dialogs/byaf_import_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/import_name_collision_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/tag_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/persona_picker_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/type_delete_dialog.dart';
 import 'package:front_porch_ai/services/byaf_service.dart';
 import 'package:front_porch_ai/utils/picker_prefs.dart';

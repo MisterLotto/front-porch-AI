@@ -178,6 +178,36 @@ extension ChatServiceSessionManage on ChatService {
     notifyListeners();
   }
 
+  /// Open a FRESH chat with [character] or [group] under an explicitly chosen
+  /// user persona — the home grid's "Start New Chat" (desktop context menu and
+  /// the web library card menu both land here, so the ordering below exists
+  /// once).
+  ///
+  /// **The order is load-bearing.** `setActiveCharacter`/`setActiveGroup` load
+  /// that cast's most recent session, and loading a session restores THAT
+  /// session's persona (see `_loadSessionInto`) — so applying the chosen
+  /// persona first would be silently overwritten by the previous chat's. It is
+  /// applied after entry and before [startNewChat], whose session write stamps
+  /// whatever persona is active.
+  Future<void> startFreshChatWith({
+    CharacterCard? character,
+    GroupChat? group,
+    GroupChatRepository? groupRepo,
+    required String personaId,
+  }) async {
+    if (character != null) {
+      await setActiveCharacter(character);
+    } else if (group != null && groupRepo != null) {
+      await setActiveGroup(group, groupRepo: groupRepo);
+    } else {
+      return;
+    }
+    if (personaId.isNotEmpty) {
+      await _userPersonaService.setActivePersona(personaId);
+    }
+    await startNewChat();
+  }
+
   Future<void> startNewChat() async {
     if (_activeCharacter == null && _activeGroup == null) return;
 
