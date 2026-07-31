@@ -40,6 +40,9 @@ extension ChatServiceSessionManage on ChatService {
       if (refs.isNotEmpty) {
         await _worldRepository.applyTemplateWorldsToChat(sid, refs);
       }
+      // Even when a fresh chat legitimately gets NO worlds, that is a decision
+      // — record it so a later back-fill can't override it.
+      await _worldRepository.markChatWorldsDecided(sid);
     } catch (e) {
       debugPrint('[ChatService] chat world seed failed: $e');
     }

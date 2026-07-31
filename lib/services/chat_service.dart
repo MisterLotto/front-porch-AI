@@ -1528,6 +1528,19 @@ class ChatService extends ChangeNotifier {
       return;
     }
     try {
+      // A chat opened BEFORE its character had a world predates any decision
+      // about attachments, so its empty list means "undecided" — give it the
+      // character's worlds now. Chats where the user actually chose (including
+      // choosing none) are flagged and skipped, so a deliberate detach sticks.
+      final refs = _activeGroup == null
+          ? (_activeCharacter?.worldNames ?? const <String>[])
+          : const <String>[];
+      if (refs.isNotEmpty) {
+        await _worldRepository.backfillChatWorldsFromCharacter(
+          chatId: sid,
+          characterWorldRefs: refs,
+        );
+      }
       _chatWorldIds = await _worldRepository.getChatWorldIds(sid);
     } catch (e) {
       debugPrint('[ChatService] chat world load failed: $e');

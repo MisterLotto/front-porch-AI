@@ -1426,6 +1426,21 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _worldsInitializedMeta = const VerificationMeta(
+    'worldsInitialized',
+  );
+  @override
+  late final GeneratedColumn<bool> worldsInitialized = GeneratedColumn<bool>(
+    'worlds_initialized',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("worlds_initialized" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _parentSessionMeta = const VerificationMeta(
     'parentSession',
   );
@@ -1969,6 +1984,7 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     authorNoteDepth,
     summary,
     summaryLastIndex,
+    worldsInitialized,
     parentSession,
     forkIndex,
     affectionScore,
@@ -2088,6 +2104,15 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         summaryLastIndex.isAcceptableOrUnknown(
           data['summary_last_index']!,
           _summaryLastIndexMeta,
+        ),
+      );
+    }
+    if (data.containsKey('worlds_initialized')) {
+      context.handle(
+        _worldsInitializedMeta,
+        worldsInitialized.isAcceptableOrUnknown(
+          data['worlds_initialized']!,
+          _worldsInitializedMeta,
         ),
       );
     }
@@ -2508,6 +2533,10 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         DriftSqlType.int,
         data['${effectivePrefix}summary_last_index'],
       ),
+      worldsInitialized: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}worlds_initialized'],
+      )!,
       parentSession: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}parent_session'],
@@ -2703,6 +2732,13 @@ class Session extends DataClass implements Insertable<Session> {
   final int authorNoteDepth;
   final String? summary;
   final int? summaryLastIndex;
+
+  /// True once this chat's world attachments have been decided — either seeded
+  /// at creation, back-filled from the character, or set by hand (including
+  /// deliberately emptied). Lets an empty list mean "the user removed them"
+  /// instead of "this chat predates the character having a world", so a
+  /// back-fill can never undo a deliberate detach.
+  final bool worldsInitialized;
   final String? parentSession;
   final int? forkIndex;
   final int affectionScore;
@@ -2767,6 +2803,7 @@ class Session extends DataClass implements Insertable<Session> {
     required this.authorNoteDepth,
     this.summary,
     this.summaryLastIndex,
+    required this.worldsInitialized,
     this.parentSession,
     this.forkIndex,
     required this.affectionScore,
@@ -2836,6 +2873,7 @@ class Session extends DataClass implements Insertable<Session> {
     if (!nullToAbsent || summaryLastIndex != null) {
       map['summary_last_index'] = Variable<int>(summaryLastIndex);
     }
+    map['worlds_initialized'] = Variable<bool>(worldsInitialized);
     if (!nullToAbsent || parentSession != null) {
       map['parent_session'] = Variable<String>(parentSession);
     }
@@ -2924,6 +2962,7 @@ class Session extends DataClass implements Insertable<Session> {
       summaryLastIndex: summaryLastIndex == null && nullToAbsent
           ? const Value.absent()
           : Value(summaryLastIndex),
+      worldsInitialized: Value(worldsInitialized),
       parentSession: parentSession == null && nullToAbsent
           ? const Value.absent()
           : Value(parentSession),
@@ -3004,6 +3043,7 @@ class Session extends DataClass implements Insertable<Session> {
       authorNoteDepth: serializer.fromJson<int>(json['authorNoteDepth']),
       summary: serializer.fromJson<String?>(json['summary']),
       summaryLastIndex: serializer.fromJson<int?>(json['summaryLastIndex']),
+      worldsInitialized: serializer.fromJson<bool>(json['worldsInitialized']),
       parentSession: serializer.fromJson<String?>(json['parentSession']),
       forkIndex: serializer.fromJson<int?>(json['forkIndex']),
       affectionScore: serializer.fromJson<int>(json['affectionScore']),
@@ -3083,6 +3123,7 @@ class Session extends DataClass implements Insertable<Session> {
       'authorNoteDepth': serializer.toJson<int>(authorNoteDepth),
       'summary': serializer.toJson<String?>(summary),
       'summaryLastIndex': serializer.toJson<int?>(summaryLastIndex),
+      'worldsInitialized': serializer.toJson<bool>(worldsInitialized),
       'parentSession': serializer.toJson<String?>(parentSession),
       'forkIndex': serializer.toJson<int?>(forkIndex),
       'affectionScore': serializer.toJson<int>(affectionScore),
@@ -3144,6 +3185,7 @@ class Session extends DataClass implements Insertable<Session> {
     int? authorNoteDepth,
     Value<String?> summary = const Value.absent(),
     Value<int?> summaryLastIndex = const Value.absent(),
+    bool? worldsInitialized,
     Value<String?> parentSession = const Value.absent(),
     Value<int?> forkIndex = const Value.absent(),
     int? affectionScore,
@@ -3200,6 +3242,7 @@ class Session extends DataClass implements Insertable<Session> {
     summaryLastIndex: summaryLastIndex.present
         ? summaryLastIndex.value
         : this.summaryLastIndex,
+    worldsInitialized: worldsInitialized ?? this.worldsInitialized,
     parentSession: parentSession.present
         ? parentSession.value
         : this.parentSession,
@@ -3280,6 +3323,9 @@ class Session extends DataClass implements Insertable<Session> {
       summaryLastIndex: data.summaryLastIndex.present
           ? data.summaryLastIndex.value
           : this.summaryLastIndex,
+      worldsInitialized: data.worldsInitialized.present
+          ? data.worldsInitialized.value
+          : this.worldsInitialized,
       parentSession: data.parentSession.present
           ? data.parentSession.value
           : this.parentSession,
@@ -3415,6 +3461,7 @@ class Session extends DataClass implements Insertable<Session> {
           ..write('authorNoteDepth: $authorNoteDepth, ')
           ..write('summary: $summary, ')
           ..write('summaryLastIndex: $summaryLastIndex, ')
+          ..write('worldsInitialized: $worldsInitialized, ')
           ..write('parentSession: $parentSession, ')
           ..write('forkIndex: $forkIndex, ')
           ..write('affectionScore: $affectionScore, ')
@@ -3474,6 +3521,7 @@ class Session extends DataClass implements Insertable<Session> {
     authorNoteDepth,
     summary,
     summaryLastIndex,
+    worldsInitialized,
     parentSession,
     forkIndex,
     affectionScore,
@@ -3532,6 +3580,7 @@ class Session extends DataClass implements Insertable<Session> {
           other.authorNoteDepth == this.authorNoteDepth &&
           other.summary == this.summary &&
           other.summaryLastIndex == this.summaryLastIndex &&
+          other.worldsInitialized == this.worldsInitialized &&
           other.parentSession == this.parentSession &&
           other.forkIndex == this.forkIndex &&
           other.affectionScore == this.affectionScore &&
@@ -3588,6 +3637,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
   final Value<int> authorNoteDepth;
   final Value<String?> summary;
   final Value<int?> summaryLastIndex;
+  final Value<bool> worldsInitialized;
   final Value<String?> parentSession;
   final Value<int?> forkIndex;
   final Value<int> affectionScore;
@@ -3643,6 +3693,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.authorNoteDepth = const Value.absent(),
     this.summary = const Value.absent(),
     this.summaryLastIndex = const Value.absent(),
+    this.worldsInitialized = const Value.absent(),
     this.parentSession = const Value.absent(),
     this.forkIndex = const Value.absent(),
     this.affectionScore = const Value.absent(),
@@ -3699,6 +3750,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.authorNoteDepth = const Value.absent(),
     this.summary = const Value.absent(),
     this.summaryLastIndex = const Value.absent(),
+    this.worldsInitialized = const Value.absent(),
     this.parentSession = const Value.absent(),
     this.forkIndex = const Value.absent(),
     this.affectionScore = const Value.absent(),
@@ -3755,6 +3807,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Expression<int>? authorNoteDepth,
     Expression<String>? summary,
     Expression<int>? summaryLastIndex,
+    Expression<bool>? worldsInitialized,
     Expression<String>? parentSession,
     Expression<int>? forkIndex,
     Expression<int>? affectionScore,
@@ -3811,6 +3864,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       if (authorNoteDepth != null) 'author_note_depth': authorNoteDepth,
       if (summary != null) 'summary': summary,
       if (summaryLastIndex != null) 'summary_last_index': summaryLastIndex,
+      if (worldsInitialized != null) 'worlds_initialized': worldsInitialized,
       if (parentSession != null) 'parent_session': parentSession,
       if (forkIndex != null) 'fork_index': forkIndex,
       if (affectionScore != null) 'affection_score': affectionScore,
@@ -3879,6 +3933,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Value<int>? authorNoteDepth,
     Value<String?>? summary,
     Value<int?>? summaryLastIndex,
+    Value<bool>? worldsInitialized,
     Value<String?>? parentSession,
     Value<int?>? forkIndex,
     Value<int>? affectionScore,
@@ -3935,6 +3990,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       authorNoteDepth: authorNoteDepth ?? this.authorNoteDepth,
       summary: summary ?? this.summary,
       summaryLastIndex: summaryLastIndex ?? this.summaryLastIndex,
+      worldsInitialized: worldsInitialized ?? this.worldsInitialized,
       parentSession: parentSession ?? this.parentSession,
       forkIndex: forkIndex ?? this.forkIndex,
       affectionScore: affectionScore ?? this.affectionScore,
@@ -4017,6 +4073,9 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     }
     if (summaryLastIndex.present) {
       map['summary_last_index'] = Variable<int>(summaryLastIndex.value);
+    }
+    if (worldsInitialized.present) {
+      map['worlds_initialized'] = Variable<bool>(worldsInitialized.value);
     }
     if (parentSession.present) {
       map['parent_session'] = Variable<String>(parentSession.value);
@@ -4182,6 +4241,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
           ..write('authorNoteDepth: $authorNoteDepth, ')
           ..write('summary: $summary, ')
           ..write('summaryLastIndex: $summaryLastIndex, ')
+          ..write('worldsInitialized: $worldsInitialized, ')
           ..write('parentSession: $parentSession, ')
           ..write('forkIndex: $forkIndex, ')
           ..write('affectionScore: $affectionScore, ')
@@ -16529,6 +16589,7 @@ typedef $$SessionsTableCreateCompanionBuilder =
       Value<int> authorNoteDepth,
       Value<String?> summary,
       Value<int?> summaryLastIndex,
+      Value<bool> worldsInitialized,
       Value<String?> parentSession,
       Value<int?> forkIndex,
       Value<int> affectionScore,
@@ -16586,6 +16647,7 @@ typedef $$SessionsTableUpdateCompanionBuilder =
       Value<int> authorNoteDepth,
       Value<String?> summary,
       Value<int?> summaryLastIndex,
+      Value<bool> worldsInitialized,
       Value<String?> parentSession,
       Value<int?> forkIndex,
       Value<int> affectionScore,
@@ -16684,6 +16746,11 @@ class $$SessionsTableFilterComposer
 
   ColumnFilters<int> get summaryLastIndex => $composableBuilder(
     column: $table.summaryLastIndex,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get worldsInitialized => $composableBuilder(
+    column: $table.worldsInitialized,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -16962,6 +17029,11 @@ class $$SessionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get worldsInitialized => $composableBuilder(
+    column: $table.worldsInitialized,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get parentSession => $composableBuilder(
     column: $table.parentSession,
     builder: (column) => ColumnOrderings(column),
@@ -17229,6 +17301,11 @@ class $$SessionsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get worldsInitialized => $composableBuilder(
+    column: $table.worldsInitialized,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get parentSession => $composableBuilder(
     column: $table.parentSession,
     builder: (column) => column,
@@ -17475,6 +17552,7 @@ class $$SessionsTableTableManager
                 Value<int> authorNoteDepth = const Value.absent(),
                 Value<String?> summary = const Value.absent(),
                 Value<int?> summaryLastIndex = const Value.absent(),
+                Value<bool> worldsInitialized = const Value.absent(),
                 Value<String?> parentSession = const Value.absent(),
                 Value<int?> forkIndex = const Value.absent(),
                 Value<int> affectionScore = const Value.absent(),
@@ -17530,6 +17608,7 @@ class $$SessionsTableTableManager
                 authorNoteDepth: authorNoteDepth,
                 summary: summary,
                 summaryLastIndex: summaryLastIndex,
+                worldsInitialized: worldsInitialized,
                 parentSession: parentSession,
                 forkIndex: forkIndex,
                 affectionScore: affectionScore,
@@ -17587,6 +17666,7 @@ class $$SessionsTableTableManager
                 Value<int> authorNoteDepth = const Value.absent(),
                 Value<String?> summary = const Value.absent(),
                 Value<int?> summaryLastIndex = const Value.absent(),
+                Value<bool> worldsInitialized = const Value.absent(),
                 Value<String?> parentSession = const Value.absent(),
                 Value<int?> forkIndex = const Value.absent(),
                 Value<int> affectionScore = const Value.absent(),
@@ -17642,6 +17722,7 @@ class $$SessionsTableTableManager
                 authorNoteDepth: authorNoteDepth,
                 summary: summary,
                 summaryLastIndex: summaryLastIndex,
+                worldsInitialized: worldsInitialized,
                 parentSession: parentSession,
                 forkIndex: forkIndex,
                 affectionScore: affectionScore,

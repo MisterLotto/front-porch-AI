@@ -324,6 +324,70 @@ void main() {
     });
   });
 
+  group('WorldRepository.backfillChatWorldsFromCharacter', () {
+    late AppDatabase db;
+    late WorldRepository repo;
+
+    setUp(() async {
+      _setupPathProviderMock();
+      SharedPreferences.setMockInitialValues({});
+      final storage = StorageService();
+      await storage.initialized;
+      db = AppDatabase.forTesting();
+      repo = WorldRepository(storage, db);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    });
+
+    tearDown(() async {
+      await db.close();
+    });
+
+    Future<void> makeSession(String id) => db.into(db.sessions).insert(
+          SessionsCompanion.insert(id: id, characterId: const Value('c1')),
+        );
+
+    test('a chat that predates the world gets it; a deliberate detach does not',
+        () async {
+      final w = model.World(name: 'Cindermaw', lorebook: Lorebook(entries: []));
+      await repo.saveWorld(w);
+
+      // Chat opened before the character had any world — never decided.
+      await makeSession('old-chat');
+      expect(
+        await repo.backfillChatWorldsFromCharacter(
+            chatId: 'old-chat', characterWorldRefs: ['Cindermaw']),
+        isTrue,
+      );
+      expect(await repo.getChatWorldIds('old-chat'), [w.id]);
+
+      // Now the user deliberately empties it. That IS a decision.
+      await repo.setChatWorlds('old-chat', const []);
+      expect(
+        await repo.backfillChatWorldsFromCharacter(
+            chatId: 'old-chat', characterWorldRefs: ['Cindermaw']),
+        isFalse,
+        reason: 'a deliberate detach must never be undone by a back-fill',
+      );
+      expect(await repo.getChatWorldIds('old-chat'), isEmpty);
+    });
+
+    test('runs once — a second call is a no-op', () async {
+      final w = model.World(name: 'Vale', lorebook: Lorebook(entries: []));
+      await repo.saveWorld(w);
+      await makeSession('chat-2');
+      expect(
+        await repo.backfillChatWorldsFromCharacter(
+            chatId: 'chat-2', characterWorldRefs: ['Vale']),
+        isTrue,
+      );
+      expect(
+        await repo.backfillChatWorldsFromCharacter(
+            chatId: 'chat-2', characterWorldRefs: ['Vale']),
+        isFalse,
+      );
+    });
+  });
+
   group('WorldRepository.applyTemplateWorldsToChat', () {
     late AppDatabase db;
     late WorldRepository repo;

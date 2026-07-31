@@ -104,6 +104,13 @@ class Sessions extends Table {
   TextColumn get summary => text().nullable()(); // rolling chat summary
   IntColumn get summaryLastIndex =>
       integer().nullable()(); // message index at last summary update
+  /// True once this chat's world attachments have been decided — either seeded
+  /// at creation, back-filled from the character, or set by hand (including
+  /// deliberately emptied). Lets an empty list mean "the user removed them"
+  /// instead of "this chat predates the character having a world", so a
+  /// back-fill can never undo a deliberate detach.
+  BoolColumn get worldsInitialized =>
+      boolean().withDefault(const Constant(false))();
   TextColumn get parentSession => text().nullable()();
   IntColumn get forkIndex => integer().nullable()();
   IntColumn get affectionScore =>
@@ -1192,7 +1199,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 42;
+  int get schemaVersion => 43;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1897,6 +1904,21 @@ class AppDatabase extends _$AppDatabase {
         try {
           await customStatement('ALTER TABLE worlds ADD COLUMN place_traits TEXT');
           debugPrint('[DB] v41: added worlds.place_traits');
+        } catch (_) {
+          // already present (re-run / dual-version)
+        }
+      }
+      if (from < 43) {
+        // v42→v43: mark whether a chat's world attachments have been decided.
+        // Existing rows default to 0 (undecided) on purpose — that is what lets
+        // chats created before their character had a world finally receive it.
+        // Additive with a default, so Character Card Forge's raw writes to
+        // `sessions` keep working untouched.
+        try {
+          await customStatement(
+            'ALTER TABLE sessions ADD COLUMN worlds_initialized INTEGER NOT NULL DEFAULT 0',
+          );
+          debugPrint('[DB] v43: added sessions.worlds_initialized');
         } catch (_) {
           // already present (re-run / dual-version)
         }
@@ -2685,6 +2707,19 @@ class AppDatabase extends _$AppDatabase {
       );
     }
     return map;
+  }
+
+  /// Mark a chat's world attachments as decided (see Sessions.worldsInitialized).
+  Future<void> markChatWorldsInitialized(String chatId) async {
+    await (update(sessions)..where((t) => t.id.equals(chatId)))
+        .write(const SessionsCompanion(worldsInitialized: Value(true)));
+  }
+
+  /// Whether this chat's world attachments have been decided yet.
+  Future<bool> chatWorldsInitialized(String chatId) async {
+    final row = await (select(sessions)..where((t) => t.id.equals(chatId)))
+        .getSingleOrNull();
+    return row?.worldsInitialized ?? false;
   }
 
   Future<List<Session>> getSessionsForCharacter(String characterId) =>

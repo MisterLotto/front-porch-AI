@@ -498,7 +498,42 @@ class WorldRepository extends ChangeNotifier {
 
   Future<void> setChatWorlds(String chatId, List<String> worldIds) async {
     await _db.setChatWorlds(chatId, worldIds);
+    // Whatever the user chose — including an empty list — is now this chat's
+    // decision, and nothing may back-fill over it later.
+    await _db.markChatWorldsInitialized(chatId);
     notifyListeners();
+  }
+
+  /// Record that a chat's world attachments are settled without changing them.
+  Future<void> markChatWorldsDecided(String chatId) =>
+      _db.markChatWorldsInitialized(chatId);
+
+  /// Give a chat the worlds its character carries, but ONLY if the chat has
+  /// never had that decision made. Returns true when it seeded.
+  /// This is what rescues chats created before their character had a world:
+  /// they predate any attachment, so their empty list is "undecided", not
+  /// "the user removed them".
+  Future<bool> backfillChatWorldsFromCharacter({
+    required String chatId,
+    required List<String> characterWorldRefs,
+  }) async {
+    if (characterWorldRefs.isEmpty) return false;
+    if (await _db.chatWorldsInitialized(chatId)) return false;
+    if ((await getChatWorldIds(chatId)).isNotEmpty) {
+      await _db.markChatWorldsInitialized(chatId);
+      return false;
+    }
+    await ready;
+    final ids = resolveWorldRefsToIds(
+      refs: characterWorldRefs,
+      nameToId: {for (final w in _worlds) w.name: w.id},
+      validIds: {for (final w in _worlds) w.id},
+      unresolved: <String>[],
+    );
+    if (ids.isEmpty) return false;
+    await setChatWorlds(chatId, ids); // marks it decided
+    debugPrint('[Worlds] back-filled chat $chatId from its character');
+    return true;
   }
 
   Future<void> attachWorldToChat(String chatId, String worldId) async {
