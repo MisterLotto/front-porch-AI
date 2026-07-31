@@ -13,6 +13,13 @@ export interface BackendStatus {
   loadedModel: string;
   /** Host CPU lacks AVX2 and has no NVIDIA GPU → local AI runs CPU-only, slowly. */
   cpuOnlyLowPerf?: boolean;
+  /** Managed KoboldCpp engine acquisition state (first-launch rework —
+   *  the binary no longer downloads at boot; it can be missing or mid-fetch). */
+  engineInstalled?: boolean;
+  engineDownloading?: boolean;
+  engineProgress?: number;
+  engineStatusMessage?: string;
+  engineError?: string;
 }
 
 export interface LocalModel {

@@ -35,6 +35,7 @@ class WebBackendRoutes {
       router.get('/api/backend/status', _status);
       router.post('/api/backend/restart', _restart);
       router.post('/api/backend/stop', _stop);
+      router.post('/api/backend/engine/install', _installEngine);
       router.get('/api/backend/models', _models);
       router.post('/api/backend/models/switch', _switchModel);
       router.post('/api/backend/models/delete', _deleteModel);
@@ -80,6 +81,11 @@ class WebBackendRoutes {
     await _backend!.stop();
     return JsonResponse.ok(_backend.status());
   }
+
+  /// Kick the managed-engine background download (guarded no-op when
+  /// installed / already downloading / remote backend selected).
+  Future<shelf.Response> _installEngine(shelf.Request r) async =>
+      JsonResponse.ok(await _backend!.installEngine());
 
   Future<shelf.Response> _models(shelf.Request r) async =>
       JsonResponse.ok({'models': await _backend!.localModels()});

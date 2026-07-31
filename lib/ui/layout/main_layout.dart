@@ -21,6 +21,7 @@ import 'package:flutter/services.dart';
 import 'package:front_porch_ai/app_version.dart';
 import 'package:front_porch_ai/services/engine_health.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/ui/widgets/engine_status_chip.dart';
 import 'package:front_porch_ai/ui/widgets/sidebar.dart';
 import 'package:front_porch_ai/ui/pages/home_page.dart';
 import 'package:front_porch_ai/ui/pages/create_character_page.dart';
@@ -105,10 +106,22 @@ class _MainLayoutState extends State<MainLayout> {
         children: [
           const Sidebar(),
           Expanded(
-            child:
+            child: Stack(
+              children: [
                 _pages[appState.selectedIndex < _pages.length
                     ? appState.selectedIndex
                     : 0],
+                // Managed-engine download progress / install affordance —
+                // global so the background first-launch fetch stays visible
+                // wherever the user wanders. Renders nothing when the engine
+                // is installed or a remote/own backend is selected.
+                const Positioned(
+                  right: 16,
+                  bottom: 16,
+                  child: EngineStatusChip(),
+                ),
+              ],
+            ),
           ),
         ],
       ),

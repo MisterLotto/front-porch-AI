@@ -20,6 +20,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:front_porch_ai/services/backend_manager.dart';
 import 'package:front_porch_ai/services/model_manager.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/hardware_service.dart';
@@ -114,6 +115,10 @@ class _ModelManagerPageState extends State<ModelManagerPage>
   void _onDownload(HFModelFile file) {
     final modelManager = Provider.of<ModelManager>(context, listen: false);
     modelManager.queueDownload(file);
+    // Downloading a model IS local intent: fetch the managed engine alongside
+    // it (a no-op when installed/downloading/remote) so both finish together
+    // instead of the engine wait landing right when the user starts chatting.
+    Provider.of<BackendManager>(context, listen: false).ensureEngineInstalled();
   }
 
   void _confirmDelete(BuildContext context, String path) {

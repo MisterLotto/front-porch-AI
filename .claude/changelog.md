@@ -7089,3 +7089,61 @@ by the _trail/_breadcrumb pair that renders the same data clickable.
 
 Web parity: none needed — the web library already has the clickable
 Home + ancestor-trail breadcrumb this brings the desktop up to.
+
+## 2026-07-31 (UTC) — First-launch rework: intent-first choice + background engine download
+
+Files: lib/services/setup_service.dart, lib/services/backend_manager.dart,
+lib/services/llm_provider.dart,
+lib/services/storage/settings/backend_settings.dart,
+lib/services/storage_service.dart, lib/ui/widgets/setup_overlay.dart,
+lib/ui/widgets/engine_status_chip.dart (new),
+lib/ui/layout/main_layout.dart, lib/ui/pages/model_manager_page.dart,
+lib/ui/pages/settings_page.controls.dart,
+lib/ui/dialogs/model_settings_dialog.dart,
+lib/services/web/facade/backend_facade.dart,
+lib/services/web/routes/backend_routes.dart,
+web_ui/src/components/models/types.ts, web_ui/src/pages/ModelsPage.tsx,
+test/services/setup_service_test.dart (new), docs/Rawhide.md
+
+Maintainer direction (after design discussion): boot must not force the
+KoboldCpp download on users who may never use it, but deferring the fetch
+to the moment of chat intent is worse on slow connections — so: ask
+intent ONCE at first launch, then download immediately in the BACKGROUND.
+
+Boot never downloads anymore. SetupStep.downloadingBackend is deleted;
+SetupStep.firstRunChoice replaces it — shown only on a genuine first
+launch (no engine on disk, no recorded choice; a found binary or a
+remote backendType resolves the choice silently, so existing installs
+never see it). The overlay's choice card offers: "KoboldCpp — managed by
+Front Porch AI (recommended)" / "I have my own backend" (OpenRouter,
+Nano-GPT, oMLX, LM Studio, any OpenAI-compatible API — wording avoids
+"local", which would misdescribe oMLX/LM Studio; sets
+backendType=openRouter, downloads nothing, points at Settings → Backend)
+/ "Not sure yet" (fetches like the managed choice — the app's default
+path). LowPerfCpuWarning rides the choice card so weak hosts are warned
+BEFORE picking local. New backend_choice_done pref in backend_settings.
+
+BackendManager.ensureEngineInstalled() is the ONE guarded background
+acquisition entry (no-op when installed / downloading / remote / Intel
+Mac), reusing downloadBackend()'s existing progress fields. Funnels into
+it: the first-run choice, boot with a recorded choice but missing binary
+(interrupted download / wiped bin dir), the new EngineStatusChip
+(mounted once over MainLayout's page area: download progress with
+%/speed/ETA, or install/retry affordances; hidden when installed or
+remote), model download queueing (desktop _onDownload AND the web
+facade's queueDownload — a model fetch IS local intent, so both run
+concurrently and the engine wait never lands at chat time),
+LLMProvider.ensureManagedBackendIsRunning's previously-silent missing-
+binary return, and the two "Backend not found." launch snackbars (now
+kick the fetch and point at the chip instead of dead-ending).
+
+Web parity: /api/backend/status gains additive engineInstalled/
+engineDownloading/engineProgress/engineStatusMessage/engineError; new
+POST /api/backend/engine/install; the web Models page's backend card
+shows the same states with a download/retry button and polls while a
+fetch is running (the fetch can also be started desktop-side).
+
+Tests: setup_service_test.dart covers all six flows (first-launch ask
+with zero network calls, managed choice → background fetch, own-backend
+→ no download + type flip, missing-binary re-acquire, remote implicit
+choice, installed-engine implicit choice).

@@ -16,6 +16,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
@@ -153,8 +155,10 @@ class LLMProvider extends ChangeNotifier {
     if (_backendManager.backendPath == null) {
       await _backendManager.checkBackendAvailability();
       if (_backendManager.backendPath == null) {
-        // Binary not available (download may be needed). Let the user
-        // trigger it manually via Settings or the normal flow.
+        // Engine not installed: kick the background acquisition (a no-op if
+        // it's already downloading) — the engine chip shows progress and the
+        // next chat entry finds the binary in place.
+        unawaited(_backendManager.ensureEngineInstalled());
         return;
       }
     }
@@ -194,6 +198,7 @@ class LLMProvider extends ChangeNotifier {
   /// Convenience getters for the underlying services (for UI that needs specifics).
   KoboldService get koboldService => _koboldService;
   OpenRouterService get openRouterService => _openRouterService;
+  BackendManager get backendManager => _backendManager;
 
   LLMProvider(
     this._koboldService,

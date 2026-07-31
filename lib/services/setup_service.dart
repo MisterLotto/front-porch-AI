@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:front_porch_ai/services/backend_manager.dart';
 import 'package:front_porch_ai/services/kobold_service.dart';
@@ -6,7 +8,11 @@ import 'package:front_porch_ai/services/storage_service.dart';
 enum SetupStep {
   idle,
   checkingBackend,
-  downloadingBackend,
+
+  /// First launch, nothing installed, no choice recorded yet: the overlay
+  /// shows the one-time "how will you run your AI?" choice instead of
+  /// touching the network. Boot NEVER downloads on its own anymore.
+  firstRunChoice,
   startingBackend,
   complete,
   error,
@@ -49,30 +55,46 @@ class SetupService extends ChangeNotifier {
       // 1. Wait for StorageService to fully initialize (SharedPreferences loaded)
       await _storageService.initialized;
 
-      // Remote backends never need a local KoboldCpp binary. Skip the ~100MB+
-      // download (and the overlay) so first boot for OpenRouter/OMLX users —
-      // and the E2E smoke suite, which runs against an in-process fake remote —
-      // is not blocked on a network fetch that can OOM or flake under CI.
+      // Remote/own backends never need a local KoboldCpp binary. Skip
+      // everything (and record the implicit choice) so first boot for
+      // OpenRouter/OMLX users — and the E2E smoke suite, which runs against
+      // an in-process fake remote — never touches the network.
       final backendType = _storageService.backendType;
       final isLocalBackend =
           backendType != 'openRouter' && backendType != 'omlx';
       if (!isLocalBackend) {
+        if (!_storageService.backendChoiceDone) {
+          await _storageService.setBackendChoiceDone(true);
+        }
         _currentStep = SetupStep.complete;
         notifyListeners();
         return;
       }
 
-      // 2. Check and Download Backend if missing (local backend only)
+      // 2. Locate an existing engine. Boot NEVER downloads on its own — the
+      //    blocking "Downloading Backend…" overlay that held the whole app
+      //    hostage on first launch is gone.
       await _backendManager.checkBackendAvailability();
       if (_backendManager.backendPath == null) {
-        _currentStep = SetupStep.downloadingBackend;
-        notifyListeners();
-
-        await _backendManager.downloadBackend();
-
-        if (_backendManager.backendPath == null) {
-          throw Exception(_backendManager.error ?? 'Failed to install backend');
+        if (!_storageService.backendChoiceDone) {
+          // Genuine first launch: ask intent (one tap), then the overlay
+          // dismisses and any download runs in the background.
+          _currentStep = SetupStep.firstRunChoice;
+          notifyListeners();
+          return;
         }
+        // Choice already made in favour of the managed engine but the binary
+        // is missing (bin dir wiped, download interrupted last session):
+        // re-acquire in the background — the engine chip shows progress.
+        unawaited(_backendManager.ensureEngineInstalled());
+        _currentStep = SetupStep.complete;
+        notifyListeners();
+        return;
+      }
+
+      // An installed engine IS the choice — never show the first-run ask.
+      if (!_storageService.backendChoiceDone) {
+        await _storageService.setBackendChoiceDone(true);
       }
 
       // 3. Dismiss overlay so the user can interact with the app
@@ -120,6 +142,29 @@ class SetupService extends ChangeNotifier {
       _currentStep = SetupStep.error;
       notifyListeners();
     }
+  }
+
+  /// First-run choice: run the managed KoboldCpp engine. Also the "Not sure
+  /// yet" path — it's the app's default, and starting the fetch NOW (in the
+  /// background) is the whole point: by the time a model is downloaded and a
+  /// chat begins, the engine is already there. Dismisses the overlay
+  /// immediately; the engine chip carries the progress.
+  Future<void> chooseManagedEngine() async {
+    await _storageService.setBackendChoiceDone(true);
+    unawaited(_backendManager.ensureEngineInstalled());
+    _currentStep = SetupStep.complete;
+    notifyListeners();
+  }
+
+  /// First-run choice: the user brings their own backend (OpenRouter,
+  /// Nano-GPT, oMLX, LM Studio, or any OpenAI-compatible API — local or
+  /// cloud). No engine download, ever; backendType flips to the API kind and
+  /// the details are configured in Settings → Backend.
+  Future<void> chooseOwnBackend() async {
+    await _storageService.setBackendType('openRouter');
+    await _storageService.setBackendChoiceDone(true);
+    _currentStep = SetupStep.complete;
+    notifyListeners();
   }
 
   void reset() {

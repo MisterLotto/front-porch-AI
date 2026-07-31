@@ -27,6 +27,7 @@ import 'preset_settings.dart'; // for parseKcppsFile (static)
 /// preserved exactly.
 class BackendSettings with SettingsBase {
   String _backendType = 'kobold'; // 'kobold' or 'openRouter'
+  bool _backendChoiceDone = false; // first-launch engine choice answered
   String _remoteApiKey = '';
   String _remoteApiUrl = 'https://openrouter.ai/api/v1';
   String _remoteModelName = '';
@@ -159,6 +160,8 @@ class BackendSettings with SettingsBase {
       _contextSize = parsed['contextsize'] as int;
     }
 
+    _backendChoiceDone = prefs?.getBool(k('backend_choice_done')) ?? false;
+
     _useCublas = prefs?.getBool(k('use_cublas'));
     _useVulkan = prefs?.getBool(k('use_vulkan'));
     _useMetal = prefs?.getBool(k('use_metal'));
@@ -179,6 +182,18 @@ class BackendSettings with SettingsBase {
   Future<void> setBackendType(String value) async {
     _backendType = value;
     await prefs?.setString(k('backend_type'), value);
+    notify();
+  }
+
+  /// Whether the one-time first-launch "how will you run your AI?" choice has
+  /// been answered (or implicitly resolved — an already-installed engine or a
+  /// configured remote backend counts). Until true, SetupService shows the
+  /// choice instead of touching the network.
+  bool get backendChoiceDone => _backendChoiceDone;
+
+  Future<void> setBackendChoiceDone(bool value) async {
+    _backendChoiceDone = value;
+    await prefs?.setBool(k('backend_choice_done'), value);
     notify();
   }
 

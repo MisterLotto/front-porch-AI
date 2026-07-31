@@ -268,6 +268,23 @@ class BackendManager extends ChangeNotifier {
     }
   }
 
+  /// The ONE background-acquisition entry point for the managed KoboldCpp
+  /// engine (first-launch choice, engine-status chip, model-download trigger,
+  /// and every "backend not found" launch path funnel through here). A no-op
+  /// whenever downloading would be wrong: engine already installed, download
+  /// already running, a remote/own backend selected, or an Intel Mac.
+  /// Progress rides the existing [isDownloading]/[downloadProgress]/
+  /// [statusMessage] notifier fields — callers just fire and forget.
+  Future<void> ensureEngineInstalled() async {
+    if (_isDownloading || _backendPath != null || isIntelMac) return;
+    await _storageService.initialized;
+    final backendType = _storageService.backendType;
+    if (backendType == 'openRouter' || backendType == 'omlx') return;
+    await checkBackendAvailability();
+    if (_backendPath != null) return; // found an existing binary after all
+    await downloadBackend();
+  }
+
   Future<void> downloadBackend() async {
     if (_isDownloading) return;
     if (_storageService.rootPath == null) return;

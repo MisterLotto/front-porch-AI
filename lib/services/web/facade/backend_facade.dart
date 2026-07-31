@@ -16,6 +16,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
+
 import 'package:front_porch_ai/services/hardware_service.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
 import 'package:front_porch_ai/services/model_manager.dart';
@@ -37,6 +39,7 @@ class BackendFacade {
   /// Live backend status for the web Models page (read-only).
   Map<String, dynamic> status() {
     final k = _llm.koboldService;
+    final engine = _llm.backendManager;
     return {
       'backend': _storage.backendSettings.remoteModelName.isEmpty,
       'isLocal': _llm.isLocal,
@@ -49,6 +52,14 @@ class BackendFacade {
       // (no AVX2 + no NVIDIA GPU → KoboldCpp's oldpc build, which has no ROCm/
       // Vulkan). Mirrors the desktop warning so the web Models page warns too.
       'cpuOnlyLowPerf': _hardware?.cpuOnlyLowPerf ?? false,
+      // Managed-engine acquisition state (additive — first-launch rework):
+      // the binary no longer downloads at boot, so the web Models page shows
+      // install/progress just like the desktop engine chip.
+      'engineInstalled': engine.backendPath != null,
+      'engineDownloading': engine.isDownloading,
+      'engineProgress': engine.downloadProgress,
+      'engineStatusMessage': engine.isDownloading ? engine.statusMessage : '',
+      'engineError': engine.error ?? '',
     };
   }
 
@@ -146,10 +157,21 @@ class BackendFacade {
     final files = await _models.getModelFiles(repoId);
     for (final f in files) {
       if (f.filename == filename) {
+        // Downloading a model IS local intent — fetch the managed engine
+        // alongside it (same trigger as the desktop Models page; no-op when
+        // installed/downloading/remote).
+        unawaited(_llm.backendManager.ensureEngineInstalled());
         return _models.queueDownload(f).id;
       }
     }
     return null;
+  }
+
+  /// Explicit engine install/retry from the web Models page — same guarded
+  /// background acquisition as everywhere else. Returns the fresh status.
+  Future<Map<String, dynamic>> installEngine() async {
+    unawaited(_llm.backendManager.ensureEngineInstalled());
+    return status();
   }
 
   bool cancelDownload(String taskId) => _models.cancelDownload(taskId);

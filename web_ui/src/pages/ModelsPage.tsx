@@ -29,6 +29,16 @@ export function ModelsPage() {
     void loadStatus();
   }, [loadStatus]);
 
+  // While the managed engine is downloading (or absent — a download can be
+  // kicked off from the desktop at any moment), poll so the progress line
+  // stays live without a manual refresh.
+  const engineBusy = status ? status.engineInstalled === false || status.engineDownloading === true : false;
+  useEffect(() => {
+    if (!engineBusy) return;
+    const t = setInterval(() => void loadStatus(), 2000);
+    return () => clearInterval(t);
+  }, [engineBusy, loadStatus]);
+
   const pickQuery = (q: string) => {
     setQuery(q);
     setSearchNonce((n) => n + 1);
@@ -76,12 +86,30 @@ function BackendStatusCard({
           connect to a cloud model instead.
         </div>
       )}
+      {/* Managed engine acquisition (first-launch rework): the binary no
+          longer downloads at boot, so surface missing / downloading states
+          here with an install action — the web twin of the desktop chip. */}
+      {status.engineDownloading && (
+        <p className="muted small">
+          ⬇️ Downloading AI engine — {status.engineStatusMessage || `${Math.round((status.engineProgress ?? 0) * 100)}%`}
+        </p>
+      )}
+      {status.engineInstalled === false && !status.engineDownloading && (
+        <p className="muted small">
+          {status.engineError
+            ? `⚠️ Engine download failed: ${status.engineError} `
+            : 'The AI engine isn’t installed yet — needed to run models on this computer. '}
+          <button className="link-btn" disabled={busy} onClick={() => act('/api/backend/engine/install')}>
+            {status.engineError ? 'Retry download' : 'Download engine'}
+          </button>
+        </p>
+      )}
       <p className="muted small">
         {status.running ? (status.modelReady ? 'Running · model ready' : `Running · ${status.statusMessage || 'loading…'}`) : 'Stopped'}
         {' · '}<strong>{status.loadedModel}</strong>
       </p>
       <div className="tool-row">
-        <button disabled={busy || status.starting} onClick={() => act('/api/backend/restart')}>
+        <button disabled={busy || status.starting || status.engineInstalled === false} onClick={() => act('/api/backend/restart')}>
           {status.starting ? 'Starting…' : 'Restart'}
         </button>
         <button disabled={busy || !status.running} onClick={() => act('/api/backend/stop')}>Stop</button>

@@ -481,6 +481,9 @@ class StorageService extends ChangeNotifier {
   // Backend / kobold / remote / launch flags / kcpps (kv + callBuffer here per lift/compat needs; some also on tts/stt)
   String get backendType => backendSettings.backendType;
   Future<void> setBackendType(String v) => backendSettings.setBackendType(v);
+  bool get backendChoiceDone => backendSettings.backendChoiceDone;
+  Future<void> setBackendChoiceDone(bool v) =>
+      backendSettings.setBackendChoiceDone(v);
   String get remoteApiKey => backendSettings.remoteApiKey;
   Future<void> setRemoteApiKey(String v) => backendSettings.setRemoteApiKey(v);
   String get remoteApiUrl => backendSettings.remoteApiUrl;
