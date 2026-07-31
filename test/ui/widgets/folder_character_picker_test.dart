@@ -17,6 +17,7 @@ import 'package:drift/drift.dart' show Value;
 
 import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/models/character_card.dart';
+import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/services/folder_service.dart';
 import 'package:front_porch_ai/ui/widgets/folder_character_picker.dart';
 
@@ -131,5 +132,74 @@ void main() {
     expect(picked?.name, 'Misty');
 
     await tester.runAsync(() => db.close());
+  });
+
+  // Pure-logic coverage of the shared rules, groups included — the Stoop
+  // share Pick step consumes buildFolderPickView with both kinds.
+  group('buildFolderPickView with groups', () {
+    late AppDatabase gdb;
+    late FolderService gfolders;
+    late CharacterFolder folder;
+
+    setUp(() async {
+      gdb = AppDatabase.forTesting();
+      gfolders = FolderService(gdb);
+      await gdb.insertGroup(
+        GroupsCompanion.insert(id: 'group_1', name: 'Porch Crew'),
+      );
+      await gdb.insertGroup(
+        GroupsCompanion.insert(id: 'group_2', name: 'Night Shift'),
+      );
+      folder = await gfolders.createFolder('Ensembles');
+      await gfolders.addGroupToFolder(folder.id, 'group_1');
+    });
+
+    tearDown(() async {
+      await gdb.close();
+    });
+
+    final groups = [
+      GroupChat(id: 'group_1', name: 'Porch Crew'),
+      GroupChat(id: 'group_2', name: 'Night Shift'),
+    ];
+
+    test('browse: root shows unfoldered groups; folder tile counts its group',
+        () {
+      final view = buildFolderPickView(
+        folderService: gfolders,
+        characters: const [],
+        groups: groups,
+        folderId: null,
+        query: '',
+      );
+      expect(view.groups.map((g) => g.id), ['group_2']);
+      // A folder holding ONLY a group is still navigable, count included.
+      expect(view.folders.map((f) => f.id), [folder.id]);
+      expect(view.folderCounts[folder.id], 1);
+    });
+
+    test('browse: inside the folder its group appears', () {
+      final view = buildFolderPickView(
+        folderService: gfolders,
+        characters: const [],
+        groups: groups,
+        folderId: folder.id,
+        query: '',
+      );
+      expect(view.groups.map((g) => g.id), ['group_1']);
+      expect(view.folders, isEmpty);
+    });
+
+    test('search: matches foldered groups by name and hides folders', () {
+      final view = buildFolderPickView(
+        folderService: gfolders,
+        characters: const [],
+        groups: groups,
+        folderId: null,
+        query: 'porch',
+      );
+      expect(view.groups.map((g) => g.id), ['group_1']);
+      expect(view.folders, isEmpty);
+    });
   });
 }

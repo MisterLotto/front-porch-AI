@@ -27,11 +27,11 @@ import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_pick_step.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_standards.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_tag_selector.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_world_share.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/group_avatar_montage.dart';
 import 'package:front_porch_ai/utils/group_avatar_compositor.dart';
 import 'package:front_porch_ai/utils/world_cover.dart';
 
@@ -97,10 +97,6 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
   final _summary = TextEditingController();
   final _originalCreator = TextEditingController();
   final _tagInput = TextEditingController();
-  final _pickSearch = TextEditingController();
-
-  /// Lowercased filter for the Pick step's character/group grids.
-  String _pickQuery = '';
 
   /// Every candidate tag (the card's own, plus any the creator types).
   List<String> _tagPool = [];
@@ -118,7 +114,6 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     _summary.dispose();
     _originalCreator.dispose();
     _tagInput.dispose();
-    _pickSearch.dispose();
     super.dispose();
   }
 
@@ -550,237 +545,18 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     }
   }
 
-  // Step 0 — pick a local character or a group (only those with an avatar /
-  // members-with-avatars can be shared).
+  // Step 0 — pick a local character, group, or place. Extracted to
+  // StoopPickStep (stoop_pick_step.dart), which is folder-aware: the grids
+  // follow the home grid's folder hierarchy via the shared
+  // buildFolderPickView rules.
   Widget _pickStep() {
-    final allCards = context
-        .read<CharacterRepository>()
-        .characters
-        .where((c) => c.imagePath != null && c.imagePath!.isNotEmpty)
-        .toList();
-    final allGroups = context.read<GroupChatRepository>().groups;
-    // Places join the empty-check only once world sharing is live; while
-    // coming-soon the banner alone shouldn't suppress the "nothing" hint.
-    final hasWorlds =
-        kStoopWorldsLive &&
-        context.read<WorldRepository>().placeWorlds.isNotEmpty;
-    if (allCards.isEmpty && allGroups.isEmpty && !hasWorlds) {
-      return _centeredHint(
-        Icons.person_off_outlined,
-        'Nothing to share yet',
-        'Characters need an avatar image, and groups need members, before they '
-            'can be shared.',
-      );
-    }
-    // Filter by name so a large library stays navigable.
-    final cards = _pickQuery.isEmpty
-        ? allCards
-        : allCards
-              .where((c) => c.name.toLowerCase().contains(_pickQuery))
-              .toList();
-    final groups = _pickQuery.isEmpty
-        ? allGroups
-        : allGroups
-              .where((g) => g.name.toLowerCase().contains(_pickQuery))
-              .toList();
-    const grid = SliverGridDelegateWithMaxCrossAxisExtent(
-      maxCrossAxisExtent: 150,
-      childAspectRatio: 0.78,
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-    );
-    return ListView(
-      key: const ValueKey('pick'),
-      padding: const EdgeInsets.all(16),
-      children: [
-        _pickSearchField(),
-        const SizedBox(height: 14),
-        if (cards.isEmpty && groups.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 40),
-            child: Center(
-              child: Text(
-                'No characters or groups match “$_pickQuery”.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: stoopMute(context)),
-              ),
-            ),
-          ),
-        // Groups first — they're the marquee thing to share and shouldn't be
-        // buried under a long character list.
-        if (groups.isNotEmpty) ...[
-          _label('Groups'),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: grid,
-            itemCount: groups.length,
-            itemBuilder: (context, i) => _groupPickTile(groups[i]),
-          ),
-        ],
-        if (cards.isNotEmpty) ...[
-          if (groups.isNotEmpty) const SizedBox(height: 16),
-          _label('Characters'),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: grid,
-            itemCount: cards.length,
-            itemBuilder: (context, i) => _pickTile(cards[i]),
-          ),
-        ],
-        // Places: a coming-soon banner until the Stoop backend accepts WORLD
-        // cards, then the user's shareable places (kStoopWorldsLive).
-        if ((cards.isNotEmpty || groups.isNotEmpty) && kStoopWorldsLive)
-          const SizedBox(height: 16),
-        StoopWorldsPickSection(
-          query: _pickQuery,
-          selectedWorldId: _selectedWorld?.id,
-          onSelect: (w) => setState(() => _applyWorldSelection(w)),
-        ),
-      ],
-    );
-  }
-
-  // Name filter for the Pick step — mirrors the browse view's search field.
-  Widget _pickSearchField() {
-    return TextField(
-      controller: _pickSearch,
-      onChanged: (v) => setState(() => _pickQuery = v.trim().toLowerCase()),
-      style: TextStyle(color: stoopCream(context)),
-      decoration: stoopInput(
-        context,
-        'Search your characters and groups',
-        prefixIcon: Icon(Icons.search, color: stoopMute(context)),
-        suffixIcon: _pickQuery.isEmpty
-            ? null
-            : IconButton(
-                icon: Icon(Icons.close, color: stoopMute(context)),
-                onPressed: () {
-                  _pickSearch.clear();
-                  setState(() => _pickQuery = '');
-                },
-              ),
-      ),
-    );
-  }
-
-  Widget _groupPickTile(GroupChat group) {
-    final selected = _selectedGroup?.id == group.id;
-    final accent = AppColors.stoopAmberDeep;
-    return GestureDetector(
-      onTap: () => _selectGroup(group),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: stoopCardGradient(context),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected ? accent : stoopBorder(context),
-            width: selected ? 2 : 1,
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              // Groups are teal on The Stoop (hub badge color) — no purple.
-              child: ColoredBox(
-                color: stoopTealSoft(context),
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: _groupMontage(group),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              child: Text(
-                group.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: stoopCream(context),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // A folder-style montage of a group's member avatars, sized to fill its slot.
-  // Shared by the picker tile and the review-step preview. Falls back to a
-  // groups glyph while members load or if none have an avatar.
-  Widget _groupMontage(GroupChat group) {
-    return FutureBuilder<List<File>>(
-      future: context.read<GroupChatRepository>().getMemberAvatarFiles(group.id),
-      builder: (context, snap) {
-        final files = snap.data ?? const <File>[];
-        if (files.isEmpty) {
-          return const Center(
-            child: Icon(
-              Icons.groups_rounded,
-              size: 44,
-              color: AppColors.stoopTeal,
-            ),
-          );
-        }
-        return LayoutBuilder(
-          builder: (context, c) {
-            final side = c.maxWidth < c.maxHeight ? c.maxWidth : c.maxHeight;
-            return Center(
-              child: GroupAvatarMontage(
-                images: files.take(4).toList(),
-                side: side,
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _pickTile(CharacterCard card) {
-    final selected = _selected?.dbId == card.dbId && _selected != null;
-    final accent = AppColors.stoopAmberDeep;
-    return GestureDetector(
-      onTap: () => _select(card),
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: stoopCardGradient(context),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected ? accent : stoopBorder(context),
-            width: selected ? 2 : 1,
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: Image.file(File(card.imagePath!), fit: BoxFit.cover),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              child: Text(
-                card.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: stoopCream(context),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+    return StoopPickStep(
+      selectedCard: _selected,
+      selectedGroup: _selectedGroup,
+      selectedWorldId: _selectedWorld?.id,
+      onSelectCard: _select,
+      onSelectGroup: _selectGroup,
+      onSelectWorld: (w) => setState(() => _applyWorldSelection(w)),
     );
   }
 
@@ -986,7 +762,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
               color: stoopTealSoft(context),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: _groupMontage(_selectedGroup!),
+            child: StoopGroupMontage(group: _selectedGroup!),
           )
         : ClipRRect(
             borderRadius: BorderRadius.circular(12),
@@ -1120,33 +896,4 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
 
   InputDecoration _input(String hint) => stoopInput(context, hint);
 
-  Widget _centeredHint(IconData icon, String title, String body) {
-    return Center(
-      key: const ValueKey('hint'),
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 48, color: stoopMute(context)),
-            const SizedBox(height: 14),
-            Text(
-              title,
-              style: TextStyle(
-                color: stoopCream(context),
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              body,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: stoopMute(context)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

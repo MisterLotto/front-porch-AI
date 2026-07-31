@@ -22,8 +22,117 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 
 import 'package:front_porch_ai/models/character_card.dart';
+import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/services/folder_service.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
+
+/// What a folder-aware pick surface shows at one (folder, query) position.
+/// Computed by [buildFolderPickView] — the ONE set of folder-browsing rules
+/// shared by every "pick from the library" surface (group-creation wizard,
+/// Stoop share Pick step), so their behavior can't drift while their visual
+/// treatments differ.
+class FolderPickView {
+  const FolderPickView({
+    required this.folders,
+    required this.folderCounts,
+    required this.characters,
+    required this.groups,
+  });
+
+  /// Navigable subfolders at this level — only those holding at least one
+  /// eligible candidate anywhere below (a picker is for finding candidates,
+  /// not managing empty folders). Empty while searching.
+  final List<CharacterFolder> folders;
+
+  /// folder id → eligible candidate count (characters + groups, recursive)
+  /// for every folder in [folders].
+  final Map<String, int> folderCounts;
+
+  final List<CharacterCard> characters;
+  final List<GroupChat> groups;
+}
+
+/// The home grid's folder rules, applied to a pick surface:
+/// - Browsing ([query] empty): the characters/groups DIRECTLY at [folderId]
+///   (null = unfoldered top level) + navigable subfolder tiles.
+/// - Searching: folders hide and the query matches ALL eligible candidates
+///   regardless of folder (name always; description/personality too when
+///   [matchDescriptions]), so nothing nested is unfindable.
+/// All lists come back name-sorted.
+FolderPickView buildFolderPickView({
+  required FolderService folderService,
+  required List<CharacterCard> characters,
+  List<GroupChat> groups = const [],
+  required String? folderId,
+  required String query,
+  bool matchDescriptions = false,
+}) {
+  List<CharacterCard> visibleCharacters;
+  List<GroupChat> visibleGroups;
+  var folders = <CharacterFolder>[];
+  final counts = <String, int>{};
+
+  if (query.isNotEmpty) {
+    visibleCharacters = characters
+        .where(
+          (c) =>
+              c.name.toLowerCase().contains(query) ||
+              (matchDescriptions &&
+                  (c.description.toLowerCase().contains(query) ||
+                      c.personality.toLowerCase().contains(query))),
+        )
+        .toList();
+    visibleGroups = groups
+        .where((g) => g.name.toLowerCase().contains(query))
+        .toList();
+  } else {
+    visibleCharacters = characters
+        .where(
+          (c) =>
+              (c.imagePath == null
+                      ? null
+                      : folderService.getFolderForCharacter(c.imagePath!))
+                  ?.id ==
+              folderId,
+        )
+        .toList();
+    visibleGroups = groups
+        .where((g) => folderService.getFolderForGroup(g.id)?.id == folderId)
+        .toList();
+
+    int eligibleIn(CharacterFolder f) {
+      final filenames = folderService
+          .getCharactersInFolderRecursive(f.id)
+          .toSet();
+      final groupIds = folderService.groupIdsInFolderRecursive(f.id).toSet();
+      return characters
+              .where(
+                (c) =>
+                    c.imagePath != null &&
+                    filenames.contains(path.basename(c.imagePath!)),
+              )
+              .length +
+          groups.where((g) => groupIds.contains(g.id)).length;
+    }
+
+    folders =
+        folderService.getSubfolders(folderId).where((f) {
+            final n = eligibleIn(f);
+            if (n > 0) counts[f.id] = n;
+            return n > 0;
+          }).toList()
+          ..sort((a, b) => a.name.compareTo(b.name));
+  }
+
+  visibleCharacters.sort((a, b) => a.name.compareTo(b.name));
+  visibleGroups.sort((a, b) => a.name.compareTo(b.name));
+  return FolderPickView(
+    folders: folders,
+    folderCounts: counts,
+    characters: visibleCharacters,
+    groups: visibleGroups,
+  );
+}
 
 /// The ONE folder-aware character browser for "pick characters" surfaces
 /// (docs/design/folder-groups.md, related queued item). First consumer is the
@@ -100,46 +209,6 @@ class _FolderCharacterPickerState extends State<FolderCharacterPicker> {
     super.dispose();
   }
 
-  CharacterFolder? _folderOf(CharacterCard c) => c.imagePath == null
-      ? null
-      : widget.folderService.getFolderForCharacter(c.imagePath!);
-
-  /// Eligible characters anywhere inside [folder] (subfolders included) —
-  /// drives the tile count badge and hides folders with nothing to pick.
-  int _eligibleCountIn(CharacterFolder folder) {
-    final filenames = widget.folderService
-        .getCharactersInFolderRecursive(folder.id)
-        .toSet();
-    return widget.characters
-        .where(
-          (c) =>
-              c.imagePath != null &&
-              filenames.contains(path.basename(c.imagePath!)),
-        )
-        .length;
-  }
-
-  List<CharacterCard> _visibleCharacters() {
-    List<CharacterCard> list;
-    if (_query.isNotEmpty) {
-      // Searching reaches every eligible character, foldered or not.
-      list = widget.characters
-          .where(
-            (c) =>
-                c.name.toLowerCase().contains(_query) ||
-                c.description.toLowerCase().contains(_query) ||
-                c.personality.toLowerCase().contains(_query),
-          )
-          .toList();
-    } else {
-      list = widget.characters
-          .where((c) => _folderOf(c)?.id == _folderId)
-          .toList();
-    }
-    list.sort((a, b) => a.name.compareTo(b.name));
-    return list;
-  }
-
   void _enterFolder(CharacterFolder folder) {
     setState(() {
       if (_folderId != null) _folderStack.add(_folderId!);
@@ -157,14 +226,15 @@ class _FolderCharacterPickerState extends State<FolderCharacterPicker> {
   Widget build(BuildContext context) {
     final accent = widget.accent ?? AppColors.porchAmberOf(context);
     final browsing = _query.isEmpty;
-    final folders = browsing
-        ? (widget.folderService
-              .getSubfolders(_folderId)
-              .where((f) => _eligibleCountIn(f) > 0)
-              .toList()
-          ..sort((a, b) => a.name.compareTo(b.name)))
-        : const <CharacterFolder>[];
-    final characters = _visibleCharacters();
+    final view = buildFolderPickView(
+      folderService: widget.folderService,
+      characters: widget.characters,
+      folderId: _folderId,
+      query: _query,
+      matchDescriptions: true,
+    );
+    final folders = view.folders;
+    final characters = view.characters;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -217,7 +287,7 @@ class _FolderCharacterPickerState extends State<FolderCharacterPicker> {
             for (final folder in folders)
               _FolderTile(
                 folder: folder,
-                count: _eligibleCountIn(folder),
+                count: view.folderCounts[folder.id] ?? 0,
                 accent: accent,
                 onTap: () => _enterFolder(folder),
               ),

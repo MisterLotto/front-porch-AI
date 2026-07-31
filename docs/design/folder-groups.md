@@ -76,7 +76,18 @@ web via one shared component per platform:
 `web_ui/src/components/FolderCharacterPicker.tsx`. Rules mirror the home
 grid: browse = current level + navigable folder tiles (folders with no
 eligible candidates hidden, count badge), search = flat across every
-folder. Still open: adopting the shared picker in the Scene Guest picker
-and the Stoop share Pick step (both currently keep their flat pattern;
-the Stoop Pick step also lists groups, so its adoption needs a group row
-variant).
+folder.
+
+**STATUS 2026-07-31 (later): Stoop share Pick step DONE.** The desktop
+filtering rules were extracted into the pure `buildFolderPickView` helper
+(same file as FolderCharacterPicker) and extended to groups; the Pick
+step was extracted from the over-cap upload page into
+`stoop_pick_step.dart` (StoopPickStep + StoopGroupMontage) and consumes
+the same rules with Stoop styling — folders section (count badges,
+characters + groups counted), then Groups/Characters, Places only at the
+top level or while searching (places aren't foldered). Web has no upload
+flow yet (Share tab is a desktop-browser-only coming-soon placeholder),
+so there is no web counterpart to keep in parity; when web Share lands
+it inherits this pattern. **Scene Guest picker: deferral explicitly
+approved by the maintainer 2026-07-31 ("defer scene guest for the
+current time") — it keeps its flat search list until then.**

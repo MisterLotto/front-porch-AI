@@ -4,6 +4,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🪜 **Sharing to The Stoop now respects your folders** — The share wizard's Pick step used to pour every character and group into two flat grids. It now shows your folder structure: step into a folder (each tile counts the characters *and* groups inside), pick from there, and search still cuts across everything. Same porch, tidier steps.
+
 - 🗂️ **Building a group? Your folders finally came along** — The "Add Characters" browser in the group-creation wizard used to dump your entire library into one flat pile. It now shows your actual folders: step into a folder to browse it (each shows how many picks it holds), and searching still finds anyone no matter how deeply they're filed. Desktop and the web wizard alike.
 
 - 📁 **Group chats can live in folders now** — Group cards were stuck on the Home Screen's top level; now they move through your folder hierarchy exactly like characters. Right-click a group for "Move to Folder" / "Remove from Folder", multi-select mixes characters and groups in one grab (move or delete them together), folder cards count their groups, and folder-scoped search finds groups too. The web library matches: drag a group into a folder, use its card menu, or multi-select — same as characters.

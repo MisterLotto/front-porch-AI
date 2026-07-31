@@ -7015,3 +7015,45 @@ groups so its adoption needs a group-row variant.
 Widget tests cover folder navigation, empty-folder hiding, and
 folder-crossing search (drift work wrapped in tester.runAsync — real DB
 I/O never completes under the fake-async test zone).
+
+## 2026-07-31 (UTC) — Stoop share Pick step is folder-aware (extracted from the upload god file)
+
+Files: lib/ui/pages/repository/stoop_pick_step.dart (new),
+lib/ui/pages/repository/stoop_upload_page.dart,
+lib/ui/widgets/folder_character_picker.dart,
+test/ui/widgets/folder_character_picker_test.dart,
+docs/Rawhide.md, docs/design/folder-groups.md (status)
+
+Maintainer request: folder support for Stoop uploads; Scene Guest picker
+deferral explicitly approved for now.
+
+The desktop folder-pick rules moved out of FolderCharacterPicker's State
+into the pure buildFolderPickView helper (same file) and grew group
+support: eligible counts and folder filtering now cover characters AND
+groups (groups gained folder membership earlier today). The wizard's
+picker delegates to it — its private _folderOf/_eligibleCountIn/
+_visibleCharacters copies are deleted, so the group wizard and the Stoop
+step literally share one rule set and cannot drift.
+
+The Pick step itself was extracted from stoop_upload_page.dart (1152
+lines, over the 500 cap — "do not grow" honored by shrinking it to 899)
+into stoop_pick_step.dart (489 lines): StoopPickStep owns the search +
+folder navigation state and renders Folders (count badges) → Groups →
+Characters → Places in The Stoop's own visual language; Places aren't
+foldered so that section shows only at the top level or while searching.
+StoopGroupMontage became a public widget reused by the review-step
+preview — and went stateful to cache its member-avatar future (the old
+inline FutureBuilder issued a fresh SQLite query per tile per rebuild,
+i.e. per search keystroke — the exact GroupGridCard incident pattern).
+Deleted from the page: _pickStep's inline body, _pickSearchField,
+_groupPickTile, _pickTile, _groupMontage, _centeredHint, _pickSearch/
+_pickQuery state.
+
+Web parity: none required — the web Stoop Share tab is a
+desktop-browser-only coming-soon placeholder (no upload flow exists);
+noted in the design doc so the pattern is inherited when it lands.
+
+Tests: pure-logic coverage of buildFolderPickView with groups (root
+browse + folder counts including group-only folders, in-folder listing,
+name search across folders) added beside the existing picker widget
+tests.
