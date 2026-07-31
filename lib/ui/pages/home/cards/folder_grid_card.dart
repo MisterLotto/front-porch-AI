@@ -44,8 +44,11 @@ class FolderGridCard extends StatelessWidget {
   });
 
   final CharacterFolder folder;
-  final void Function(CharacterCard character, CharacterFolder folder)
-  onAcceptFolderDrop;
+
+  /// Fired when a card is dropped on this folder. [item] is the dragged
+  /// [CharacterCard] **or** [GroupChat] — one callback for both kinds rather
+  /// than parallel character/group drop paths.
+  final void Function(Object item, CharacterFolder folder) onAcceptFolderDrop;
   final void Function(CharacterFolder folder) onFolderTap;
   final void Function(
     FolderDialogAction action, {
@@ -83,7 +86,12 @@ class FolderGridCard extends StatelessWidget {
     final charCount = folder.characterPaths.length;
     final groupCount = folder.groupIds.length;
 
-    return DragTarget<CharacterCard>(
+    // Object (not CharacterCard) so group casts can be dropped here too —
+    // typed as the base with an explicit will-accept guard, so an unrelated
+    // draggable neither highlights the folder nor fires the callback.
+    return DragTarget<Object>(
+      onWillAcceptWithDetails: (details) =>
+          details.data is CharacterCard || details.data is GroupChat,
       onAcceptWithDetails: (details) {
         onAcceptFolderDrop(details.data, folder);
       },

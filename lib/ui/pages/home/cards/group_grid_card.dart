@@ -23,6 +23,8 @@ import 'package:flutter/material.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/ui/widgets/character_card_grid.dart'
+    show kFolderDragHoldDelay;
 import 'package:front_porch_ai/ui/widgets/group_avatar_montage.dart';
 
 /// A single group-chat card in the home grid — avatar montage, name, member
@@ -97,7 +99,7 @@ class _GroupGridCardState extends State<GroupGridCard> {
       future: _avatarsFuture,
       builder: (context, snapshot) {
         final memberFiles = snapshot.data ?? <File>[];
-        return Card(
+        final card = Card(
           color: AppColors.cardOf(context),
           clipBehavior: Clip.antiAlias,
           shape: RoundedRectangleBorder(
@@ -408,6 +410,50 @@ class _GroupGridCardState extends State<GroupGridCard> {
               ],
             ),
           ),
+        );
+
+        // Group casts drag into folders exactly like characters do — the
+        // folder drop targets accept either kind (they were CharacterCard-only,
+        // which is why groups couldn't be dragged at all).
+        return LongPressDraggable<GroupChat>(
+          data: group,
+          delay: kFolderDragHoldDelay,
+          feedback: Material(
+            color: Colors.transparent,
+            child: SizedBox(
+              width: 150,
+              height: 200,
+              child: Card(
+                color: AppColors.cardOf(context),
+                clipBehavior: Clip.antiAlias,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: ColoredBox(
+                  color: AppColors.porchTerracottaOf(
+                    context,
+                  ).withValues(alpha: 0.12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: memberFiles.isEmpty
+                        ? Icon(
+                            Icons.groups,
+                            size: 64,
+                            color: AppColors.porchTerracottaOf(context),
+                          )
+                        : Center(
+                            child: GroupAvatarMontage(
+                              images: memberFiles.take(4).toList(),
+                              side: 120,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          childWhenDragging: Opacity(opacity: 0.3, child: card),
+          child: card,
         );
       },
     );

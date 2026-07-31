@@ -7250,3 +7250,45 @@ Tests: setup_service_test.dart covers all six flows (first-launch ask
 with zero network calls, managed choice → background fetch, own-backend
 → no download + type flip, missing-binary re-acquire, remote implicit
 choice, installed-engine implicit choice).
+
+## 2026-07-31 (UTC) — Group casts drag into folders; drag hold-time halved
+
+Files: lib/ui/widgets/character_card_grid.dart,
+lib/ui/pages/home/cards/character_grid_card.dart,
+lib/ui/pages/home/cards/group_grid_card.dart,
+lib/ui/pages/home/cards/folder_grid_card.dart,
+lib/ui/pages/home/home_page_chrome.dart,
+test/ui/widgets/folder_drag_drop_test.dart (new), docs/Rawhide.md
+
+Two maintainer bug reports on the home grid's drag-to-folder system.
+
+(1) Group casts could not be dragged into folders. Two independent
+causes: GroupGridCard was never wrapped in a Draggable at all, and the
+folder drop target was typed `DragTarget<CharacterCard>` — so even a
+dragged group would have been rejected. GroupGridCard now wraps its card
+in LongPressDraggable<GroupChat> (feedback = the member montage,
+childWhenDragging = the dimmed card, mirroring CharacterGridCard), and
+FolderGridCard became `DragTarget<Object>` with an explicit
+onWillAcceptWithDetails guard (`is CharacterCard || is GroupChat`) so
+unrelated draggables neither highlight the folder nor fire the callback.
+onAcceptFolderDrop's signature generalized from CharacterCard to Object,
+and _handleAcceptFolderDrop branches once on the type (characters key by
+image filename, groups by group id) — ONE drop handler, not parallel
+character/group paths.
+
+(2) The press-and-hold before a drag began was Flutter's stock
+kLongPressTimeout (500 ms), which read as "the app didn't register my
+click". New shared const kFolderDragHoldDelay = 250 ms (exactly half),
+declared in character_card_grid.dart beside the other shared home-grid
+symbols and used by BOTH draggable cards so they can't drift.
+
+Web parity: none required. The web library already drags groups into
+folders (shipped with the group-foldering work) and uses native HTML5
+drag, which has no hold delay to tune — the tuned delay is a
+touch/long-press concern specific to the desktop grid.
+
+Tests: folder_drag_drop_test.dart drives real gestures — a group dropping
+on a folder, a character still dropping (no regression from the generic
+drop target), and a short press NOT dragging. The successful drags hold
+for 300 ms: longer than the new delay but SHORTER than the old 500 ms
+stock value, so reverting either fix fails the suite.

@@ -339,13 +339,19 @@ extension _HomePageChrome on _HomePageState {
   }
 
 
+  /// One drop handler for both draggable kinds: characters are keyed by image
+  /// filename, group casts by their group id (see FolderService).
   Future<void> _handleAcceptFolderDrop(
-    CharacterCard character,
+    Object item,
     CharacterFolder folder,
   ) async {
     final folderService = Provider.of<FolderService>(context, listen: false);
-    if (character.imagePath != null) {
-      await folderService.addToFolder(folder.id, character.imagePath!);
+    if (item is CharacterCard) {
+      if (item.imagePath != null) {
+        await folderService.addToFolder(folder.id, item.imagePath!);
+      }
+    } else if (item is GroupChat) {
+      await folderService.addGroupToFolder(folder.id, item.id);
     }
   }
 

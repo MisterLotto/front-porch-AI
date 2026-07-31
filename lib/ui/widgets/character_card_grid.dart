@@ -20,6 +20,13 @@ enum SearchScope { currentFolder, folderRecursive, allCharacters }
 
 enum FolderDialogAction { create, rename, delete }
 
+/// How long a press must be held before a home-grid card starts dragging to a
+/// folder. HALF Flutter's `kLongPressTimeout` (500 ms) — the stock delay made
+/// organising a library feel unresponsive, as if the drag hadn't registered.
+/// Shared by every draggable card (characters AND group casts) so the two
+/// can't drift apart.
+const Duration kFolderDragHoldDelay = Duration(milliseconds: 250);
+
 class CharacterCardGrid extends StatelessWidget {
   const CharacterCardGrid({
     super.key,
@@ -94,8 +101,9 @@ class CharacterCardGrid extends StatelessWidget {
   final void Function(String action, CharacterCard character)
   onContextMenuAction;
   final void Function(String source) onImport;
-  final void Function(CharacterCard character, CharacterFolder folder)
-  onAcceptFolderDrop;
+  /// A card was dropped on a folder — [item] is a [CharacterCard] or a
+  /// [GroupChat] (both drag into folders).
+  final void Function(Object item, CharacterFolder folder) onAcceptFolderDrop;
   final void Function(
     FolderDialogAction action, {
     CharacterFolder? folder,

@@ -22,6 +22,8 @@ import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/ui/widgets/character_card_grid.dart'
+    show kFolderDragHoldDelay;
 import 'package:front_porch_ai/utils/utils.dart';
 
 /// A single character card in the home grid: draggable (for folder organizing),
@@ -92,6 +94,7 @@ class CharacterGridCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return LongPressDraggable<CharacterCard>(
       data: character,
+      delay: kFolderDragHoldDelay,
       feedback: Material(
         color: Colors.transparent,
         child: SizedBox(
