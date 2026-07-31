@@ -369,22 +369,18 @@ extension _HomePageChrome on _HomePageState {
   }
 
   void _handleFolderTap(CharacterFolder folder) {
-    applyState(() {
-      if (_activeFolderId != null) {
-        _folderStack.add(_activeFolderId!);
-      }
-      _activeFolderId = folder.id;
-    });
+    applyState(() => _activeFolderId = folder.id);
   }
 
+  /// Up one level. Subfolder cards only render inside their parent, so the
+  /// parent chain IS the navigation history — no stack needed (and the
+  /// breadcrumb trail can jump to any ancestor directly).
   void _handleFolderNavigateBack() {
-    applyState(() {
-      if (_folderStack.isNotEmpty) {
-        _activeFolderId = _folderStack.removeLast();
-      } else {
-        _activeFolderId = null;
-      }
-    });
+    final folderService = Provider.of<FolderService>(context, listen: false);
+    final current = folderService.folders
+        .where((f) => f.id == _activeFolderId)
+        .firstOrNull;
+    applyState(() => _activeFolderId = current?.parentId);
   }
 
   void _handleMoveToFolder(Set<String> selectedIds) {

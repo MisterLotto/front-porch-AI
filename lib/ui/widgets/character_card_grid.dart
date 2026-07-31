@@ -52,6 +52,7 @@ class CharacterCardGrid extends StatelessWidget {
     required this.onFolderDialogAction,
     required this.onFolderTap,
     required this.onFolderNavigateBack,
+    required this.onFolderJump,
     required this.onCancelSelection,
     required this.onDeleteSelected,
     required this.onMoveToFolder,
@@ -103,6 +104,9 @@ class CharacterCardGrid extends StatelessWidget {
   onFolderDialogAction;
   final void Function(CharacterFolder folder) onFolderTap;
   final VoidCallback onFolderNavigateBack;
+
+  /// Breadcrumb jump to an ancestor folder (null = the library top level).
+  final void Function(String? folderId) onFolderJump;
   final VoidCallback onCancelSelection;
   // onCreateGroup removed — group creation is now exclusively via the sidebar "Create Group Chat" button.
   /// Mass delete of the selected characters (severe typed-DELETE confirm
@@ -228,6 +232,7 @@ class CharacterCardGrid extends StatelessWidget {
               folderService: folderService,
               onCancelSelection: onCancelSelection,
               onFolderNavigateBack: onFolderNavigateBack,
+              onFolderJump: onFolderJump,
               onSortChanged: onSortChanged,
               onGridScaleChanged: onGridScaleChanged,
               onGridScaleChangeEnd: onGridScaleChangeEnd,

@@ -68,7 +68,6 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   String _searchQuery = '';
   String? _activeFolderId; // null = top level view
-  List<String> _folderStack = []; // navigation breadcrumb for subfolder back
   SearchScope _searchScope = SearchScope.currentFolder;
   final _searchController = TextEditingController();
 
@@ -144,6 +143,27 @@ class _HomePageState extends State<HomePage> {
       final charRepo = Provider.of<CharacterRepository>(context, listen: false);
       charRepo.removeListener(_onCharactersChanged);
       charRepo.addListener(_onCharactersChanged);
+    } catch (_) {}
+    // Re-tapping the sidebar's Home entry bumps AppState.homeResetTick —
+    // treat it as "take me back to the main screen" (library top level).
+    try {
+      final appState = Provider.of<AppState>(context, listen: false);
+      _lastHomeResetTick ??= appState.homeResetTick;
+      appState.removeListener(_onAppStateChanged);
+      appState.addListener(_onAppStateChanged);
+    } catch (_) {}
+  }
+
+  int? _lastHomeResetTick;
+
+  void _onAppStateChanged() {
+    if (!mounted) return;
+    try {
+      final appState = Provider.of<AppState>(context, listen: false);
+      if (appState.homeResetTick != _lastHomeResetTick) {
+        _lastHomeResetTick = appState.homeResetTick;
+        setState(() => _activeFolderId = null);
+      }
     } catch (_) {}
   }
 
@@ -323,7 +343,12 @@ class _HomePageState extends State<HomePage> {
     _activityRefreshDebounce?.cancel();
     _searchController.dispose();
     _gridScrollController.dispose();
-
+    try {
+      Provider.of<AppState>(
+        context,
+        listen: false,
+      ).removeListener(_onAppStateChanged);
+    } catch (_) {}
     super.dispose();
   }
 
@@ -455,6 +480,7 @@ class _HomePageState extends State<HomePage> {
             onFolderDialogAction: _handleFolderDialogAction,
             onFolderTap: _handleFolderTap,
             onFolderNavigateBack: _handleFolderNavigateBack,
+            onFolderJump: (id) => setState(() => _activeFolderId = id),
             onCancelSelection: _cancelSelection,
             onDeleteSelected: _massDeleteSelected,
             // onCreateGroup no longer wired — old select-for-group path deprecated.

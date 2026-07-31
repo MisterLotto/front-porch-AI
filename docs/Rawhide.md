@@ -4,6 +4,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🧭 **Real breadcrumbs for folders — and Home actually takes you home** — Standing three folders deep used to mean tapping back one level at a time, and clicking the sidebar's Home while inside a folder did nothing. The folder header is now a clickable path ("My Characters / Cast / Villains") — tap any part to jump straight there — and re-tapping Home in the sidebar always returns you to the main screen. (The web library already worked this way.)
+
 - 🪜 **Sharing to The Stoop now respects your folders** — The share wizard's Pick step used to pour every character and group into two flat grids. It now shows your folder structure: step into a folder (each tile counts the characters *and* groups inside), pick from there, and search still cuts across everything. Same porch, tidier steps.
 
 - 🗂️ **Building a group? Your folders finally came along** — The "Add Characters" browser in the group-creation wizard used to dump your entire library into one flat pile. It now shows your actual folders: step into a folder to browse it (each shows how many picks it holds), and searching still finds anyone no matter how deeply they're filed. Desktop and the web wizard alike.

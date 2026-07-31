@@ -41,6 +41,7 @@ class HomeGridToolbar extends StatelessWidget {
     required this.folderService,
     required this.onCancelSelection,
     required this.onFolderNavigateBack,
+    required this.onFolderJump,
     required this.onSortChanged,
     required this.onGridScaleChanged,
     required this.onGridScaleChangeEnd,
@@ -63,6 +64,9 @@ class HomeGridToolbar extends StatelessWidget {
   final FolderService folderService;
   final VoidCallback onCancelSelection;
   final VoidCallback onFolderNavigateBack;
+
+  /// Breadcrumb jump — null = the library top level, else an ancestor folder.
+  final void Function(String? folderId) onFolderJump;
   final void Function(String mode) onSortChanged;
   final void Function(double scale) onGridScaleChanged;
   final void Function(double scale)? onGridScaleChangeEnd;
@@ -76,12 +80,69 @@ class HomeGridToolbar extends StatelessWidget {
   onFolderDialogAction;
   final void Function(String source) onImport;
 
-  String _getActiveFolderName() {
-    if (activeFolderId == null) return 'My Characters';
-    final folder = folderService.folders
-        .where((f) => f.id == activeFolderId)
-        .firstOrNull;
-    return folder?.name ?? 'Folder';
+  /// Ancestor chain for the active folder, root-first with the current
+  /// folder last (subfolder cards only render inside their parent, so the
+  /// parent chain is the full navigation path).
+  List<CharacterFolder> _trail() {
+    final trail = <CharacterFolder>[];
+    var cur = activeFolderId;
+    while (cur != null) {
+      final folder = folderService.folders
+          .where((f) => f.id == cur)
+          .firstOrNull;
+      if (folder == null) break;
+      trail.insert(0, folder);
+      cur = folder.parentId;
+    }
+    return trail;
+  }
+
+  /// Clickable path — "My Characters / folder1 / folder2 / current". Every
+  /// segment but the current one jumps straight there, so deep nesting never
+  /// needs N back-taps to escape.
+  Widget _breadcrumb(BuildContext context) {
+    final trail = _trail();
+    final crumbStyle = TextStyle(
+      color: AppColors.textSecondary(context),
+      fontSize: 15,
+    );
+    Widget crumb(String label, String? target) => InkWell(
+      onTap: () => onFolderJump(target),
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: Text(label, style: crumbStyle),
+      ),
+    );
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      // Keep the tail (the folder you're standing in) visible on long paths.
+      reverse: true,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          crumb('My Characters', null),
+          for (var i = 0; i < trail.length; i++) ...[
+            Text(
+              '/',
+              style: TextStyle(color: AppColors.textTertiary(context)),
+            ),
+            if (i < trail.length - 1)
+              crumb(trail[i].name, trail[i].id)
+            else
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  trail[i].name,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
   }
 
   @override
@@ -118,20 +179,12 @@ class HomeGridToolbar extends StatelessWidget {
                   ] else if (activeFolderId != null) ...[
                     IconButton(
                       icon: const Icon(Icons.arrow_back),
-                      tooltip: 'Back to all characters',
+                      tooltip: 'Up one level',
                       visualDensity: VisualDensity.compact,
                       onPressed: onFolderNavigateBack,
                     ),
                     const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        _getActiveFolderName(),
-                        overflow: TextOverflow.ellipsis,
-                        softWrap: false,
-                        style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                    ),
+                    Flexible(child: _breadcrumb(context)),
                   ] else
                     modeToggle,
                   const SizedBox(width: 12),

@@ -25,7 +25,14 @@ class AppState extends ChangeNotifier {
   int _selectedIndex = 0;
   int get selectedIndex => _selectedIndex;
 
+  /// Bumped when the sidebar's Home entry is tapped while Home is already the
+  /// selected page. Re-tapping Home used to be a silent no-op; the home grid
+  /// listens for this and returns to the library's top level (folder = null).
+  int _homeResetTick = 0;
+  int get homeResetTick => _homeResetTick;
+
   void setIndex(int index) {
+    if (index == 0 && _selectedIndex == 0) _homeResetTick++;
     _selectedIndex = index;
     notifyListeners();
   }

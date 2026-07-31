@@ -7057,3 +7057,35 @@ Tests: pure-logic coverage of buildFolderPickView with groups (root
 browse + folder counts including group-only folders, in-folder listing,
 name search across folders) added beside the existing picker widget
 tests.
+
+## 2026-07-31 (UTC) — Folder breadcrumbs + sidebar Home actually goes home
+
+Files: lib/providers/app_state.dart, lib/ui/pages/home_page.dart,
+lib/ui/pages/home/home_page_chrome.dart,
+lib/ui/pages/home/home_page_handlers.dart,
+lib/ui/pages/home/widgets/home_grid_toolbar.dart,
+lib/ui/widgets/character_card_grid.dart,
+test/golden/widget/home_golden_test.dart, docs/Rawhide.md
+
+Maintainer reports: (1) clicking the sidebar's Home while standing inside
+a folder was a no-op (setIndex(0) with index already 0 changed nothing);
+(2) deep nesting (folder1/folder2/folder3) had no way to jump to an
+ancestor or the main screen — only single-step back.
+
+Fixes: AppState gains homeResetTick, bumped when Home is tapped while
+already selected; HomePage listens (same listener pattern as its
+KoboldService/CharacterRepository hooks) and clears _activeFolderId. The
+toolbar's single folder-name header became a clickable breadcrumb path
+("My Characters / f1 / f2 / current") — every segment but the current one
+jumps straight there; horizontal scroll (reverse:true) keeps the tail
+visible on long paths.
+
+Consolidation: the _folderStack navigation-history list is DELETED —
+subfolder cards only render inside their parent, so the parent chain IS
+the history; back ("Up one level") now derives the parent from
+FolderService, and _leaveDeletedFolder takes the folder (jumping to its
+parentId) instead of popping a stack. _getActiveFolderName was replaced
+by the _trail/_breadcrumb pair that renders the same data clickable.
+
+Web parity: none needed — the web library already has the clickable
+Home + ancestor-trail breadcrumb this brings the desktop up to.

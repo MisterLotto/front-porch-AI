@@ -321,7 +321,7 @@ extension _HomePageHandlers on _HomePageState {
           onPressed: () {
             folderService.deleteFolder(folder.id);
             Navigator.pop(context);
-            _leaveDeletedFolder(folder.id);
+            _leaveDeletedFolder(folder);
           },
         ),
         if (charCount > 0)
@@ -338,16 +338,11 @@ extension _HomePageHandlers on _HomePageState {
     );
   }
 
-  /// If the user is standing inside the folder being deleted, step back out.
-  void _leaveDeletedFolder(String folderId) {
-    if (_activeFolderId != folderId) return;
-    applyState(() {
-      if (_folderStack.isNotEmpty) {
-        _activeFolderId = _folderStack.removeLast();
-      } else {
-        _activeFolderId = null;
-      }
-    });
+  /// If the user is standing inside the folder being deleted, step back out
+  /// to its parent (top level when the folder was top-level).
+  void _leaveDeletedFolder(CharacterFolder folder) {
+    if (_activeFolderId != folder.id) return;
+    applyState(() => _activeFolderId = folder.parentId);
   }
 
   /// The nuclear option: PERMANENTLY delete a folder, its subfolders, and
@@ -384,7 +379,7 @@ extension _HomePageHandlers on _HomePageState {
           'There is no undo and no recycle bin.',
       afterDelete: () async {
         await folderService.deleteFolder(folder.id);
-        _leaveDeletedFolder(folder.id);
+        _leaveDeletedFolder(folder);
       },
     );
   }

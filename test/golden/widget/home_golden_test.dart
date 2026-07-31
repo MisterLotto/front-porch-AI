@@ -106,6 +106,7 @@ Widget _grid({
       onFolderDialogAction: (FolderDialogAction _, {folder, parentId}) {},
       onFolderTap: (_) {},
       onFolderNavigateBack: () {},
+      onFolderJump: (_) {},
       onCancelSelection: () {},
       onDeleteSelected: (_) {},
       onMoveToFolder: (_) {},
