@@ -64,6 +64,7 @@
         });
 
         mount.replaceChildren(el('div', null, [
+          ui.verifyBanner(function () { renderMine(mount); }),
           el('div', { class: 'hub-head-row' }, [
             el('h2', null, 'My cards'),
             el('div', { class: 'hub-head-actions' }, [
@@ -192,7 +193,9 @@
       }).catch(function (e) {
         submitBtn.disabled = false;
         submitBtn.textContent = updateId ? 'Publish new version' : 'Submit for review';
-        setError(e.message);
+        setError(e.code === 'email_not_verified'
+          ? 'Confirm your email address first — check your inbox for the link, or use “Send it again” on My cards.'
+          : e.message);
       });
     }
 
@@ -203,6 +206,9 @@
 
     mount.replaceChildren(el('div', { class: 'hub-submit' }, [
       el('a', { class: 'hub-back', href: '#/mine' }, '← My cards'),
+      // Say it up front rather than letting them fill the whole form and hit a
+      // 403 at the end.
+      ui.verifyBanner(),
       el('h2', null, updateId ? 'Update your card' : 'Share a card on The Stoop'),
       el('p', { class: 'hub-dim' }, [
         'Start from a card file: a character PNG (V2 “chara” cards from Front Porch AI, SillyTavern, and friends), a Front Porch ',
@@ -366,12 +372,15 @@
       }).catch(function (e) {
         submitBtn.disabled = false;
         submitBtn.textContent = 'Submit for review';
-        setError(e.message);
+        setError(e.code === 'email_not_verified'
+          ? 'Confirm your email address first — check your inbox for the link, or use “Send it again” on My cards.'
+          : e.message);
       });
     }
 
     mount.replaceChildren(el('div', { class: 'hub-submit' }, [
       el('a', { class: 'hub-back', href: '#/mine' }, '← My cards'),
+      ui.verifyBanner(),
       el('h2', null, '🏞️ Share a world on The Stoop'),
       el('p', { class: 'hub-dim' }, [
         'Start from a ',

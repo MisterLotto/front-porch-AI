@@ -27,6 +27,7 @@ import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_verify_banner.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_pick_step.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_standards.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_tag_selector.dart';
@@ -201,6 +202,9 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     switch (code) {
       case 'policy_not_accepted':
         return 'Please accept the Acceptable Use Policy before sharing.';
+      case 'email_not_verified':
+        return 'Confirm your email address before sharing — check your inbox '
+            'for the link we sent. Browsing and downloading still work.';
       case 'unsupported_image_type':
         return 'That avatar image type isn’t supported (use PNG, JPG, or WebP).';
       case 'file_too_large':
@@ -458,9 +462,20 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
           ),
         ),
       ),
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 250),
-        child: _stepBody(),
+      body: Column(
+        children: [
+          // Say it before they fill the whole wizard and hit a 403 at the end.
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: StoopVerifyBanner(),
+          ),
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              child: _stepBody(),
+            ),
+          ),
+        ],
       ),
       bottomNavigationBar: _navButtons(),
     );

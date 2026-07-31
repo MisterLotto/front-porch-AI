@@ -23,6 +23,11 @@ class BackporchUser {
   /// Whether the 18+ age gate has been completed for this account.
   final bool ageVerified;
 
+  /// Whether the account's email address is confirmed. Sharing requires it;
+  /// browsing and downloading never do. Defaults true so an older server that
+  /// doesn't report the field can't make the app nag about a gate it lacks.
+  final bool emailVerified;
+
   /// Whether the user has opted into seeing NSFW content (policy default: off).
   final bool nsfwEnabled;
 
@@ -40,6 +45,7 @@ class BackporchUser {
     required this.displayName,
     required this.role,
     required this.ageVerified,
+    this.emailVerified = true,
     required this.nsfwEnabled,
     required this.acceptedPolicyVersion,
     required this.twoFactorEnabled,
@@ -53,6 +59,7 @@ class BackporchUser {
     displayName: json['displayName'] as String? ?? '',
     role: json['role'] as String? ?? 'USER',
     ageVerified: json['ageVerified'] as bool? ?? false,
+    emailVerified: json['emailVerified'] as bool? ?? true,
     nsfwEnabled: json['nsfwEnabled'] as bool? ?? false,
     acceptedPolicyVersion: json['acceptedPolicyVersion'] as String?,
     twoFactorEnabled: json['twoFactorEnabled'] as bool? ?? false,

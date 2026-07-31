@@ -79,7 +79,13 @@
       } else {
         p = Api.login(email.value.trim(), password.value, totp.value.trim() || undefined);
       }
-      p.then(function () { S.app.onAuthed(); })
+      p.then(function () {
+        // Confirmation email is on its way; sharing needs it, browsing doesn't.
+        if (mode === 'signup') {
+          ui.toast('Welcome! Check your email to confirm your address — you’ll need it to share cards.');
+        }
+        S.app.onAuthed();
+      })
         .catch(function (err) {
           if (err.code === 'two_factor_required') {
             totpRow.classList.remove('hub-hidden');

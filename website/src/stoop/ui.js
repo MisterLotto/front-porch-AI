@@ -261,6 +261,45 @@
     ]);
   }
 
+  /** Banner for a signed-in user whose address isn't confirmed yet. Sharing is
+      the ONLY thing this blocks — browsing and downloading stay open — so the
+      wording says exactly that instead of sounding like a lockout. Returns null
+      when there's nothing to say (verified, or an older server that doesn't
+      report the field at all). */
+  function verifyBanner(onVerified) {
+    Api = Api || window.Stoop.api;
+    var u = Api.state.user;
+    if (!u || u.emailVerified !== false) return null;
+    var btn = el('button', { class: 'btn btn-amber', type: 'button' }, 'Send it again');
+    btn.addEventListener('click', function () {
+      btn.disabled = true;
+      Api.resendVerification()
+        .then(function (r) {
+          if (r && r.alreadyVerified) {
+            toast('Already confirmed \u2014 you\u2019re good to go.');
+            if (onVerified) onVerified();
+          } else {
+            toast('Sent. Check your inbox, and the spam folder just in case.');
+          }
+        })
+        .catch(function (e) {
+          toast(e.code === 'resend_too_soon'
+            ? 'One just went out \u2014 give it a couple of minutes before asking again.'
+            : e.message, 'err');
+        })
+        .finally(function () { btn.disabled = false; });
+    });
+    return el('div', { class: 'hub-verify-banner' }, [
+      el('span', { class: 'hub-verify-ico' }, '\u2709\uFE0F'),
+      el('div', { class: 'hub-verify-text' }, [
+        el('strong', null, 'Confirm your email to share your own cards.'),
+        el('p', null, 'We sent a link to ' + (u.email || 'your address') +
+          '. Browsing and downloading work without it \u2014 confirming is only needed to upload.'),
+      ]),
+      btn,
+    ]);
+  }
+
   /** The "plays best in Front Porch AI" strip used on browse + detail. */
   function fpaiBanner(compact) {
     return el('div', { class: 'hub-fpai' + (compact ? ' compact' : '') }, [
@@ -292,5 +331,6 @@
     downloadCard: downloadCard,
     confirmAdult: confirmAdult,
     fpaiBanner: fpaiBanner,
+    verifyBanner: verifyBanner,
   };
 })();

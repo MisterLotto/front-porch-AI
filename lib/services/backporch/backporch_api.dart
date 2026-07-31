@@ -238,6 +238,12 @@ class BackporchApi {
         .toList();
   }
 
+  /// Ask for another email-confirmation link. Throws `resend_too_soon` when
+  /// one was sent within the last couple of minutes.
+  Future<void> resendVerification(String accessToken) async {
+    await _post('/auth/resend-verification', const {}, token: accessToken);
+  }
+
   /// Cards the user has downloaded before (newest first), so they can grab them
   /// again on a new device. Returns the same shape as browse items.
   Future<List<StoopCard>> myDownloads(String accessToken) async {

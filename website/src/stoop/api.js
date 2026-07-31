@@ -267,6 +267,8 @@
     unfollow: function (id) { return api('DELETE', '/creators/' + encodeURIComponent(id) + '/follow'); },
     following: function () { return api('GET', '/me/following'); },
 
+    resendVerification: function () { return api('POST', '/auth/resend-verification', {}); },
+
     /* own cards */
     myCharacters: function () { return api('GET', '/me/characters?types=solo,group,world'); },
     myDownloads: function () { return api('GET', '/me/downloads?types=solo,group,world'); },

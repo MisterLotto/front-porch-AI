@@ -413,6 +413,17 @@
 
 /* ---- my cards ---- */
 .hub-head-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 22px; }
+.hub-verify-banner {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  border: 1px solid rgba(245, 166, 35, 0.4); border-left: 3px solid var(--amber);
+  border-radius: var(--radius-sm); background: var(--amber-soft);
+  padding: 14px 18px; margin-bottom: 20px;
+}
+.hub-verify-ico { font-size: 1.3rem; }
+.hub-verify-text { flex: 1 1 260px; }
+.hub-verify-text strong { color: var(--amber-hi); display: block; margin-bottom: 3px; }
+.hub-verify-text p { color: var(--cream-2); font-size: 0.9rem; margin: 0; }
+
 .hub-head-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .hub-empty-cta { display: flex; justify-content: center; margin-top: 4px; padding-bottom: 26px; }
 .hub-head-row h2, .hub-h2-space { color: var(--cream); }
