@@ -7959,3 +7959,63 @@ pending state visible + cancellable on all three surfaces. Backend deployed to d
 (avatars/recovery/mod tools + email-change, sessionEpoch); hub dist-hub deployed
 (reset pages, avatars, From-your-porch row, signup-toast fix). Dashboard now flags
 unverified emails on the Users list.
+
+## 2026-08-01 (v1.2 production-proofing) — Kokoro voices, cleanup data loss, E2E, barrels
+
+**Files:** lib/services/kokoro_engine.dart, lib/services/tts/sherpa_kokoro_engine.dart,
+lib/services/tts_service.dart, lib/ui/dialogs/tts_settings_dialog.dart,
+lib/database/database_cleanup.dart, lib/utils/character_id.dart,
+lib/services/chat/chat_service_reprocess.dart, lib/services/chat_service.dart,
+NEW test/services/kokoro_voice_catalog_test.dart,
+NEW test/database/database_cleanup_identity_test.dart,
+integration_test/app_smoke_test.dart, integration_test/support/fake_backend.dart,
+10 NEW barrels + 72 importers, docs/Rawhide.md.
+
+**Why — Kokoro (Discord report, Dazpants Games 2026-07-31):** "Kokoro falls back to a
+default voice." Two causes. (1) The hand-written 53-entry voice catalog had drifted from
+the shipped model: it offered jm_beta/em_santa/zm_yibo (all labelled Male) which
+kokoro-multi-lang-v1_0 does not contain, and hid jf_nezumi/jf_tebukuro/zm_yunjian which it
+does. (2) `speakerIds[voice] ?? speakerIds['af_heart']!` silently substituted a FEMALE
+voice for any unresolved name, with no log. Ground truth came from the model itself —
+model.onnx embeds `af_alloy->0,…,am_adam->11,…` and voices.bin is exactly 53×522,240 B —
+which confirmed the speaker map was correct and the catalog was not. The catalog is now
+DERIVED from speakerIds (385 lines -> ~35), so drift is structurally impossible, and
+unknown voices fall back within the same language+gender. Third cause, UX: a character's
+own ttsVoice overrides the global Settings voice with nothing saying so — now stated in
+the dialog and logged in TtsService.
+
+**Why — Database Cleanup (release blocker, found by audit, verified against the real DB):**
+`objectives.character_id` / `message_embeddings.character_id` hold a **stableGroupId**
+(image-filename basename, e.g. `Jennifer_1782587668376`) but `_deleteOrphanRows` joined
+them against `characters.id` (a UUID). Nothing ever matched, so every row was an "orphan."
+Measured on the maintainer's live DB: 107/107 objectives and 68/68 embeddings would have
+been deleted by the Settings dialog; avatar_images was unaffected (it does use UUIDs).
+The file already warned about this exact trap for journal_memories — it was never applied
+here. Fixed by resolving the true identity space (characters.id ∪ stableGroupId ∪
+group_members.id); after the fix only 8 objectives delete, all belonging to characters with
+a non-null deleted_at. `stableGroupIdFrom()` extracted in character_id.dart so the
+derivation has ONE implementation (a drifted copy here is a DELETE).
+
+**Why — regenerate cancel (data loss):** regenerate pops the reply at reprocess.dart:417 so
+the prompt excludes it; both `_realismEvalCancelled` early-returns fired before
+_generateResponse appends the replacement, destroying the message and all its swipes. The
+backend gate above already guarded this ("aborting after removeLast would drop the popped
+reply"); the cancel paths never learned it. Both now restore + save.
+
+**E2E:** six new phases — session-reload persistence (realism + messages reaching SQLite),
+weather determinism across reload, needs refund + delete persistence, backend-500
+resilience (guards released, chat recovers), worlds biome swap, and lorebook keyword
+injection asserted against the real outbound prompt. fake_backend gained
+`failNextChatCompletion`. Runtime ~21s.
+
+**Barrels:** 10 new directory barrels (services/chat — named by CLAUDE.md as needed —
+web/util, capability, image_prompt, web/tunnels, ui/dialogs, ui/pages, ui/character_creator
++ its widgets, ui/settings/widgets); 263 solo imports collapsed across 72 files. 76 remain,
+all single-sibling (the documented exemption). One redundant import removed from
+chat_service.dart.
+
+**Verification:** flutter analyze clean; 2797 unit tests pass; E2E green.
+NOT fixed (deliberate, maintainer's call): `_isGenerating` is cleared at
+chat_service_generation.dart:1575 while post-gen evals run at 1698-1760, leaving every
+re-entrancy guard open for seconds. Real, but changing generation-completion timing hours
+before a release is the wrong trade.
