@@ -35,6 +35,7 @@ export 'json_sanitizer.dart';
 export 'kobold_layer_solver.dart';
 export 'output_sanitizer_regex.dart';
 export 'persona_colors.dart';
+export 'picker_prefs.dart';
 export 'think_tags.dart';
 export 'world_ref_resolver.dart';
 export 'character_linked_world.dart';

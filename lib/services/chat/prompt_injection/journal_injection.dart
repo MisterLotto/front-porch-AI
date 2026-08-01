@@ -21,7 +21,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/database/database.dart';
-import 'package:front_porch_ai/models/chat_message.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/memory_service.dart';
 import '../journal_physics.dart';
 import '../journal_store.dart';

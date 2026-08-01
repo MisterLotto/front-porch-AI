@@ -5,8 +5,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
-import 'package:front_porch_ai/services/image_gen_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/image/model_family.dart';
 import 'package:front_porch_ai/ui/image_studio/backend_catalog.dart';
 import 'package:front_porch_ai/ui/image_studio/connection_status_card.dart';

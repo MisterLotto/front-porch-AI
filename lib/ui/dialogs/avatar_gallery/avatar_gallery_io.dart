@@ -21,8 +21,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive_io.dart';
 
-import 'package:front_porch_ai/utils/emotion_labels.dart';
-import 'package:front_porch_ai/utils/picker_prefs.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Pure IO helpers for the Avatar Gallery add flows — file/ZIP picking and
 /// sprite-pack decoding. No widgets, no repository, no state: keeps the

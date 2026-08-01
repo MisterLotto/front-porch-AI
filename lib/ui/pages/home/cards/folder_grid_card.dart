@@ -25,9 +25,7 @@ import 'package:provider/provider.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/character_card_grid.dart'
-    show FolderDialogAction;
-import 'package:front_porch_ai/ui/widgets/group_avatar_montage.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 /// A single folder card in the home grid — a 2x2 preview montage (or a folder
 /// icon when empty), name, character count, and rename/delete actions. It is a

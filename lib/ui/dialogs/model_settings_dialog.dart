@@ -27,7 +27,6 @@ import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 // Not in barrels (internal or low-frequency)
 import 'package:front_porch_ai/services/model_file_check.dart';
-import 'package:front_porch_ai/services/model_manager.dart';
 import 'package:front_porch_ai/services/optimization_service.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 

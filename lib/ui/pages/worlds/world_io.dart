@@ -25,9 +25,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/models/world.dart';
-import 'package:front_porch_ai/services/world_repository.dart';
-import 'package:front_porch_ai/utils/picker_prefs.dart';
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Pick a `.fpworld` (or bare lorebook `.json`) and import it as a new
 /// place, preserving climate + place traits + lore.

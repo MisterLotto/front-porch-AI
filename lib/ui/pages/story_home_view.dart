@@ -19,16 +19,16 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:front_porch_ai/services/story_repository.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/audiobook_generator_service.dart';
 import 'package:front_porch_ai/services/epub_generator_service.dart';
-import 'package:front_porch_ai/models/story_project.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/ui/pages/story_setup_page.dart';
 import 'package:front_porch_ai/ui/pages/story_dashboard_page.dart';
 import 'package:front_porch_ai/ui/pages/story_reader_page.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/ai_engine_status_card.dart';
-import 'package:front_porch_ai/utils/picker_prefs.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// The "Porch Stories" home view — shows all story projects with create/delete.
 class StoryHomeView extends StatefulWidget {

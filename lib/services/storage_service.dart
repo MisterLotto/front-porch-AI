@@ -23,9 +23,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:front_porch_ai/app_version.dart';
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/models/chat_theme_preset.dart';
-import 'package:front_porch_ai/models/chat_theme_overrides.dart';
+import 'package:front_porch_ai/models/models.dart';
 
 // Stage 7: storage decomposition (directories + domain settings; final cleanup complete - shims excised; corrective COMPAT FLAT ACCESSORS bridge re-inserted at ~113 after incomplete 29bbf59d; see block comments + refactoring-guide.md "old API preserved via shim" for current state; long-term pure-dir + *Settings wiring intended). NOTE: file >500 LOC due to bridge (documented exception; do not grow per rule).
 import 'storage/directories.dart';

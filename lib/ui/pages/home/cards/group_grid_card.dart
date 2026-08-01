@@ -24,9 +24,7 @@ import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/pages/home/cards/home_card_menu.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/character_card_grid.dart'
-    show kFolderDragHoldDelay;
-import 'package:front_porch_ai/ui/widgets/group_avatar_montage.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 /// A single group-chat card in the home grid — avatar montage, name, member
 /// count, turn-order badge, and a right-click context menu. Extracted verbatim

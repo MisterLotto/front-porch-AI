@@ -5,11 +5,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/services/chat_service.dart';
-import 'package:front_porch_ai/services/group_chat_repository.dart';
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
-import 'package:front_porch_ai/ui/widgets/styled_text_controller.dart';
+import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 part 'prompt_engineering_tab.editors.dart';
 

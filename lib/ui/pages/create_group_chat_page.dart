@@ -26,14 +26,10 @@ import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
-import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
-import 'package:front_porch_ai/ui/widgets/folder_character_picker.dart';
-import 'package:front_porch_ai/ui/widgets/realism_form_section.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'package:front_porch_ai/ui/widgets/needs_form_section.dart';
 import 'package:front_porch_ai/ui/widgets/story_begins_row.dart';
-import 'package:front_porch_ai/ui/widgets/styled_text_controller.dart';
-import 'package:front_porch_ai/utils/character_id.dart';
-import 'package:front_porch_ai/utils/group_realism_blobs.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 import 'package:front_porch_ai/ui/widgets/relationship_scale.dart'
     show relationshipTierName, relationshipScaleColor;
 import 'package:front_porch_ai/ui/theme/app_colors.dart';

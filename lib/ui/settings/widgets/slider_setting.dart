@@ -19,7 +19,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/slider_with_input.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 /// Slider setting widget extracted from settings_page (Stage 5).
 /// Pure lift of _buildSlider with AppColors exclusive.

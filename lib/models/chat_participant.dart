@@ -17,7 +17,7 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/utils/character_id.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// A single speaker in a chat, regardless of whether the conversation is a
 /// single-character chat, a 1:1 chat augmented with Scene Guests (Lite NPCs),

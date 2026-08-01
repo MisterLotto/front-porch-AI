@@ -53,7 +53,6 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 // Services and modules not yet in the services barrel (internal, low-frequency, or side-effect heavy)
-import 'package:front_porch_ai/services/model_manager.dart';
 import 'package:front_porch_ai/services/download_manager.dart';
 import 'package:front_porch_ai/services/setup_service.dart';
 import 'package:front_porch_ai/services/db_reunification_service.dart';

@@ -17,7 +17,7 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:path/path.dart' as p;
-import 'package:front_porch_ai/models/character_card.dart';
+import 'package:front_porch_ai/models/models.dart';
 
 extension StableGroupId on CharacterCard {
   /// The canonical stable identifier for *singular/library* CharacterCards only.

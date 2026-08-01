@@ -23,17 +23,12 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
-import 'package:front_porch_ai/models/avatar_image.dart';
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/models/chat_message.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/avatar_gallery.dart';
 import 'package:front_porch_ai/services/chat/pass_support.dart';
 import 'package:front_porch_ai/services/chat/realism_tools.dart';
-import 'package:front_porch_ai/services/expression_classifier.dart';
-import 'package:front_porch_ai/services/llm_service.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
-import 'package:front_porch_ai/utils/emotion_labels.dart';
-import 'package:front_porch_ai/utils/think_tags.dart';
+import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Plain (non-ChangeNotifier) domain service owning the chat-scoped expression
 /// label selection state machine, manual override, avatar resolution (with

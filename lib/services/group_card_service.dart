@@ -20,7 +20,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:image/image.dart' as img;
-import 'package:front_porch_ai/models/group_card.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/utils/png_metadata_utils.dart';
 import 'package:front_porch_ai/utils/group_avatar_compositor.dart';
 

@@ -19,9 +19,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/models/chat_theme_preset.dart';
-import 'package:front_porch_ai/models/chat_theme_overrides.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'settings_base.dart';
 
 /// UI / theme / chat presentation settings (bubble colors/opacity, fonts,

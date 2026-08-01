@@ -19,7 +19,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/services/capability/image_reference_role.dart';
-import 'package:front_porch_ai/services/image_gen_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/image_prompt/expression_prompts.dart';
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_io.dart';
 import 'package:front_porch_ai/ui/image_studio/model_slot_dropdown.dart';

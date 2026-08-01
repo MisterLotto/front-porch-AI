@@ -19,7 +19,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/services/chat/pass_support.dart';
-import 'package:front_porch_ai/services/llm_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 
 /// Actively answers "does the current model speak the tools protocol?" for
 /// the chat sidebar's tool-calling pill — instead of the user only finding

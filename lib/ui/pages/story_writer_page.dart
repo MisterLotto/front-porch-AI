@@ -21,11 +21,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:front_porch_ai/services/story_repository.dart';
-import 'package:front_porch_ai/services/story_pipeline_service.dart';
-import 'package:front_porch_ai/models/story_project.dart';
+import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/ai_engine_status_card.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 /// Writer page — beat-by-beat prose view with draft/edit/regenerate controls.
 class StoryWriterPage extends StatefulWidget {

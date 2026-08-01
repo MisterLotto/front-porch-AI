@@ -21,8 +21,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import 'package:front_porch_ai/services/image_gen_service.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 
 /// Web adapter for image generation: read/flip the backend config (Local A1111 /
 /// Draw Things ↔ remote API) and generate an image. Reuses [ImageGenService]

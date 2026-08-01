@@ -18,7 +18,7 @@
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:front_porch_ai/models/download_task.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Collapsible panel showing active downloads with controls.

@@ -23,7 +23,7 @@ import 'package:provider/provider.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 
-import 'package:front_porch_ai/ui/widgets/styled_text_controller.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'external_image_widget.dart';
 
 /// Applies a font family to a base TextStyle dynamically.

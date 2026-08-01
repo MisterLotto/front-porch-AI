@@ -21,7 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/theme/tier_colors.dart';
-import 'package:front_porch_ai/ui/widgets/realism_progress_row.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 /// The 1:1 relationship bars — Short-Term Bond, Long-Term Bond, Trust, and
 /// (when NSFW enhancements are on) Lust — all rendered through the ONE shared

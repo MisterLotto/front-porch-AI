@@ -14,18 +14,16 @@ import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
 import 'package:front_porch_ai/database/database.dart';
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/models/fp_world_package.dart';
-import 'package:front_porch_ai/models/lorebook.dart';
-import 'package:front_porch_ai/models/lorebook_export.dart';
+// `World` here means the Drift row from database.dart; the model type is
+// reached through the `model.` prefix below.
+import 'package:front_porch_ai/models/models.dart' hide World;
 import 'package:front_porch_ai/models/world.dart' as model;
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/chat/biome_schedule.dart';
 import 'package:front_porch_ai/services/chat/weather_biomes.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
-import 'package:front_porch_ai/utils/character_linked_world.dart';
-import 'package:front_porch_ai/utils/world_ref_resolver.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class WorldRepository extends ChangeNotifier {

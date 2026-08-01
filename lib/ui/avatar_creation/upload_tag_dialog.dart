@@ -21,7 +21,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/utils/emotion_labels.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Sentinel returned by [showUploadTagDialog] for "gallery look" (no emotion).
 const String kUploadTagLook = '__look__';

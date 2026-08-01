@@ -18,7 +18,7 @@
 
 import 'dart:io';
 import 'package:front_porch_ai/services/hardware_service.dart';
-import 'package:front_porch_ai/utils/kobold_layer_solver.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 class OptimizationResult {
   final int gpuLayers;

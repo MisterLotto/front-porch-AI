@@ -19,8 +19,8 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/services/chat_service.dart';
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/pages/edit_group_page.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/theme/tier_colors.dart';
@@ -28,7 +28,7 @@ import 'package:front_porch_ai/ui/widgets/realism_progress_row.dart';
 import 'package:front_porch_ai/ui/widgets/needs_bar.dart';
 import 'package:front_porch_ai/ui/widgets/fixation_chip.dart';
 import 'package:front_porch_ai/ui/chat_components/sidebar/character_state/ambitions_row.dart';
-import 'package:front_porch_ai/utils/emotion_labels.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// First-class representation of a group chat member in the sidebar.
 ///

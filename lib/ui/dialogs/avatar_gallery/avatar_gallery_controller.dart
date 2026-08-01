@@ -21,13 +21,10 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
-import 'package:front_porch_ai/models/avatar_image.dart';
-import 'package:front_porch_ai/models/character_card.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/avatar_gallery.dart';
-import 'package:front_porch_ai/services/character_repository.dart';
-import 'package:front_porch_ai/services/chat_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/portrait_promotion.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
 
 /// How the Avatar Gallery was opened. Caller-passed (never inferred from global
 /// state — Grok): [inChat] enables per-chat "use this look" selection and needs

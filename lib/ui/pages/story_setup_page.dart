@@ -19,10 +19,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:front_porch_ai/models/story_project.dart';
-import 'package:front_porch_ai/services/character_repository.dart';
-import 'package:front_porch_ai/services/story_repository.dart';
-import 'package:front_porch_ai/services/user_persona_service.dart';
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/pages/story_dashboard_page.dart';
 import 'package:front_porch_ai/ui/story_setup/cast_step.dart';
 import 'package:front_porch_ai/ui/story_setup/concept_step.dart';
@@ -31,7 +29,7 @@ import 'package:front_porch_ai/ui/story_setup/setup_widgets.dart';
 import 'package:front_porch_ai/ui/story_setup/story_setup_draft.dart';
 import 'package:front_porch_ai/ui/story_setup/style_step.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/ai_engine_status_card.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 /// New-story wizard — the standard creation-wizard shell (top-bar step dots +
 /// linear progression, same pattern as `create_character_page.dart`), warm

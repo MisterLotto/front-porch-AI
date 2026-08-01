@@ -16,7 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'package:front_porch_ai/models/character_card.dart';
+import 'package:front_porch_ai/models/models.dart';
 
 /// Result of an attempted Scene Guest mint, surfaced back to the handler so it
 /// can report progress/errors uniformly. On success [card] is the minted (and

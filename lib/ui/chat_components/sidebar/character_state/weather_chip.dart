@@ -19,7 +19,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/services/chat/weather_skins.dart';
-import 'package:front_porch_ai/services/chat_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Sidebar weather glyph (Living Time §3, intra-day since v3) — the CURRENT

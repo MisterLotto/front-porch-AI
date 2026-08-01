@@ -23,7 +23,7 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/utils/picker_prefs.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// A locally generated image inside a chat bubble (from `/image` or the Image
 /// Studio's "Send to chat"). Left-click opens a zoomable full-size viewer;

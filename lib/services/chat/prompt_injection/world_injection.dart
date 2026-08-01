@@ -4,7 +4,7 @@
 // World description injection — makes a world a *place* the character inhabits.
 // Budget-capped; only worlds with injectDescription == true contribute.
 
-import 'package:front_porch_ai/models/world.dart';
+import 'package:front_porch_ai/models/models.dart';
 
 /// Soft token budget for world place prose (approx chars / 4).
 const int kWorldInjectionMaxChars = 600;

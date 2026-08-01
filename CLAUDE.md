@@ -296,6 +296,10 @@ The user has **no ability to read or evaluate Dart code**. The following rules a
 - Methods deleted (list them)
 - Whether `flutter analyze` is clean
 - Any duplication or dead code you chose not to remove and why
+- **Barrels + boilerplate on every file touched**: confirm each edited file was
+  left on barrel imports (or that its remaining direct imports are all on the
+  exemption list, naming which), and what repetition you collapsed while you
+  were in there. "None found" is a valid answer; silence is not.
 
 ## Code Style & Conventions
 
@@ -367,16 +371,81 @@ Barrel files reduce repetitive intra-package imports:
 - `package:front_porch_ai/ui/widgets/widgets.dart`
 - `package:front_porch_ai/ui/chat_components/chat_components.dart`
 
-**Preferred style for new code and refactors** is to import the barrel(s) instead of many individual files. Direct single-file imports remain legal forever and are correct for internal-only or one-off modules.
+**Barrel imports are the required style — solo single-file imports are no
+longer "legal forever" (maintainer directive, 2026-08-01).** The previous
+wording blessed direct imports as a permanent, acceptable state for
+"internal-only or one-off modules"; that clause is REVOKED and is why the
+boilerplate accumulated. If a barrel covers the file, you import the barrel.
+Converting the stragglers is mandatory ongoing work, not a nice-to-have.
 
-**Long-term migration (opportunistic, no heroic PRs):**
-- No dedicated "import cleanup" effort.
-- When you open a file for a real reason, convert its imports to barrels as part of the same change.
-- Small dedicated hygiene PRs (5–8 files max) are allowed at most once per month, only when the verification surface is tiny.
-- Mass automated find/replace across dozens of files is forbidden.
-- Rarely-edited files may stay on direct imports indefinitely.
+**If no barrel covers it, create one (self-extending rule).** Converting alone
+can never finish the job: 1,101 solo imports live in directories that have no
+barrel at all. So when you find yourself importing **2+ siblings from the same
+un-barrelled directory**, add a barrel for that directory in the same change
+and use it. The directories that most need one, measured 2026-08-01 by how
+many files pull 2+ siblings from them: `services/chat` (28 files / 161 lines),
+`services/web/util` (18/42), `ui/pages/repository` (12/52),
+`ui/character_creator` (10/35), `ui/dialogs` (8/52), `ui/pages` (7/31),
+`services/capability` (7/25). Note `services/chat` needs its OWN
+`chat/chat.dart` barrel — the curated `services.dart` deliberately does not
+re-export the chat leaves, and that stays true.
 
-When you add a new service or model used from 3+ locations and not purely internal, add the export to the appropriate barrel in the same PR.
+**The one place a solo import is still right:** a directory where every
+importer only ever needs ONE file from it (11 such directories today). Wrapping
+a single import in a barrel is ceremony, not hygiene. Don't.
+
+**Migration status: the one-time sweep is DONE (2026-08-01, maintainer-directed).**
+Every convertible single-file import in `lib/` was converted to its barrel in
+one commit. The rules previously forbade exactly this ("no dedicated import
+cleanup effort", "mass automated find/replace ... is forbidden"); the
+maintainer overrode them to clear the backlog in one pass rather than bleed it
+out opportunistically forever. That override was for the sweep itself and is
+now spent — **do not run another mass import rewrite.** Keeping it clean is
+now a per-file duty:
+
+**Every file you touch, you leave on barrels (mandatory).** Opening a file for
+ANY reason — a one-line bug fix, a feature, a rename — obliges you to convert
+its convertible single-file imports to the barrel *in that same change*. This
+is no longer "opportunistic" and it is not optional. The codebase accumulated
+hundreds of hand-written import lines precisely because "convert it if you
+happen to be in there" had no teeth. **A diff that edits a file and leaves a
+convertible import block behind is incomplete work.**
+
+**Same visit, same rule for boilerplate (mandatory).** While you are in that
+file, collapse the repetition you find: an identical widget / `ListTile` /
+`PopupMenuItem` shape pasted N times becomes one helper; a copy-pasted guard
+becomes one function; three private copies of the same filter become one
+shared function. Two precedents that set this rule — `homeCardMenuItem()`
+replaced ~14 copies of an 18-line `PopupMenuItem`/`ListTile` block across two
+card files (and brought `character_grid_card.dart` back *under* the 500-line
+cap while ADDING a menu entry), and `buildFolderPickView()` replaced three
+private copies of the same folder-filtering logic. **Extraction that shrinks
+the file always beats adding to it.**
+
+**When you add a service/model/widget used from 3+ locations** and not purely
+internal, add the export to the appropriate barrel **in the same PR**. The
+sweep found `picker_prefs.dart` (24 importers), `model_manager.dart` (11),
+`engine_health.dart`, `expression_pack_service.dart`, `model_fetch.dart` and
+`realism_form_section.dart` all missing from their barrels — every one of
+those absences forced N callers to hand-write a single-file import. This is
+the rule that actually prevents a repeat; the sweep only cleared the symptom.
+
+**The only exemptions** are the cases below. If a file you touched still has
+direct imports afterwards, they must ALL be from this list — and say so in your
+Hygiene Summary rather than leaving it unexplained.
+
+**The only structural exemptions** (everything else must be converted):
+- A file that lives in its own barrel's directory — it would self-import.
+  `lib/services/foo.dart` importing `lib/services/bar.dart` is correct and
+  unavoidable.
+- Part files (`part of`), which cannot carry imports at all.
+- A directory where importers only ever need one file from it (see above).
+
+Note `show`/`hide`/`as` is NOT an exemption: `import 'models.dart' show
+CharacterCard;` is valid and preferred over reaching for the single file. Only
+keep the direct import when the barrel genuinely reintroduces a collision the
+`hide` was there to solve (`import database.dart hide World` is that case —
+and `database.dart` has no barrel anyway).
 
 ### Riverpod patterns (for new code)
 - **The decision rule (maintainer-set, 2026-07-25): Riverpod is allowed when the state can be fully owned and tested without replacing `ChatService`, `StorageService`, or the `main.dart` provider graph; otherwise Provider stays.** There is NO project to migrate the whole codebase — a full Provider→Riverpod conversion was explicitly evaluated and rejected (dual-model review): it would churn ~634 consumer call sites, 39 ChangeNotifier services, the delicate `main.dart` init order, and the Realism/Needs parity hub for zero user-visible benefit. Do not start one, and do not convert files "while you're in there" unless the feature you're shipping needs it.

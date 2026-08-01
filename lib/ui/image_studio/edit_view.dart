@@ -21,13 +21,12 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:front_porch_ai/services/image_gen_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/image/edit_profile.dart';
 import 'package:front_porch_ai/services/capability/image_reference_role.dart';
 import 'package:front_porch_ai/services/capability/image_reference_resolver.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/utils/picker_prefs.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 import 'comfy_edit_panel.dart';
 import 'edit_recipe_strip.dart';

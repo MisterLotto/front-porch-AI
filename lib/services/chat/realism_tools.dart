@@ -39,7 +39,7 @@ library;
 import 'dart:convert';
 
 import 'package:front_porch_ai/services/llm_service.dart' show LlmToolCall;
-import 'package:front_porch_ai/utils/emotion_labels.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Tool names (also referenced by the prompts' tools-mode instruction).
 const String kRelationshipTool = 'report_relationship';

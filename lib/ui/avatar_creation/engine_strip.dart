@@ -18,7 +18,7 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/services/image_gen_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/dialogs/image_gen_settings_dialog.dart';
 import 'package:front_porch_ai/ui/image_studio/model_slot_dropdown.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';

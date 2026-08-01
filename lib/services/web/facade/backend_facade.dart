@@ -18,11 +18,7 @@
 
 import 'dart:async';
 
-import 'package:front_porch_ai/services/hardware_service.dart';
-import 'package:front_porch_ai/services/llm_provider.dart';
-import 'package:front_porch_ai/services/model_manager.dart';
-import 'package:front_porch_ai/services/open_router_service.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 
 /// Web adapter for local-backend lifecycle, local-model switching, and the
 /// HuggingFace model browser/downloader. Reuses [LLMProvider]'s managed-backend

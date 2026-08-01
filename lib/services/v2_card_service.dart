@@ -19,8 +19,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:image/image.dart' as img;
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/models/lorebook.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/utils/png_metadata_utils.dart';
 
 class V2CardService {

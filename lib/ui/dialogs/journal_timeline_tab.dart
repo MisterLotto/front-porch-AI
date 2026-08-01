@@ -20,7 +20,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:front_porch_ai/services/chat/milestone_providers.dart';
-import 'package:front_porch_ai/services/chat_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// "Our Story" — the milestones timeline tab inside the Journal dialog

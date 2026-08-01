@@ -16,7 +16,7 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/group_member_realism_editor.dart';
 import 'package:front_porch_ai/ui/widgets/relationship_scale.dart';
 import 'package:front_porch_ai/ui/widgets/story_begins_row.dart';
-import 'package:front_porch_ai/utils/group_realism_blobs.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// A group member as this editor needs it: the RUNTIME id the realism engine
 /// reads (`mid`), a display name, the optional legacy `originStableId` (used to

@@ -17,9 +17,8 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:flutter/foundation.dart';
-import 'package:front_porch_ai/services/image_gen_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/image_prompt/image_gen_context.dart';
-import 'package:front_porch_ai/services/llm_service.dart';
 
 /// Single source of truth for turning (mode + style + raw context) into a high-quality,
 /// style-faithful image generation prompt.

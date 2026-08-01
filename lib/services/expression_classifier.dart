@@ -21,7 +21,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:front_porch_ai/services/expression/onnx_emotion_classifier.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
-import 'package:front_porch_ai/utils/emotion_labels.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Result of emotion classification.
 class EmotionResult {

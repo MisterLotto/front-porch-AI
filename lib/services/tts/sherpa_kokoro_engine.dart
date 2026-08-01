@@ -24,7 +24,7 @@ import 'dart:math' as math;
 import 'package:path/path.dart' as p;
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
-import 'package:front_porch_ai/services/model_fetch.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/sherpa_runtime.dart';
 
 /// In-process Kokoro TTS via sherpa-onnx (phase 4 of

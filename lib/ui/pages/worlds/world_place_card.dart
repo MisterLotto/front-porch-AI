@@ -8,9 +8,9 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/models/world.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/utils/world_colors.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 import 'package:front_porch_ai/utils/world_cover.dart';
 
 /// One place in the Worlds grid — cover (or letter), climate chip, actions.

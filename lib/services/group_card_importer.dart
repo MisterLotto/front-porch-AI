@@ -18,10 +18,8 @@ import 'package:path/path.dart' as path;
 import 'package:uuid/uuid.dart';
 
 import 'package:front_porch_ai/database/database.dart';
-import 'package:front_porch_ai/models/group_card.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/utils/group_stable_id.dart';
-import 'package:front_porch_ai/models/group_chat.dart';
-import 'package:front_porch_ai/models/group_member.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 

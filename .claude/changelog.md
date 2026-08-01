@@ -7392,3 +7392,56 @@ buried-message refund, positive deltas taken back rather than given
 again, and no-op when a message carries no deltas. Group branch is
 covered by review, not a test — no group-chat harness (repository +
 members + session) exists in this suite; noted in the test file.
+
+## 2026-08-01 (UTC) — Barrel import sweep (maintainer-directed) + policy change
+
+Files: 248 changed. CLAUDE.md (policy), lib/models/models.dart,
+lib/utils/utils.dart, lib/services/services.dart,
+lib/ui/widgets/widgets.dart (barrel exports), + 116 files swept to barrel
+imports, + collision/redundancy fixes.
+
+Maintainer directive: sweep imports to barrels in one pass, and make
+barrels + boilerplate reduction MANDATORY on every file touched going
+forward. This directly overrode the previous policy ("no dedicated import
+cleanup effort", "mass automated find/replace across dozens of files is
+forbidden", "direct single-file imports remain legal forever"). CLAUDE.md
+is updated in this same commit so the docs don't contradict the tree: the
+mass-sweep override is recorded as SPENT (no second sweep), per-file
+conversion is now mandatory, and the Hygiene Summary must report it.
+
+Net: 648 import lines removed, 436 added (-212 net).
+
+Root cause of the accumulation was NOT the swept files — it was six
+high-frequency files missing from their barrels, so every caller had to
+hand-write the single-file import: picker_prefs.dart (24 importers),
+model_manager.dart (11), engine_health.dart, expression_pack_service.dart,
+model_fetch.dart, realism_form_section.dart. All six are now exported, and
+the policy's "add it to the barrel in the same PR" rule is what prevents a
+repeat. The sweep only cleared the symptom.
+
+Sweep was mechanical but deliberately conservative — it SKIPS: files in
+their own barrel's directory (self-import), part files (cannot carry
+imports), and imports whose trailing comment documents why that specific
+symbol is needed. Pre-flight verified the four barrels are symbol-disjoint
+(0 shared names), so no file importing two barrels can go ambiguous.
+
+Two things a blind find/replace would have shipped broken, both caught:
+  1. world_repository.dart — models.dart exports world.dart, whose `World`
+     collides with the Drift `World` row from database.dart. Kept the
+     barrel with `hide World` (the file reaches the model via its `model.`
+     prefix) + a comment naming which World is which.
+  2. Five files importing BOTH a barrel and a file it now covers, incl.
+     chat_service.dart's annotated group_realism_blobs.dart import that
+     the sweep had skipped on purpose but utils.dart now supersedes.
+
+Still solo by design: 1,101 imports live in directories with NO barrel
+(services/chat, services/web/util, ui/pages/repository, ui/dialogs, …).
+Converting cannot reach those, so the policy now carries a self-extending
+rule: importing 2+ siblings from an un-barrelled directory obliges you to
+create that barrel. The seven highest-value targets are listed in
+CLAUDE.md with measured counts.
+
+Verification: flutter analyze 0 issues, dart fix clean, full suite +
+goldens + Linux build green before push. Import changes are compile-time
+only — a clean analyze plus a compiling test suite IS the behavioural
+proof here.

@@ -22,11 +22,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:front_porch_ai/models/chat_participant.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/dialogs/group_objectives_dialog.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/group_member_card.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'character_state/character_state_group.dart';
 import 'journal_memory/journal_memory_group.dart';
 import 'porch_accordion.dart';

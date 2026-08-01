@@ -32,7 +32,7 @@ import 'package:front_porch_ai/services/vision_eval.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
 import 'package:front_porch_ai/services/user_persona_service.dart';
 
-import 'package:front_porch_ai/utils/character_id.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/image_gen_service.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
@@ -40,27 +40,14 @@ import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/avatar_gallery.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/models/chat_generation_settings.dart';
-import 'package:front_porch_ai/models/chat_theme_overrides.dart';
-import 'package:front_porch_ai/models/chat_message.dart';
-import 'package:front_porch_ai/models/chat_participant.dart';
-import 'package:front_porch_ai/models/group_chat.dart';
-import 'package:front_porch_ai/models/avatar_image.dart';
-import 'package:front_porch_ai/models/group_member.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/chat/member_origin_resolver.dart';
 import 'package:front_porch_ai/services/group_turn_manager.dart';
-import 'package:front_porch_ai/models/lorebook.dart';
-import 'package:front_porch_ai/models/needs_impact.dart';
-import 'package:front_porch_ai/models/world.dart';
 import 'package:front_porch_ai/services/chat/biome_schedule.dart';
 import 'package:front_porch_ai/services/chat/weather_biomes.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/services/memory_service.dart';
 import 'package:front_porch_ai/database/database.dart' hide AvatarImage, World;
-import 'package:front_porch_ai/utils/emotion_labels.dart';
-import 'package:front_porch_ai/utils/output_sanitizer_regex.dart';
-import 'package:front_porch_ai/utils/group_realism_blobs.dart'; // parseGroupRealismSeeds — fresh-chat group realism reset (fixation-bleed fix)
 import 'package:front_porch_ai/services/expression_classifier.dart'; // top-level for ExpressionClassifierService type in @Dep shim (pre-existing)
 import 'package:front_porch_ai/services/chat/chat_command_handler.dart';
 import 'package:front_porch_ai/services/chat/image_command_service.dart';

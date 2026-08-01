@@ -4,7 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:front_porch_ai/ui/character_creator/creator_state.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/utils/picker_prefs.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// World-lore ingestion: a comma-separated URL field plus attach/remove of
 /// local lore files (.txt/.md/.pdf/.json/.csv). Restored from the god file's

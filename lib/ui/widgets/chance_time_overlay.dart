@@ -4,7 +4,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:front_porch_ai/services/chat_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/macro_resolver.dart';
 
 enum _EventCategory { fortune, misfortune, chaos, wildCard }

@@ -24,9 +24,7 @@ import 'package:path/path.dart' as path;
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/download_manager.dart';
 import 'package:front_porch_ai/utils/gguf_parser.dart'; // for GGUFModelInfo + parser
-import 'package:front_porch_ai/models/hf_model.dart';
-import 'package:front_porch_ai/models/local_model_info.dart';
-import 'package:front_porch_ai/models/download_task.dart';
+import 'package:front_porch_ai/models/models.dart';
 
 /// Manages local model files and HuggingFace model discovery.
 ///

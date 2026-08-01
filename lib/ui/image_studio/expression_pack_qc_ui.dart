@@ -19,7 +19,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/services/expression_pack_qc.dart';
-import 'package:front_porch_ai/services/expression_pack_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Slightly-tinted rounded backdrop so overlay controls stay legible on any

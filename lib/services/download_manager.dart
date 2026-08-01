@@ -22,7 +22,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-import 'package:front_porch_ai/models/download_task.dart';
+import 'package:front_porch_ai/models/models.dart';
 
 /// Manages a queue of model downloads with support for:
 /// - Multiple concurrent downloads (configurable, default: 3)

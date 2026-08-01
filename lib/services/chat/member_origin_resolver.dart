@@ -16,8 +16,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/utils/character_id.dart';
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Phase 1 of the "one chat, a cast that changes" unification: a pure, best-effort
 /// resolver from a group member back to the LIBRARY CharacterCard it originated

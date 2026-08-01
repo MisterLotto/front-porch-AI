@@ -16,8 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'package:front_porch_ai/services/image_gen_service.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 
 /// The ONE place that knows how to reach the active image backend and list
 /// its models — shared by the Image Studio settings tab and the creators'

@@ -18,11 +18,9 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/models/lorebook.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
-import 'package:front_porch_ai/ui/widgets/expanded_editor_dialog.dart';
-import 'package:front_porch_ai/ui/widgets/styled_text_controller.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'lorebook_entry/lorebook_entry_advanced.dart';
 import 'lorebook_entry/lorebook_entry_fields.dart';
 

@@ -18,7 +18,7 @@
 
 import 'dart:developer';
 
-import 'package:front_porch_ai/models/character_card.dart';
+import 'package:front_porch_ai/models/models.dart';
 
 /// Decides which Scene Guests (Lite NPCs) should "chime in" after the primary
 /// 1:1 character has replied, and runs their guest turns in order.

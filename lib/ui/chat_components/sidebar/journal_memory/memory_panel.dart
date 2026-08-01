@@ -24,8 +24,7 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/embedding_service.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/data_bank_dialog.dart';
-import 'package:front_porch_ai/ui/chat_components/overlays/rag_setup_dialog.dart';
-import '../sidebar_tokens.dart';
+import 'package:front_porch_ai/ui/chat_components/chat_components.dart';
 import 'memory_sources_list.dart';
 
 /// Memory (RAG) sidebar panel — enable toggle (with first-run consent flow),

@@ -17,7 +17,7 @@ import 'package:front_porch_ai/app_version.dart';
 import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/services/backporch/backporch_api.dart';
 import 'package:front_porch_ai/services/backporch/backporch_auth_store.dart';
-import 'package:front_porch_ai/services/hardware_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 
 /// Sends one anonymous device ping per app launch — but only when the user is
 /// signed in to The Stoop AND has analytics enabled (opt-out, default on).

@@ -26,7 +26,7 @@ import 'package:front_porch_ai/services/image_prompt/image_gen_context.dart';
 import 'package:front_porch_ai/services/image_prompt/image_prompt_builder.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/image_crop_dialog.dart';
-import 'package:front_porch_ai/utils/picker_prefs.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 import 'edit_view.dart';
 import 'expression_pack_dialog.dart';

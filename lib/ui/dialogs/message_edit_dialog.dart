@@ -10,9 +10,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
-import 'package:front_porch_ai/ui/widgets/styled_text_controller.dart';
-import 'package:front_porch_ai/utils/think_tags.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Opens the fullscreen message editor. Returns the joined text on save, or
 /// `null` if the user cancelled.

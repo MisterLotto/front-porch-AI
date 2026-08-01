@@ -8,8 +8,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/models/lorebook.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Returns cloned lore entries from the chosen character, or null if cancelled.

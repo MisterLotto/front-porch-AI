@@ -18,7 +18,7 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/models/world.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/world_injection.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 

@@ -20,8 +20,8 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:front_porch_ai/database/database.dart';
-import 'package:front_porch_ai/models/chat_message.dart';
-import 'package:front_porch_ai/utils/emotion_labels.dart';
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// The Journal — deterministic emotional physics
 /// (docs/design/journal-memory.md §4.4). Pure constants + functions, no LLM

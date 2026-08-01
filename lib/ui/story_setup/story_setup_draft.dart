@@ -18,9 +18,8 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/models/story_project.dart';
-import 'package:front_porch_ai/services/character_repository.dart';
-import 'package:front_porch_ai/services/user_persona_service.dart';
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/services.dart';
 
 /// All the choices the Story Setup wizard collects, held mutably while the
 /// user walks the steps, with load-from / apply-to [StoryProject] round-trips.

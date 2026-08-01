@@ -57,7 +57,6 @@ import 'package:front_porch_ai/ui/dialogs/scene_guest_picker_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/kobold_log_dialog.dart';
 // Stage 3 Image Studio (replaces old image_gen_dialog completely)
 import 'package:front_porch_ai/ui/image_studio/image_studio.dart';
-import 'package:front_porch_ai/utils/picker_prefs.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});

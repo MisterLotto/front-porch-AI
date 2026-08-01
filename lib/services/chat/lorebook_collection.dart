@@ -16,9 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/models/lorebook.dart';
-import 'package:front_porch_ai/models/world.dart';
+import 'package:front_porch_ai/models/models.dart';
 
 /// One lorebook entry plus the book it came from — the book carries the
 /// V2 book-level overrides (scanDepth / tokenBudget / recursiveScanning)

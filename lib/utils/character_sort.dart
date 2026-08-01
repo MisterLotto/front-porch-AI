@@ -18,7 +18,7 @@
 
 import 'package:path/path.dart' as p;
 
-import 'package:front_porch_ai/models/character_card.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/utils/character_id.dart';
 
 /// The home-screen library sort modes. String keys are the persisted values

@@ -18,8 +18,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/services/character_repository.dart';
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/services.dart';
 
 /// Dialog shown after character import to let user add/edit tags.
 /// Pre-populates with any tags from the V2 card data (e.g. from Chub.ai).

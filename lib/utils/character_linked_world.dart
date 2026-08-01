@@ -4,7 +4,7 @@
 // Detects legacy "character worlds" — auto-cloned character lorebooks that
 // cluttered the Worlds tab. Real places never have a linked character.
 
-import 'package:front_porch_ai/models/world.dart';
+import 'package:front_porch_ai/models/models.dart';
 
 /// True when [world] is a legacy character-lore clone, not a real place.
 ///

@@ -20,7 +20,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
-import 'package:front_porch_ai/models/lorebook.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/chat/lorebook_collection.dart';
 import 'package:front_porch_ai/services/chat/lorebook_matcher.dart';
 import 'package:front_porch_ai/services/chat/lorebook_timed_effects.dart';

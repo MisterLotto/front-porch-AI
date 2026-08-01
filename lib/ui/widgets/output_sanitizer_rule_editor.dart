@@ -18,9 +18,9 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/models/output_sanitizer_rule.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/utils/output_sanitizer_regex.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Reusable find/replace rule editor for the Output Sanitizer.
 ///

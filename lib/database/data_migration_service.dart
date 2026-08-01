@@ -23,7 +23,7 @@ import 'package:drift/drift.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:front_porch_ai/database/database.dart';
-import 'package:front_porch_ai/services/v2_card_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 
 /// Handles one-time migration of existing JSON files & SharedPreferences
 /// data into the Drift SQLite database.

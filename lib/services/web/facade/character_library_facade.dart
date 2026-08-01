@@ -20,12 +20,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/services/character_repository.dart';
-import 'package:front_porch_ai/services/folder_service.dart';
-import 'package:front_porch_ai/services/group_chat_repository.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
-import 'package:front_porch_ai/services/v2_card_service.dart';
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/services.dart';
 
 /// Write-side adapter for the character *library*: folder CRUD, moving cards
 /// into/out of folders, duplicating a card, and exporting a card (PNG / JSON).

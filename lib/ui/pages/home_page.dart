@@ -29,7 +29,7 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 // Barrel imports (preferred during major refactor per project guidelines)
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
-import 'package:front_porch_ai/utils/character_id.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 // Specific pages, dialogs, and internal services not in barrels
@@ -48,7 +48,6 @@ import 'package:front_porch_ai/ui/dialogs/tag_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/persona_picker_dialog.dart';
 import 'package:front_porch_ai/ui/dialogs/type_delete_dialog.dart';
 import 'package:front_porch_ai/services/byaf_service.dart';
-import 'package:front_porch_ai/utils/picker_prefs.dart';
 
 // _HomePageState is split across these part files (each a private extension on
 // the State) to keep every file under the 500-line cap while preserving full
