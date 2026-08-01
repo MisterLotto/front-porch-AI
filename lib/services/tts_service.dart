@@ -224,13 +224,23 @@ class TtsService extends ChangeNotifier {
     _lastError = null;
     await stop();
 
-    // Resolve voice
+    // Resolve voice. A character's own voice deliberately wins over the
+    // global one — say so in the log, because "I changed the voice in
+    // Settings and it kept talking in the old one" is otherwise invisible.
     var voice = (voiceKey != null && voiceKey.isNotEmpty)
         ? voiceKey
         : _storageService.ttsVoiceModel;
     if (voice.isEmpty) {
       print('TTS: no voice configured');
       return;
+    }
+    if (voiceKey != null &&
+        voiceKey.isNotEmpty &&
+        voiceKey != _storageService.ttsVoiceModel) {
+      print(
+        'TTS: using this character\'s assigned voice "$voiceKey" instead of '
+        'the global voice "${_storageService.ttsVoiceModel}".',
+      );
     }
 
     // Defensive check: if the resolved voice key is clearly incompatible

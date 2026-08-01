@@ -740,7 +740,9 @@ class _TtsSettingsDialogState extends State<TtsSettingsDialog> {
       const Padding(
         padding: EdgeInsets.symmetric(horizontal: 4),
         child: Text(
-          'All voices are included in the base model — no additional downloads needed.',
+          'All voices are included in the base model — no additional downloads '
+          'needed. This is the default voice; a character with its own voice '
+          'assigned keeps using that one.',
           style: TextStyle(color: Colors.white24, fontSize: 10),
         ),
       ),

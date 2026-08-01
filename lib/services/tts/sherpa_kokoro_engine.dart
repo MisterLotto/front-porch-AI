@@ -21,6 +21,7 @@ import 'dart:io';
 import 'dart:isolate';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
@@ -48,8 +49,12 @@ class SherpaKokoroEngine {
   static const bundleUrl =
       'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_0.tar.bz2';
 
-  /// Voice name → sherpa speaker id for kokoro-multi-lang-v1_0, from the
-  /// export's generate_voices_bin.py (scripts/kokoro/v1.0 in sherpa-onnx).
+  /// The voice used when a saved voice name cannot be resolved at all.
+  static const String defaultVoice = 'af_heart';
+
+  /// Voice name → sherpa speaker id for kokoro-multi-lang-v1_0. Verified
+  /// against the shipped model's own embedded speaker table (model.onnx
+  /// metadata carries the literal `af_alloy->0,…,zm_yunyang->52` mapping).
   static const Map<String, int> speakerIds = {
     'af_alloy': 0,
     'af_aoede': 1,
@@ -105,6 +110,41 @@ class SherpaKokoroEngine {
     'zm_yunxia': 51,
     'zm_yunyang': 52,
   };
+
+  /// Resolves a saved voice name to a sherpa speaker id.
+  ///
+  /// An unknown name used to fall straight through to [defaultVoice], so a
+  /// male voice silently became a female one with nothing logged. That is
+  /// reachable in normal use: a character can still carry a voice assigned
+  /// before the sherpa migration, and the old hand-written catalog offered
+  /// three names (`jm_beta`, `em_santa`, `zm_yibo`) the shipped model never
+  /// contained. Fall back within the same language+gender first — a stale
+  /// `jm_beta` becomes another Japanese male rather than an American woman —
+  /// and always log which substitution happened.
+  static int resolveSpeakerId(String voice) {
+    final exact = speakerIds[voice];
+    if (exact != null) return exact;
+
+    // Voice ids are `<language><gender>_<name>`, so the first two characters
+    // identify the closest sensible neighbour.
+    if (voice.length > 3 && voice[2] == '_') {
+      final prefix = voice.substring(0, 2);
+      for (final entry in speakerIds.entries) {
+        if (entry.key.startsWith(prefix)) {
+          debugPrint(
+            '[Kokoro] voice "$voice" is not in this model; using '
+            '"${entry.key}" (same language and gender) instead.',
+          );
+          return entry.value;
+        }
+      }
+    }
+    debugPrint(
+      '[Kokoro] voice "$voice" is not in this model and has no same-language '
+      'match; using "$defaultVoice".',
+    );
+    return speakerIds[defaultVoice]!;
+  }
 
   /// A `sherpa-v1_0/` sibling of the legacy kokoro_models files so the old
   /// model stays untouched until the post-soak cleanup UI.
@@ -178,7 +218,7 @@ class SherpaKokoroEngine {
       _worker!.send([
         reply.sendPort,
         text,
-        speakerIds[voice] ?? speakerIds['af_heart']!,
+        resolveSpeakerId(voice),
         speed,
         outputPath,
       ]);
