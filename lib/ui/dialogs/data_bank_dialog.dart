@@ -25,7 +25,10 @@ import 'package:drift/drift.dart' as drift;
 import 'package:path/path.dart' as p;
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:front_porch_ai/database/database.dart';
+// embedding_service is not carried by the services barrel; services.dart is
+// here for liveDatabase().
 import 'package:front_porch_ai/services/embedding_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'package:front_porch_ai/utils/utils.dart';
 
@@ -72,7 +75,7 @@ class _DataBankDialogState extends State<DataBankDialog> {
   }
 
   Future<void> _loadEntries() async {
-    final db = Provider.of<AppDatabase>(context, listen: false);
+    final db = liveDatabase(context);
     final entries = await db.getDataBankEntriesForCharacter(widget.characterId);
     setState(() {
       _entries = entries;
@@ -103,7 +106,7 @@ class _DataBankDialogState extends State<DataBankDialog> {
     final content = _contentController.text.trim();
     if (title.isEmpty || content.isEmpty) return;
 
-    final db = Provider.of<AppDatabase>(context, listen: false);
+    final db = liveDatabase(context);
 
     if (_editingId != null) {
       await db.updateDataBankEntry(
@@ -130,7 +133,7 @@ class _DataBankDialogState extends State<DataBankDialog> {
   }
 
   Future<void> _deleteEntry(String id) async {
-    final db = Provider.of<AppDatabase>(context, listen: false);
+    final db = liveDatabase(context);
     await db.deleteDataBankEntry(id);
     await _loadEntries();
   }
@@ -140,7 +143,7 @@ class _DataBankDialogState extends State<DataBankDialog> {
       context,
       listen: false,
     );
-    final db = Provider.of<AppDatabase>(context, listen: false);
+    final db = liveDatabase(context);
 
     // Ensure availability has been checked (lazy init)
     if (!embeddingService.isAvailable) {
@@ -252,7 +255,7 @@ class _DataBankDialogState extends State<DataBankDialog> {
       final chunks = _chunkText(fullText, maxWords: 500);
 
       // Insert each chunk as a Data Bank entry
-      final db = Provider.of<AppDatabase>(context, listen: false);
+      final db = liveDatabase(context);
       setState(() => _importStatus = 'Saving ${chunks.length} chunk(s)...');
 
       for (int i = 0; i < chunks.length; i++) {

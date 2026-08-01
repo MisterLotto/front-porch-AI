@@ -8134,3 +8134,51 @@ that gate is gone.
 - ChatService is a 28-part-file library; the Stoop has a second client via `/api/stoop/*`
 
 **Verification:** all 38 referenced paths resolve; headers intact; fences balanced.
+
+---
+
+## 2026-08-01 — Database swap leaves every service on a closed handle (restore blocker for v1.2)
+
+**Files changed**
+- `lib/services/database_rebind.dart` (NEW) — the ONE rebind + `liveDatabase()`
+- `lib/services/services.dart` — barrel export for the above
+- `lib/database/database.dart` — added `AppDatabase.current` (no schema change)
+- `lib/main.dart` — `_reinitializeAfterImport` → `_rebindAfterDatabaseSwap`, now a thin
+  wrapper over the shared rebind; 2 stale `Provider.of<AppDatabase>` reads → `liveDatabase`
+- `lib/services/chat_service.dart` — `updateDatabase` now re-points the owned
+  MemoryService; `setDatabase` collapsed to an alias (was a byte-identical second body)
+- `lib/ui/pages/backups_page.dart` — restore actually rebinds
+- `lib/ui/pages/settings_page.controls.dart` — storage move uses the shared rebind
+- `lib/ui/dialogs/{database_cleanup_dialog,data_bank_dialog}.dart`,
+  `lib/ui/pages/home/home_page_transfer.dart`,
+  `lib/ui/pages/repository/{stoop_upload_page,stoop_card_detail_page}.dart` — off the
+  stale startup snapshot
+- `test/services/database_rebind_test.dart` (NEW)
+
+**Why.** Restoring a backup closed the live DB, copied the snapshot over it, reopened the
+singleton and told the user to restart. Nothing was re-pointed, so every repository,
+ChatService and the web server held a closed handle and threw on the next query. Four
+distinct defects, one root cause:
+
+1. **Restore never rebound anything.** The reported blocker.
+2. **`cleanOrphanedPngs()` on a restore is destructive.** It deletes portraits no character
+   references; an older snapshot legitimately lacks every character created since, so their
+   art was deleted permanently. `main.dart:1542`'s restore path was already doing this via
+   the shared-with-import helper. Now opt-in and off for restores.
+3. **`close()` does not clear the static singleton — only `closeAndReset()` does.** The
+   stable-DB import closed its own handle then called `instance()` and was handed back the
+   object it had just closed. The shared rebind now calls `closeAndReset()` (idempotent).
+4. **`MemoryService` was rebound by neither existing copy**, so RAG memory stayed on the
+   dead handle after import / storage move / restore.
+
+Plus: `Provider<AppDatabase>.value` is a startup snapshot built inside `runApp` (not a
+State), so it can never be updated — 14 UI sites were handed the closed DB. They now read
+`liveDatabase(context)`, which prefers the live singleton and falls back to the provider so
+widget tests are unaffected.
+
+**Approach.** Two hand-maintained copies of the rebind already existed (`main.dart` and the
+storage-path picker) and had drifted; the Backups page had none. Consolidated to one
+function so a service added there is fixed for all three flows at once. Net −27 lines.
+
+**Verification.** `flutter analyze --no-fatal-warnings --no-fatal-infos` → No issues found.
+New test pins the three traps (singleton lifecycle, MemoryService rebind, liveDatabase).

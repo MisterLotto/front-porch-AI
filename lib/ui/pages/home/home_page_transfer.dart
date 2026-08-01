@@ -110,7 +110,7 @@ extension _HomePageTransfer on _HomePageState {
   ) async {
     final groups = Provider.of<GroupChatRepository>(context, listen: false);
     final storage = Provider.of<StorageService>(context, listen: false);
-    final db = Provider.of<AppDatabase>(context, listen: false);
+    final db = liveDatabase(context);
     final result = await GroupCardImporter(
       groups,
       storage,
@@ -206,7 +206,7 @@ extension _HomePageTransfer on _HomePageState {
 
     final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
     final storage = Provider.of<StorageService>(context, listen: false);
-    final db = Provider.of<AppDatabase>(context, listen: false);
+    final db = liveDatabase(context);
 
     final members = await groupRepo.getMembersForGroup(group.id);
 

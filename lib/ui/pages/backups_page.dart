@@ -21,7 +21,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/app_version.dart';
-import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
@@ -326,11 +325,22 @@ class _BackupsPageState extends State<BackupsPage> {
     Navigator.of(dialogContext).pop();
     try {
       await BackupService.restoreBackup(backupPath);
-      await AppDatabase.instance(); // reopen the database
+      if (!mounted) return;
+      // Reopening the database is not enough on its own: every repository and
+      // service captured the instance restoreBackup just closed, so without the
+      // rebind the app looked restored but threw "database was closed" on the
+      // next action. Never cleans orphaned portraits — an older snapshot is
+      // *supposed* to be missing newer characters.
+      final rebound = await reopenAndRebindDatabase(context);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Backup restored. Please restart the app for full effect.'),
+        SnackBar(
+          content: Text(
+            rebound != null
+                ? 'Backup restored. Your library is back to that snapshot.'
+                : 'Backup restored to disk, but the app could not reload it — '
+                      'please close and reopen Front Porch AI.',
+          ),
         ),
       );
     } catch (e) {
