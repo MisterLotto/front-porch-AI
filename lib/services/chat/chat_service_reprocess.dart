@@ -777,11 +777,20 @@ extension ChatServiceReprocess on ChatService {
           debugPrint(
             '[Realism] Evaluation cancelled during regenerate, aborting',
           );
+          // Put the popped reply back BEFORE bailing. The regen removed it at
+          // the top so the outbound prompt wouldn't contain it, and
+          // _generateResponse — the thing that appends the replacement — is
+          // still below us. Returning without this destroys the message and
+          // every swipe it carried. It is the same hazard the backend gate
+          // further up already guards ("aborting after removeLast would drop
+          // the popped reply"); the cancel path just never learned it.
+          _messages.add(lastMsg);
           _realismEvalCancelled = false;
           _evalChunkTimer?.cancel();
           _evalChunkTimer = null;
           _isEvaluatingRealism = false;
           notifyListeners();
+          await _saveChat();
           return;
         }
 
@@ -813,10 +822,15 @@ extension ChatServiceReprocess on ChatService {
           preTurn: regenPreTurn,
         );
 
-        // If cancellation was requested during realism evaluation, abort generation
+        // If cancellation was requested during realism evaluation, abort
+        // generation — restoring the popped reply first, for the same reason
+        // as the cancel point above: _generateResponse has still not run, so
+        // this local is the only place the message still exists.
         if (_realismEvalCancelled) {
+          _messages.add(lastMsg);
           _realismEvalCancelled = false;
           notifyListeners();
+          await _saveChat();
           return;
         }
       }
