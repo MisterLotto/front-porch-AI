@@ -7836,3 +7836,57 @@ Also repointed links that presented AGENTS.md as the full guide:
 These were partly self-inflicted — the CONTRIBUTING rewrite earlier today
 added two of them, linking a file that had not been read on the assumption
 it was current.
+
+## 2026-08-01 — Docs index was calling finished documentation "scaffold"
+
+Files: docs/README.md, dev-notes/ (4 files moved in + new README), CLAUDE.md
+untouched
+
+Reason: continued repo-hygiene sweep.
+
+1. docs/README.md — the index for the PUBLISHED documentation site
+   (.github/workflows/pages.yml uploads path: 'docs') opened with
+   "**Status:** Scaffold — outlines ready, content to be filled in
+   per-session", marked 9 of 10 documents with a 🏗️ Scaffold badge, and
+   carried a "How to Use This Scaffold" section telling readers to work
+   through <!-- TODO --> markers.
+
+   The documents are finished. Measured TODO markers:
+     user-guide.md        409 lines   0 TODOs
+     troubleshooting.md   315 lines   0
+     faq.md               311 lines   0
+     realism-engine.md    266 lines   0
+     getting-started.md   239 lines   0
+     release-notes.md     194 lines   0
+     characters.md        185 lines   0
+     keyboard-shortcuts.md 46 lines   0
+
+   ~1,900 lines of real documentation behind an index announcing it as
+   unwritten. Anyone arriving from the README read "scaffold" and left.
+   Rewritten as a real index grouped by intent (start here / going deeper /
+   when something goes wrong / what changed / for developers), with the
+   security-reporting pointer so nobody files a vulnerability publicly.
+
+2. Moved 4 internal engineering docs out of the published path into
+   dev-notes/: refactor-god-file-modularization.md (916 KB progress log —
+   nearly half of docs/ by size, and titled so that visitors learn the
+   codebase has god files), refactoring-guide.md, release-promotion.md (the
+   release runbook) and web-parity.md (a "W8 sign-off" checklist). Since
+   Pages does a static upload of docs/ with no Jekyll config, there is no
+   exclude mechanism — moving them out is the only way to stop serving them.
+
+   148 internal cross-references inside those files were rewritten from
+   docs/... to dev-notes/... . No inbound links existed from anywhere else
+   (checked all .md/.yml/.html), so nothing else needed touching. The
+   .claude/changelog.md history was deliberately NOT rewritten — those
+   entries describe where files were at the time.
+
+   dev-notes/README.md explains what the directory is, why it sits outside
+   docs/, and that CLAUDE.md wins wherever a note disagrees with it.
+
+Every relative link in both new index files was programmatically verified to
+resolve.
+
+Left alone deliberately: docs/design/ stays published — architecture notes
+are legitimate public documentation for an open-source project, and several
+are referenced from CLAUDE.md.
