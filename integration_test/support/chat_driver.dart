@@ -137,14 +137,53 @@ class ChatDriver {
         controller.text = text;
       }
       await tester.pump();
-      await tester.tap(find.byTooltip('Send message'));
+      // The composer is a TERNARY: `isGenerating ? StopButton : SendButton`,
+      // so while a generation is live there is no 'Send message' tooltip in
+      // the tree at all. waitSendable() above cleared isGenerating, but a
+      // background turn (an objective-completion check, an auto-advance) can
+      // flip it back in the gap before this tap — and then find.byTooltip
+      // matches nothing and tester.tap throws inside _getElementPoint rather
+      // than failing this loop's own retry. Re-check and give the attempt back
+      // to the loop instead of exploding on a race the app is allowed to have.
+      final sendBtn = find.byTooltip('Send message');
+      if (sendBtn.evaluate().isEmpty) {
+        await tester.pump(const Duration(milliseconds: 250));
+        continue;
+      }
+      await tester.tap(sendBtn);
       for (var i = 0; i < 8 && !delivered(); i++) {
         await spinChanceTimeIfAsked();
         await tester.pump(const Duration(milliseconds: 250));
       }
       if (delivered()) return;
     }
-    fail('"$text" was never accepted by sendMessage after 8 attempts');
+    // Self-diagnosing on purpose. This failure has now cost three CI cycles of
+    // guessing from a message that said only "was never accepted": every
+    // early-return in _sendCurrentMessage is silent, so from the outside a
+    // refused send is indistinguishable from a missed tap, a stale controller
+    // or a lost finder. Report the whole guard set plus the tap surface so the
+    // next red run names the cause instead of inviting another theory.
+    final input0 = input.evaluate();
+    final controllerText = input0.isEmpty
+        ? '(input widget not found)'
+        : (tester.widget<TextField>(input).controller?.text ?? '(no controller)');
+    final sendBtn = find.byTooltip('Send message').evaluate().length;
+    fail(
+      '"$text" was never accepted by sendMessage after 8 attempts.\n'
+      '  guards : gen=${chatService.isGenerating} '
+      'settling=${chatService.isSettlingTurn} '
+      'guest=${chatService.isGuestBusy} '
+      'photo=${chatService.isPhotoTurnInFlight} '
+      'entrances=${chatService.entrancesInFlight}\n'
+      '  chat   : char=${chatService.activeCharacter?.name} '
+      'group=${chatService.activeGroup?.id} '
+      'session=${chatService.currentSessionId}\n'
+      '  tree   : inputWidgets=${input0.length} sendButtons=$sendBtn '
+      'controllerText="$controllerText"\n'
+      '  msgs   : ${chatService.messages.length} '
+      'last=${chatService.messages.isEmpty ? "(none)" : chatService.messages.last.sender}\n'
+      '  wheels : $wheelsSpun',
+    );
   }
 
   /// Scroll the sidebar to the Journal & Memory accordion and expand it.

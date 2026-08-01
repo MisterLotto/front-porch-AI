@@ -15,17 +15,50 @@ Front Porch AI is a Flutter desktop application (Windows/Linux/macOS) for AI-pow
 ```bash
 # Setup
 flutter pub get
+dart run build_runner build --delete-conflicting-outputs
+                                     # Codegen — required after a Drift schema change
+                                     #   (regenerates database.g.dart) and after adding
+                                     #   any @riverpod provider.
 
 # Development
 flutter run                          # Debug run
 flutter analyze                      # Lint (0 warnings on active rules; CI runs on changed .dart files for PRs + full scheduled job)
-flutter format --set-exit-if-changed .  # Format check
+dart format --set-exit-if-changed .  # Format check. NOT `flutter format` — that
+                                     #   subcommand was removed; it errors with
+                                     #   "Could not find a command named format".
+                                     #   Do NOT bulk-run this: see "Verification".
 
 # Tests
-flutter test                         # Run all tests
+flutter test --concurrency=1 --exclude-tags golden
+                                     # What CI actually runs. Bare `flutter test`
+                                     #   races the realism-engine integration tests
+                                     #   at default concurrency.
 flutter test --coverage              # With coverage
 flutter test test/path/to/file.dart  # Single test file
 flutter test -n "test name"          # Run specific test by name
+
+# The Linux-gated gate — MANDATORY before pushing
+./scripts/ci-local.sh                # Runs the pixel goldens in the fpai-golden
+                                     #   linux/amd64 container. 18 golden files are
+                                     #   @TestOn('linux'), so a green macOS run never
+                                     #   executes them — that is exactly how a red-CI
+                                     #   commit once reached Rawhide.
+                                     #   Also: ci-local.sh test | all | update-goldens
+
+# E2E (integration_test/) — one invocation PER FILE
+flutter test integration_test/app_smoke_test.dart -d macos
+                                     # Never `flutter test integration_test/` — a single
+                                     #   invocation launches a second app while the first
+                                     #   still holds the device, and the second file dies
+                                     #   at "loading" with no stack. CI loops per file.
+
+# WebUI (web_ui/ — the React PWA; desktop parity is mandatory)
+cd web_ui && npm ci                  # Setup
+cd web_ui && npm run dev             # Vite dev server
+cd web_ui && npm run lint && npm test  # What the `web-tests` CI job runs (tsc + vitest)
+cd web_ui && npm run build           # REQUIRED after ANY web_ui change: vite writes to
+                                     #   ../assets/web_app, which is the bundle the Flutter
+                                     #   app serves. No build = your change ships nothing.
 
 # Release builds
 flutter build linux                  # Linux
@@ -65,10 +98,12 @@ lib/
 │   │   ├── journal_physics.dart         # Journal emotional physics: heat/flashbulb decay, mood recall, event salience (pure)
 │   │   ├── journal_prompt.dart          # Journal maintenance prompt builder (XML + tools variants, salience annotations)
 │   │   ├── journal_review.dart          # Journal proposals + the ONE applier; review-first parking (apply/discard)
-│   │   └── evolution_service.dart       # Character evolution (trait development, effective layering)
-│   ├── prompt_injection/        # prompt-injection builders (author_note, relationship, emotion,
+│   │   ├── growth_service.dart          # Growth Rings — character evolution (replaced the
+│   │   │                                #   DELETED evolution_service.dart; + growth_store/_ops)
+│   │   ├── time_service.dart            # Story clock — CONTINUOUS per-turn advance (no 6-turn gate)
+│   │   └── story_clock.dart             # Clock math: periods, dayCount, weekday, per-turn clamps
+│   │   ├── prompt_injection/    # prompt-injection builders (author_note, relationship, emotion,
 │   │                            #   behavioral, time, nsfw, chaos, needs, realism_state, journal)
-│   ├── cloud_providers/         # Cloud storage backends (Google Drive, OneDrive, WebDAV)
 │   ├── grpc/                    # gRPC-generated code and services (e.g. Draw Things)
 │   ├── chat_service.dart        # Core chat orchestration: context building, streaming, Realism
 │   │                            #   orchestration, _groupRealism map, post-gen wiring (see notes below)
@@ -120,7 +155,7 @@ lib/
 
 ### Critical Services
 
-- **ChatService** (`lib/services/chat_service.dart`): The orchestration hub. Builds context windows, handles message streaming, coordinates Realism Engine evaluations and post-generation needs/climax/sexual/daily checks, owns the `_groupRealism` map and load/save scalars for per-character group state, attaches chip deltas to messages, and wires all cross-service callbacks. The domain logic lives in the `chat/` leaf services below; ChatService stays the thin coordinator. **It is still large — do not grow it. Extract cohesive logic into new `chat/` leaves instead.**
+- **ChatService** (`lib/services/chat_service.dart`): The orchestration hub. **It is a `part`-file library**: 28 `part 'chat/chat_service_*.dart';` directives mean a great deal of "ChatService" code lives in `chat/` files that can touch its privates directly — when hunting a method, grep `lib/services/chat/` too, not just this file. Builds context windows, handles message streaming, coordinates Realism Engine evaluations and post-generation needs/climax/sexual/daily checks, owns the `_groupRealism` map and load/save scalars for per-character group state, attaches chip deltas to messages, and wires all cross-service callbacks. The domain logic lives in the `chat/` leaf services below; ChatService stays the thin coordinator. **It is still large — do not grow it. Extract cohesive logic into new `chat/` leaves instead.**
 - **NeedsSimulation** (`lib/services/chat/needs_simulation.dart`): Sims-style needs (hunger, bladder, energy, social, fun, hygiene, comfort) — decay, post-climax arousal suppression/afterglow buffers, catastrophe narrative triggers, `applyNeedsDeltas`, `applySceneImpact`, `computeNeedsDeltasWithReasons`, and context helpers. Pure class; all cross-state (group, time, arousal) via callbacks.
 - **NeedsImpactEvaluator** (`lib/services/chat/needs_impact_evaluator.dart`): Post-gen needs impact layer (LLM "needs_impact" JSON + declarative activity table + ordered modifiers pipeline for romance/stance/enjoys). Produces a `NeedsImpact` and applies it via the simulation.
 - **ChaosModeService** (`lib/services/chat/chaos_mode_service.dart`): Chaos Mode pressure growth, Chance Time random event selection, custom event prompt injection.
@@ -130,7 +165,7 @@ lib/
 - **RealismEvals** (`lib/services/chat/realism_evals.dart`): The 5 realism evaluation calls (relationship, emotional state, physical state, narrative, one-shot) plus their prompt builders, orchestration, and parse (bond/trust/emotion/arousal/fixation/spatial/time deltas + pending chip metadata).
 - **ObjectiveProposal** (`lib/services/chat/objective_proposal.dart`): Objective proposal handling (autonomous "none" vs value, dedup, auto task-gen for autonomous), `generateObjectiveTasks`, and background task-completion checks.
 - **The Journal** (`lib/services/chat/journal_maintenance.dart` + `journal_store.dart` + `journal_ops.dart` + `journal_physics.dart` + `prompt_injection/journal_injection.dart`; design: `docs/design/journal-memory.md`): the unified emotional memory system. One periodic maintenance pass per diary owner produces (a) per-chat, per-character **memory cards** (with emotion label + intensity stamped deterministically from the message metadata the Realism Engine already wrote) and (b) the per-chat **"Where we are" recap**, which reuses the old summary scalars/column (`_summary`, `Sessions.summary`, `summaryLastIndex` as the pass cursor) so EvolutionService, the sidebar, and the web facade surface kept working. Cards are strictly session-scoped — **no memory ever crosses chats** — and are deleted with the chat. XML-tag transport parsed forgivingly (local-model floor); reasoning off + think-strip via LlmEvalEngine. Replaced the deleted `SummaryService` + `FactExtraction` (and the persona learned-facts feature; `Personas.learnedFacts` column is dormant). **Emotional physics** (phase 2, all constants/math in `journal_physics.dart`, pure + deterministic): cards carry heat that cools one step per pass with flashbulb resistance (strong feelings barely fade; pinned never), cold cards (heat < 0.35) leave the always-injected hot set but resurface via cosine search against the recent turn (re-warmed to 0.75 + access recorded), hot-set ordering gets a mood-congruence boost (emotion families via `EmotionLabels.nuancedToStandard`, read from the same `_characterEmotion` scalar the group pre-gen load sets per speaker — parity), cap trims the coldest unpinned card, salient events (|bond/trust delta| ≥ 12, trust repair, Chance Time, objective completion via `ObjectiveProposal.onObjectiveCompleted` → `eventKickPending`) trigger an immediate pass from `_maybeRunJournalPass`, and a virgin journal on a long chat reads only the trailing 50 messages. Card embeddings ride `MemoryService.embedText` and are strictly optional (no-RAG floor: hot/pinned injection never needs the sidecar). **UI** (phase 3): sidebar peek `ui/chat_components/sidebar/journal_memory/journal_panel.dart` (follows the focused participant — `ChatParticipant.id` IS the cards' storage key) + full diary `ui/dialogs/journal_dialog.dart` + shared plant/edit editor `ui/dialogs/journal_card_editor.dart`; the UI mutates `ChatService.journalStore` directly and the injection builder re-reads the DB each turn, so edits need no extra plumbing. Receipts quote the cited lines AND tap-to-jump: `ui/chat_components/widgets/message_jump.dart` seeks the chat's reverse `ListView.builder` (bubbles keyed `GlobalObjectKey(msg)` — was ObjectKey) by proportional hop + viewport paging until the target key materializes, then `ensureVisible` + a brief `JumpFlash` tint. **Phase 4** — two transports, ONE applier (`journal_review.dart`): the pass (`_runExchange`) probes `LLMService.generateWithTools` once per backend identity per run (`kJournalTools` schemas + `parseJournalToolCalls` in journal_ops; OpenRouterService implements over its shared `_chatPayload`; KoboldCpp + PseudoRemote implement via the shared `postOpenAiChatWithTools` in openai_chat_stream.dart — Qwen3-class local models call tools fine, per user decision 2026-07-03), salvages tags from text-only replies, and remembers XML-only backends per backend+model identity (remote model name AND local model path ride the key). **Review-first mode** (`journal_review_first`, default off, toggle in the recap gear): the pass resolves ops into id-addressed `JournalProposedOp`s and parks a session-guarded `JournalReviewBatch` (blocks further auto passes; cursor moves only on Apply/Discard); sidebar banner → `journal_review_dialog.dart` checkboxes → Apply routes through the same `applyOwnerProposals` normal mode uses. Prompt building lives in `journal_prompt.dart` (XML + tools closing sections over an identical body).
-- **EvolutionService** (`lib/services/chat/evolution_service.dart`): Character evolution — trait development, effective personality/scenario layering, group per-character counts.
+- **Growth Rings** (`lib/services/chat/growth_service.dart` + `growth_store.dart` + `growth_ops.dart`): character evolution. NOTE: the old `EvolutionService` and `chat/evolution_service.dart` were DELETED — only tombstone comments remain. Scenario evolution was retired with it. Do not reference either name.
 - **KoboldService** (`lib/services/kobold_service.dart`): HTTP client for KoboldCpp (`/api/v1/generate`, `/api/extras/abort`, etc.).
 - **StorageService** (`lib/services/storage_service.dart`): Data directories. Beta builds use `FrontPorchAI-Beta/` with `beta_` prefixed SharedPreferences keys.
 - **EmbeddingService** (`lib/services/embedding_service.dart`): In-process RAG embeddings — nomic-embed-text-v1.5 via onnxruntime in a persistent worker isolate (`embedding/native_embedding_engine.dart`), golden-pinned to the retired Rust server's exact vectors so stored embeddings stay valid. Owns the model download/setup flow the RAG consent dialog drives.
@@ -143,7 +178,9 @@ Every sidecar was retired in 2026-07 (docs/design/sidecar-retirement.md — read
 
 Drift ORM with SQLite. Schema in `lib/database/database.dart`. Run `dart run build_runner build` after schema changes to regenerate `database.g.dart`.
 
-Key tables: `characters`, `chats`, `chat_messages`, `lorebooks`, `worlds`, `group_chats`, `story_projects`, `learned_facts`, `avatars`. UUID primary keys for cloud sync merge compatibility.
+Key tables (REAL SQL names — verify against `database.g.dart`, not memory): `characters`, `sessions`, `messages`, `groups`, `group_members`, `folders`, `personas`, `worlds`, `chat_worlds`, `chat_biome_spans`, `message_embeddings`, `objectives`, `data_bank_entries`, `avatar_images`, `journal_memories`, `sync_meta`. 21 tables in total. UUID primary keys for merge compatibility.
+
+**Identity gotcha that has already caused data loss:** `objectives`, `message_embeddings` and `data_bank_entries` key their `character_id` by the character's **stableGroupId** (the portable image-filename basename, e.g. `Jennifer_1782587668376`), NOT by the `characters.id` UUID. `avatar_images` DOES use the UUID. Joining the former against `characters.id` matches nothing and marks every row an orphan — that shipped in Database Cleanup and would have deleted 107/107 objectives and 68/68 RAG embeddings on a real library. Resolve identities via `stableGroupIdFrom()` in `lib/utils/character_id.dart`.
 
 **Important — external direct writers**: A community companion app (Character Card Forge — https://github.com/FrozenKangaroo/Character-Card-Forge) performs direct raw SQL `INSERT`/`UPDATE` into the database files (primarily `characters`, `sessions`, `messages`, `avatar_images`, `sync_meta`). Schema changes can break it. See "Files Requiring Discussion Before Changes".
 
@@ -152,11 +189,11 @@ Key tables: `characters`, `chats`, `chat_messages`, `lorebooks`, `worlds`, `grou
 A multi-component system spanning `chat_service.dart` (orchestration, `_groupRealism`, post-gen hooks, message metadata), the `chat/` domain services, and the LLM provider:
 - Emotion tracking with inertia between turns (ExpressionClassifier)
 - Bond/trust relationship scoring (bond clamped to ±300, arousal ±100) (RelationshipService)
-- Deterministic time progression (advances every 6 turns) — still in ChatService; a TimeService is planned
+- Time progression — `lib/services/chat/time_service.dart` (`TimeService`) + `story_clock.dart`. Advancement is CONTINUOUS AND PER-TURN: the scene-time eval reports `minutes_elapsed` for the exchange, clamped by `StoryClock.maxMinutesPerTurn`, with `StoryClock.failureDriftMinutes` as the deterministic floor when the eval fails and a `stallBackstopTurns` backstop so time can never freeze. **The old 6-turn gate and its `hold_time` veto are GONE** — do not reason about a turn counter.
 - Fixation engine (emotional obsessions)
 - Character evolution (trait development) (EvolutionService)
 - Chaos Mode / "Chance Time" random events (ChaosModeService)
-- Sims-style Needs Simulation (NeedsSimulation): decay, stepped descriptions, afterglow/lust-haze/post-climax-crash buffers, catastrophe triggers, hygiene inversion for "enjoys low hygiene"
+- Sims-style Needs Simulation (NeedsSimulation): straight per-turn decay ticks (needDecay + time mods + cross-boost modifiers), scene deltas, stepped descriptions, hygiene inversion for "enjoys low hygiene". **The afterglow / lust-haze / post-climax-crash / arousal-suppression BUFFERS were removed** (see the class doc in `needs_simulation.dart`) — do not reason about buffer state.
 - Escape hatch: `cancelRealismEval()` aborts in-flight evals via `_isCancellingRealismEval` + `abortGeneration()`
 
 **Known gotcha**: GBNF grammar constraints cause many KoboldCPP models to return empty eval responses. Evals use stop sequences + regex parsing (no grammar). Remote APIs work fine without grammar. **Tools transport (2026-07-06)**: every flat-JSON eval — the 4 realism evals (relationship, emotional, narrative, one-shot), the needs-impact eval, the scene-time/posture eval, the expression reclassifier, and the cast detector — tries native tool calls first (`realism_tools.dart` schemas + the ONE shared negotiation `fireStructuredEval` in `pass_support.dart`, same probe-and-fallback as Journal/Growth via the shared `ToolTransportProbe`); a successful call is converted to the canonical flat-JSON text and flows through the UNCHANGED verifier/parse/apply pipeline, so parity holds by construction. The regex text path remains the floor and the sole path for tool-less backends. Deliberately text-only: the Director/verifier critique output, the AI character creator, and the story pipeline (streaming live-preview + their own repair machinery).
@@ -175,8 +212,8 @@ Because core simulation lives in the `chat/` leaves while orchestration, the `_g
 
 **Where the pieces live:**
 - **Orchestration + group state + chip attachment** — `chat_service.dart`:
-  - Pre-turn capture (in `sendMessage`): `preTurnVector`, `groupSpeakerPreDecayNeeds` snapshot before `tickDecay`.
-  - Group per-speaker pre-gen (`_evaluateRealismForUpcomingGroupSpeaker`): `_loadGroupRealismIntoScalars` → run evals under impersonation → `_saveScalarsIntoGroupRealism` → stamp `realism_state` metadata on the new message.
+  - Pre-turn capture (in `sendMessage`): `preTurnVector` (`chat_service.dart:~3699`) before `tickDecay`. (There is no `groupSpeakerPreDecayNeeds` — that symbol was removed.)
+  - Group per-speaker pre-gen: **`_evaluateRealismForUpcomingSpeaker`** (no "Group" in the name; `chat_service.dart:2782` + the `chat/chat_service_realism_dance.dart` part) — `_loadGroupRealismIntoScalars` → run evals under impersonation → `_saveScalarsIntoGroupRealism` → stamp `realism_state` metadata on the new message.
   - Post-gen finalization (late in `_generateResponse`): temporarily re-set `_activeCharacter` + `_loadGroupRealismIntoScalars` so checks see the right character, `await _runPostGenNeedsChecks(finalResponse)` (climax → sexual → daily → fulfillment), `applyLongGenerationNeedsDecay`, then **`_saveScalarsIntoGroupRealism`** (the critical persist — without it scene deltas never reach `_groupRealism`).
   - Chip delta computation/attach (after `_generateResponse` in the `sendMessage` caller): the `if (_needsSimEnabled && _messages.isNotEmpty)` block; 1:1 uses `preTurnVector`, group uses the pre-decay snapshot. Sets `metadata['needs_deltas']`.
   - Group helpers: `_getGroupNeeds`/`_setGroupNeeds`, `_loadGroupRealismIntoScalars`/`_saveScalarsIntoGroupRealism`, `getNeedsForGroupCharacter`, `_getCurrentSpeakerIdForRealism`, `nextCharacter`.
@@ -184,7 +221,7 @@ Because core simulation lives in the `chat/` leaves while orchestration, the `_g
 - **Needs impact eval** — `chat/needs_impact_evaluator.dart`: `evaluateAndApply(responseText)` is the single post-gen entry; activity table + modifiers pipeline; decoupled from the god via callbacks.
 - **Display consumers**:
   - Per-message chips: `lib/ui/chat_components/bubbles/message_bubble.dart` `_buildRealismIndicator` reads `metadata['needs_deltas']` (skips zero-delta needs).
-  - Sidebar levels/bars: `lib/ui/chat_components/sidebar/realism_section.dart` uses `chat.needsVector` or the group getters.
+  - Sidebar levels/bars: `lib/ui/chat_components/sidebar/character_state/` (`bond_bars.dart`, `character_state_group.dart`, …) reads **`chat.needsSimulation.vector`** and the per-member getters `getNeedsForGroupCharacter` / `getAffectionForGroupCharacter` / `getTrustForGroupCharacter`. (There is no `realism_section.dart`, and `needsVector` is a DB column, not a ChatService getter.)
   - Group member cards: `lib/ui/widgets/group_member_card.dart` → `getNeedsForGroupCharacter` → `NeedsGrid`.
   - Bar/grid widgets: `lib/ui/widgets/needs_bar.dart`.
 
@@ -208,6 +245,16 @@ When you touch any of the above you **must**: keep 1:1 and group producing equiv
 **The Stoop** is the built-in, opt-in, account-gated, strictly-18+ community hub for sharing character and group cards (browse/search, upload, download, upvotes, follow creators, and mod↔user messaging). It is served by a **companion backend API** (an independent service) that the app talks to over HTTPS. The Dart client lives in **`lib/services/backporch/`** — auth, browse/search, upload, downloads, messaging (+ a WebSocket for live messages/typing), and models such as `StoopCard` / `StoopCardDetail`. Everything else in the app remains local-first; The Stoop and any remote APIs are opt-in.
 
 **The backend's source, hosting, and deployment are maintained privately and are NOT part of this repository.** Do not add operational details (hosts, IPs, deploy steps, buckets, credentials) to this file or the repo.
+
+**There is a SECOND Stoop client, and parity work must update it too.** The PWA never
+calls the backend directly: `web_ui/src/stoop/` (`stoopApi.ts`, `StoopContext.tsx`,
+`stoopTypes.ts`, `pages/stoop/*`, `components/stoop/*`) talks to the Dart server's
+**`/api/stoop/*` relay** — `lib/services/web/routes/stoop_routes.dart` plus
+`facade/stoop_facade.dart`, which wrap `BackporchApi` and proxy the messaging
+WebSocket. A new Stoop endpoint or field therefore needs three edits: the Dart client,
+the relay route/facade, and the TS client. The web side authenticates with its own
+`X-Stoop-Token` from browser localStorage — deliberately separate from the desktop
+`AuthState` session.
 
 ### API backward-compatibility (non-negotiable)
 The backend is deployed independently and **far more frequently** than the app, and users update the app slowly — so the live fleet is **always a mix of app versions**. A backend change must never break an already-installed app:
@@ -235,6 +282,12 @@ There is no app-version gating in the backend, and there must not be — the con
 
 When a release cycle begins, a beta branch is cut from Rawhide; Rawhide keeps moving forward while the beta stabilizes.
 
+**Cron gotcha:** GitHub evaluates `schedule:` triggers ONLY from workflow files on the
+repository's DEFAULT branch. `nightly.yml` therefore runs `main`'s copy — any change to
+it must be synced to `main` or the nightly silently keeps using the old version.
+The same applies to `test-integrity.yml`: `pull_request_target` runs the BASE branch's
+copy, so it protects only branches that actually carry the file.
+
 ## Important Constraints
 
 - Beta builds MUST isolate data: `FrontPorchAI-Beta/` directory, `beta_` prefixed SharedPreferences keys.
@@ -246,7 +299,7 @@ When a release cycle begins, a beta branch is cut from Rawhide; Rawhide keeps mo
 ## Files Requiring Discussion Before Changes
 
 ### Never touch without discussion
-- `database/migrations/` — schema changes require migration planning. **Do not introduce breaking changes** (especially to columns/tables written by external tools such as `characters`, `sessions`, `messages`, `avatar_images`, `sync_meta`) without direct maintainer confirmation. Character Card Forge relies on direct raw SQL writes.
+- `lib/database/database.dart` (the Drift schema + its `onUpgrade` migration ladder; there is NO `database/migrations/` directory) — schema changes require migration planning. **Do not introduce breaking changes** (especially to columns/tables written by external tools such as `characters`, `sessions`, `messages`, `avatar_images`, `sync_meta`) without direct maintainer confirmation. Character Card Forge relies on direct raw SQL writes.
 - `lib/main.dart` — service initialization order is delicate.
 - `pubspec.yaml` — **do not edit unless directly instructed.** CI/CD normalizes the release version. Local dev uses standard semver (e.g. `0.9.8+1`).
 - `analysis_options.yaml` — linting rules.
@@ -364,12 +417,26 @@ To prevent "God files" (historically some `.dart` files exceeded 9,000 lines):
 3. Local imports (`../`, `./`)
 
 ### Barrel files and import hygiene (policy)
-Barrel files reduce repetitive intra-package imports:
+Barrel files reduce repetitive intra-package imports. **17 exist today** — run
+`find lib -name '*.dart' | awk -F/ '$NF==$(NF-1)".dart"'` for the live list rather
+than trusting this one. The high-frequency ones:
 - `package:front_porch_ai/models/models.dart`
 - `package:front_porch_ai/utils/utils.dart`
 - `package:front_porch_ai/services/services.dart` (curated — only the high-frequency public surface)
+- `package:front_porch_ai/services/chat/chat.dart` (the chat domain leaves; `services.dart` deliberately does NOT re-export them)
+- `package:front_porch_ai/services/capability/capability.dart`
+- `package:front_porch_ai/services/image_prompt/image_prompt.dart`
+- `package:front_porch_ai/services/web/util/util.dart`
+- `package:front_porch_ai/services/web/tunnels/tunnels.dart`
+- `package:front_porch_ai/services/backporch/backporch.dart`
 - `package:front_porch_ai/ui/widgets/widgets.dart`
 - `package:front_porch_ai/ui/chat_components/chat_components.dart`
+- `package:front_porch_ai/ui/dialogs/dialogs.dart`
+- `package:front_porch_ai/ui/pages/pages.dart`
+- `package:front_porch_ai/ui/pages/repository/repository.dart`
+- `package:front_porch_ai/ui/character_creator/character_creator.dart` (+ `widgets/widgets.dart`)
+- `package:front_porch_ai/ui/settings/widgets/widgets.dart`
+- `package:front_porch_ai/ui/image_studio/image_studio.dart`
 
 **Barrel imports are the required style — solo single-file imports are no
 longer "legal forever" (maintainer directive, 2026-08-01).** The previous
@@ -382,13 +449,19 @@ Converting the stragglers is mandatory ongoing work, not a nice-to-have.
 can never finish the job: 1,101 solo imports live in directories that have no
 barrel at all. So when you find yourself importing **2+ siblings from the same
 un-barrelled directory**, add a barrel for that directory in the same change
-and use it. The directories that most need one, measured 2026-08-01 by how
-many files pull 2+ siblings from them: `services/chat` (28 files / 161 lines),
-`services/web/util` (18/42), `ui/pages/repository` (12/52),
-`ui/character_creator` (10/35), `ui/dialogs` (8/52), `ui/pages` (7/31),
-`services/capability` (7/25). Note `services/chat` needs its OWN
-`chat/chat.dart` barrel — the curated `services.dart` deliberately does not
-re-export the chat leaves, and that stays true.
+and use it. **All seven directories previously listed here as "most needing
+one" now HAVE a barrel** (added 2026-08-01, 263 solo imports collapsed across 72
+files) — `services/chat`, `services/web/util`, `ui/pages/repository`,
+`ui/character_creator`, `ui/dialogs`, `ui/pages`, `services/capability`, plus
+`services/image_prompt`, `services/web/tunnels`, `ui/character_creator/widgets`
+and `ui/settings/widgets`. Do NOT re-derive that stale list; re-measure before
+claiming a directory needs one.
+
+`services/chat` keeps its OWN `chat/chat.dart` barrel — the curated
+`services.dart` deliberately does not re-export the chat leaves, and that stays
+true. Note `chat.dart` exports only the 59 non-`part` files: the 28
+`chat_service_*.dart` part files belong to `chat_service.dart` and must never be
+exported.
 
 **The one place a solo import is still right:** a directory where every
 importer only ever needs ONE file from it (11 such directories today). Wrapping
@@ -464,6 +537,30 @@ and `database.dart` has no barrel anyway).
 
 ## Testing Expectations
 
+- **Goldens are Linux-gated.** 18 widget golden files carry `@TestOn('linux')` and the
+  `golden` tag, so a green macOS `flutter test` NEVER runs them. Run
+  `./scripts/ci-local.sh` (the fpai-golden linux/amd64 container) before pushing — the
+  script's own header notes this is how a red-CI commit once reached Rawhide.
+- **E2E lives in `integration_test/`**: `app_smoke_test.dart` (1:1 journey — realism,
+  needs, chaos, objectives, journal, persistence, backend-failure resilience, worlds +
+  lorebook injection), `group_smoke_test.dart` (per-speaker `_groupRealism` isolation +
+  persistence), `theme_interaction_test.dart` (every theme preset must leave bubble
+  controls hit-testable). CI globs `integration_test/*_test.dart` and runs ONE
+  invocation per file on macOS/Windows/Linux — a new suite is picked up automatically.
+- **Interaction coverage is the point.** Goldens answer "does it look right"; only an
+  E2E tap answers "can a user actually do this". The 10-theme dead-button bug
+  (512e4803) shipped with pixel-identical goldens and a fully green suite because
+  nothing in CI had ever pressed a button. Prefer a few BROAD hit-test sweeps over a
+  guard per widget.
+- **Do not edit a test to make CI green.** `.github/workflows/test-integrity.yml` runs
+  on `pull_request_target` (from the base branch, so a PR cannot weaken it) and FAILS
+  any PR that modifies or deletes an existing test, golden, baseline,
+  `test/deps/dependency_floors.json`, workflow, or `analysis_options.yaml`. Adding NEW
+  test files never blocks. Clearing it needs a maintainer's `approved-test-change`
+  label — an author cannot self-approve. `.github/CODEOWNERS` is the second gate.
+  Precedent: PR #172 edited the dependency floors to pass, which would have
+  reintroduced the sqlite3 3.2.0 → 2.9.4 downgrade that shipped v1.1.0 with no SQLite
+  engine on Linux.
 - Aim for **80%+ coverage** on new code.
 - Test error conditions and edge cases.
 - Mock external dependencies.
