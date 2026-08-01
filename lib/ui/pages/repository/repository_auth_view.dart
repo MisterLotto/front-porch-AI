@@ -63,6 +63,12 @@ class _RepositoryAuthViewState extends State<RepositoryAuthView> {
         return 'Incorrect email or password.';
       case 'email_taken':
         return 'That email is already registered. Try signing in.';
+      case 'disposable_email':
+        return 'Please use a permanent email address — throwaway addresses '
+            "aren't accepted. You can browse The Stoop without an account.";
+      case 'undeliverable_email':
+        return "That domain can't receive email. Check the address and try "
+            'again.';
       case 'underage':
         return 'You must be 18 or older to use The Stoop.';
       case 'account_banned':

@@ -377,6 +377,10 @@ export function stoopErrorText(e: unknown): string {
       return 'That code didn’t work — try again.';
     case 'email_taken':
       return 'An account with that email already exists.';
+    case 'disposable_email':
+      return "Please use a permanent email address — throwaway addresses aren't accepted. You can browse The Stoop without an account.";
+    case 'undeliverable_email':
+      return "That domain can't receive email. Check the address and try again.";
     case 'underage':
       return 'You must be 18 or older to use The Stoop.';
     case 'account_banned':

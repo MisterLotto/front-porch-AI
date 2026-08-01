@@ -88,6 +88,11 @@ class _ChangeEmailDialogState extends State<_ChangeEmailDialog> {
         } else {
           _error = switch (e.code) {
             'email_taken' => 'That address already has a Stoop account.',
+            'disposable_email' =>
+              'Please use a permanent email address — throwaway addresses '
+                  "aren't accepted.",
+            'undeliverable_email' =>
+              "That domain can't receive email. Check the address.",
             'same_email' => 'That’s already your sign-in email.',
             'wrong_password' => 'That password didn’t match.',
             'resend_too_soon' =>
