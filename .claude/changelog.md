@@ -7643,3 +7643,55 @@ Note on process: the first truncation test FAILED and the test was wrong,
 not the code — lopping bytes off the end only removes IEND, leaving the
 chara chunk intact and correctly returned. Rewritten to truncate inside
 the chunk, with a cross-check that the byte path rejects it too.
+
+## 2026-08-01 — CONTRIBUTING.md: add inbound licensing, delete the sidecar era
+
+File: CONTRIBUTING.md
+
+Reason: the file had no licensing statement at all — the only inbound grant
+was GitHub's ToS default. Asked to state explicitly that contributions are
+AGPL-3.0-or-later. While in there, the rest of the file turned out to be
+badly stale and in two places actively wrong.
+
+Added a Licensing section: contributions are AGPL-3.0-or-later, the
+contributor confirms they have the right to submit, no CLA and no copyright
+assignment (contributors keep their copyright). Plus practical notes on the
+AGPL header for new files, dependency licensing, and the fact that
+runtime-downloaded model weights are covered by third-party terms rather
+than this license — several Piper voices carry non-commercial dataset terms
+(en_US-lessac-medium is research-only; en_US-ryan-medium is CC BY-NC-SA).
+
+Deleted, all describing a build that has not existed since the 2026-07
+sidecar retirement:
+  - "Rust toolchain (for embedding server)" prerequisite
+  - "Python 3.8+ (for TTS/STT scripts)" prerequisite
+  - the `cargo build --manifest-path tools/embed_server/Cargo.toml` step
+  - `pip install -r requirements.txt` ("for sidecars")
+  - two `cp .../embed_server` post-build copy steps (Linux + Windows)
+None of tools/embed_server, requirements.txt or the Rust crate exist.
+
+Two entries were worse than merely stale — they told contributors to do
+things the project forbids:
+  - `flutter format --set-exit-if-changed .` as a required check, which
+    directly contradicts the tall-style migration rule (a whole-file format
+    rewraps hundreds of unrelated lines).
+  - "Version bumped in pubspec.yaml" in the release checklist, when
+    pubspec.yaml is explicitly do-not-edit and CI/CD normalizes the version.
+
+Also fixed: "up-to-date with the main branch" replaced with the real branch
+table (Rawhide / dev / *-Beta / main), since the old text pointed
+contributors at main; Flutter version corrected from "3.10.8 or later"
+(which was the DART sdk constraint misread as a Flutter version) to 3.44.8,
+what CI actually pins; added the Linux desktop build deps.
+
+Added, because none of it was documented: the real CI gate list
+(analyze / test / E2E smoke / web-tests / theme-lint / io-lint / golden),
+what the dependency-floor guard is and why regenerating its baseline is the
+wrong fix, the io-lint rationale, the web_ui npm commands, the
+build_runner step for schema changes, and a short "rules that trip people
+up" section (500-line cap, WebUI parity, Realism/Needs parity, AppColors,
+barrels, Character Card Forge's raw-SQL dependency).
+
+Every path and command in the new file was verified to exist.
+
+Docs-only change: no Dart touched, so the code gates do not apply.
