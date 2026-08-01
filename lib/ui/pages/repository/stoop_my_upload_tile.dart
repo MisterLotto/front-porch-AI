@@ -17,14 +17,16 @@ import 'package:front_porch_ai/services/backporch/backporch.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/pages/edit_character_page.dart';
 import 'package:front_porch_ai/ui/pages/edit_group_page.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_avatar.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_upload_page.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
-/// One of the signed-in user's own Stoop uploads on the profile tab: name +
-/// moderation status chip, summary, version/download meta, the in-place Update
-/// flow, Delete, and the moderator's rejection note when there is one.
-/// (Extracted from StoopHomeView so the profile redesign fits the file cap.)
+/// One of the signed-in user's own Stoop uploads on the profile tab, as a
+/// GRID tile (maintainer request 2026-08-01 — a text list "will look really
+/// bad" at scale): card art with the moderation status chip riding it, name,
+/// version/download meta, compact Update/Delete icons, and — for rejections —
+/// a tappable ember "Moderator note" pill over the art.
 class StoopMyUploadTile extends StatelessWidget {
   final StoopCharacter character;
 
@@ -232,107 +234,155 @@ class StoopMyUploadTile extends StatelessWidget {
     }
   }
 
+  // A rejection's moderator note doesn't fit on a grid tile — the ember pill
+  // on the art opens it here instead.
+  void _showModNote(BuildContext context) {
+    final note = character.rejectionNote;
+    if (note == null || note.isEmpty) return;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: stoopCard2(ctx),
+        title: Text(
+          '“${character.name}” — moderator note',
+          style: stoopDisplay(ctx, size: 17),
+        ),
+        content: Text(note, style: TextStyle(color: stoopEmberText(ctx))),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = character;
+    final hasNote = c.isRejected && (c.rejectionNote?.isNotEmpty ?? false);
     return Container(
-      padding: const EdgeInsets.all(14),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         gradient: stoopCardGradient(context),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: stoopBorder(context)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(c.name, style: stoopDisplay(context, size: 16)),
-              ),
-              _statusChip(context),
-            ],
-          ),
-          if (c.summary.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              c.summary,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: stoopCream2(context)),
-            ),
-          ],
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'v${c.version} · ${c.downloadCount} downloads'
-                  '${c.nsfw ? ' · NSFW' : ''}',
-                  style: TextStyle(color: stoopMute(context), fontSize: 12),
-                ),
-              ),
-              // Update publishes a new version of THIS post in place — for solo
-              // characters and (now that groups carry a portable stable id) group
-              // cards alike, each through its own editor + publish flow. World
-              // posts are new-upload-only for now (re-share from the wizard);
-              // routing them to the character path would just dead-end.
-              if (c.type != 'WORLD') ...[
-                OutlinedButton.icon(
-                  onPressed: () => c.type == 'GROUP'
-                      ? _startGroupUpdate(context)
-                      : _startUpdate(context),
-                  icon: const Icon(Icons.autorenew_rounded, size: 15),
-                  label: const Text('Update'),
-                  style: _smallAction(stoopCream2(context),
-                      stoopBorderHi(context)),
-                ),
-                const SizedBox(width: 8),
+          Expanded(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                StoopAvatar(assetId: c.primaryAssetId),
+                Positioned(top: 8, left: 8, child: _statusChip(context)),
+                if (hasNote)
+                  Positioned(
+                    left: 8,
+                    right: 8,
+                    bottom: 8,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(999),
+                      onTap: () => _showModNote(context),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.stoopEmber.withValues(alpha: 0.85),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Text(
+                          '⚠ Moderator note',
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: AppColors.stoopAmberInk,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
-              OutlinedButton.icon(
-                onPressed: () => _confirmDelete(context),
-                icon: const Icon(Icons.delete_outline_rounded, size: 15),
-                label: const Text('Delete'),
-                style: _smallAction(
-                  stoopEmberText(context),
-                  AppColors.stoopEmber.withValues(alpha: 0.4),
-                ),
-              ),
-            ],
-          ),
-          if (c.isRejected && (c.rejectionNote?.isNotEmpty ?? false)) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppColors.stoopEmber.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: AppColors.stoopEmber.withValues(alpha: 0.4),
-                ),
-              ),
-              child: Text(
-                'Moderator: ${c.rejectionNote}',
-                style: TextStyle(
-                  color: stoopEmberText(context),
-                  fontSize: 12,
-                ),
-              ),
             ),
-          ],
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 4, 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  c.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: stoopDisplay(context, size: 14),
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'v${c.version} · ⬇ ${c.downloadCount}'
+                        '${c.nsfw ? ' · 18+' : ''}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: stoopMute(context),
+                          fontSize: 11.5,
+                        ),
+                      ),
+                    ),
+                    // Update publishes a new version of THIS post in place —
+                    // solo and group cards alike, each through its own editor +
+                    // publish flow. World posts are new-upload-only for now
+                    // (re-share from the wizard); routing them to the
+                    // character path would just dead-end.
+                    if (c.type != 'WORLD')
+                      _iconAction(
+                        context,
+                        Icons.autorenew_rounded,
+                        'Update (publish a new version)',
+                        stoopCream2(context),
+                        () => c.type == 'GROUP'
+                            ? _startGroupUpdate(context)
+                            : _startUpdate(context),
+                      ),
+                    _iconAction(
+                      context,
+                      Icons.delete_outline_rounded,
+                      'Delete from The Stoop',
+                      stoopEmberText(context),
+                      () => _confirmDelete(context),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
-  ButtonStyle _smallAction(Color fg, Color side) {
-    return OutlinedButton.styleFrom(
-      foregroundColor: fg,
-      side: BorderSide(color: side),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      minimumSize: const Size(0, 32),
-      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      textStyle: const TextStyle(fontSize: 12),
+  Widget _iconAction(
+    BuildContext context,
+    IconData icon,
+    String tooltip,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return IconButton(
+      onPressed: onTap,
+      tooltip: tooltip,
+      icon: Icon(icon, size: 17, color: color),
+      padding: const EdgeInsets.all(4),
+      constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+      visualDensity: VisualDensity.compact,
     );
   }
 

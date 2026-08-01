@@ -172,11 +172,21 @@ class _StoopHomeViewState extends State<StoopHomeView> {
               ),
             )
           else
-            for (final c in _mine)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: StoopMyUploadTile(character: c, onChanged: _load),
+            // Art-forward grid (not a list): with many uploads a text list
+            // reads terribly, and the art is the identity anyway.
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 190,
+                childAspectRatio: 0.62,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
               ),
+              itemCount: _mine.length,
+              itemBuilder: (_, i) =>
+                  StoopMyUploadTile(character: _mine[i], onChanged: _load),
+            ),
           if (_followed.isNotEmpty) ...[
             const SizedBox(height: 14),
             _sectionRow(

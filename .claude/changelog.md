@@ -7926,3 +7926,18 @@ POST/DELETE /me/avatar, avatar fallback on /assets/:id/raw, POST /auth/forgot + 
 /mod/avatars feed + avatar-strip/lock, dashboard Avatars view + Message/Reset-PW user actions.
 Deploy pending maintainer approval. flutter analyze clean; debug macOS build OK; web_ui tsc clean
 + bundle rebuilt; hub bundle rebuilt; new tests pass.
+
+## 2026-08-01 (later) — Your-cards list → art grid (maintainer live-test feedback)
+
+**Files:** lib/ui/pages/repository/{stoop_my_upload_tile,stoop_home_view}.dart,
+web_ui/src/pages/stoop/StoopAccountPage.tsx, web_ui/src/styles.css (+ dead
+.stoop-mine list CSS pruned), assets/web_app rebuilt, docs/Rawhide.md.
+
+**Why:** Live-testing the new profile tab, the maintainer flagged the "Your
+cards" text list — "will look really bad when people start submitting a lot
+of characters" (he has 17). Rebuilt as an art-forward grid on desktop AND the
+web account page: card art fills the tile, status chip rides the art,
+Update/Delete are compact icons, and a rejection's moderator note moved into
+a tappable ember pill → dialog (it can't fit on a grid tile). The hub site's
+My-cards rows already show art; unchanged. analyze clean, tsc clean, bundle +
+debug build OK.

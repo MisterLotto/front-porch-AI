@@ -8,7 +8,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { StoopCardTile } from '../../components/stoop/StoopCardTile';
+import { StoopCardArt, StoopCardTile } from '../../components/stoop/StoopCardTile';
 import { StoopCreatorAvatar } from '../../components/stoop/StoopCreatorAvatar';
 import { stoop, stoopErrorText } from '../../stoop/stoopApi';
 import { useStoop } from '../../stoop/StoopContext';
@@ -341,29 +341,42 @@ export function StoopAccountPage() {
         {mine.length === 0 ? (
           <p className="muted">Nothing shared yet.</p>
         ) : (
-          <ul className="stoop-mine">
+          <div className="lib-grid stoop-grid stoop-mine-grid">
             {mine.map((m) => (
-              <li key={m.id}>
-                <span>
-                  {m.status === 'APPROVED' ? (
-                    <Link to={`/stoop/card/${encodeURIComponent(m.id)}`}>{m.name}</Link>
-                  ) : (
-                    m.name
-                  )}{' '}
-                  <span className="muted">v{m.version} · ⬇ {m.downloadCount}</span>
-                </span>
-                <span className={`stoop-status ${m.status.toLowerCase()}`}>
+              <div className="lib-card stoop-tile stoop-mine-tile" key={m.id}>
+                {m.status === 'APPROVED' ? (
+                  <Link to={`/stoop/card/${encodeURIComponent(m.id)}`} className="stoop-mine-art">
+                    <StoopCardArt assetId={m.primaryAssetId} name={m.name} />
+                  </Link>
+                ) : (
+                  <span className="stoop-mine-art">
+                    <StoopCardArt assetId={m.primaryAssetId} name={m.name} />
+                  </span>
+                )}
+                <span className={`stoop-status stoop-mine-status ${m.status.toLowerCase()}`}>
                   {STATUS_LABEL[m.status]}
                 </span>
-                <button className="link-btn stoop-delete-link" disabled={busy} onClick={() => deleteUpload(m)}>
-                  Delete
-                </button>
-                {m.status === 'REJECTED' && m.rejectionNote && (
-                  <p className="muted stoop-reject-note">{m.rejectionNote}</p>
-                )}
-              </li>
+                <div className="lib-info">
+                  <div className="lib-name-row">
+                    <span className="lib-name">{m.name}</span>
+                  </div>
+                  <div className="stoop-tile-meta">
+                    <span>v{m.version} · ⬇ {m.downloadCount}</span>
+                    <button
+                      className="link-btn stoop-delete-link"
+                      disabled={busy}
+                      onClick={() => deleteUpload(m)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                  {m.status === 'REJECTED' && m.rejectionNote && (
+                    <p className="muted stoop-reject-note">{m.rejectionNote}</p>
+                  )}
+                </div>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </section>
 
