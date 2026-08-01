@@ -2,6 +2,18 @@
 
 These notes feed the in-app "Update Available" dialog for stable releases on `main`.
 
+## v1.2 — Occupy Mars
+
+- 🌍 **Worlds — build a place, then share it** — Places carry real climates you can author: rename conditions, give them emoji and flavour, set temperature bands, and choose the **atmosphere and gravity**. Mars stops shipping with breathable air, volcano heat and Martian cold are real to the engine, and characters feel them, dress for them and complain about them. Finished a world? **Post it to The Stoop** like a character — full upload and download — and a new chat inherits its character's world automatically.
+
+- 🎙️ **Bring your own Piper voices** — Import raw `.onnx` voice files straight into the app, no conversion step, and they sit alongside the built-in voices everywhere.
+
+- 🗂️ **Folders finally hold group casts** — Groups can be dragged into folders and moved through the hierarchy exactly like characters always could, including from the multi-select toolbar.
+
+- 🏡 **Profiles and avatars on The Stoop** — Your name now opens a real profile: your picture, when you joined, followers and lifetime stats, a bio and up to four links, with your uploads underneath as an art grid. Other creators get the same page. Avatars need a **confirmed email address**, so drive-by accounts can't post pictures at all — and confirming one also unlocks sharing, password reset and changing your sign-in email.
+
+Plus bug fixes and speed improvements ported from nightly Rawhide builds.
+
 ## v1.1.2 — Faces That Stick
 
 Portrait and gallery fixes that make avatars behave, plus stability polish from the nightlies (Flutter 3.44.8 under the hood).
