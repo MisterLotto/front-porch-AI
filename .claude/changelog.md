@@ -8065,3 +8065,34 @@ mid-post-gen still bypasses it (wants the `_generationEpoch`/session-token patte
 
 **Test:** every `waitSendable()` now also requires `!isSettlingTurn`, so a latched flag fails
 all three E2E suites loudly. analyze clean; 2797 unit; 3/3 E2E green.
+
+## 2026-08-01 (later) — Folder/character card hit target + layout
+
+**Files:** lib/ui/pages/home/cards/{folder_grid_card,character_grid_card}.dart, docs/Rawhide.md.
+
+**Why:** A folder card was only clickable down a narrow strip on its left, its contents
+looked left-aligned, and the "N characters" line clipped past the rounded corner.
+
+**One root cause for all three:** `InkWell` was a BARE child of the card's `Stack`.
+Non-positioned Stack children get LOOSE constraints and top-left alignment, so the InkWell
+shrink-wrapped to its widest line ("0 characters") and sat against the left edge — the tap
+target literally was only that wide, the column centred inside its shrunken box rather than
+the card, and `LayoutBuilder` reported a bogus `maxWidth` that `previewSide = maxWidth *
+0.78` was computed from. The giveaway was in the same file: the right-click handler already
+used `Positioned.fill`, so right-click covered the whole card while tap did not.
+`group_grid_card` avoids it by putting the InkWell OUTSIDE the Stack.
+
+**Also:** the count label lacked the padding/textAlign/ellipsis the folder name directly
+above it already had, so it rendered edge-to-edge and was clipped on narrow grids.
+
+**character_grid_card had the identical Stack-with-bare-InkWell shape** — masked because its
+content is an image that fills anyway, but the same latent defect (and the same wrong
+LayoutBuilder width). Fixed in the same pass rather than left to surface later.
+
+**Verification:** analyze clean; 2797 unit tests; 94 Linux-gated pixel goldens via
+scripts/ci-local.sh (these never run on macOS and this was a layout change, so they were the
+gate that mattered).
+
+**Note for later:** this is exactly the "renders but isn't reachable" class the
+theme_interaction_test hit-test sweep catches. That sweep covers chat bubbles only —
+extending it to the home grid would have caught this mechanically.

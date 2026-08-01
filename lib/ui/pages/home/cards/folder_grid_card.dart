@@ -112,80 +112,104 @@ class FolderGridCard extends StatelessWidget {
           ),
           child: Stack(
             children: [
-              InkWell(
-                onTap: () => onFolderTap(folder),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isSmall = constraints.maxHeight < 200;
-                    final isTiny = constraints.maxHeight < 140;
-                    final iconSize = isTiny ? 32.0 : (isSmall ? 48.0 : 72.0);
-                    // Scale the preview to the card width so it fills a real
-                    // chunk of the card (and scales with the grid size) rather
-                    // than a fixed thumbnail that looks tiny on larger cards.
-                    final previewSide = (constraints.maxWidth * 0.78).clamp(
-                      64.0,
-                      220.0,
-                    );
-                    final fontSize = isTiny ? 11.0 : (isSmall ? 13.0 : 16.0);
+              // Positioned.fill, NOT a bare child. A non-positioned Stack child
+              // gets LOOSE constraints and top-left alignment, so this InkWell
+              // shrink-wrapped to the width of its widest line ("N characters")
+              // and sat against the left edge. Two visible bugs from one cause:
+              // the card's content looked left-aligned instead of centred, and
+              // only that narrow strip was clickable — while right-click worked
+              // everywhere, because THAT handler below already uses
+              // Positioned.fill. Filling also gives LayoutBuilder the card's
+              // real width, which `previewSide = maxWidth * 0.78` depends on.
+              Positioned.fill(
+                child: InkWell(
+                  onTap: () => onFolderTap(folder),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isSmall = constraints.maxHeight < 200;
+                      final isTiny = constraints.maxHeight < 140;
+                      final iconSize = isTiny ? 32.0 : (isSmall ? 48.0 : 72.0);
+                      // Scale the preview to the card width so it fills a real
+                      // chunk of the card (and scales with the grid size) rather
+                      // than a fixed thumbnail that looks tiny on larger cards.
+                      final previewSide = (constraints.maxWidth * 0.78).clamp(
+                        64.0,
+                        220.0,
+                      );
+                      final fontSize = isTiny ? 11.0 : (isSmall ? 13.0 : 16.0);
 
-                    // Preview the first few characters inside the folder (2x2).
-                    // Empty folders fall back to the plain folder icon.
-                    final previews = _folderPreviewImages(context, folder, 4);
+                      // Preview the first few characters inside the folder (2x2).
+                      // Empty folders fall back to the plain folder icon.
+                      final previews = _folderPreviewImages(context, folder, 4);
 
-                    return Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (previews.isEmpty)
-                          Icon(
-                            Icons.folder,
-                            size: iconSize,
-                            color: isHovering
-                                ? AppColors.porchAmberOf(context)
-                                : AppColors.iconSecondary(context),
-                          )
-                        else
-                          GroupAvatarMontage(
-                            images: previews,
-                            side: previewSide,
-                          ),
-                        SizedBox(height: isTiny ? 4 : (isSmall ? 8 : 16)),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          child: Text(
-                            folder.name,
-                            style: TextStyle(
-                              color: AppColors.textPrimary(context),
-                              fontWeight: FontWeight.bold,
-                              fontSize: fontSize,
+                      return Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (previews.isEmpty)
+                            Icon(
+                              Icons.folder,
+                              size: iconSize,
+                              color: isHovering
+                                  ? AppColors.porchAmberOf(context)
+                                  : AppColors.iconSecondary(context),
+                            )
+                          else
+                            GroupAvatarMontage(
+                              images: previews,
+                              side: previewSide,
                             ),
-                            textAlign: TextAlign.center,
-                            maxLines: isTiny ? 1 : 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (!isTiny) ...[
-                          SizedBox(height: isSmall ? 4 : 8),
-                          Text(
-                            groupCount > 0
-                                ? '$charCount character${charCount == 1 ? '' : 's'}'
-                                      ' · $groupCount group${groupCount == 1 ? '' : 's'}'
-                                : '$charCount character${charCount == 1 ? '' : 's'}',
-                            style: TextStyle(
-                              color: AppColors.textSecondary(context),
-                              fontSize: isSmall ? 11 : 13,
+                          SizedBox(height: isTiny ? 4 : (isSmall ? 8 : 16)),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: Text(
+                              folder.name,
+                              style: TextStyle(
+                                color: AppColors.textPrimary(context),
+                                fontWeight: FontWeight.bold,
+                                fontSize: fontSize,
+                              ),
+                              textAlign: TextAlign.center,
+                              maxLines: isTiny ? 1 : 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          if (!isTiny) ...[
+                            SizedBox(height: isSmall ? 4 : 8),
+                            // Same horizontal padding + ellipsis as the name
+                            // above. Without them this line rendered edge to
+                            // edge and got clipped by the card's rounded
+                            // corner on a narrow grid — the count is the
+                            // widest thing on an empty folder card.
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                              child: Text(
+                                groupCount > 0
+                                    ? '$charCount character${charCount == 1 ? '' : 's'}'
+                                          ' · $groupCount group${groupCount == 1 ? '' : 's'}'
+                                    : '$charCount character${charCount == 1 ? '' : 's'}',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary(context),
+                                  fontSize: isSmall ? 11 : 13,
+                                ),
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                          // The old inline Rename/Delete icon row lived behind
+                          // `if (!isSmall)`, so at any grid size under 200 px
+                          // tall it was not rendered AT ALL — which is why folder
+                          // deletion read as "there is no way to delete a
+                          // folder". The actions now live in the always-present
+                          // ⋮ menu (and on right-click), so they exist at every
+                          // grid size.
                         ],
-                        // The old inline Rename/Delete icon row lived behind
-                        // `if (!isSmall)`, so at any grid size under 200 px
-                        // tall it was not rendered AT ALL — which is why folder
-                        // deletion read as "there is no way to delete a
-                        // folder". The actions now live in the always-present
-                        // ⋮ menu (and on right-click), so they exist at every
-                        // grid size.
-                      ],
-                    );
-                  },
+                      );
+                      },
+                  ),
                 ),
               ),
               // Always-visible menu affordance + right-click, matching the
