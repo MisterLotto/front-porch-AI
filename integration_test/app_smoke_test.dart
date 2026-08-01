@@ -492,18 +492,42 @@ void main() {
       () => 'isGenerating to clear after the backend failure',
     );
 
-    // The real proof of recovery: every send guard is down again and a normal
-    // turn still goes through afterwards.
+    // NOTE: a 500 is classified backend-unreachable, so _generateResponse
+    // takes its `treatAsCancel` path — it keeps the (empty) streamed
+    // character message and appends NO System banner. That is why this does
+    // not assert one; the banner path belongs to other error classes.
     await d.waitSendable();
+
+    // The real proof of recovery is REGENERATE, because that is what a user
+    // actually reaches for after a failed reply — and until now it was a
+    // silent no-op. A failed turn leaves `user -> System(banner)`, which
+    // matched neither branch of regenerateLastMessage, so nothing happened
+    // and the only workaround was to copy the typed text out, delete the
+    // message and retype it. Asserting a fresh reply here pins the fix, and
+    // it keeps this phase from stacking a second user turn onto an
+    // unanswered one.
     final chatsBeforeRecovery = backend.chatRequests;
-    await d.sendMessage('And the porch is still here afterwards.');
+    final messagesBeforeRegen = chatService.messages.length;
+    await chatService.regenerateLastMessage();
     await d.waitFor(
       () => backend.chatRequests > chatsBeforeRecovery,
       () =>
-          'the chat to recover and generate again after the failure '
+          'regenerate to retry the failed turn '
           '(chatRequests=${backend.chatRequests}, was $chatsBeforeRecovery)',
     );
     await d.waitSendable();
+    expect(
+      chatService.messages.last.isUser,
+      isFalse,
+      reason: 'regenerate must leave a character reply as the last message',
+    );
+    expect(
+      chatService.messages.length,
+      messagesBeforeRegen,
+      reason:
+          'regenerate replaces the failed turn in place — the user turn '
+          'behind it is reused, never duplicated',
+    );
 
     // ── Phase 4f: worlds — climate swap + lorebook reaching the prompt ──
     // A World carries two mechanisms that are invisible from the chat UI: a

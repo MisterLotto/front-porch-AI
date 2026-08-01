@@ -143,13 +143,7 @@ class ChatFacade {
       'sessionId': _chat.currentSessionId,
       'sessionName': _chat.sessionName,
       'messages': messages,
-      // Deliberately WIDER than the desktop getter of the same name. The web
-      // composer (ChatComposer.tsx `send()`) calls setDraft('') BEFORE
-      // onSend(), so unlike the desktop mirror it cannot preserve the text by
-      // returning early — if the server refuses the send, the draft is already
-      // gone. Reporting busy through the post-generation window keeps the
-      // composer disabled for those seconds so there is nothing to lose.
-      'isGenerating': _chat.isGenerating || _chat.isSettlingTurn,
+      'isGenerating': _chat.isGenerating,
       // Additive (mixed-fleet safe): older web clients ignore it; newer ones
       // can distinguish "streaming tokens" from "still settling".
       'isSettlingTurn': _chat.isSettlingTurn,

@@ -3444,7 +3444,17 @@ class ChatService extends ChangeNotifier {
     // inserts (dream block) with the active turn's writes on one shared
     // list — the 2026-07-28 dream-corruption report. Stop first: the Stop
     // button now halts a turn promptly (see the drain cancel fix).
-    if (_isTurnBusy) return;
+    //
+    // Deliberately _isGenerating, NOT _isTurnBusy. Extending this to the
+    // post-generation window was tried twice and CI rejected it both times:
+    // post-gen evals plus background objective checks meant the composer was
+    // unavailable for most of a turn, and on a slow local backend a user
+    // would meet a dead send button far more often than a live one.
+    // Sending APPENDS a message; it does not shift indices or rewrite state
+    // under a running eval the way delete/regenerate/swipe/cast do — those
+    // keep the wider _isTurnBusy guard, because that is where the race
+    // actually corrupts something.
+    if (_isGenerating) return;
     // One-shot absence acknowledgment: pending survives exactly the first
     // user turn after load (all of that turn's prompt builds see it); the
     // second turn clears it for good.

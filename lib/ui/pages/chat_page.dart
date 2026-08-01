@@ -1975,16 +1975,13 @@ class _ChatPageState extends State<ChatPage> {
     final pending = chatService.observerMode ? null : _pendingImageBytes;
     final text = _controller.text;
     if ((text.trim().isEmpty && pending == null) ||
+        // Mirrors sendMessage's guard set EXACTLY. If this list is ever
+        // narrower than the service's, we fall through to _controller.clear()
+        // below for a send the service silently refused, and the user's typed
+        // text and pending photo are consumed into the void. Note sendMessage
+        // deliberately guards on isGenerating (streaming) and NOT on
+        // isSettlingTurn — see the comment there.
         chatService.isGenerating ||
-        // Must match sendMessage's own guard. The service refuses while the
-        // previous turn's post-generation work is still settling; if this
-        // mirror did not also check it, we would fall through to
-        // _controller.clear() below for a send the service silently dropped —
-        // exactly the "consumed into the void" case this guard exists to
-        // prevent. The send button stays ENABLED during that window (it is
-        // brief, and disabling it made the composer unusable on slow
-        // machines); pressing it simply keeps your text.
-        chatService.isSettlingTurn ||
         chatService.isGuestBusy ||
         chatService.isPhotoTurnInFlight ||
         chatService.entrancesInFlight ||
