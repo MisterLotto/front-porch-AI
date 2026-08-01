@@ -2561,6 +2561,27 @@ class AppDatabase extends _$AppDatabase {
         .get();
   }
 
+  /// Every character's avatars in ONE query, grouped by character id.
+  ///
+  /// Loading the library used to call [getAvatarImagesByCharacterId] once per
+  /// character — an N+1 where each query is also a round trip to the database
+  /// isolate (`NativeDatabase.createInBackground`), so the cost is per-call
+  /// overhead more than SQL. One grouped query measured ~4x faster and, more
+  /// importantly, stops scaling with the size of the library.
+  Future<Map<String, List<AvatarImage>>> getAvatarImagesGroupedByCharacter()
+  async {
+    final rows =
+        await (select(avatarImages)..orderBy([
+          (a) => OrderingTerm.asc(a.characterId),
+          (a) => OrderingTerm.asc(a.displayOrder),
+        ])).get();
+    final grouped = <String, List<AvatarImage>>{};
+    for (final row in rows) {
+      (grouped[row.characterId] ??= <AvatarImage>[]).add(row);
+    }
+    return grouped;
+  }
+
   /// Get a single avatar by ID.
   Future<AvatarImage?> getAvatarById(String id) async {
     return (select(

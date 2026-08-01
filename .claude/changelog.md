@@ -7567,3 +7567,79 @@ runner's timing variance can never turn it red.
 
 Verification: flutter analyze 0 issues, dart fix clean, full suite
 2774 passed / 12 skipped / 0 failed.
+
+## 2026-08-01 — Library load: stop reading 142MB to find a few KB of JSON
+
+Files:
+- lib/utils/png_metadata_utils.dart
+- lib/services/v2_card_service.dart
+- lib/services/character_repository.dart
+- lib/services/hardware_service.dart
+- lib/services/group_card_service.dart
+- lib/database/database.dart
+- lib/utils/utils.dart
+- test/utils/png_metadata_seek_test.dart (new)
+- test/services/hardware_info_cache_test.dart (new)
+- docs/Rawhide.md
+
+Reason: acting on the measurements from the previous commit (b4ea4cf).
+First frame was already fast (156ms); the cost was everything between the
+window appearing and the home grid being usable.
+
+1. PNG metadata is now read by SEEKING the chunk table
+   (PngMetadataUtils.extractTextChunkFromFile) instead of loading the file.
+   readCard pulled the ENTIRE multi-megabyte card off disk to reach a
+   'chara' tEXt chunk sitting in the header — 142MB for a 120-card library.
+   Walking the chunk table reads 8-byte headers plus the matching chunk and
+   never touches IDAT.
+
+   Measured, same 120 cards at 1.1MB each: 501-743ms -> 214ms (~3.5x).
+   The residual is JSON parse + model construction, i.e. real work. Chosen
+   over the 64KB-prefix approach originally proposed because seeking also
+   (a) does not degrade as card art resolution grows and (b) still finds
+   cards that write 'chara' AFTER IDAT, which the PNG spec permits and a
+   prefix read would have missed. The whole-file path is retained verbatim
+   as the fallback, so nothing that loaded before stops loading.
+
+   The per-chunk decode was factored into ONE _parseTextChunk shared by the
+   byte walker and the file walker — the two cannot disagree about how a
+   chunk decodes.
+
+2. Avatar loading was an N+1: one getAvatarImagesByCharacterId per
+   character, each a round trip to the Drift background isolate. Replaced
+   with getAvatarImagesGroupedByCharacter (one query, grouped in memory).
+
+3. Three debugPrints ran per character inside the load loop. debugPrint is
+   NOT compiled out in release, so a 500-card library built 500+ log
+   strings nobody reads on every load. Replaced with two summaries.
+
+4. HardwareService no longer re-detects from its constructor. It spawned up
+   to four PowerShell processes (plus nvidia-smi) on Windows during
+   provider-tree construction, every launch, and never persisted the
+   result. It now restores a cached HardwareInfo immediately (correct VRAM
+   + cpuOnlyLowPerf from the first frame) and re-detects after the first
+   frame — same freshness, no contention with the library load.
+
+   WidgetsBinding.instance is guarded with try/catch because it THROWS when
+   no binding exists; without it, constructing HardwareService headlessly
+   (script, web server host) would crash. Tests use a fake, so they would
+   not have caught this.
+
+Barrels: png_metadata_utils, group_avatar_compositor and cpu_features were
+all missing from the utils barrel, which is exactly the absence the
+self-extending rule exists to prevent — added, and their importers
+(v2_card_service, group_card_service, hardware_service, model_manager)
+converted to the barrel.
+
+Tests: 9 new. The chunk walker is pinned to the whole-file path's contract
+including where it returns null (null is what triggers the fallback), and
+covers iTXt, chunks after IDAT, non-matching keywords, non-PNG input,
+mid-chunk truncation and a missing file. The cache tests cover an entry
+written by an older build degrading to defaults rather than throwing —
+a startup crash over a stale cache would be worse than the slow detection
+this replaced.
+
+Note on process: the first truncation test FAILED and the test was wrong,
+not the code — lopping bytes off the end only removes IEND, leaving the
+chara chunk intact and correctly returned. Rewritten to truncate inside
+the chunk, with a cross-check that the byte path rejects it too.
