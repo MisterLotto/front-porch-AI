@@ -75,4 +75,27 @@ void main() {
     await folders.inheritFolder(null, '/library/Misty_duplicate_2.png');
     await folders.inheritFolder('/library/Misty_1.png', null);
   });
+
+  test('a null folder id removes a character from whatever folder holds it',
+      () async {
+    // The move picker's "Home (no folder)" entry is the always-reachable way
+    // OUT of a folder (the card menu's "Remove from Folder" only shows while
+    // browsing inside that folder), and it cannot know which folder the card
+    // is in — so it passes null.
+    final parent = await folders.createFolder('Meteorologists');
+    final child = await folders.createFolder('Interns', parentId: parent.id);
+    await folders.addToFolder(child.id, '/library/Misty_1.png');
+
+    await folders.removeFromFolder(null, '/library/Misty_1.png');
+
+    expect(folders.getFolderForCharacter('/library/Misty_1.png'), isNull);
+    // A non-null id still guards against a stale card yanking the character
+    // out of a folder it has since been moved to.
+    await folders.addToFolder(parent.id, '/library/Misty_1.png');
+    await folders.removeFromFolder(child.id, '/library/Misty_1.png');
+    expect(
+      folders.getFolderForCharacter('/library/Misty_1.png')?.id,
+      parent.id,
+    );
+  });
 }

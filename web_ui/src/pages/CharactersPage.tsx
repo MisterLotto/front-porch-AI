@@ -30,6 +30,7 @@ import {
 type Dialog =
   | { kind: 'newFolder' }
   | { kind: 'renameFolder'; folder: LibFolder }
+  | { kind: 'newSubfolder'; folder: LibFolder }
   | { kind: 'deleteFolder'; folder: LibFolder }
   | { kind: 'deleteFolderDeep'; folder: LibFolder }
   | { kind: 'deleteChar'; char: LibChar }
@@ -101,6 +102,11 @@ export function CharactersPage() {
 
   const folderMenu = (f: LibFolder): CardMenuItem[] => [
     { label: 'Rename', icon: '✏️', onClick: () => setDialog({ kind: 'renameFolder', folder: f }) },
+    {
+      label: 'New subfolder',
+      icon: '📂',
+      onClick: () => setDialog({ kind: 'newSubfolder', folder: f }),
+    },
     {
       label: 'Delete folder only',
       icon: '🗑',
@@ -349,6 +355,14 @@ export function CharactersPage() {
           title={lib.folderId ? 'New subfolder' : 'New folder'}
           confirmLabel="Create"
           onConfirm={(name) => lib.createFolder(name, lib.folderId)}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog?.kind === 'newSubfolder' && (
+        <PromptDialog
+          title={`New subfolder in "${dialog.folder.name}"`}
+          confirmLabel="Create"
+          onConfirm={(name) => lib.createFolder(name, dialog.folder.id)}
           onClose={() => setDialog(null)}
         />
       )}

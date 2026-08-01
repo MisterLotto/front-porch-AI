@@ -474,6 +474,18 @@ class CharacterGridCard extends StatelessWidget {
                         icon: Icons.data_object,
                         label: 'Export JSON',
                       ),
+                      // Filing a single character was drag-only before this —
+                      // the menu could take one OUT of a folder but never put
+                      // one in, or move it between folders (the picker lists
+                      // every folder by full path, so it doubles as "move up
+                      // one level" when nested). Group cards already had this.
+                      homeCardMenuItem(
+                        context,
+                        value: 'move_folder',
+                        icon: Icons.drive_file_move,
+                        label: 'Move to Folder…',
+                        iconColor: AppColors.porchAmberOf(context),
+                      ),
                       if (activeFolderId != null)
                         homeCardMenuItem(
                           context,

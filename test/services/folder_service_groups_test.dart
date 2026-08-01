@@ -61,6 +61,26 @@ void main() {
     expect((await db.getGroupById('group_1'))?.folderId, isNull);
   });
 
+  test('a null folder id removes a group from whatever folder holds it',
+      () async {
+    // The "Home (no folder)" entry in the move picker has no idea which
+    // folder the card is in (you can reach it from a global search), so it
+    // passes null and expects the group to come out regardless.
+    final parent = await folders.createFolder('Ensembles');
+    final child = await folders.createFolder('Duos', parentId: parent.id);
+    await folders.addGroupToFolder(child.id, 'group_1');
+
+    await folders.removeGroupFromFolder(null, 'group_1');
+
+    expect(folders.getFolderForGroup('group_1'), isNull);
+    expect((await db.getGroupById('group_1'))?.folderId, isNull);
+    // Already at the top level: still a harmless no-op.
+    await folders.removeGroupFromFolder(null, 'group_2');
+    expect(folders.getFolderForGroup('group_2'), isNull);
+    // Sanity: the folders themselves are untouched.
+    expect(folders.folders.map((f) => f.id), containsAll([parent.id, child.id]));
+  });
+
   test('deleteFolder unassigns its groups back to the top level', () async {
     final folder = await folders.createFolder('Ensembles');
     await folders.addGroupToFolder(folder.id, 'group_1');

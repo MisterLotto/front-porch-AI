@@ -276,6 +276,22 @@ extension _HomePageChrome on _HomePageState {
       case 'export_json':
         _exportCharacterJson(context, character);
         break;
+      case 'move_folder':
+        final moveService = Provider.of<FolderService>(context, listen: false);
+        _showMoveToFolderDialog(
+          context,
+          moveService,
+          title: 'Move "${character.name}" to folder',
+          onMove: (folderId) async {
+            if (character.imagePath == null) return;
+            if (folderId == null) {
+              await moveService.removeFromFolder(null, character.imagePath!);
+            } else {
+              await moveService.addToFolder(folderId, character.imagePath!);
+            }
+          },
+        );
+        break;
       case 'remove_folder':
         final folderService = Provider.of<FolderService>(
           context,
@@ -320,8 +336,9 @@ extension _HomePageChrome on _HomePageState {
           context,
           folderService,
           title: 'Move "${group.name}" to folder',
-          onMove: (folderId) =>
-              folderService.addGroupToFolder(folderId, group.id),
+          onMove: (folderId) => folderId == null
+              ? folderService.removeGroupFromFolder(null, group.id)
+              : folderService.addGroupToFolder(folderId, group.id),
         );
         break;
       case 'remove_folder':

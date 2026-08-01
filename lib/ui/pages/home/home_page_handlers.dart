@@ -59,11 +59,18 @@ extension _HomePageHandlers on _HomePageState {
   /// actually moves via [onMove] — the multi-select toolbar moves the whole
   /// selection (characters + groups) while a group card's context menu moves
   /// just that group. Generalized instead of duplicated per surface.
+  ///
+  /// [onMove] receives `null` when the user picks "Home (no folder)". That
+  /// entry is the only always-reachable way *out* of a folder: the card menu's
+  /// "Remove from Folder" only appears while you are browsing inside the
+  /// folder, so a card found via global search had no exit before. Because
+  /// every folder is listed by its full path, picking an ancestor is also how
+  /// you move a card up one level when nested.
   void _showMoveToFolderDialog(
     BuildContext context,
     FolderService folderService, {
     required String title,
-    required Future<void> Function(String folderId) onMove,
+    required Future<void> Function(String? folderId) onMove,
   }) {
     final folders = folderService.folders.toList()
       ..sort((a, b) {
@@ -81,6 +88,31 @@ extension _HomePageHandlers on _HomePageState {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            ListTile(
+              leading: Icon(
+                Icons.home_outlined,
+                color: AppColors.porchHoneyOf(context),
+              ),
+              title: Text(
+                'Home (no folder)',
+                style: TextStyle(color: AppColors.textPrimary(context)),
+              ),
+              subtitle: Text(
+                'Move back out to the library top level',
+                style: TextStyle(
+                  color: AppColors.textTertiary(context),
+                  fontSize: 12,
+                ),
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              onTap: () async {
+                Navigator.pop(context);
+                await onMove(null);
+              },
+            ),
+            Divider(color: AppColors.borderOf(context).withValues(alpha: 0.5)),
             if (folders.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
@@ -173,9 +205,11 @@ extension _HomePageHandlers on _HomePageState {
     );
   }
 
+  /// [folderId] is `null` for "Home (no folder)" — the whole selection moves
+  /// back out to the library top level instead of into a folder.
   Future<void> _moveSelectedToFolder(
     BuildContext context,
-    String folderId,
+    String? folderId,
     CharacterRepository repo,
     FolderService folderService,
   ) async {
@@ -185,18 +219,30 @@ extension _HomePageHandlers on _HomePageState {
           .where((c) => _getCharacterIdFromCard(c) == id)
           .firstOrNull;
       if (card?.imagePath != null) {
-        await folderService.addToFolder(folderId, card!.imagePath!);
+        if (folderId == null) {
+          await folderService.removeFromFolder(null, card!.imagePath!);
+        } else {
+          await folderService.addToFolder(folderId, card!.imagePath!);
+        }
       }
     }
     // Groups ride the same move — their selection ids ARE their group ids.
     for (final groupId in _selectedGroupIds) {
-      await folderService.addGroupToFolder(folderId, groupId);
+      if (folderId == null) {
+        await folderService.removeGroupFromFolder(null, groupId);
+      } else {
+        await folderService.addGroupToFolder(folderId, groupId);
+      }
     }
     final moved = _selectedCharacterIds.length + _selectedGroupIds.length;
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Moved $moved item${moved == 1 ? '' : 's'} to folder'),
+          content: Text(
+            folderId == null
+                ? 'Moved $moved item${moved == 1 ? '' : 's'} out of the folder'
+                : 'Moved $moved item${moved == 1 ? '' : 's'} to folder',
+          ),
         ),
       );
     }

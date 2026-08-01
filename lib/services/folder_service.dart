@@ -212,7 +212,14 @@ class FolderService extends ChangeNotifier {
     await _load();
   }
 
-  Future<void> removeFromFolder(String folderId, String characterPath) async {
+  /// Clear a character's folder so it lands back on the home top level.
+  ///
+  /// [folderId] is the folder the caller *believes* the character is in — the
+  /// guard stops a stale card from yanking a character out of a folder it was
+  /// since moved to. Pass `null` for "whatever folder it is in", which is what
+  /// the folder picker's "Home (no folder)" entry needs: from a global search
+  /// or a breadcrumb view the caller has no idea which folder holds the card.
+  Future<void> removeFromFolder(String? folderId, String characterPath) async {
     final filename = _normalize(characterPath);
 
     // Find the character and clear its folderId
@@ -220,7 +227,7 @@ class FolderService extends ChangeNotifier {
     for (final c in chars) {
       if (c.imagePath != null &&
           _normalize(c.imagePath!) == filename &&
-          c.folderId == folderId) {
+          (folderId == null || c.folderId == folderId)) {
         await _db.updateCharacter(
           CharactersCompanion(
             id: Value(c.id),
@@ -267,9 +274,13 @@ class FolderService extends ChangeNotifier {
   }
 
   /// Remove a group chat from a folder (back to the home top level).
-  Future<void> removeGroupFromFolder(String folderId, String groupId) async {
+  ///
+  /// Same contract as [removeFromFolder]: a non-null [folderId] guards against
+  /// a stale card, `null` means "whatever folder it is in".
+  Future<void> removeGroupFromFolder(String? folderId, String groupId) async {
     final folder = getFolderForGroup(groupId);
-    if (folder?.id != folderId) return;
+    if (folder == null) return;
+    if (folderId != null && folder.id != folderId) return;
     await _db.updateGroupFolderId(groupId, null);
     await _load();
   }

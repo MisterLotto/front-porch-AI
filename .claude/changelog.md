@@ -7445,3 +7445,66 @@ Verification: flutter analyze 0 issues, dart fix clean, full suite +
 goldens + Linux build green before push. Import changes are compile-time
 only — a clean analyze plus a compiling test suite IS the behavioural
 proof here.
+
+## 2026-08-01 — Folder UX: discoverable folder actions + an always-reachable way out
+
+Files:
+- lib/ui/pages/home/cards/folder_grid_card.dart
+- lib/ui/pages/home/cards/character_grid_card.dart
+- lib/ui/pages/home/home_page_chrome.dart
+- lib/ui/pages/home/home_page_handlers.dart
+- lib/services/folder_service.dart
+- test/services/folder_service_groups_test.dart
+- test/services/folder_service_inherit_test.dart
+- web_ui/src/pages/CharactersPage.tsx
+- docs/Rawhide.md
+
+Reason: a user reported they could not figure out how to delete a folder,
+and separately that there is no way to move a character back out of a
+folder (or up one level when nested).
+
+Root causes, three separate ones:
+
+1. Folder Rename/Delete lived in an inline icon row gated behind
+   `if (!isSmall)` where `isSmall = constraints.maxHeight < 200`. Below
+   that card height the buttons were not rendered AT ALL — not shrunk,
+   not scrolled, absent. Folder cards also had no `onSecondaryTapUp`, so
+   right-click offered nothing either. At the default grid scale most
+   users never saw the buttons, which reads exactly like "there is no way
+   to delete a folder". Fixed by deleting the size-gated row and putting
+   the actions in an always-present corner ⋮ button plus a right-click
+   handler, both routed through ONE `_showFolderMenu` so the two surfaces
+   cannot drift apart. The menu also picked up New Subfolder, which
+   previously had no per-folder entry point at all.
+
+2. Character cards had no `move_folder` menu item (group cards did), so
+   the only way to file a character was drag-and-drop. Added, reusing the
+   already-generalized `_showMoveToFolderDialog`.
+
+3. Getting OUT of a folder only existed as "Remove from Folder", which is
+   conditional on `activeFolderId != null` — i.e. it appears only while
+   you are browsing inside that folder. A character found via global
+   search, or reached from a breadcrumb view, had no exit. The move
+   picker now leads with a "Home (no folder)" destination.
+
+To support (3) the picker's callback became
+`Future<void> Function(String? folderId)` (null = root), and
+`FolderService.removeFromFolder` / `removeGroupFromFolder` took a
+NULLABLE folder id: non-null keeps the existing stale-card guard (do not
+yank a character out of a folder it has since been moved to), null means
+"whatever folder it is in" — which is all the picker can know. No new
+service methods; the two existing removers were relaxed rather than
+duplicated by a `moveToRoot` pair. The web facade already passed a
+concrete current-folder id on its root path, so it is unaffected.
+
+Note this is desktop catching up to web, not the usual direction: the web
+library already had Move-to-folder for both kinds, folder Rename/Delete
+in a kebab, and a "No folder (root)" row in its move dialog. The one item
+web was missing — New subfolder — was added there in the same change so
+both sides now offer the same folder actions.
+
+Tests: two added (one per kind) covering the null-folder-id removal AND
+that a non-null id still guards correctly.
+
+Verification: flutter analyze 0 issues; full Dart suite, goldens and the
+Linux build green; web tsc + vitest (34) green.
