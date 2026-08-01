@@ -12,5 +12,12 @@
 #     flutter test --tags golden
 #   Refresh pixel goldens after an intentional UI change (Linux / CI):
 #     flutter test --tags golden --update-goldens
+#
+# The `perf` tag marks startup/throughput benchmarks. They PRINT numbers rather
+# than assert them (a wall-clock threshold would flake on shared CI runners), and
+# they self-skip unless FP_BENCH_DIR points at a seeded library — so leaving them
+# in the default run is harmless. Run them deliberately:
+#     FP_BENCH_DIR=~/Documents/FrontPorchAI flutter test --tags perf
 tags:
   golden:
+  perf:

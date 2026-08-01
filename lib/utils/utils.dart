@@ -27,6 +27,7 @@
 // Direct imports of individual utility files remain fully supported.
 
 export 'character_sort.dart';
+export 'cpu_features.dart';
 export 'emotion_labels.dart';
 export 'gguf_parser.dart';
 export 'character_id.dart';
@@ -36,6 +37,7 @@ export 'kobold_layer_solver.dart';
 export 'output_sanitizer_regex.dart';
 export 'persona_colors.dart';
 export 'picker_prefs.dart';
+export 'startup_trace.dart';
 export 'think_tags.dart';
 export 'world_ref_resolver.dart';
 export 'character_linked_world.dart';

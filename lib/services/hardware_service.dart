@@ -19,7 +19,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:front_porch_ai/utils/cpu_features.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Parsed output of `nvidia-smi --query-gpu=name,memory.total`.
 /// Used internally by [HardwareService._parseNvidiaSmi] so the multi-line CSV
@@ -93,8 +93,10 @@ class HardwareService extends ChangeNotifier {
   Future<void> detectHardware() async {
     _isDetecting = true;
     notifyListeners();
+    final traceStart = DateTime.now();
 
     await _checkDrivers();
+    StartupTrace.mark('HardwareService._checkDrivers');
 
     try {
       if (Platform.isWindows) {
@@ -109,6 +111,10 @@ class HardwareService extends ChangeNotifier {
     } finally {
       _isDetecting = false;
       notifyListeners();
+      StartupTrace.mark(
+        'HardwareService.detectHardware DONE in '
+        '${DateTime.now().difference(traceStart).inMilliseconds}ms',
+      );
     }
   }
 

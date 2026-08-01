@@ -23,7 +23,7 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/download_manager.dart';
-import 'package:front_porch_ai/utils/gguf_parser.dart'; // for GGUFModelInfo + parser
+import 'package:front_porch_ai/utils/utils.dart'; // GGUFModelInfo + parser, StartupTrace
 import 'package:front_porch_ai/models/models.dart';
 
 /// Manages local model files and HuggingFace model discovery.
@@ -174,6 +174,7 @@ class ModelManager extends ChangeNotifier {
   /// Scans the models directory for .gguf files.
   Future<void> refreshModels() async {
     if (_storageService.rootPath == null) return;
+    final traceStart = DateTime.now();
     final modelDir = _storageService.modelsDir;
 
     if (await modelDir.exists()) {
@@ -192,6 +193,10 @@ class ModelManager extends ChangeNotifier {
       _models = [];
     }
     notifyListeners();
+    StartupTrace.mark(
+      'ModelManager.refreshModels — ${_models.length} models in '
+      '${DateTime.now().difference(traceStart).inMilliseconds}ms',
+    );
   }
 
   /// Imports a local .gguf file into the models directory.

@@ -43,6 +43,7 @@ import 'package:front_porch_ai/services/backporch/backporch.dart';
 import 'package:front_porch_ai/ui/layout/main_layout.dart'; // Keep original import for MainLayout
 import 'package:front_porch_ai/app_version.dart';
 import 'package:front_porch_ai/utils/native_exit.dart';
+import 'package:front_porch_ai/utils/utils.dart' show StartupTrace;
 import 'package:front_porch_ai/database/database.dart';
 // ignore: unused_import — used in the commented-out auto-cleanup block below
 import 'package:front_porch_ai/database/database_cleanup.dart';
@@ -195,9 +196,13 @@ class _DbInitErrorApp extends StatelessWidget {
   }
 }
 
+void _mark(String step) => StartupTrace.mark(step);
+
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  _mark('binding ready');
   await windowManager.ensureInitialized();
+  _mark('windowManager.ensureInitialized');
 
   // Intercept SIGINT (Ctrl+C) and SIGTERM on Linux/macOS to prevent
   // the Flutter engine from doing an unclean teardown that triggers:
@@ -233,6 +238,7 @@ void main(List<String> args) async {
   } catch (e) {
     debugPrint('Fatal error during file consolidation: $e');
   }
+  _mark('FileConsolidationService.consolidate');
 
   // Initialize database. This is the last thing that can die BEFORE any window
   // exists — a disk-full/permissions failure, or a second copy of the app
@@ -246,7 +252,9 @@ void main(List<String> args) async {
   final bool dbHealthy;
   try {
     db = await AppDatabase.instance();
+    _mark('AppDatabase.instance (incl. schema migration)');
     needsMigration = !await DataMigrationService.isMigrated();
+    _mark('DataMigrationService.isMigrated');
     // Cheap first-query probe: forces the lazily-opened file to actually
     // open, so a locked/unreadable DB still fails fast into
     // _DbInitErrorApp. The EXPENSIVE health check (PRAGMA quick_check reads
@@ -255,6 +263,7 @@ void main(List<String> args) async {
     // largest fixed startup cost; it now runs post-first-frame in
     // _checkDbHealth, which owns the corrupt-DB restore overlay anyway.
     await db.customSelect('SELECT 1').get();
+    _mark('first DB query (SELECT 1)');
     dbHealthy = true;
   } catch (e, st) {
     debugPrint('[DB] FATAL: could not open the database: $e\n$st');
@@ -349,6 +358,7 @@ void main(List<String> args) async {
     await windowManager.focus();
     await windowManager.setPreventClose(true);
   });
+  _mark('window shown (waitUntilReadyToShow)');
   runApp(
     // ProviderScope: Riverpod root for new-code state (CLAUDE.md Riverpod
     // migration; first consumer: Living Time weather). Wraps the existing
@@ -815,6 +825,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
     }
     // Run migration after first frame, then reunification if needed
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _mark('FIRST FRAME (user sees the app)');
       // First frame is up — arm the deferred overlays (see the home Stack).
       if (mounted) setState(() => _overlaysArmed = true);
       // Capture initial window bounds after restore so tracking is correct

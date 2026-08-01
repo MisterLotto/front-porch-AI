@@ -7508,3 +7508,62 @@ that a non-null id still guards correctly.
 
 Verification: flutter analyze 0 issues; full Dart suite, goldens and the
 Linux build green; web tsc + vitest (34) green.
+
+## 2026-08-01 — Startup instrumentation + the library-load benchmark
+
+Files:
+- lib/utils/startup_trace.dart (new)
+- lib/utils/utils.dart
+- lib/main.dart
+- lib/services/character_repository.dart
+- lib/services/hardware_service.dart
+- lib/services/model_manager.dart
+- test/perf/character_load_bench_test.dart (new)
+- dart_test.yaml
+
+Reason: asked to make the app faster in wall-clock terms. "Feels slow" is
+unactionable without numbers, and the startup path is spread across
+main(), the provider-tree constructors and the post-first-frame block, so
+no single file could time it.
+
+What the measurements found (release build, run headless under xvfb
+against a seeded library of 120 characters / 200 chats / 20k messages):
+
+  FIRST FRAME lands at 156ms with a realistic library (416ms on a truly
+  empty first run, where 299ms of that is one-time DB creation). The
+  pre-first-frame path is NOT the problem — moving PRAGMA quick_check off
+  it already took that win.
+
+  The cost is after first frame, in CharacterRepository.loadCharacters():
+  it re-reads EVERY character PNG in full, every launch, to recover the
+  V2.5 extension fields that live only in the PNG tEXt chunk.
+
+    readCard x120 (1.1MB cards) : 501-743ms
+    bytes read                  : 142.0 MB
+    64KB prefix read instead    : 54ms  (9.3x, chunk found in 120/120)
+
+  142MB of disk I/O to recover a few KB of JSON. Projected at 500
+  characters: ~2.1-3.1s today vs ~0.23s. Warm-cache on container ext4, so
+  Windows-under-Defender is materially worse — the same platform-
+  asymmetric shape as the coverImageFileFor incident.
+
+Also found, not yet fixed: HardwareService spawns up to 4 PowerShell
+processes on Windows from its CONSTRUCTOR on every launch and never
+persists the result (no prefs/cache reference exists in the file); the
+per-character avatar lookup is an N+1 (4.2x slower than one batched
+query, and each is an isolate round-trip under createInBackground); and
+three debugPrints run per character inside the load loop (debugPrint is
+not compiled out in release).
+
+This commit lands the MEASUREMENT only — the fixes touch performance-
+critical paths that CLAUDE.md puts under architecture review, and the
+hardware-detection change alters when detection happens, which is
+user-visible. Proposed separately.
+
+StartupTrace is env-gated (FP_STARTUP_TRACE=1); a normal run costs one
+bool read per call site. The benchmark is tagged `perf`, self-skips
+without FP_BENCH_DIR, and PRINTS rather than asserts, so a shared CI
+runner's timing variance can never turn it red.
+
+Verification: flutter analyze 0 issues, dart fix clean, full suite
+2774 passed / 12 skipped / 0 failed.

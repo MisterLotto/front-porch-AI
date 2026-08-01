@@ -28,6 +28,7 @@ import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/database/database.dart' hide AvatarImage;
+import 'package:front_porch_ai/utils/utils.dart' show StartupTrace;
 
 class CharacterRepository extends ChangeNotifier {
   AppDatabase _db;
@@ -102,9 +103,13 @@ class CharacterRepository extends ChangeNotifier {
 
     _isLoading = true;
     notifyListeners();
+    final traceStart = DateTime.now();
 
     try {
       final dbChars = await _db.getAllCharacters();
+      StartupTrace.mark(
+        'CharacterRepository: got ${dbChars.length} rows from DB',
+      );
 
       _characters.clear();
 
@@ -203,6 +208,11 @@ class CharacterRepository extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+      StartupTrace.mark(
+        'CharacterRepository.loadCharacters DONE — ${_characters.length} chars'
+        ' in ${DateTime.now().difference(traceStart).inMilliseconds}ms'
+        ' (home grid is now populated)',
+      );
     }
   }
 
