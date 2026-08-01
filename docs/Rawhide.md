@@ -4,6 +4,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🔄 **Fixed: the updater would have gone quiet on you in about a month** — The app asked GitHub for its release list but only ever got the newest 30 entries, and with a nightly going out every day that's barely a month of history. v1.2 itself arrives fine — but a month later it would have slipped off that list, and anyone on a stable build who hadn't updated in a while would simply stop being told new versions existed. No error, nothing to notice. It now reads the full release history.
+
 - 🧹 **Fixed: "Database Cleanup" was throwing away your objectives and chat memory** — The cleanup tool in Settings decided which rows still belonged to a living character by comparing two different kinds of ID, so the answer was always "nobody owns this." On my own library that meant it would have deleted **all 107 objectives and all 68 stored chat memories** — everything, not the leftovers — while reporting it as tidying up. It now matches rows the way the app actually stores them and removes only genuinely abandoned ones (8 of those 107, all belonging to characters that really were deleted). If you ever ran Database Cleanup and your characters' goals vanished, this was why.
 
 - ♻️ **Fixed: cancelling a regenerate could delete the message you were regenerating** — Hitting regenerate and then cancelling while the realism check was still running made the original reply disappear for good, along with all of its swipes. The message is now put back whenever you cancel.

@@ -8019,3 +8019,12 @@ NOT fixed (deliberate, maintainer's call): `_isGenerating` is cleared at
 chat_service_generation.dart:1575 while post-gen evals run at 1698-1760, leaving every
 re-entrancy guard open for seconds. Real, but changing generation-completion timing hours
 before a release is the wrong trade.
+
+**Follow-up (same day):** lib/services/update_service.dart — `/releases` had no
+`per_page`, so the update check saw GitHub's default 30 entries. That endpoint orders by
+tag created_at and nightlies publish daily, so the page held ~1 month of history and only
+4 stable releases. v1.2 is fine at launch (newest tag → index 0), but ~30 days later it
+falls off page 1 and selectTargetRelease returns null — stable users silently stop being
+offered any update. `per_page=100` now returns the full 86-release history (15 stable).
+selectTargetRelease unchanged; it already ranks by publish timestamp rather than list
+order — its window was just too small. Verified live against the GitHub API.
