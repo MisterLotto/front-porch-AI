@@ -55,9 +55,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'package:front_porch_ai/main.dart' as app;
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/services/character_repository.dart';
-import 'package:front_porch_ai/services/chat_service.dart';
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/layout/main_layout.dart';
 import 'package:front_porch_ai/ui/pages/chat_page.dart';
 
@@ -334,6 +333,222 @@ void main() {
 
     // ── Phase 4b: full Journal dialog — "Our Story" must resolve ────────
     await d.openOurStoryAndRequireResolved();
+
+    // ── Phase 4c: persistence — the turn survives a real reload ─────────
+    // Everything above proves the LIVE objects hold the right state. This
+    // proves it reached SQLite: reload the session the way leaving a chat and
+    // coming back does, and require the conversation AND the realism scalars
+    // it produced to return identical. A write path that silently dropped
+    // bond/trust would look perfect all the way to here, and the user would
+    // only discover it after reopening the chat.
+    final rel = chatService.relationshipService;
+    final sessionId = chatService.currentSessionId;
+    expect(sessionId, isNotNull, reason: 'the chat must have a saved session');
+    final bondBeforeReload = rel.affectionScore;
+    final trustBeforeReload = rel.trustLevel;
+    final messagesBeforeReload = chatService.messages.length;
+    expect(
+      bondBeforeReload,
+      isNot(0),
+      reason: 'realism must have moved bond before we can test it persists',
+    );
+
+    // Weather is a pure function of the session seed and the story clock —
+    // nothing about it is stored. That makes "unchanged across a reload" the
+    // real invariant: a seed or day-count that shifted on load would silently
+    // re-roll the world's weather every time the user reopened the chat, and
+    // the foreshadowed front promised yesterday would never arrive.
+    final weatherBeforeReload = chatService.currentWeather;
+    expect(
+      weatherBeforeReload,
+      isNotNull,
+      reason:
+          'the weather engine must be live here — realism, passage of time '
+          'and the weather toggle are all on in this run',
+    );
+    expect(
+      chatService.upcomingWeather,
+      isNotNull,
+      reason: 'tomorrow\'s forecast rides the same gate as today\'s weather',
+    );
+
+    await chatService.loadSession(sessionId!);
+    await d.waitFor(
+      () => chatService.messages.length >= messagesBeforeReload,
+      () =>
+          'the reloaded session to hold its $messagesBeforeReload messages '
+          '(has ${chatService.messages.length})',
+    );
+    expect(
+      chatService.messages.any((m) => m.text.contains(_kUserMessage)),
+      isTrue,
+      reason: 'the user turn must come back out of the database',
+    );
+    expect(
+      rel.affectionScore,
+      bondBeforeReload,
+      reason: 'bond must survive a session reload',
+    );
+    expect(
+      rel.trustLevel,
+      trustBeforeReload,
+      reason: 'trust must survive a session reload',
+    );
+    expect(
+      chatService.currentWeather,
+      weatherBeforeReload,
+      reason: 'weather is seed-derived and must not re-roll on reload',
+    );
+
+    // ── Phase 4d: deleting a turn refunds what it cost, and stays gone ──
+    // deleteMessage refunds the deleted turn's NEEDS arithmetically. That
+    // refund is the load-bearing half: before it existed, a reply that cost
+    // 20 hunger left the character 20 hungrier forever, with the timeline
+    // chip claiming otherwise and nothing able to undo it.
+    //
+    // Realism (bond/trust) is deliberately NOT asserted here. That path is a
+    // time-travel restore from the NEW last message's stamped snapshot, and
+    // deleting the tail assistant turn leaves a USER message last — user
+    // messages carry no snapshot, so the restore correctly no-ops ("No
+    // time-travel snapshot found in message"). Asserting a rollback here
+    // would be pinning a behaviour the design does not promise.
+    await d.waitSendable(); // deleteMessage early-returns while generating
+    final scoredIdx = chatService.messages.lastIndexWhere(
+      (m) => (m.activeMetadata?['bond_delta'] as int?) == 13,
+    );
+    expect(
+      scoredIdx,
+      greaterThanOrEqualTo(0),
+      reason: 'the scored turn must still be present after the reload',
+    );
+    // Count-based, NOT text-based: both assistant turns stream the same
+    // canned reply, so "no message with this text" can never become true and
+    // would hang forever on a passing app.
+    final messagesBeforeDelete = chatService.messages.length;
+    // The canned needs-impact eval pays +6 fun, so the refund must pull it
+    // back down. Read the live simulation the sidebar reads.
+    final funBeforeDelete = chatService.needsSimulation.vector['fun'];
+    expect(
+      funBeforeDelete,
+      isNotNull,
+      reason: 'the needs simulation must be live before testing its refund',
+    );
+
+    chatService.deleteMessage(scoredIdx);
+    await d.waitFor(
+      () => chatService.messages.length == messagesBeforeDelete - 1,
+      () =>
+          'the deleted turn to leave the message list '
+          '(${chatService.messages.length} of $messagesBeforeDelete remain)',
+    );
+    await d.waitFor(
+      () => (chatService.needsSimulation.vector['fun'] ?? 0) < funBeforeDelete!,
+      () =>
+          'the deleted turn to refund its +6 fun '
+          '(was $funBeforeDelete, now ${chatService.needsSimulation.vector['fun']})',
+    );
+
+    // The delete must have reached SQLite too — otherwise it reappears the
+    // next time the user opens the chat. deleteMessage is fire-and-forget
+    // (`void ... async`), so its session save can still be in flight; retry
+    // the reload rather than racing it, but keep the attempt budget so a
+    // delete that never persists still fails this phase.
+    var deletePersisted = false;
+    for (var attempt = 0; attempt < 10 && !deletePersisted; attempt++) {
+      await tester.pump(const Duration(milliseconds: 500));
+      await chatService.loadSession(sessionId);
+      deletePersisted =
+          chatService.messages.length == messagesBeforeDelete - 1;
+    }
+    expect(
+      deletePersisted,
+      isTrue,
+      reason:
+          'the delete must reach SQLite — after reloading, the chat came '
+          'back with ${chatService.messages.length} messages instead of '
+          '${messagesBeforeDelete - 1}',
+    );
+
+    // ── Phase 4e: a backend failure must not wedge the composer ─────────
+    // The everyday local-backend failure (model unloaded, OOM, server
+    // restarted) is an HTTP 500 mid-turn. The app must report it and release
+    // every in-flight guard: a generation flag left stuck true is invisible
+    // in code review and leaves the user with a chat that silently refuses
+    // to send for the rest of the session.
+    backend.failNextChatCompletion = true;
+    await d.sendMessage('This turn is answered with a 500.');
+    await d.waitFor(
+      () => backend.chatFailuresServed >= 1,
+      () =>
+          'the injected backend failure to be served '
+          '(chatFailuresServed=${backend.chatFailuresServed})',
+    );
+    await d.waitFor(
+      () => !chatService.isGenerating,
+      () => 'isGenerating to clear after the backend failure',
+    );
+    // The real proof of recovery: every send guard is down again and a normal
+    // turn still goes through afterwards.
+    await d.waitSendable();
+    final chatsBeforeRecovery = backend.chatRequests;
+    await d.sendMessage('And the porch is still here afterwards.');
+    await d.waitFor(
+      () => backend.chatRequests > chatsBeforeRecovery,
+      () =>
+          'the chat to recover and generate again after the failure '
+          '(chatRequests=${backend.chatRequests}, was $chatsBeforeRecovery)',
+    );
+
+    // ── Phase 4f: worlds — climate swap + lorebook reaching the prompt ──
+    // A World carries two mechanisms that are invisible from the chat UI: a
+    // climate the weather engine reads through the biome schedule, and a
+    // lorebook whose keyword entries are injected into the outbound prompt.
+    // Both fail silently. The canonical case is a keyword that never matched,
+    // leaving every lorebook entry dead with no symptom except characters who
+    // mysteriously know nothing about their own world.
+    const loreKeyword = 'cactus';
+    const loreContent =
+        'The cracked well at the edge of town has been dry for nine years.';
+    final world = World(
+      name: 'Smoke Desert',
+      description: 'A parched world that exists only inside the E2E suite.',
+      biomeId: 'desert',
+      lorebook: Lorebook(
+        entries: [
+          LorebookEntry(
+            name: 'The cracked well',
+            keys: const [loreKeyword],
+            content: loreContent,
+          ),
+        ],
+      ),
+    );
+    await Provider.of<WorldRepository>(ctx, listen: false).saveWorld(world);
+    await chatService.setChatWorldIds([world.id]);
+
+    expect(chatService.chatWorldIds, contains(world.id));
+    expect(
+      chatService.activeChatBiome.id,
+      'desert',
+      reason: 'binding a desert world must re-point the biome schedule',
+    );
+    expect(
+      chatService.currentWeather,
+      isNotNull,
+      reason: 'the weather engine must survive a mid-chat climate change',
+    );
+
+    // The lorebook proof: mention the keyword and require the entry's text to
+    // appear in the prompt the backend actually received. Asserting on
+    // lastChatBody (not on a UI dot) is what makes this a real injection
+    // test rather than a rendering test.
+    await d.sendMessage('Tell me about the $loreKeyword by the road.');
+    await d.waitFor(
+      () => backend.lastChatBody.contains(loreContent),
+      () =>
+          'the triggered lorebook entry to reach the outbound prompt '
+          '(keyword "$loreKeyword")',
+    );
 
     // ── Phase 5: backend traffic audit ──────────────────────────────────
     // Any endpoint the fake doesn't model would have 404'd silently and

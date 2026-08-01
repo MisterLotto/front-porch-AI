@@ -54,6 +54,16 @@ class FakeBackendServer {
   /// the user's message actually reached the outbound prompt.
   String lastChatBody = '';
 
+  /// When set, the next conversation turn is answered with HTTP 500 instead
+  /// of a stream, then this clears itself. Models the everyday failure a
+  /// local backend actually produces (model unloaded, OOM, server restarted)
+  /// so the suite can prove the app reports it and — critically — releases
+  /// its in-flight guards instead of wedging the composer forever.
+  bool failNextChatCompletion = false;
+
+  /// Conversation turns rejected via [failNextChatCompletion].
+  int chatFailuresServed = 0;
+
   /// Paths the app hit that this fake doesn't model. Asserted empty: if a
   /// future change adds backend traffic to a chat turn, the failure names
   /// the endpoint instead of a silent 404 skewing behavior.
@@ -241,11 +251,27 @@ class FakeBackendServer {
       // The whole eval JSON rides one content delta — the parser regex/JSON
       // extraction works on the assembled text either way.
       await _streamSse(req, [jsonEncode(eval)]);
-    } else {
-      chatRequests++;
-      lastChatBody = body;
-      await _streamSse(req, replyPieces);
+      return;
     }
+
+    // Injected failure: only conversation turns, never evals, so a resilience
+    // phase cannot accidentally starve the realism pipeline it runs after.
+    if (failNextChatCompletion) {
+      failNextChatCompletion = false;
+      chatFailuresServed++;
+      req.response.statusCode = HttpStatus.internalServerError;
+      req.response.headers.contentType = ContentType.json;
+      req.response.write(
+        jsonEncode({
+          'error': {'message': 'smoke-test injected backend failure'},
+        }),
+      );
+      return;
+    }
+
+    chatRequests++;
+    lastChatBody = body;
+    await _streamSse(req, replyPieces);
   }
 
   Future<void> _streamSse(HttpRequest req, List<String> pieces) async {
