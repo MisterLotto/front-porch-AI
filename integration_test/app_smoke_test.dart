@@ -546,6 +546,14 @@ void main() {
     // error — strictly worse than the race it exists to prevent. Every
     // waitSendable() above already insists it clears; this states it outright
     // so the failure names itself instead of arriving as a timeout.
+    // Phase 4f finished when the lore text appeared in the OUTBOUND prompt,
+    // which happens as the request is sent — the turn's post-generation work
+    // is still legitimately running at that moment. So wait for it to settle
+    // (bounded, CI-scaled) and then state it: the property is "this always
+    // clears", not "it is already clear at this instant". Asserting the
+    // instant is how this went red on the slower CI runner while passing
+    // locally.
+    await d.waitSendable();
     expect(
       chatService.isSettlingTurn,
       isFalse,
