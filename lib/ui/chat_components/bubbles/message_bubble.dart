@@ -998,11 +998,19 @@ class _MessageBubbleState extends State<MessageBubble> {
                   ),
                 ),
 
+                // Decorative only — MUST stay IgnorePointer. A CustomPaint
+                // with a background painter is hit-test OPAQUE by default, so
+                // without this the invisible border layer swallows every tap
+                // on the bubble (edit/fork/delete, TTS, thought chips, …) for
+                // all 10 theme presets. Same convention as the chat-page
+                // background layers.
                 if (theme.borderPainter != null)
                   Positioned.fill(
-                    child: ClipRRect(
-                      borderRadius: theme.borderRadius,
-                      child: CustomPaint(painter: theme.borderPainter),
+                    child: IgnorePointer(
+                      child: ClipRRect(
+                        borderRadius: theme.borderRadius,
+                        child: CustomPaint(painter: theme.borderPainter),
+                      ),
                     ),
                   ),
               ],

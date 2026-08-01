@@ -7,6 +7,14 @@ abstract class ThemeBorderPainter extends CustomPainter {
 
   ThemeBorderPainter({required this.color, this.strokeWidth = 2.0});
 
+  // Never intercept pointer events. CustomPainter's default (null) makes a
+  // background painter hit-test opaque over its whole rect, which — drawn
+  // Positioned.fill over a message bubble — killed every button underneath.
+  // The overlay is also IgnorePointer-wrapped; this is defense in depth for
+  // any future CustomPaint use of these painters.
+  @override
+  bool? hitTest(Offset position) => false;
+
   @override
   bool shouldRepaint(covariant ThemeBorderPainter old) =>
       old.color != color || old.strokeWidth != strokeWidth;
