@@ -475,8 +475,12 @@ void main() {
     // every in-flight guard: a generation flag left stuck true is invisible
     // in code review and leaves the user with a chat that silently refuses
     // to send for the rest of the session.
-    backend.failNextChatCompletion = true;
-    await d.sendMessage('This turn is answered with a 500.');
+    // Marker-targeted so a background objective-completion check cannot eat
+    // the injected failure and leave this phase asserting against a turn that
+    // actually succeeded.
+    const failMarker = 'This turn is answered with a 500.';
+    backend.failChatCompletionContaining = failMarker;
+    await d.sendMessage(failMarker);
     await d.waitFor(
       () => backend.chatFailuresServed >= 1,
       () =>
@@ -487,6 +491,7 @@ void main() {
       () => !chatService.isGenerating,
       () => 'isGenerating to clear after the backend failure',
     );
+
     // The real proof of recovery: every send guard is down again and a normal
     // turn still goes through afterwards.
     await d.waitSendable();
@@ -498,6 +503,7 @@ void main() {
           'the chat to recover and generate again after the failure '
           '(chatRequests=${backend.chatRequests}, was $chatsBeforeRecovery)',
     );
+    await d.waitSendable();
 
     // ── Phase 4f: worlds — climate swap + lorebook reaching the prompt ──
     // A World carries two mechanisms that are invisible from the chat UI: a

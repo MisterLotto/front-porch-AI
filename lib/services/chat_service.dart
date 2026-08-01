@@ -2905,24 +2905,23 @@ class ChatService extends ChangeNotifier {
 
   CharacterCard? get activeCharacter => _activeCharacter;
   List<ChatMessage> get messages => List.unmodifiable(_messages);
-  /// "The turn is not finished" — INCLUDING the awaited post-generation work,
-  /// not just token streaming.
+  /// Token streaming — deliberately the NARROW sense.
   ///
-  /// This must stay in step with the internal [_isTurnBusy] guards. Reporting
-  /// idle here while `sendMessage` internally refuses is not a cosmetic
-  /// mismatch, it is data loss: the desktop composer (chat_page.dart) and the
-  /// web composer (ChatComposer.tsx) both CLEAR the input before calling
-  /// through, so a message typed during post-gen would be wiped with no error
-  /// and never sent. Every consumer that reads this disables a mutation while
-  /// it is true — the send button, the sidebar toggles, member removal, the
-  /// time nudge — and every one of those is a thing that genuinely must not
-  /// happen mid-turn.
-  bool get isGenerating => _isTurnBusy;
-
-  /// Token streaming specifically — the narrow sense [isGenerating] used to
-  /// have. For anything that cares about the HTTP stream itself rather than
-  /// "is the turn over", e.g. an abort control.
-  bool get isStreamingTokens => _isGenerating;
+  /// This drives the send button's enabled state, and widening it to include
+  /// post-generation was tried and reverted: background work (post-gen evals,
+  /// objective completion checks) then held the composer disabled for most of
+  /// a turn on a slow machine. CI caught it — the E2E driver could not find a
+  /// tappable send button across eight retries on the macOS and Windows
+  /// runners, which is exactly what a user on a slow local backend would have
+  /// experienced.
+  ///
+  /// The data-loss hazard that widening was meant to solve is real but belongs
+  /// at the composer, not here: what matters is that a composer's own guard
+  /// uses the SAME predicate as [sendMessage]. If the composer's check is
+  /// narrower than the service's, the composer clears the field for a send the
+  /// service then refuses. See [isSettlingTurn] and the mirror in
+  /// `_sendCurrentMessage`.
+  bool get isGenerating => _isGenerating;
 
   /// True while the turn's awaited post-generation work is still settling.
   /// Exposed so tests can assert the window opens and — more importantly —

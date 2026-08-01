@@ -54,12 +54,21 @@ class FakeBackendServer {
   /// the user's message actually reached the outbound prompt.
   String lastChatBody = '';
 
-  /// When set, the next conversation turn is answered with HTTP 500 instead
-  /// of a stream, then this clears itself. Models the everyday failure a
-  /// local backend actually produces (model unloaded, OOM, server restarted)
-  /// so the suite can prove the app reports it and — critically — releases
-  /// its in-flight guards instead of wedging the composer forever.
-  bool failNextChatCompletion = false;
+  /// When set, a conversation turn whose prompt contains this marker is
+  /// answered with HTTP 500 instead of a stream, then this clears itself.
+  /// Models the everyday failure a local backend actually produces (model
+  /// unloaded, OOM, server restarted) so the suite can prove the app reports
+  /// it and — critically — releases its in-flight guards rather than wedging
+  /// the composer forever.
+  ///
+  /// Marker-matched, not "next request": an untargeted flag is a race. The
+  /// app fires background chat-shaped completions (the objective completion
+  /// check is the one that bit us) which are classified CHAT by this fake, so
+  /// on a slower machine one of THOSE consumed the injected failure while the
+  /// real user turn succeeded. That desynchronised the whole phase and turned
+  /// a deterministic test into a platform-dependent one — green on the dev
+  /// Mac, red on the macOS and Windows CI runners.
+  String? failChatCompletionContaining;
 
   /// Conversation turns rejected via [failNextChatCompletion].
   int chatFailuresServed = 0;
@@ -255,9 +264,11 @@ class FakeBackendServer {
     }
 
     // Injected failure: only conversation turns, never evals, so a resilience
-    // phase cannot accidentally starve the realism pipeline it runs after.
-    if (failNextChatCompletion) {
-      failNextChatCompletion = false;
+    // phase cannot accidentally starve the realism pipeline it runs after —
+    // and only the turn actually carrying the marker.
+    final marker = failChatCompletionContaining;
+    if (marker != null && body.contains(marker)) {
+      failChatCompletionContaining = null;
       chatFailuresServed++;
       req.response.statusCode = HttpStatus.internalServerError;
       req.response.headers.contentType = ContentType.json;
