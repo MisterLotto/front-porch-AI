@@ -22,10 +22,7 @@ import 'package:provider/provider.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/tts_settings_dialog.dart';
-import 'package:front_porch_ai/ui/settings/widgets/photo_understanding_card.dart';
-import 'package:front_porch_ai/ui/settings/widgets/section_header.dart';
-import 'package:front_porch_ai/ui/settings/widgets/image_gen_enable_section.dart';
-import 'package:front_porch_ai/ui/settings/widgets/legacy_cleanup_card.dart';
+import 'package:front_porch_ai/ui/settings/widgets/widgets.dart';
 
 /// Voice & Media tab extracted from settings_page god file (Stage 5).
 /// Pure lift of _buildVoiceMediaTab + voice-specific helpers + onnx button.

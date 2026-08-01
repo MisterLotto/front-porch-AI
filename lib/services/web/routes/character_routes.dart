@@ -22,9 +22,7 @@ import 'package:shelf_router/shelf_router.dart';
 import 'package:front_porch_ai/services/web/facade/character_authoring_facade.dart';
 import 'package:front_porch_ai/services/web/facade/character_facade.dart';
 import 'package:front_porch_ai/services/web/facade/character_library_facade.dart';
-import 'package:front_porch_ai/services/web/util/image_thumbnails.dart';
-import 'package:front_porch_ai/services/web/util/json_response.dart';
-import 'package:front_porch_ai/services/web/util/request_body.dart';
+import 'package:front_porch_ai/services/web/util/util.dart';
 
 /// Character endpoints (list / avatar / detail / create / edit / delete /
 /// avatar management) for the rewritten server.

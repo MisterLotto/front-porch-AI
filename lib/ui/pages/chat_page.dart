@@ -30,31 +30,19 @@ import 'package:front_porch_ai/utils/utils.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'package:front_porch_ai/ui/chat_components/chat_components.dart';
 import 'package:front_porch_ai/ui/chat_components/overlays/absence_recap_banner.dart';
-import 'package:front_porch_ai/ui/dialogs/chat_to_story_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/dialogs.dart';
 
 // Specific dialogs and modules not covered by the barrels (or intentionally direct)
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_controller.dart';
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/image_prompt_review_dialog.dart';
 import 'package:front_porch_ai/ui/pages/edit_character_page.dart';
-import 'package:front_porch_ai/ui/dialogs/ui_settings_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/chat_settings_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/model_settings_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/tts_settings_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/user_persona_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/context_viewer_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/group_settings_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/scene_guest_detected_dialog.dart';
 import 'package:front_porch_ai/services/chat/chat_command_handler.dart';
 import 'package:front_porch_ai/services/avatar_gallery.dart';
-import 'package:front_porch_ai/services/capability/model_capabilities.dart';
-import 'package:front_porch_ai/services/capability/vision_support_resolver.dart';
+import 'package:front_porch_ai/services/capability/capability.dart';
 import 'package:front_porch_ai/services/caption/local_caption_service.dart';
-import 'package:front_porch_ai/ui/dialogs/scene_guest_picker_dialog.dart';
 // Old ImageGenDialog removed in Stage 3 (full from-scratch Image Studio).
 // Studio launched below; see lib/ui/image_studio/ and _showImageGenDialog.
-import 'package:front_porch_ai/ui/dialogs/kobold_log_dialog.dart';
 // Stage 3 Image Studio (replaces old image_gen_dialog completely)
 import 'package:front_porch_ai/ui/image_studio/image_studio.dart';
 

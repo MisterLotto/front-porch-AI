@@ -18,8 +18,7 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/services/chat/journal_ops.dart';
-import 'package:front_porch_ai/services/chat/journal_review.dart';
+import 'package:front_porch_ai/services/chat/chat.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Review-first mode (docs/design/journal-memory.md §4.3, phase 4): the

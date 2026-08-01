@@ -16,8 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'package:front_porch_ai/services/chat/story_clock.dart';
-import 'package:front_porch_ai/services/chat/time_service.dart';
+import 'package:front_porch_ai/services/chat/chat.dart';
 
 /// Scene-time fragment for the words-only state block
 /// (docs/design/prompt-state-injection.md §3). One line; clock digits and

@@ -20,8 +20,7 @@ import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf_router/shelf_router.dart';
 
 import 'package:front_porch_ai/services/web/facade/chargen_facade.dart';
-import 'package:front_porch_ai/services/web/util/json_response.dart';
-import 'package:front_porch_ai/services/web/util/request_body.dart';
+import 'package:front_porch_ai/services/web/util/util.dart';
 
 /// AI character creator endpoints. Generation runs in the background and reports
 /// progress over the WebSocket hub (chargen_status / chargen_done /

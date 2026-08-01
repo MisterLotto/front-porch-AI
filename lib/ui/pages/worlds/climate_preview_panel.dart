@@ -24,11 +24,7 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/services/chat/biome_preview.dart';
-import 'package:front_porch_ai/services/chat/weather_biomes.dart';
-import 'package:front_porch_ai/services/chat/weather_engine.dart';
-import 'package:front_porch_ai/services/chat/weather_segments.dart';
-import 'package:front_porch_ai/services/chat/weather_skins.dart';
+import 'package:front_porch_ai/services/chat/chat.dart';
 import 'package:front_porch_ai/ui/pages/worlds/climate_editor_widgets.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 

@@ -19,9 +19,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/character_creator/creator_state.dart';
+import 'package:front_porch_ai/ui/character_creator/character_creator.dart';
 import 'package:front_porch_ai/services/services.dart';
-import 'package:front_porch_ai/ui/character_creator/creator_state_engine.dart';
 import 'package:front_porch_ai/ui/character_creator/steps/setup_step.dart';
 import 'package:front_porch_ai/ui/character_creator/steps/mode_select_step.dart';
 import 'package:front_porch_ai/ui/character_creator/steps/quick_config_step.dart';

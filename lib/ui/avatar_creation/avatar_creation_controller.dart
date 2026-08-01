@@ -24,9 +24,7 @@ import 'package:flutter/painting.dart';
 import 'package:flutter/widgets.dart' show TextEditingController;
 
 import 'package:front_porch_ai/models/models.dart';
-import 'package:front_porch_ai/services/capability/image_reference_resolver.dart';
-import 'package:front_porch_ai/services/capability/image_reference_role.dart';
-import 'package:front_porch_ai/services/capability/model_capabilities.dart';
+import 'package:front_porch_ai/services/capability/capability.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/expression_pack_qc.dart';
 import 'package:front_porch_ai/services/image_prompt/expression_prompts.dart';

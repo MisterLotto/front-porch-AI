@@ -22,8 +22,7 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/services/chat/weather_biomes.dart';
-import 'package:front_porch_ai/services/chat/weather_engine.dart';
+import 'package:front_porch_ai/services/chat/chat.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Artifact palette notes: the amber/ink/surface/text roles map to

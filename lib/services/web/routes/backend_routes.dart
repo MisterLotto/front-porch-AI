@@ -21,8 +21,7 @@ import 'package:shelf_router/shelf_router.dart';
 
 import 'package:front_porch_ai/services/web/facade/backend_facade.dart';
 import 'package:front_porch_ai/services/web/facade/image_facade.dart';
-import 'package:front_porch_ai/services/web/util/json_response.dart';
-import 'package:front_porch_ai/services/web/util/request_body.dart';
+import 'package:front_porch_ai/services/web/util/util.dart';
 
 /// Backend lifecycle + local-model switching + HuggingFace downloader, plus
 /// image-generation config/generate. Progress is polled (GET /downloads), not

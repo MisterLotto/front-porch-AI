@@ -19,10 +19,8 @@
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf_router/shelf_router.dart';
 
-import 'package:front_porch_ai/services/web/tunnels/tailscale_provider.dart';
-import 'package:front_porch_ai/services/web/tunnels/tunnel_manager.dart';
-import 'package:front_porch_ai/services/web/util/json_response.dart';
-import 'package:front_porch_ai/services/web/util/request_body.dart';
+import 'package:front_porch_ai/services/web/tunnels/tunnels.dart';
+import 'package:front_porch_ai/services/web/util/util.dart';
 import 'package:front_porch_ai/services/web/web_server_deps.dart';
 
 /// Remote-access (Tailscale / ngrok / port-forward) status + control endpoints.

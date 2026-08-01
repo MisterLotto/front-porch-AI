@@ -20,8 +20,7 @@ import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf_router/shelf_router.dart';
 
 import 'package:front_porch_ai/services/web/facade/chat_facade.dart';
-import 'package:front_porch_ai/services/web/util/json_response.dart';
-import 'package:front_porch_ai/services/web/util/request_body.dart';
+import 'package:front_porch_ai/services/web/util/util.dart';
 
 /// Chat state + action endpoints for the rewritten server. Live tokens stream
 /// over the WebSocket hub (/api/ws); these endpoints drive and read state.

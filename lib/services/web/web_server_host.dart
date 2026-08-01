@@ -29,10 +29,7 @@ import 'package:front_porch_ai/services/web/auth/auth_service.dart';
 import 'package:front_porch_ai/services/web/facade/facades.dart';
 import 'package:front_porch_ai/services/web/server_bootstrap.dart';
 import 'package:front_porch_ai/services/web/streaming/stream_hub.dart';
-import 'package:front_porch_ai/services/web/tunnels/tailscale_provider.dart';
-import 'package:front_porch_ai/services/web/tunnels/tunnel_manager.dart';
-import 'package:front_porch_ai/services/web/tunnels/lan_ip.dart';
-import 'package:front_porch_ai/services/web/tunnels/remote_setup_result.dart';
+import 'package:front_porch_ai/services/web/tunnels/tunnels.dart';
 import 'package:front_porch_ai/services/web/web_server_deps.dart';
 
 // Re-export the extracted RemoteSetupResult so existing consumers importing

@@ -16,10 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'package:front_porch_ai/services/chat/weather_biomes.dart';
-import 'package:front_porch_ai/services/chat/weather_engine.dart';
-import 'package:front_porch_ai/services/chat/weather_segments.dart';
-import 'package:front_porch_ai/services/chat/weather_skins.dart';
+import 'package:front_porch_ai/services/chat/chat.dart';
 
 /// Weather fragment for the words-only state block
 /// (docs/design/living-time-features.md §3, intra-day since v3). Renders the

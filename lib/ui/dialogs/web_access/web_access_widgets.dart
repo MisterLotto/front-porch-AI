@@ -21,8 +21,7 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'package:front_porch_ai/services/web/tunnels/tailscale_installer.dart';
-import 'package:front_porch_ai/services/web/tunnels/tailscale_provider.dart';
+import 'package:front_porch_ai/services/web/tunnels/tunnels.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Open [url] in the OS browser/app. Shared by every web-access guide.

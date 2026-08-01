@@ -20,9 +20,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/database/database.dart';
-import 'package:front_porch_ai/services/chat/growth_ops.dart';
-import 'package:front_porch_ai/services/chat/growth_physics.dart';
-import 'package:front_porch_ai/services/chat/growth_store.dart';
+import 'package:front_porch_ai/services/chat/chat.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/dialogs/growth_review_dialog.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';

@@ -19,8 +19,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:front_porch_ai/services/web/tunnels/ngrok_provider.dart';
-import 'package:front_porch_ai/services/web/tunnels/tailscale_provider.dart';
+import 'package:front_porch_ai/services/web/tunnels/tunnels.dart';
 import 'package:front_porch_ai/services/web/web_server_host.dart';
 import 'package:front_porch_ai/ui/dialogs/web_access/web_access_widgets.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';

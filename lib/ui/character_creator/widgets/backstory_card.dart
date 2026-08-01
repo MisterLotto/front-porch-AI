@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'package:flutter/material.dart';
-import 'package:front_porch_ai/ui/character_creator/creator_options.dart';
-import 'package:front_porch_ai/ui/character_creator/creator_state.dart';
+import 'package:front_porch_ai/ui/character_creator/character_creator.dart';
 import 'package:front_porch_ai/ui/character_creator/widgets/chip_select_row.dart';
 import 'package:front_porch_ai/ui/character_creator/widgets/creator_hint_field.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';

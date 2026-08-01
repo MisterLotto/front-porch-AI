@@ -20,8 +20,7 @@ import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf_router/shelf_router.dart';
 
 import 'package:front_porch_ai/services/web/facade/chat_tools_facade.dart';
-import 'package:front_porch_ai/services/web/util/json_response.dart';
-import 'package:front_porch_ai/services/web/util/request_body.dart';
+import 'package:front_porch_ai/services/web/util/util.dart';
 
 /// Chat sidebar *tools* endpoints (memory/summary/chaos/NSFW/scene-time/
 /// objectives) — read state plus the mutations the desktop sidebar offers.

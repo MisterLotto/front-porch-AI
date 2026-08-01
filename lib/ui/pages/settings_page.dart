@@ -32,17 +32,14 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/services/model_file_check.dart';
 import 'package:front_porch_ai/services/optimization_service.dart';
 import 'package:front_porch_ai/services/web/web_server_host.dart';
-import 'package:front_porch_ai/ui/dialogs/web_access_setup_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/rocm_guidance_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/database_cleanup_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/dialogs.dart';
 
-import 'package:front_porch_ai/ui/settings/widgets/section_header.dart';
+import 'package:front_porch_ai/ui/settings/widgets/widgets.dart';
 import 'package:front_porch_ai/ui/settings/tabs/general_tab.dart';
 import 'package:front_porch_ai/ui/settings/tabs/generation_tab.dart';
 import 'package:front_porch_ai/ui/settings/tabs/backend_tab.dart';
 
 import 'package:front_porch_ai/ui/settings/tabs/voice_media_tab.dart';
-import 'package:front_porch_ai/ui/settings/widgets/web_login_section.dart';
 import 'package:front_porch_ai/utils/utils.dart';
 // Note: Image Generation *config* options (backend / model / LoRAs) live in a first-class
 // tab-like panel inside the Image Studio (see generation_options_tab.dart + studio integration).

@@ -24,8 +24,7 @@ import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
-import 'package:front_porch_ai/services/web/util/lorebook_json.dart';
-import 'package:front_porch_ai/services/web/util/realism_extensions_json.dart';
+import 'package:front_porch_ai/services/web/util/util.dart';
 
 /// Thin read adapter over the character store for the rewritten web server.
 ///

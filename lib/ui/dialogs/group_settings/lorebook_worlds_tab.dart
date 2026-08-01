@@ -9,8 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/models/models.dart';
-import 'package:front_porch_ai/ui/dialogs/import_character_lore_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/dialogs.dart';
 import 'package:front_porch_ai/utils/utils.dart';
 import 'package:front_porch_ai/ui/dialogs/group_settings/group_settings_support.dart';
 

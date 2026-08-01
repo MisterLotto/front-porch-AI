@@ -22,12 +22,7 @@ import 'package:front_porch_ai/app_version.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
-import 'package:front_porch_ai/ui/pages/home_page.dart';
-import 'package:front_porch_ai/ui/pages/create_character_page.dart';
-import 'package:front_porch_ai/ui/pages/model_manager_page.dart';
-import 'package:front_porch_ai/ui/pages/settings_page.dart';
-import 'package:front_porch_ai/ui/pages/user_persona_page.dart';
-import 'package:front_porch_ai/ui/pages/world_management_page.dart';
+import 'package:front_porch_ai/ui/pages/pages.dart';
 import 'package:provider/provider.dart';
 import 'package:front_porch_ai/providers/app_state.dart';
 

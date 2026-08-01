@@ -64,8 +64,7 @@ import 'package:front_porch_ai/services/file_consolidation_service.dart';
 import 'package:front_porch_ai/services/web/web_server_host.dart';
 
 // Dialogs and specific widgets used only in main.dart (direct imports are appropriate)
-import 'package:front_porch_ai/ui/dialogs/update_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/stable_db_import_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/dialogs.dart';
 
 /// Prefix SharedPreferences keys for beta builds so window state is
 /// isolated from the stable installation.  Unchanged for stable builds.

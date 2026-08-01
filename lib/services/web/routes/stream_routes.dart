@@ -21,8 +21,7 @@ import 'package:shelf_router/shelf_router.dart';
 import 'package:shelf_web_socket/shelf_web_socket.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-import 'package:front_porch_ai/services/web/util/json_response.dart';
-import 'package:front_porch_ai/services/web/util/ws_guard.dart';
+import 'package:front_porch_ai/services/web/util/util.dart';
 import 'package:front_porch_ai/services/web/web_server_deps.dart';
 
 /// The single authenticated WebSocket endpoint (`/api/ws`).

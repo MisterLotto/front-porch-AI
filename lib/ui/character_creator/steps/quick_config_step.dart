@@ -3,10 +3,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:front_porch_ai/ui/character_creator/creator_state.dart';
-import 'package:front_porch_ai/ui/character_creator/widgets/creator_section_card.dart';
-import 'package:front_porch_ai/ui/character_creator/widgets/dynamic_macros_toggle.dart';
-import 'package:front_porch_ai/ui/character_creator/widgets/lore_input_section.dart';
-import 'package:front_porch_ai/ui/character_creator/widgets/reasoning_toggle.dart';
+import 'package:front_porch_ai/ui/character_creator/widgets/widgets.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/alternate_greetings_slider.dart';
 import 'package:front_porch_ai/ui/widgets/avatar_art_style_selector.dart';

@@ -4,14 +4,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:front_porch_ai/services/services.dart';
-import 'package:front_porch_ai/ui/character_creator/creator_options.dart';
-import 'package:front_porch_ai/ui/character_creator/creator_state.dart';
-import 'package:front_porch_ai/ui/character_creator/creator_state_engine.dart';
+import 'package:front_porch_ai/ui/character_creator/character_creator.dart';
 import 'package:front_porch_ai/ui/character_creator/steps/guided_output_settings.dart';
-import 'package:front_porch_ai/ui/character_creator/widgets/creator_section_card.dart';
-import 'package:front_porch_ai/ui/character_creator/widgets/guided_vision_panel.dart';
-import 'package:front_porch_ai/ui/character_creator/widgets/lore_input_section.dart';
-import 'package:front_porch_ai/ui/character_creator/widgets/suggestion_chip_field.dart';
+import 'package:front_porch_ai/ui/character_creator/widgets/widgets.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/age_gender_row.dart';
 import 'package:front_porch_ai/ui/widgets/character_name_input.dart';
