@@ -8096,3 +8096,41 @@ gate that mattered).
 **Note for later:** this is exactly the "renders but isn't reachable" class the
 theme_interaction_test hit-test sweep catches. That sweep covers chat bubbles only —
 extending it to the home grid would have caught this mechanically.
+
+## 2026-08-01 — CLAUDE.md factual rewrite (LANDED IN f40d1f39, mis-attributed)
+
+**Recorded here because the git log will not lead you to it.** The rewrite went out inside
+f40d1f39 ("test(e2e): survive the Send/Stop swap") via a `git add -A`, not under a docs
+commit. Content is complete and verified (119 insertions / 22 deletions); only the
+attribution is wrong. Noted rather than rebased — the commit is already pushed.
+
+**Why:** CLAUDE.md is the first thing every agent reads, so a wrong line there degrades all
+of them silently. It demonstrably did during this session: an agent twice repeated "time
+advances every 6 turns" in a pre-promotion briefing when time_service.dart's own doc says
+that gate is gone.
+
+**Corrected (verified against the code, not assumed):**
+- `flutter format --set-exit-if-changed .` → the subcommand does not exist in Flutter 3.44.8
+  ("Could not find a command named format"). Now `dart format`.
+- `lib/services/prompt_injection/` → real path is `lib/services/chat/prompt_injection/`
+- `lib/services/cloud_providers/` → does not exist (removed with Cloud Sync)
+- `chat/evolution_service.dart` → deleted; Growth Rings replaced it
+- `database/migrations/` (the FIRST "never touch without discussion" entry) → never existed
+- 6 of 9 named DB tables did not exist; replaced with the real 21 + the stableGroupId-vs-UUID
+  identity trap that caused the Database Cleanup data loss
+- Time: the 6-turn gate is gone; advancement is continuous per-turn via TimeService
+- Needs buffers (afterglow / lust-haze / post-climax-crash / arousal-suppression) were
+  removed but still documented as live
+- Tracing section: `groupSpeakerPreDecayNeeds`, `_evaluateRealismForUpcomingGroupSpeaker`,
+  `applyLongGenerationNeedsDecay` and `realism_section.dart` all return ZERO hits
+
+**Added (absence caused real failures this session):**
+- `scripts/ci-local.sh` as the mandatory pre-push gate + why (18 golden files are
+  `@TestOn('linux')`, so a green macOS run never executes them)
+- `flutter test --concurrency=1 --exclude-tags golden` — what CI actually runs
+- one-invocation-per-file for integration tests, and why the directory form breaks
+- the whole `web_ui/` toolchain, incl. that `npm run build` writes the bundle the app serves
+- the test-integrity guard, CODEOWNERS, and the `pull_request_target`/cron base-branch rule
+- ChatService is a 28-part-file library; the Stoop has a second client via `/api/stoop/*`
+
+**Verification:** all 38 referenced paths resolve; headers intact; fences balanced.
