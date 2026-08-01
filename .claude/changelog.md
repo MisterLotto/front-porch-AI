@@ -8028,3 +8028,40 @@ falls off page 1 and selectTargetRelease returns null — stable users silently 
 offered any update. `per_page=100` now returns the full 86-release history (15 stable).
 selectTargetRelease unchanged; it already ranks by publish timestamp rather than list
 order — its window was just too small. Verified live against the GitHub API.
+
+## 2026-08-01 (later) — Blocker 1: post-generation re-entrancy window
+
+**Files:** lib/services/chat_service.dart, lib/services/chat/{chat_service_generation,
+chat_service_group_membership, chat_service_idle_autonomous, chat_service_reprocess,
+chat_service_cast, chat_service_images, chat_service_impersonate, chat_service_scene_guest}.dart,
+integration_test/{app_smoke_test.dart, support/chat_driver.dart}, docs/Rawhide.md.
+
+**Why:** `_isGenerating` cleared at generation.dart:1575 while post-gen ran to ~1760 —
+needs-impact eval, realism re-stamp, `_saveScalarsIntoGroupRealism`, chip attach, plus the
+group impersonation dance. Every re-entrancy guard stood open for seconds of live LLM work.
+
+**Fix:** `_isPostGenerating` across the AWAITED region only (1702-1779), cleared in a
+`finally`; NOT across the fire-and-forget passes (they can run indefinitely — gating on them
+trades a race for a wedged UI). The `finally` also fixes a latent bug: a throw in
+`_runPostGenNeedsChecks` skipped the inline `_activeCharacter` restore, leaving a group pinned
+to the wrong speaker with their scalars loaded.
+
+**The public getter is part of the fix.** v1 of this change widened internal guards but left
+`isGenerating` narrow; a 4-agent adversarial review found that ships SILENT DATA LOSS — both
+composers (chat_page.dart, ChatComposer.tsx) clear the input BEFORE calling through, so a
+message typed during post-gen vanished. `isGenerating` now means "turn not finished";
+`isStreamingTokens` keeps the narrow meaning. chat_facade.dart:146 serves the public getter,
+so web was fixed by the same line.
+
+**Deliberately NOT broadened** (a mechanical sweep would have broken both): `stopGeneration`
+(inverted do-work-if; would leak `_cancelRequested` into the next turn, aborting it on its
+first token) and `_cancelAndWaitForGeneration` (spins on the flag; would freeze the UI).
+Also reverted an over-built auto-play re-arm — both schedulers arm AFTER the awaited section,
+so the flag is already clear when they fire.
+
+**Left open, documented:** window opens after `await _saveChat()`; bool not depth counter
+(overlapping turns); hung backend holds it silently behind the 180s eval timeout; chat-switch
+mid-post-gen still bypasses it (wants the `_generationEpoch`/session-token pattern).
+
+**Test:** every `waitSendable()` now also requires `!isSettlingTurn`, so a latched flag fails
+all three E2E suites loudly. analyze clean; 2797 unit; 3/3 E2E green.
