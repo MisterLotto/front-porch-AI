@@ -911,6 +911,20 @@ class AppDatabase extends _$AppDatabase {
         'is_primary INTEGER NOT NULL DEFAULT 1', // v20
         'injection_depth INTEGER NOT NULL DEFAULT 4', // safety (was in v8 CREATE + v9 ALTER)
       ],
+      'message_embeddings': [
+        // Added to the MessageEmbeddings Table class during the Journal work
+        // WITHOUT a migration: the only CREATE TABLE for this table is the
+        // v4→v5 one above, which predates both columns, and no ALTER ever adds
+        // them. Fresh installs get them from onCreate's createAll(), so the
+        // gap is invisible on any recently-created database — but a library
+        // that has simply been upgraded since before the Journal landed has
+        // neither column, and Drift's generated SELECT names them, so every
+        // RAG read throws "no such column: memory_type". Both are dormant, so
+        // the defaults below match the Table class exactly and change nothing
+        // for databases that already have them.
+        "memory_type TEXT NOT NULL DEFAULT 'message'",
+        'metadata TEXT',
+      ],
       'groups': [
         // v30
         'default_member_realism_state TEXT NOT NULL DEFAULT "{}"',
