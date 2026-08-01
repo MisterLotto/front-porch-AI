@@ -7794,3 +7794,45 @@ template would have silently failed to load. Fixed to 7. All four YAML files
 parse and every dropdown default is now in range.
 
 flutter analyze clean after removing test_mod.dart from the package.
+
+## 2026-08-01 — AGENTS.md reduced to a pointer (it was teaching the forbidden architecture)
+
+Files: AGENTS.md, CONTRIBUTING.md, README.md
+
+Reason: two agent-guidance files existed and had silently diverged.
+CLAUDE.md is auto-loaded by Claude Code and is maintained; AGENTS.md is the
+filename other AI tools (Codex, Cursor, Aider, Gemini CLI) look for, and had
+not been touched since the sidecar era.
+
+How bad the drift was, measured:
+
+  topic            AGENTS.md   CLAUDE.md
+  Realism engine       0          38
+  AppColors            0           2
+  web_ui parity        0           3
+  500-line cap         0           2
+  io-lint              0           1
+
+Beyond the omissions it actively documented the deleted architecture: a
+"Python Sidecar Conventions" section, "EmbeddingSidecar: Rust-based local
+embedding server", `Process.start('python', ['kokoro_tts.py'])` sample code,
+and — worst — a worked example at line 417 headed "Good: Python Sidecar
+Implementation". That is an exemplar teaching an agent to build the exact
+thing CLAUDE.md forbids ("Do not reintroduce sidecar processes"). Any
+contributor using a non-Claude tool was being coached to violate the
+architecture while knowing nothing about Realism/Needs parity.
+
+Fixed by making AGENTS.md a short pointer to CLAUDE.md rather than rewriting
+it — two maintained copies is how it rotted in the first place. The stub
+keeps a ~10-line "short version" of the rules most likely to be violated
+before an agent gets as far as opening CLAUDE.md (no sidecars, 500-line cap,
+Realism parity, web parity, AppColors, barrels, no whole-file format, no
+pubspec version edit, no destructive git), and explains why it is a stub so
+nobody "helpfully" refills it.
+
+Also repointed links that presented AGENTS.md as the full guide:
+  CONTRIBUTING.md x3 (commit-message standard, "full guide", resources)
+  README.md x2 (branch workflow, commit conventions)
+These were partly self-inflicted — the CONTRIBUTING rewrite earlier today
+added two of them, linking a file that had not been read on the assumption
+it was current.

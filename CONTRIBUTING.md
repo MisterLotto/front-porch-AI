@@ -106,7 +106,7 @@ dart run build_runner build   # regenerates lib/database/database.g.dart
 2. Make your change, and keep it scoped to one thing
 3. Run the [required checks](#required-checks) locally
 4. Write a commit message that explains **why**, not just what — see the
-   "Commit Messages" section of [AGENTS.md](AGENTS.md) for the standard
+   "Commit Messages" section of [CLAUDE.md](CLAUDE.md) for the standard
 5. Open the PR against the same branch you started from — GitHub will fill in the
    PR template automatically; delete any section that doesn't apply to your change
 6. Say what you tested, and on which platforms
@@ -158,7 +158,7 @@ edit. A whole-file reformat is its own separate, intentional commit.
 
 ## Project Rules That Trip People Up
 
-[AGENTS.md](AGENTS.md) is the full guide. These are the ones that most often send
+[CLAUDE.md](CLAUDE.md) is the full guide. These are the ones that most often send
 a PR back:
 
 - **Files stay under 500 lines.** If the file you are editing is already over,
@@ -217,7 +217,7 @@ packages.
 
 ## Additional Resources
 
-- [AGENTS.md](AGENTS.md) — the full contributor/agent guide
+- [CLAUDE.md](CLAUDE.md) — the full contributor/agent guide (AGENTS.md points here)
 - [Flutter docs](https://docs.flutter.dev/) · [Effective Dart](https://dart.dev/effective-dart/style)
 - [Discord](https://discord.gg/e4tET6rpdv)
 

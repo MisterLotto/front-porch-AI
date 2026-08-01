@@ -227,9 +227,9 @@ Head to the **[Releases](https://github.com/linux4life1/front-porch-ai/releases)
 
 Pull requests are welcome! If you're a dev reading this far down, here's what you need to know:
 
-- **Branch workflow:** All new features, experiments, and major work target the **`Rawhide`** branch (the primary rolling development line). Bug fixes for the current stable go to `dev`. Beta stabilization branches (e.g. `0.9.x-Beta`) receive only fixes for that release series. `main` is for final tagged stable releases only. See AGENTS.md for the full current model.
+- **Branch workflow:** All new features, experiments, and major work target the **`Rawhide`** branch (the primary rolling development line). Bug fixes for the current stable go to `dev`. Beta stabilization branches (e.g. `0.9.x-Beta`) receive only fixes for that release series. `main` is for final tagged stable releases only. See CONTRIBUTING.md for the full current model.
 - **Nightly / scheduled builds & schedule triggers:** Automatic builds are powered by `.github/workflows/nightly.yml`. GitHub **only** reads `on: schedule:` from the default branch (`main`). A current copy of the workflow (especially the version-patching step) must live on `main`, otherwise nightly compiles will fail. The job typically checks out the active development branch for source, but the workflow definition itself always comes from `main`.
-- **Commit conventions:** Follow the guidelines in [AGENTS.md](AGENTS.md) for commit message format, code style, and naming conventions.
+- **Commit conventions:** Follow the guidelines in [CLAUDE.md](CLAUDE.md) for commit message format, code style, and naming conventions.
 - **Full guide:** See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions, testing requirements, and the PR template.
 - **Before you PR:** Run `flutter analyze` and `flutter test` locally. The project is now at 0 warnings on the active rules. CI analyzes only changed `.dart` files on PRs (plus a full scheduled lint job). Introducing new warnings will fail CI.
 
