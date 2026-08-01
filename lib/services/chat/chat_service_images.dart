@@ -56,7 +56,7 @@ extension ChatServiceImages on ChatService {
   ImageCommandService _ensureImageCommand() {
     return _imageCommand ??= ImageCommandService(
       isConfigured: () => _imageGenService?.isConfigured ?? false,
-      isBusy: () => _isGenerating || _guestBusy,
+      isBusy: () => _isTurnBusy || _guestBusy,
       onStatus: (message, {bool sticky = false}) => _setGuestStatus(
         message,
         isError: message.startsWith('⚠'),

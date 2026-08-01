@@ -34,7 +34,7 @@ extension ChatServiceGroupMembership on ChatService {
     TurnOrder turnOrder = TurnOrder.roundRobin,
     Map<String, ({String text, bool creative})> entrances = const {},
   }) async {
-    if (_isGenerating) return null;
+    if (_isTurnBusy) return null;
     if (_activeCharacter == null || _characterRepository == null) return null;
     if (_messages.isEmpty) return null;
     // 1:1 → group only. Forking from an existing group would rebuild a group
@@ -357,7 +357,7 @@ extension ChatServiceGroupMembership on ChatService {
     GroupChatRepository groupRepo,
   ) async {
     if (_activeGroup == null || _characterRepository == null) return false;
-    if (_isGenerating) return false;
+    if (_isTurnBusy) return false;
 
     // D5 — one instance per library character per chat. Refuse to add a
     // character already present (the host or an existing member), matched by
@@ -452,7 +452,7 @@ extension ChatServiceGroupMembership on ChatService {
     GroupChatRepository groupRepo,
   ) async {
     if (_activeGroup == null || _characterRepository == null) return false;
-    if (_isGenerating) return false;
+    if (_isTurnBusy) return false;
 
     final charId = _getCharacterIdFromCard(character); // member instance id (mid)
 

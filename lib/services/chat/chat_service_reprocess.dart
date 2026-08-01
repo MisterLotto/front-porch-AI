@@ -27,7 +27,7 @@ part of '../chat_service.dart';
 extension ChatServiceReprocess on ChatService {
   Future<bool> manualReprocessNeeds(int index, String critique) async {
     if (index < 0 || index >= _messages.length) return false;
-    if (_isGenerating) return false;
+    if (_isTurnBusy) return false;
 
     final msg = _messages[index];
     if (msg.isUser || msg.sender == 'System') return false;
@@ -229,7 +229,7 @@ extension ChatServiceReprocess on ChatService {
   /// Returns true on success.
   Future<bool> revertNeedsReprocess(int index) async {
     if (index < 0 || index >= _messages.length) return false;
-    if (_isGenerating) return false;
+    if (_isTurnBusy) return false;
     final msg = _messages[index];
     final meta = msg.activeMetadata;
     if (meta == null || !meta.containsKey('needs_deltas_pre_reprocess')) {
@@ -348,7 +348,7 @@ extension ChatServiceReprocess on ChatService {
   /// When the host message is already last (no trailing guests) this simply
   /// delegates to [regenerateLastMessage].
   Future<void> regenerateMainCharacter() async {
-    if (_messages.isEmpty || _isGenerating || _guestBusy) return;
+    if (_messages.isEmpty || _isTurnBusy || _guestBusy) return;
     // Backend gate BEFORE any guest-tail splice — same restore problem as
     // regenerateLastMessage (see _abortIfBackendDown).
     if (await _abortIfBackendDown()) return;
@@ -399,7 +399,7 @@ extension ChatServiceReprocess on ChatService {
   }
 
   Future<void> regenerateLastMessage() async {
-    if (_messages.isEmpty || _isGenerating || _guestBusy) return;
+    if (_messages.isEmpty || _isTurnBusy || _guestBusy) return;
     // Backend gate BEFORE the pop below — aborting after removeLast would
     // drop the popped reply (the deep guard in _generateResponse cannot
     // restore it; see _abortIfBackendDown).

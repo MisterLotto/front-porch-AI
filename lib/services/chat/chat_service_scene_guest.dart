@@ -174,7 +174,7 @@ extension ChatServiceSceneGuest on ChatService {
   }) async {
     // Don't race another creation OR an in-flight turn (the mint runs a separate
     // LLM call that doesn't set _isGenerating).
-    if (_guestBusy || _isGenerating) {
+    if (_guestBusy || _isTurnBusy) {
       _setGuestStatus('Busy — try again in a moment.', isError: true);
       return;
     }
@@ -290,7 +290,7 @@ extension ChatServiceSceneGuest on ChatService {
   /// context-guarded so a chat switch mid-turn can't leave `_guestBusy` stuck.
   Future<void> speakGuestNow(CharacterCard guest) async {
     if (_activeGroup != null) return;
-    if (_isGenerating || _guestBusy) {
+    if (_isTurnBusy || _guestBusy) {
       _setGuestStatus('Busy — try again in a moment.', isError: true);
       return;
     }

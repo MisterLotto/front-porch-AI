@@ -438,7 +438,7 @@ class ChatService extends ChangeNotifier {
       );
       return;
     }
-    if (_isGenerating) {
+    if (_isTurnBusy) {
       _setGuestStatus(
         '⚠ Wait for the current reply to finish first.',
         isError: true,
@@ -503,7 +503,7 @@ class ChatService extends ChangeNotifier {
       );
       return;
     }
-    if (_isGenerating) {
+    if (_isTurnBusy) {
       _setGuestStatus(
         '⚠ Wait for the current reply to finish first.',
         isError: true,
@@ -679,7 +679,7 @@ class ChatService extends ChangeNotifier {
         // /speak <name> in a full group: force that member to take their turn now
         // (jump the rotation), mirroring the Lite-NPC /speak. Same setNextSpeaker
         // + generate path the goodbye narration uses, minus the removal/directive.
-        if (_activeGroup == null || _isGenerating) return;
+        if (_activeGroup == null || _isTurnBusy) return;
         _groupManager?.setNextSpeaker(member);
         await _generateResponse(GenerationMode.normal);
       },
@@ -973,6 +973,35 @@ class ChatService extends ChangeNotifier {
   Map<String, dynamic>?
   _pendingRealismMetadata; // stores deltas for the next generation
   bool _isGenerating = false;
+
+  /// True while the awaited POST-generation work is still running.
+  ///
+  /// `_isGenerating` is cleared the moment the last token lands, but the turn
+  /// is not finished there: the needs-impact eval, the realism-state re-stamp,
+  /// the `_saveScalarsIntoGroupRealism` persist and the chip attach all run
+  /// afterwards, and in a group they run under an impersonation dance that
+  /// reassigns `_activeCharacter` and loads that member's scalars. For those
+  /// seconds the app used to report "not generating" while the engine was
+  /// still mutating state, so every re-entrancy guard stood open: a delete
+  /// could shift the timeline under a running eval, and a new turn could
+  /// interleave with the previous one's persist.
+  ///
+  /// Deliberately NOT held across the fire-and-forget passes (journal, growth,
+  /// promise-debt, embed, periodic evals). Those are unawaited by design and
+  /// can run indefinitely; blocking input until they finish would trade a race
+  /// for a wedged UI, which is the worse bug.
+  bool _isPostGenerating = false;
+
+  /// The honest "this turn is still in motion" predicate — what the mutation
+  /// guards should ask, rather than `_isGenerating` alone.
+  ///
+  /// NOT for the escape hatches: `stopGeneration` and
+  /// `_cancelAndWaitForGeneration` must keep testing `_isGenerating` on its
+  /// own. The first aborts an in-flight HTTP stream (there is none during
+  /// post-gen), and the second SPINS until the flag clears — broadening it
+  /// would hang the caller if post-gen ever failed to settle.
+  bool get _isTurnBusy => _isGenerating || _isPostGenerating;
+
   // True while a forked-in character's custom entrance sequence is running
   // (fire-and-forget after forkToGroupChat). Blocks user-triggered turns so the
   // one-shot _entranceDirective can't be consumed/overwritten by a racing user
@@ -2876,7 +2905,29 @@ class ChatService extends ChangeNotifier {
 
   CharacterCard? get activeCharacter => _activeCharacter;
   List<ChatMessage> get messages => List.unmodifiable(_messages);
-  bool get isGenerating => _isGenerating;
+  /// "The turn is not finished" — INCLUDING the awaited post-generation work,
+  /// not just token streaming.
+  ///
+  /// This must stay in step with the internal [_isTurnBusy] guards. Reporting
+  /// idle here while `sendMessage` internally refuses is not a cosmetic
+  /// mismatch, it is data loss: the desktop composer (chat_page.dart) and the
+  /// web composer (ChatComposer.tsx) both CLEAR the input before calling
+  /// through, so a message typed during post-gen would be wiped with no error
+  /// and never sent. Every consumer that reads this disables a mutation while
+  /// it is true — the send button, the sidebar toggles, member removal, the
+  /// time nudge — and every one of those is a thing that genuinely must not
+  /// happen mid-turn.
+  bool get isGenerating => _isTurnBusy;
+
+  /// Token streaming specifically — the narrow sense [isGenerating] used to
+  /// have. For anything that cares about the HTTP stream itself rather than
+  /// "is the turn over", e.g. an abort control.
+  bool get isStreamingTokens => _isGenerating;
+
+  /// True while the turn's awaited post-generation work is still settling.
+  /// Exposed so tests can assert the window opens and — more importantly —
+  /// always closes. See [_isPostGenerating].
+  bool get isSettlingTurn => _isPostGenerating;
   bool get isLoadingSession => _isLoadingSession;
   String? get currentSessionId => _currentSessionId;
 
@@ -3394,7 +3445,7 @@ class ChatService extends ChangeNotifier {
     // inserts (dream block) with the active turn's writes on one shared
     // list — the 2026-07-28 dream-corruption report. Stop first: the Stop
     // button now halts a turn promptly (see the drain cancel fix).
-    if (_isGenerating) return;
+    if (_isTurnBusy) return;
     // One-shot absence acknowledgment: pending survives exactly the first
     // user turn after load (all of that turn's prompt builds see it); the
     // second turn clears it for good.
@@ -3777,7 +3828,7 @@ class ChatService extends ChangeNotifier {
   }) async {
     if (_activeGroup != null ||
         _sceneGuestCards.isEmpty ||
-        _isGenerating ||
+        _isTurnBusy ||
         _entrancesInFlight) {
       return;
     }
@@ -3860,7 +3911,10 @@ class ChatService extends ChangeNotifier {
   /// Internal: trigger the next auto-play response.
   Future<void> _autoPlayNext() async {
     if (!_autoPlayActive || !_observerMode || _activeGroup == null) return;
-    if (_isGenerating) return; // wait for current generation to finish
+    // Both auto-play schedulers (generation.dart and _waitForTtsThenContinue)
+    // arm their delay AFTER the awaited post-gen section has already finished,
+    // so this is clear by the time they fire; no re-arm machinery is needed.
+    if (_isTurnBusy) return; // wait for the current turn to finish settling
 
     await _generateResponse(GenerationMode.normal);
   }
@@ -3904,7 +3958,7 @@ class ChatService extends ChangeNotifier {
       _invalidateJournalFrom(messageIndex);
       await _saveChat();
       notifyListeners();
-    } else if (messageIndex == _messages.length - 1 && !_isGenerating) {
+    } else if (messageIndex == _messages.length - 1 && !_isTurnBusy) {
       // Past last swipe on last message — regenerate
       await regenerateLastMessage();
     }
@@ -3919,7 +3973,7 @@ class ChatService extends ChangeNotifier {
   }
 
   Future<void> continueGeneration() async {
-    if (_messages.isEmpty || _isGenerating || _guestBusy) return;
+    if (_messages.isEmpty || _isTurnBusy || _guestBusy) return;
 
     // Only continue if the last message is from a bot (non-user, non-system).
     // Narration banners (dreams, Chance Time) are excluded: continue_ streams
@@ -3935,7 +3989,7 @@ class ChatService extends ChangeNotifier {
 
   /// Trigger the next character to speak in group mode.
   Future<void> triggerNextCharacter() async {
-    if (_activeGroup == null || _groupCharacters.isEmpty || _isGenerating) {
+    if (_activeGroup == null || _groupCharacters.isEmpty || _isTurnBusy) {
       return;
     }
     await _generateResponse(GenerationMode.normal);
@@ -4017,7 +4071,7 @@ class ChatService extends ChangeNotifier {
     // position the active turn still relies on (chip attach, lorebook scan,
     // journal invalidation) — and made a dream banner the last message,
     // where the aborted turn's writes landed (2026-07-28). Stop first.
-    if (_isGenerating) return;
+    if (_isTurnBusy) return;
     if (index >= 0 && index < _messages.length) {
       final deleted = _messages[index];
 

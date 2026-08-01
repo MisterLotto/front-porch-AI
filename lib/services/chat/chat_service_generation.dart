@@ -1686,70 +1686,96 @@ extension ChatServiceGeneration on ChatService {
           // to the prior speaker; the thin delegate relies on the pointer for cbs. We restore the
           // pointer after the checks (scalars remain correct for the persist below).
           CharacterCard? prePostActiveChar;
-          if (_activeGroup != null && !_observerMode) {
-            prePostActiveChar = _activeCharacter;
-            _activeCharacter = speakingCharacter;
-            final sid = _getCharacterIdFromCard(speakingCharacter);
-            if (sid.isNotEmpty) {
-              _loadGroupRealismIntoScalars(sid);
+          // Everything from here to the chip attach is the awaited post-gen
+          // critical section: it mutates _activeCharacter, the needs scalars
+          // and _groupRealism, across two awaits. _isGenerating is already
+          // false by now (cleared when the last token landed), so without this
+          // flag every re-entrancy guard stands open for the duration — a
+          // delete could shift the timeline under a running eval, and a new
+          // turn could interleave with this one's persist.
+          //
+          // The try/finally is not decoration. If _runPostGenNeedsChecks
+          // throws, the inline restore below is skipped and _activeCharacter
+          // stays pinned to this speaker with their scalars loaded — the next
+          // turn's save would then write to the wrong member. The finally
+          // makes both the pointer restore and the flag clear unconditional.
+          _isPostGenerating = true;
+          try {
+            if (_activeGroup != null && !_observerMode) {
+              prePostActiveChar = _activeCharacter;
+              _activeCharacter = speakingCharacter;
+              final sid = _getCharacterIdFromCard(speakingCharacter);
+              if (sid.isNotEmpty) {
+                _loadGroupRealismIntoScalars(sid);
+              }
             }
-          }
 
-          await _runPostGenNeedsChecks(finalResponse);
+            await _runPostGenNeedsChecks(finalResponse);
 
-          // Re-stamp the needs vector inside THIS message's realism_state snapshot
-          // with the now-final (post-impact) vector. The snapshot was captured
-          // during the pre-generation realism eval — BEFORE _runPostGenNeedsChecks
-          // applied this turn's needs impact (scene rewards like a bath's +Hygiene).
-          // Every other field in it is already the final post-turn value; only the
-          // needs vector was frozen pre-impact. Consumers that restore a message's
-          // realism_state as a baseline — regenerating a LATER message, navigating
-          // swipes, objective checks — would otherwise revert this turn's accepted
-          // needs deltas (the reported "Hygiene snaps back after regenerating the
-          // next message"). metadata and swipeMetadata[i] share one map instance, so
-          // this in-place update sticks and persists. 1:1 and group alike: the
-          // per-speaker vector is loaded above and is final here (before the group
-          // persist below).
-          if (_needsSimEnabled &&
-              !streamTarget.isUser &&
-              _needsSimulation.vector.isNotEmpty) {
-            final rs = streamTarget.activeMetadata?['realism_state'];
-            if (rs is Map && rs['needs'] is Map) {
-              (rs['needs'] as Map)['vector'] = Map<String, int>.from(
-                _needsSimulation.vector,
-              );
+            // Re-stamp the needs vector inside THIS message's realism_state snapshot
+            // with the now-final (post-impact) vector. The snapshot was captured
+            // during the pre-generation realism eval — BEFORE _runPostGenNeedsChecks
+            // applied this turn's needs impact (scene rewards like a bath's +Hygiene).
+            // Every other field in it is already the final post-turn value; only the
+            // needs vector was frozen pre-impact. Consumers that restore a message's
+            // realism_state as a baseline — regenerating a LATER message, navigating
+            // swipes, objective checks — would otherwise revert this turn's accepted
+            // needs deltas (the reported "Hygiene snaps back after regenerating the
+            // next message"). metadata and swipeMetadata[i] share one map instance, so
+            // this in-place update sticks and persists. 1:1 and group alike: the
+            // per-speaker vector is loaded above and is final here (before the group
+            // persist below).
+            if (_needsSimEnabled &&
+                !streamTarget.isUser &&
+                _needsSimulation.vector.isNotEmpty) {
+              final rs = streamTarget.activeMetadata?['realism_state'];
+              if (rs is Map && rs['needs'] is Map) {
+                (rs['needs'] as Map)['vector'] = Map<String, int>.from(
+                  _needsSimulation.vector,
+                );
+              }
             }
-          }
 
-          if (prePostActiveChar != null) {
-            _activeCharacter = prePostActiveChar;
-          }
-
-          // For group non-observer, persist the post-scene + long-gen-decay needs changes (and any
-          // other scalars mutated by the checks) back into _groupRealism for this speaker. This is
-          // what makes sidebar member cards + getNeedsForGroupCharacter() + future loads see the
-          // effects of the just-generated response. (Pre-eval saved the pre-turn state for bond/etc;
-          // this captures the *response* effects on needs.)
-          if (_activeGroup != null &&
-              !_observerMode &&
-              finalResponse.isNotEmpty &&
-              _messages.isNotEmpty) {
-            // The ACTUAL speaker of this turn — not a by-name lookup with a
-            // first-member fallback (duplicate display names would persist the
-            // critical scalar save to the wrong member's _groupRealism entry).
-            final sid = _getCharacterIdFromCard(speakingCharacter);
-            if (sid.isNotEmpty) {
-              _saveScalarsIntoGroupRealism(sid);
+            if (prePostActiveChar != null) {
+              _activeCharacter = prePostActiveChar;
             }
-          }
 
-          // Per-message needs chips for whoever just spoke. Lives here (not in
-          // sendMessage) so EVERY speaker gets them — group auto-advance, /speak
-          // and chime-ins reach _generateResponse but never sendMessage's old
-          // chip block, which is why only the first responder showed chips.
-          // Normal turns only; regen/continue manage their own chips.
-          if (mode == GenerationMode.normal) {
-            await _attachNeedsDeltaChipToLastMessage();
+            // For group non-observer, persist the post-scene + long-gen-decay needs changes (and any
+            // other scalars mutated by the checks) back into _groupRealism for this speaker. This is
+            // what makes sidebar member cards + getNeedsForGroupCharacter() + future loads see the
+            // effects of the just-generated response. (Pre-eval saved the pre-turn state for bond/etc;
+            // this captures the *response* effects on needs.)
+            if (_activeGroup != null &&
+                !_observerMode &&
+                finalResponse.isNotEmpty &&
+                _messages.isNotEmpty) {
+              // The ACTUAL speaker of this turn — not a by-name lookup with a
+              // first-member fallback (duplicate display names would persist the
+              // critical scalar save to the wrong member's _groupRealism entry).
+              final sid = _getCharacterIdFromCard(speakingCharacter);
+              if (sid.isNotEmpty) {
+                _saveScalarsIntoGroupRealism(sid);
+              }
+            }
+
+            // Per-message needs chips for whoever just spoke. Lives here (not in
+            // sendMessage) so EVERY speaker gets them — group auto-advance, /speak
+            // and chime-ins reach _generateResponse but never sendMessage's old
+            // chip block, which is why only the first responder showed chips.
+            // Normal turns only; regen/continue manage their own chips.
+            if (mode == GenerationMode.normal) {
+              await _attachNeedsDeltaChipToLastMessage();
+            }
+          } finally {
+            // Unconditional: an exception inside the critical section must
+            // not leave the group impersonating this speaker (the inline
+            // restore above is skipped on a throw), and must never leave the
+            // guard latched — a stuck flag would silently refuse deletes,
+            // regenerates and group edits for the rest of the session.
+            if (prePostActiveChar != null) {
+              _activeCharacter = prePostActiveChar;
+            }
+            _isPostGenerating = false;
           }
 
           // Journal maintenance pass if due (fire-and-forget): memory cards +

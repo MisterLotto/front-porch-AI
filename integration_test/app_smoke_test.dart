@@ -550,6 +550,23 @@ void main() {
           '(keyword "$loreKeyword")',
     );
 
+    // ── Phase 4g: the post-gen guard window always closes ───────────────
+    // The turn is not over when the last token lands: the needs-impact eval,
+    // the group scalar persist and the chip attach all run afterwards, and
+    // `_isPostGenerating` holds the mutation guards shut for that stretch. It
+    // is cleared in a `finally`, but a latched flag would silently refuse
+    // deletes, regenerates and group edits for the rest of the session with no
+    // error — strictly worse than the race it exists to prevent. Every
+    // waitSendable() above already insists it clears; this states it outright
+    // so the failure names itself instead of arriving as a timeout.
+    expect(
+      chatService.isSettlingTurn,
+      isFalse,
+      reason:
+          'the post-generation guard must always settle — a latched '
+          '_isPostGenerating wedges every mutation path for the session',
+    );
+
     // ── Phase 5: backend traffic audit ──────────────────────────────────
     // Any endpoint the fake doesn't model would have 404'd silently and
     // skewed behavior; surface it by name instead.

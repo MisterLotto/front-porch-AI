@@ -25,7 +25,7 @@ extension ChatServiceImpersonate on ChatService {
     required Function(String accumulated) onToken,
   }) async {
     if ((_activeCharacter == null && _activeGroup == null) ||
-        _isGenerating ||
+        _isTurnBusy ||
         _guestBusy) {
       return;
     }

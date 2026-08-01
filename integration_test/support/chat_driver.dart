@@ -97,14 +97,25 @@ class ChatDriver {
   );
 
   /// All of _sendCurrentMessage's silent early-return guards down at once.
+  ///
+  /// `isSettlingTurn` is included deliberately, and it earns its place in every
+  /// suite: the awaited post-gen critical section (needs impact, the group
+  /// scalar persist, the chip attach) runs AFTER `isGenerating` clears, and its
+  /// guard flag is cleared in a `finally`. If that `finally` is ever bypassed —
+  /// a new early-return, a swallowed throw — the flag latches true and the app
+  /// silently refuses deletes, regenerates and group edits for the rest of the
+  /// session. That failure is worse than the race it prevents and is invisible
+  /// in review, so every single wait in the suite now insists it clears.
   Future<void> waitSendable() => waitFor(
     () =>
         !chatService.isGenerating &&
+        !chatService.isSettlingTurn &&
         !chatService.isGuestBusy &&
         !chatService.isPhotoTurnInFlight &&
         !chatService.entrancesInFlight,
     () =>
         'chat sendable (gen=${chatService.isGenerating} '
+        'settling=${chatService.isSettlingTurn} '
         'guest=${chatService.isGuestBusy} '
         'photo=${chatService.isPhotoTurnInFlight} '
         'entrances=${chatService.entrancesInFlight})',

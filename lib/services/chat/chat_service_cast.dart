@@ -38,7 +38,7 @@ extension ChatServiceCast on ChatService {
     CharacterCard member,
     GroupChatRepository groupRepo,
   ) async {
-    if (_activeGroup == null || _isGenerating) return false;
+    if (_activeGroup == null || _isTurnBusy) return false;
     // Finalize any prior pending exit before starting a new one — the UNDO only
     // ever applies to the most recent `/exit`, so a second exit commits the
     // first. That commit may have collapsed the group or removed this member, so
