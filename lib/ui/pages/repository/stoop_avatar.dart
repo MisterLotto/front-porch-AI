@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Loads a Stoop card asset (avatar) by id. The asset endpoint serves only
@@ -49,22 +50,25 @@ class StoopAvatar extends StatelessWidget {
     );
   }
 
+  // Hub placeholder: a faint lantern on the inset ground (.hub-tile-art).
   Widget _placeholder(BuildContext context, {bool loading = false}) {
     return Container(
       width: width,
       height: height,
-      color: AppColors.surfaceContainerOf(context),
+      color: stoopBg1(context),
       alignment: Alignment.center,
       child: loading
           ? const SizedBox(
               width: 20,
               height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.stoopAmber,
+              ),
             )
-          : Icon(
-              Icons.person_outline,
-              color: AppColors.iconSecondary(context),
-              size: 32,
+          : const Opacity(
+              opacity: 0.35,
+              child: Text('🏮', style: TextStyle(fontSize: 30)),
             ),
     );
   }

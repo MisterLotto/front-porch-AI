@@ -19,13 +19,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/services/character_gen_service.dart';
-import 'package:front_porch_ai/services/character_repository.dart';
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/chat/chat_command_handler.dart';
-import 'package:front_porch_ai/services/llm_service.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
-import 'package:front_porch_ai/services/v2_card_service.dart';
 
 /// Mints Scene Guests (Lite NPCs): generates a character from a name + concept,
 /// tags it `tier == 'lite'` (no Realism/Needs state), and persists it via the

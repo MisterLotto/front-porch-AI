@@ -17,19 +17,10 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:front_porch_ai/database/database.dart' show Objective;
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/models/chat_participant.dart';
-import 'package:front_porch_ai/services/chat_service.dart';
-import 'package:front_porch_ai/services/chat/growth_physics.dart';
-import 'package:front_porch_ai/services/chat/growth_store.dart';
-import 'package:front_porch_ai/services/chat/journal_store.dart';
-import 'package:front_porch_ai/services/chat/ambition_service.dart';
-import 'package:front_porch_ai/services/chat/weather_engine.dart';
-import 'package:front_porch_ai/services/chat/weather_segments.dart';
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/services/chat/chat.dart';
 import 'package:front_porch_ai/services/story/faithful_mode.dart';
-import 'package:front_porch_ai/services/story_repository.dart';
-import 'package:front_porch_ai/services/user_persona_service.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/web/streaming/stream_hub.dart';
 
 /// Thin adapter for the chat *tools* sidebar — the memory/summary/chaos/NSFW/
@@ -150,16 +141,21 @@ class ChatToolsFacade {
                   // Intra-day (v3): the label leads with the CURRENT
                   // day-part's condition + numeric temp in the user's unit —
                   // older bundles render it as opaque text, so this upgrade
-                  // reaches every web client with zero TS changes.
-                  final seg? => WeatherSegments.label(
+                  // reaches every web client with zero TS changes. Skinned
+                  // conditions (phase 2 step ④) surface their renamed label
+                  // through the shared helpers — parity by construction.
+                  final seg? => skinnedChipLabel(
                     seg,
+                    _chat.activeChatBiome,
                     fahrenheit: _storage.weatherFahrenheit,
                   ),
                   null => WeatherEngine.label(weather),
                 },
                 'emoji': switch (_chat.currentSegmentWeather) {
-                  final seg? => WeatherEngine.emoji(seg.condition),
-                  null => WeatherEngine.emoji(weather.condition),
+                  final seg? =>
+                    skinnedEmoji(_chat.activeChatBiome, seg.condition),
+                  null =>
+                    skinnedEmoji(_chat.activeChatBiome, weather.condition),
                 },
                 // Intra-day fields (additive, v3) — day-part identity plus
                 // both units so richer web UIs can format freely.

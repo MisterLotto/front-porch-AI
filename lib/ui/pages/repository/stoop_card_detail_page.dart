@@ -18,14 +18,11 @@ import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/database/database.dart';
-import 'package:front_porch_ai/models/group_card.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
-import 'package:front_porch_ai/services/character_repository.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/group_card_importer.dart';
-import 'package:front_porch_ai/services/group_chat_repository.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
-import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_avatar.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_card_sections.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_group_sections.dart';
@@ -189,6 +186,8 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
             context.read<AppDatabase>(),
           )
         : null;
+    // World cards import as places; provider read before the await, like above.
+    final worldRepo = d.isWorld ? context.read<WorldRepository>() : null;
     Directory? tmp;
     try {
       final payload = await _api.download(_token, widget.cardId);
@@ -199,6 +198,15 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
       }
       final cardJson = payload['card'] as Map<String, dynamic>?;
       if (cardJson == null) throw Exception('no card data');
+      if (worldRepo != null) {
+        // WORLD card: the payload IS the .fpworld envelope — import it whole
+        // (lore + climate + traits + cover) as a new place.
+        final imported = await worldRepo.importWorldJson(cardJson);
+        messenger.showSnackBar(
+          SnackBar(content: Text('“${imported.name}” added to your places.')),
+        );
+        return;
+      }
       if (groupImporter != null) {
         final result = await groupImporter.importCard(
           GroupCard.fromJson(cardJson),
@@ -235,7 +243,13 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
       );
     } catch (_) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Couldn’t download that character.')),
+        SnackBar(
+          content: Text(
+            d.isWorld
+                ? 'Couldn’t download that place.'
+                : 'Couldn’t download that character.',
+          ),
+        ),
       );
     } finally {
       await tmp?.delete(recursive: true).catchError((_) => tmp!);
@@ -277,35 +291,39 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
     );
     return ClipRRect(
       borderRadius: radius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-        child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.backgroundOf(context).withValues(alpha: 0.8),
-            borderRadius: radius,
-            border: Border(
-              left: BorderSide(
-                color: stoopAccent(context).withValues(alpha: 0.4),
-              ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: stoopBg0(context),
+          borderRadius: radius,
+          border: Border(
+            left: BorderSide(
+              color: AppColors.stoopAmber.withValues(alpha: 0.35),
             ),
           ),
-          child: _loading
-              ? const Center(child: CircularProgressIndicator())
-              : _error != null || _detail == null
-              ? Center(
-                  child: Text(
-                    _error ?? 'Not found',
-                    style: TextStyle(color: AppColors.textTertiary(context)),
-                  ),
-                )
-              : _content(_detail!),
         ),
+        child: _loading
+            ? const StoopLamp()
+            : _error != null || _detail == null
+            ? stoopEmpty(
+                context,
+                glyph: '🌙',
+                title: _error ?? 'Not found',
+              )
+            : _content(_detail!),
       ),
     );
   }
 
+  // The name {{char}} actually maps to in chat — the CARD's own name, which
+  // may differ from the post's display title ("Misty" vs "Misty Meadows,
+  // Misguided Meteorologist"). Previews must read like the chat will.
+  String _chatName(StoopCardDetail d) {
+    final n = (d.card['name'] ?? '').toString().trim();
+    return n.isNotEmpty ? n : d.name;
+  }
+
   String _s(StoopCardDetail d, String key) =>
-      stoopResolveMacros((d.card[key] ?? '').toString(), d.name);
+      stoopResolveMacros((d.card[key] ?? '').toString(), _chatName(d));
 
   List<String> _greetings(StoopCardDetail d) {
     final first = _s(d, 'first_mes');
@@ -331,15 +349,30 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
               _reportButton(),
               if (d.tags.isNotEmpty) ...[
                 const SizedBox(height: 16),
+                // Teal tag pills (hub .hub-tag).
                 Wrap(
                   spacing: 8,
                   runSpacing: 6,
                   children: [
                     for (final t in d.tags)
-                      Text(
-                        '#$t',
-                        style: TextStyle(
-                          color: AppColors.textTertiary(context),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 11,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: stoopTealSoft(context),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: AppColors.stoopTeal.withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: Text(
+                          '#$t',
+                          style: TextStyle(
+                            color: stoopTealText(context),
+                            fontSize: 12.5,
+                          ),
                         ),
                       ),
                   ],
@@ -347,11 +380,13 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
               ],
               if (d.type == 'GROUP')
                 ..._groupSections(d)
+              else if (d.isWorld)
+                ...stoopWorldSections(context, d.card)
               else
                 ...stoopStandardSections(
                   context,
                   d.card,
-                  d.name,
+                  _chatName(d),
                   firstMessage: _firstMessage(d),
                 ),
             ]),
@@ -379,9 +414,14 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
           // wouldn't paint until scrolled).
           ImageFiltered(
             imageFilter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-            child: StoopAvatar(assetId: d.primaryAssetId),
+            child: Transform.scale(
+              scale: 1.18,
+              child: StoopAvatar(assetId: d.primaryAssetId),
+            ),
           ),
-          Container(color: Colors.black.withValues(alpha: 0.3)),
+          // Dusk-toned scrims (hub #0a0805 tints) — the hero stays a night
+          // scene in both themes, so overlay text uses the const dusk ramp.
+          Container(color: const Color(0x4D0A0805)),
           Center(
             child: StoopAvatar(
               assetId: d.primaryAssetId,
@@ -389,16 +429,16 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
             ),
           ),
           Container(
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Colors.black.withValues(alpha: 0.25),
+                  Color(0x400A0805),
                   Colors.transparent,
-                  Colors.black.withValues(alpha: 0.85),
+                  Color(0xD90A0805),
                 ],
-                stops: const [0, 0.4, 1],
+                stops: [0, 0.4, 1],
               ),
             ),
           ),
@@ -417,10 +457,10 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
               children: [
                 Text(
                   d.name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
+                  style: stoopDisplay(
+                    context,
+                    size: 26,
+                    color: AppColors.stoopCream,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -439,8 +479,8 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
                         },
                         child: Text(
                           '@${d.creator!.displayName}',
-                          style: TextStyle(
-                            color: stoopAccent(context),
+                          style: const TextStyle(
+                            color: AppColors.stoopTealText,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -527,18 +567,7 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
                     ],
                     if (d.nsfw) ...[
                       const SizedBox(width: 12),
-                      Text(
-                        'NSFW',
-                        style: TextStyle(
-                          color: AppColors.resolve(
-                            context,
-                            Colors.pinkAccent,
-                            Colors.pink,
-                          ),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
+                      const StoopBadge(StoopBadgeKind.nsfw),
                     ],
                   ],
                 ),
@@ -550,9 +579,10 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
     );
   }
 
-  // A red pill so reporting is obvious and easy to find, under the vote row.
+  // An ember link-button so reporting is obvious and easy to find, under the
+  // vote row (hub .hub-linklike.danger, given a soft pill ground for touch).
   Widget _reportButton() {
-    final red = AppColors.resolve(context, Colors.redAccent, Colors.red);
+    final ember = stoopEmberText(context);
     return Align(
       alignment: Alignment.centerLeft,
       child: TextButton.icon(
@@ -560,9 +590,11 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
         icon: const Icon(Icons.flag_rounded, size: 18),
         label: const Text('Report Character'),
         style: TextButton.styleFrom(
-          foregroundColor: red,
-          backgroundColor: red.withValues(alpha: 0.12),
-          side: BorderSide(color: red.withValues(alpha: 0.55)),
+          foregroundColor: ember,
+          backgroundColor: AppColors.stoopEmber.withValues(alpha: 0.1),
+          side: BorderSide(
+            color: AppColors.stoopEmber.withValues(alpha: 0.45),
+          ),
           shape: const StadiumBorder(),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         ),
@@ -570,83 +602,95 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
     );
   }
 
+  // Floating close control over the hero (always on the dark scrim).
   Widget _glassIcon(IconData icon, VoidCallback onTap) {
-    return StoopPill(
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xBF14110D),
+        shape: BoxShape.circle,
+        border: Border.all(color: AppColors.stoopBorderHi),
+      ),
       child: InkWell(
+        customBorder: const CircleBorder(),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: Icon(icon, size: 18, color: Colors.white),
+          padding: const EdgeInsets.all(6),
+          child: Icon(icon, size: 18, color: AppColors.stoopCream2),
         ),
       ),
     );
   }
 
+  // Hub votebox (joined ▼ score ▲, amber-lit when upvoted, ember when
+  // downvoted) + the lamplight download CTA.
   Widget _actions(StoopCardDetail d) {
-    final accent = stoopAccent(context);
     return Row(
       children: [
         Container(
+          clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            color: AppColors.surfaceContainerOf(context),
-            borderRadius: BorderRadius.circular(24),
+            color: stoopBg1(context),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: stoopBorderHi(context)),
           ),
           child: Row(
             children: [
-              IconButton(
-                icon: const Icon(Icons.arrow_downward_rounded),
-                color: _myVote == -1
-                    ? Colors.redAccent
-                    : AppColors.iconSecondary(context),
-                onPressed: () => _vote(-1),
+              _voteCell(
+                icon: Icons.arrow_downward_rounded,
+                on: _myVote == -1,
+                gradient: stoopEmberGradient,
+                onTap: () => _vote(-1),
               ),
-              Text(
-                '$_score',
-                style: TextStyle(
-                  color: AppColors.textPrimary(context),
-                  fontWeight: FontWeight.bold,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Text(
+                  '$_score',
+                  style: TextStyle(
+                    color: stoopAmberText(context),
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.arrow_upward_rounded),
-                color: _myVote == 1 ? accent : AppColors.iconSecondary(context),
-                onPressed: () => _vote(1),
+              _voteCell(
+                icon: Icons.arrow_upward_rounded,
+                on: _myVote == 1,
+                gradient: stoopAmberGradient,
+                onTap: () => _vote(1),
               ),
             ],
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(
-                  color: accent.withValues(alpha: 0.4),
-                  blurRadius: 18,
-                  spreadRadius: -4,
-                ),
-              ],
-            ),
-            child: FilledButton.icon(
-              onPressed: _downloading ? null : _download,
-              icon: _downloading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.download_rounded, size: 18),
-              label: Text(_downloading ? 'Adding…' : 'Download to library'),
-              style: FilledButton.styleFrom(
-                backgroundColor: accent,
-                foregroundColor: AppColors.background,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-            ),
+          child: StoopAmberButton(
+            label: _downloading ? 'Adding…' : 'Download to library',
+            icon: _downloading ? null : Icons.download_rounded,
+            busy: _downloading,
+            onPressed: _downloading ? null : _download,
+            padding: const EdgeInsets.symmetric(vertical: 13),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _voteCell({
+    required IconData icon,
+    required bool on,
+    required Gradient gradient,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Ink(
+        decoration: BoxDecoration(gradient: on ? gradient : null),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Icon(
+          icon,
+          size: 19,
+          color: on ? AppColors.stoopAmberInk : stoopCream2(context),
+        ),
+      ),
     );
   }
 
@@ -668,32 +712,35 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   icon: const Icon(Icons.chevron_left, size: 20),
+                  color: stoopCream2(context),
                   onPressed: idx > 0
                       ? () => setState(() => _greetingIndex = idx - 1)
                       : null,
                 ),
                 Text(
                   '${idx + 1}/${greetings.length}',
-                  style: TextStyle(color: AppColors.textTertiary(context)),
+                  style: TextStyle(color: stoopMute(context)),
                 ),
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   icon: const Icon(Icons.chevron_right, size: 20),
+                  color: stoopCream2(context),
                   onPressed: idx < greetings.length - 1
                       ? () => setState(() => _greetingIndex = idx + 1)
                       : null,
                 ),
               ],
             ),
-          StoopGlass(
-            radius: 12,
+          Container(
             padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: stoopBg1(context),
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: stoopBorder(context)),
+            ),
             child: Text(
               greetings[idx],
-              style: TextStyle(
-                color: AppColors.textSecondary(context),
-                height: 1.5,
-              ),
+              style: TextStyle(color: stoopCream2(context), height: 1.5),
             ),
           ),
         ],
@@ -718,7 +765,7 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
             children: [
               Text('Members', style: stoopSectionTitleStyle(context)),
               const SizedBox(width: 12),
-              Expanded(child: Divider(color: AppColors.borderOf(context))),
+              Expanded(child: Divider(color: stoopBorder(context))),
             ],
           ),
         ),
@@ -757,17 +804,19 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   icon: const Icon(Icons.chevron_left, size: 20),
+                  color: stoopCream2(context),
                   onPressed: idx > 0
                       ? () => setState(() => _memberIndex = idx - 1)
                       : null,
                 ),
                 Text(
                   '${idx + 1}/${members.length}',
-                  style: TextStyle(color: AppColors.textTertiary(context)),
+                  style: TextStyle(color: stoopMute(context)),
                 ),
                 IconButton(
                   visualDensity: VisualDensity.compact,
                   icon: const Icon(Icons.chevron_right, size: 20),
+                  color: stoopCream2(context),
                   onPressed: idx < members.length - 1
                       ? () => setState(() => _memberIndex = idx + 1)
                       : null,
@@ -812,11 +861,12 @@ class _ReportDialogState extends State<_ReportDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AppColors.cardOf(context),
-      title: Text(
-        'Report this card',
-        style: TextStyle(color: AppColors.textPrimary(context)),
+      backgroundColor: stoopCard2(context),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: stoopBorderHi(context)),
       ),
+      title: Text('Report this card', style: stoopDisplay(context, size: 19)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -832,9 +882,10 @@ class _ReportDialogState extends State<_ReportDialog> {
                     value: e.key,
                     contentPadding: EdgeInsets.zero,
                     dense: true,
+                    activeColor: AppColors.stoopAmber,
                     title: Text(
                       e.value,
-                      style: TextStyle(color: AppColors.textSecondary(context)),
+                      style: TextStyle(color: stoopCream2(context)),
                     ),
                   ),
               ],
@@ -844,25 +895,24 @@ class _ReportDialogState extends State<_ReportDialog> {
           TextField(
             controller: _reason,
             maxLines: 2,
-            style: TextStyle(color: AppColors.textPrimary(context)),
-            decoration: InputDecoration(
-              hintText: 'Anything else? (optional)',
-              hintStyle: TextStyle(color: AppColors.textTertiary(context)),
-            ),
+            style: TextStyle(color: stoopCream(context)),
+            decoration: stoopInput(context, 'Anything else? (optional)'),
           ),
         ],
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
+          style: TextButton.styleFrom(foregroundColor: stoopMute(context)),
           child: const Text('Cancel'),
         ),
-        FilledButton(
+        StoopAmberButton(
+          label: 'Submit report',
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           onPressed: () => Navigator.pop(context, (
             category: _category,
             reason: _reason.text.trim(),
           )),
-          child: const Text('Submit report'),
         ),
       ],
     );

@@ -20,7 +20,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/services/expression_pack_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// The re-roll editor: with img2img, same seed + same prompt + same strength

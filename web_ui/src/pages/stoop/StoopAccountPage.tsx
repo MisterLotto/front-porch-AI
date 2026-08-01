@@ -6,12 +6,61 @@
 // moderation status, your past downloads, creators you follow, sign out and
 // account deletion. Mirrors the desktop account sheet feature-for-feature.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { StoopCardTile } from '../../components/stoop/StoopCardTile';
-import { stoop, stoopErrorText } from '../../stoop/stoopApi';
+import { StoopCardArt, StoopCardTile } from '../../components/stoop/StoopCardTile';
+import { StoopCreatorAvatar } from '../../components/stoop/StoopCreatorAvatar';
+import { stoop, StoopError, stoopErrorText } from '../../stoop/stoopApi';
 import { useStoop } from '../../stoop/StoopContext';
 import type { StoopCard, StoopFollowedCreator, StoopMine } from '../../stoop/stoopTypes';
+
+/** Center-crop to a square (max 512px), encoded as JPEG — same treatment the
+ *  hub site applies, so avatars land round-crop-safe and small. */
+function squareCropAvatar(file: File): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const side = Math.min(img.naturalWidth, img.naturalHeight);
+        const out = Math.min(side, 512);
+        const canvas = document.createElement('canvas');
+        canvas.width = out;
+        canvas.height = out;
+        canvas
+          .getContext('2d')!
+          .drawImage(
+            img,
+            (img.naturalWidth - side) / 2,
+            (img.naturalHeight - side) / 2,
+            side,
+            side,
+            0,
+            0,
+            out,
+            out,
+          );
+        canvas.toBlob(
+          (b) => {
+            URL.revokeObjectURL(url);
+            if (b) resolve(b);
+            else reject(new Error('Couldn’t read that image.'));
+          },
+          'image/jpeg',
+          0.9,
+        );
+      } catch (e) {
+        URL.revokeObjectURL(url);
+        reject(e instanceof Error ? e : new Error('Couldn’t read that image.'));
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Couldn’t read that image.'));
+    };
+    img.src = url;
+  });
+}
 
 const STATUS_LABEL: Record<StoopMine['status'], string> = {
   PENDING: 'In review',
@@ -23,6 +72,17 @@ const STATUS_LABEL: Record<StoopMine['status'], string> = {
 export function StoopAccountPage() {
   const { user, updateUser, signOut } = useStoop();
   const [name, setName] = useState(user?.displayName ?? '');
+  const [bio, setBio] = useState(user?.bio ?? '');
+  const [links, setLinks] = useState<string[]>(() => {
+    const l = user?.profileLinks ?? [];
+    return [l[0] ?? '', l[1] ?? '', l[2] ?? '', l[3] ?? ''];
+  });
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [emailPw, setEmailPw] = useState('');
+  const [emailTotp, setEmailTotp] = useState('');
+  const [emailTotpNeeded, setEmailTotpNeeded] = useState(false);
   const [mine, setMine] = useState<StoopMine[]>([]);
   const [downloads, setDownloads] = useState<StoopCard[]>([]);
   const [followed, setFollowed] = useState<StoopFollowedCreator[]>([]);
@@ -60,6 +120,90 @@ export function StoopAccountPage() {
       updateUser(r.user);
       setNote('Display name updated.');
     });
+
+  const saveProfile = () =>
+    run(async () => {
+      const cleaned = links.map((l) => l.trim()).filter(Boolean);
+      if (cleaned.some((l) => !/^https?:\/\/.+/.test(l))) {
+        setError('Links must start with http:// or https://');
+        return;
+      }
+      const r = await stoop.updateProfile(bio.trim(), cleaned);
+      updateUser(r.user);
+      setNote('Profile updated.');
+    });
+
+  const canAvatar = user?.emailVerified !== false && !user?.avatarLocked;
+
+  const pickAvatar = (file: File | null) => {
+    if (!file) return;
+    void run(async () => {
+      const blob = await squareCropAvatar(file);
+      const r = await stoop.uploadAvatar(blob);
+      updateUser(r.user);
+      setNote('Profile photo updated — it’s live.');
+    });
+  };
+
+  const removeAvatar = () =>
+    run(async () => {
+      const r = await stoop.deleteAvatar();
+      updateUser(r.user);
+      setNote('Profile photo removed.');
+    });
+
+  const resendVerify = () =>
+    run(async () => {
+      await stoop.resendVerification();
+      setNote('Confirmation email sent — check your inbox (and spam).');
+    });
+
+  const submitEmailChange = async () => {
+    setBusy(true);
+    setNote('');
+    setError('');
+    try {
+      const r = await stoop.changeEmail(
+        newEmail.trim(),
+        emailPw,
+        emailTotpNeeded ? emailTotp.trim() : undefined,
+      );
+      updateUser(r.user);
+      setEmailOpen(false);
+      setNewEmail('');
+      setEmailPw('');
+      setEmailTotp('');
+      setEmailTotpNeeded(false);
+      setNote(`Confirmation sent to ${newEmail.trim()} — the change lands when that inbox opens the link.`);
+    } catch (e) {
+      if (e instanceof StoopError && e.code === 'two_factor_required') {
+        setEmailTotpNeeded(true);
+        setError(emailTotp ? stoopErrorText(e) : 'Enter your two-factor code to confirm the change.');
+      } else {
+        setError(stoopErrorText(e));
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const cancelEmailChange = () =>
+    run(async () => {
+      const r = await stoop.cancelEmailChange();
+      updateUser(r.user);
+      setNote('Pending email change cancelled.');
+    });
+
+  const deleteUpload = (m: StoopMine) => {
+    if (!window.confirm(`Take “${m.name}” off The Stoop permanently? Copies people already downloaded stay theirs.`)) {
+      return;
+    }
+    void run(async () => {
+      await stoop.deleteCharacter(m.id);
+      setMine((prev) => prev.filter((x) => x.id !== m.id));
+      setNote(`“${m.name}” was removed from The Stoop.`);
+    });
+  };
 
   const toggleNsfw = () =>
     run(async () => {
@@ -105,7 +249,96 @@ export function StoopAccountPage() {
       <section className="card">
         <h3>Profile</h3>
         <p className="muted">
-          {user.email} · {user.role !== 'USER' ? `${user.role} · ` : ''}age verified
+          {user.email} · {user.role !== 'USER' ? `${user.role} · ` : ''}age verified{' '}
+          <button className="link-btn" onClick={() => setEmailOpen(!emailOpen)}>
+            Change email…
+          </button>
+        </p>
+        {user.pendingEmail && (
+          <p className="muted stoop-small">
+            → {user.pendingEmail} (awaiting confirmation){' '}
+            <button className="link-btn" disabled={busy} onClick={cancelEmailChange}>
+              Cancel
+            </button>
+          </p>
+        )}
+        {emailOpen && (
+          <div className="stoop-email-change">
+            <p className="muted stoop-small">
+              We’ll send a confirmation link to the new address; your account keeps{' '}
+              {user.email} until that link is opened. This also proves the new address
+              for sharing and profile photos.
+            </p>
+            <label>
+              New email
+              <input
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+              />
+            </label>
+            <label>
+              Current password
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={emailPw}
+                onChange={(e) => setEmailPw(e.target.value)}
+              />
+            </label>
+            {emailTotpNeeded && (
+              <label>
+                Two-factor code
+                <input
+                  inputMode="numeric"
+                  placeholder="123456"
+                  value={emailTotp}
+                  onChange={(e) => setEmailTotp(e.target.value)}
+                />
+              </label>
+            )}
+            <button
+              className="primary"
+              disabled={busy || !newEmail.includes('@')}
+              onClick={() => void submitEmailChange()}
+            >
+              Send confirmation
+            </button>
+          </div>
+        )}
+        {user.emailVerified === false && (
+          <p className="stoop-verify-note">
+            📮 Confirm your email to share cards and set a profile photo.{' '}
+            <button className="link-btn" disabled={busy} onClick={resendVerify}>
+              Send the link again
+            </button>
+          </p>
+        )}
+        <div className="stoop-ava-row">
+          <StoopCreatorAvatar assetId={user.avatarAssetId} name={user.displayName} size={52} />
+          <button disabled={busy || !canAvatar} onClick={() => fileRef.current?.click()}>
+            {user.avatarAssetId ? 'Change photo…' : 'Choose photo…'}
+          </button>
+          {user.avatarAssetId && (
+            <button className="danger" disabled={busy} onClick={removeAvatar}>
+              Remove
+            </button>
+          )}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            hidden
+            onChange={(e) => {
+              pickAvatar(e.target.files?.[0] ?? null);
+              e.target.value = '';
+            }}
+          />
+        </div>
+        <p className="muted stoop-small">
+          {user.avatarLocked
+            ? 'A moderator has disabled profile pictures for this account. You can appeal from your inbox.'
+            : 'Shows beside your name across The Stoop, immediately. Keep it porch-front friendly — visitors see it without an 18+ check, and a moderator removing an avatar counts as a formal warning.'}
         </p>
         <label>
           Display name
@@ -113,6 +346,34 @@ export function StoopAccountPage() {
         </label>
         <button disabled={busy || !name.trim() || name.trim() === user.displayName} onClick={saveName}>
           Save name
+        </button>
+        <label>
+          Bio
+          <textarea
+            rows={3}
+            maxLength={300}
+            placeholder="A short bio for your public porch page (300 characters max)."
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+          />
+        </label>
+        <label>
+          Links (up to 4, shown on your public page)
+          {links.map((l, i) => (
+            <input
+              key={i}
+              type="url"
+              maxLength={200}
+              placeholder={i === 0 ? 'https:// — your chub / Backyard / socials' : 'https://…'}
+              value={l}
+              onChange={(e) =>
+                setLinks((prev) => prev.map((x, j) => (j === i ? e.target.value : x)))
+              }
+            />
+          ))}
+        </label>
+        <button disabled={busy} onClick={saveProfile}>
+          Save profile
         </button>
       </section>
 
@@ -176,26 +437,42 @@ export function StoopAccountPage() {
         {mine.length === 0 ? (
           <p className="muted">Nothing shared yet.</p>
         ) : (
-          <ul className="stoop-mine">
+          <div className="lib-grid stoop-grid stoop-mine-grid">
             {mine.map((m) => (
-              <li key={m.id}>
-                <span>
-                  {m.status === 'APPROVED' ? (
-                    <Link to={`/stoop/card/${encodeURIComponent(m.id)}`}>{m.name}</Link>
-                  ) : (
-                    m.name
-                  )}{' '}
-                  <span className="muted">v{m.version} · ⬇ {m.downloadCount}</span>
-                </span>
-                <span className={`stoop-status ${m.status.toLowerCase()}`}>
+              <div className="lib-card stoop-tile stoop-mine-tile" key={m.id}>
+                {m.status === 'APPROVED' ? (
+                  <Link to={`/stoop/card/${encodeURIComponent(m.id)}`} className="stoop-mine-art">
+                    <StoopCardArt assetId={m.primaryAssetId} name={m.name} />
+                  </Link>
+                ) : (
+                  <span className="stoop-mine-art">
+                    <StoopCardArt assetId={m.primaryAssetId} name={m.name} />
+                  </span>
+                )}
+                <span className={`stoop-status stoop-mine-status ${m.status.toLowerCase()}`}>
                   {STATUS_LABEL[m.status]}
                 </span>
-                {m.status === 'REJECTED' && m.rejectionNote && (
-                  <p className="muted stoop-reject-note">{m.rejectionNote}</p>
-                )}
-              </li>
+                <div className="lib-info">
+                  <div className="lib-name-row">
+                    <span className="lib-name">{m.name}</span>
+                  </div>
+                  <div className="stoop-tile-meta">
+                    <span>v{m.version} · ⬇ {m.downloadCount}</span>
+                    <button
+                      className="link-btn stoop-delete-link"
+                      disabled={busy}
+                      onClick={() => deleteUpload(m)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                  {m.status === 'REJECTED' && m.rejectionNote && (
+                    <p className="muted stoop-reject-note">{m.rejectionNote}</p>
+                  )}
+                </div>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </section>
 
@@ -220,7 +497,10 @@ export function StoopAccountPage() {
           <ul className="stoop-following">
             {followed.map((c) => (
               <li key={c.id}>
-                <Link to={`/stoop/creator/${encodeURIComponent(c.id)}`}>{c.displayName}</Link>
+                <Link to={`/stoop/creator/${encodeURIComponent(c.id)}`}>
+                  <StoopCreatorAvatar assetId={c.avatarAssetId} name={c.displayName} size={24} />{' '}
+                  {c.displayName}
+                </Link>
                 <span className="muted">
                   {c.followers} follower{c.followers === 1 ? '' : 's'}
                 </span>

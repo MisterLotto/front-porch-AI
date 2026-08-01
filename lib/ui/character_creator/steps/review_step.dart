@@ -19,14 +19,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:front_porch_ai/services/character_repository.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/avatar_creation/avatar_generation_panel.dart';
-import 'package:front_porch_ai/ui/character_creator/creator_state.dart';
-import 'package:front_porch_ai/ui/character_creator/creator_state_engine.dart';
+import 'package:front_porch_ai/ui/character_creator/character_creator.dart';
 import 'package:front_porch_ai/ui/character_creator/widgets/review_lorebook_section.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 /// Review & edit step: the shared Portrait & Avatars panel in the left rail
 /// (phase #12 — it replaced the bespoke avatar generation controls) + editable

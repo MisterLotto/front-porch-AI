@@ -16,9 +16,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'package:front_porch_ai/services/image_gen_service.dart';
-import 'package:front_porch_ai/services/image_prompt/image_gen_context.dart';
-import 'package:front_porch_ai/services/image_prompt/image_prompt_builder.dart';
+import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/services/image_prompt/image_prompt.dart';
 
 /// Pure helpers extracted from the ImageStudio coordinator to keep the main file
 /// under the project 500 LOC cap while preserving behavior and readability.

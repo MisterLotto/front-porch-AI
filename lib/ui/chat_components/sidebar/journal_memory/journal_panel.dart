@@ -21,9 +21,7 @@ import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/services/services.dart';
-import 'package:front_porch_ai/ui/dialogs/journal_card_editor.dart';
-import 'package:front_porch_ai/ui/dialogs/journal_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/journal_review_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/dialogs.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import '../sidebar_tokens.dart';
 

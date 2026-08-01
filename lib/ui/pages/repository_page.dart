@@ -13,13 +13,7 @@ import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
-import 'package:front_porch_ai/ui/pages/repository/repository_auth_view.dart';
-import 'package:front_porch_ai/ui/pages/repository/repository_account_sheet.dart';
-import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
-import 'package:front_porch_ai/ui/pages/repository/stoop_inbox_bell.dart';
-import 'package:front_porch_ai/ui/pages/repository/stoop_signed_in.dart';
-import 'package:front_porch_ai/ui/pages/repository/stoop_policy_gate.dart';
-import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/ui/pages/repository/repository.dart';
 
 /// The Front Porch repository — a full page (opened from the sidebar, like the
 /// AI Character Creator). An account is required only here; the rest of the app
@@ -41,32 +35,23 @@ class RepositoryPage extends StatelessWidget {
         // gate); the gate carries its own decline/sign-out action.
         final showAccount = auth.isLoggedIn && !auth.needsPolicyAcceptance;
         return Scaffold(
-          backgroundColor: AppColors.backgroundOf(context),
+          backgroundColor: stoopBg0(context),
           appBar: AppBar(
             centerTitle: false,
             titleSpacing: 4,
-            title: ShaderMask(
-              shaderCallback: (rect) =>
-                  stoopGradient(context).createShader(rect),
-              blendMode: BlendMode.srcIn,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Icon(Icons.deck_rounded, size: 20),
-                  SizedBox(width: 7),
-                  Text(
-                    'The Stoop',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 20,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                ],
-              ),
+            elevation: 0,
+            shape: Border(bottom: BorderSide(color: stoopBorder(context))),
+            // Hub nav: lantern glyph + serif wordmark in cream, amber accent.
+            title: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('🏡', style: const TextStyle(fontSize: 18)),
+                const SizedBox(width: 8),
+                Text('The Stoop', style: stoopDisplay(context, size: 20)),
+              ],
             ),
-            backgroundColor: AppColors.surfaceOf(context),
-            foregroundColor: AppColors.textPrimary(context),
+            backgroundColor: stoopBg0(context),
+            foregroundColor: stoopCream(context),
             actions: [
               if (showAccount) const StoopInboxBell(),
               if (showAccount)

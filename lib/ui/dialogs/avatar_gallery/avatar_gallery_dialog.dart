@@ -21,10 +21,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/services/character_repository.dart';
-import 'package:front_porch_ai/services/chat_service.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_controller.dart';
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_expressions_section.dart';
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_looks_section.dart';
@@ -32,7 +30,7 @@ import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_io.dart'
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/emotion_picker.dart';
 import 'package:front_porch_ai/ui/dialogs/image_crop_dialog.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/warm_dialog.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 /// The one unified Avatar Gallery — gallery avatars + expression images in a
 /// single warm-porch dialog, sharing one ★ canonical-avatar star. Replaces the

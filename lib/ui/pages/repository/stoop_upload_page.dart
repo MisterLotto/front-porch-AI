@@ -13,20 +13,22 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:front_porch_ai/database/database.dart';
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/models/group_chat.dart';
+// The Drift schema also declares a `World` row class — hide it so `World`
+// below always means the model (the same shape .fpworld export uses).
+import 'package:front_porch_ai/database/database.dart' hide World;
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
-import 'package:front_porch_ai/services/character_repository.dart';
-import 'package:front_porch_ai/services/group_card_exporter.dart';
-import 'package:front_porch_ai/services/group_chat_repository.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_verify_banner.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_pick_step.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_standards.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_tag_selector.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_world_share.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/group_avatar_montage.dart';
 import 'package:front_porch_ai/utils/group_avatar_compositor.dart';
+import 'package:front_porch_ai/utils/world_cover.dart';
 
 /// Wizard to share one of the user's local characters to The Stoop. Mirrors the
 /// app's create-wizard chrome (step dots + AnimatedSwitcher + nav buttons).
@@ -48,6 +50,14 @@ class StoopUploadPage extends StatefulWidget {
   /// preserves it by default (clearing the field on update removes the credit).
   final String? initialOriginalCreator;
 
+  /// The post's current DISPLAY name + summary, so update mode preserves them
+  /// instead of re-seeding from the local card. The display name is the
+  /// listing title ("Misty Meadows, Misguided Meteorologist") and may differ
+  /// from the card's in-chat name ("Misty", what {{char}} maps to) — without
+  /// these, publishing an update would silently revert a custom title.
+  final String? initialName;
+  final String? initialSummary;
+
   const StoopUploadPage({
     super.key,
     this.updateCharacter,
@@ -55,6 +65,8 @@ class StoopUploadPage extends StatefulWidget {
     this.updateStoopId,
     this.initialNsfw = false,
     this.initialOriginalCreator,
+    this.initialName,
+    this.initialSummary,
   });
 
   bool get isUpdate =>
@@ -75,14 +87,11 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
   int _currentStep = 0;
   CharacterCard? _selected;
   GroupChat? _selectedGroup; // set instead of _selected when sharing a group
+  World? _selectedWorld; // set when sharing a place (.fpworld) — see below
   final _name = TextEditingController();
   final _summary = TextEditingController();
   final _originalCreator = TextEditingController();
   final _tagInput = TextEditingController();
-  final _pickSearch = TextEditingController();
-
-  /// Lowercased filter for the Pick step's character/group grids.
-  String _pickQuery = '';
 
   /// Every candidate tag (the card's own, plus any the creator types).
   List<String> _tagPool = [];
@@ -100,7 +109,6 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     _summary.dispose();
     _originalCreator.dispose();
     _tagInput.dispose();
-    _pickSearch.dispose();
     super.dispose();
   }
 
@@ -127,6 +135,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
   void _applyGroupSelection(GroupChat group) {
     _selectedGroup = group;
     _selected = null;
+    _selectedWorld = null;
     _name.text = group.name;
     _setSummaryFrom(group.scenario); // groups have no description; seed scenario
     _tagPool = [];
@@ -148,6 +157,14 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       _nsfw = widget.initialNsfw;
       _currentStep = 1;
     }
+    // Update mode: the post's stored display name/summary win over the
+    // card-derived seeds the appliers just set (custom titles must survive).
+    if (widget.initialName?.trim().isNotEmpty ?? false) {
+      _name.text = widget.initialName!.trim();
+    }
+    if (widget.initialSummary?.trim().isNotEmpty ?? false) {
+      _summary.text = widget.initialSummary!.trim();
+    }
     _originalCreator.text = widget.initialOriginalCreator ?? '';
   }
 
@@ -160,6 +177,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
   void _applySelection(CharacterCard card) {
     _selected = card;
     _selectedGroup = null;
+    _selectedWorld = null;
     _name.text = card.name;
     _setSummaryFrom(card.description);
     // De-duplicate (preserving order) into the candidate pool, then
@@ -178,6 +196,9 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     switch (code) {
       case 'policy_not_accepted':
         return 'Please accept the Acceptable Use Policy before sharing.';
+      case 'email_not_verified':
+        return 'Confirm your email address before sharing — check your inbox '
+            'for the link we sent. Browsing and downloading still work.';
       case 'unsupported_image_type':
         return 'That avatar image type isn’t supported (use PNG, JPG, or WebP).';
       case 'file_too_large':
@@ -191,7 +212,25 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     }
   }
 
+  // Pre-fills the wizard from a chosen place. Mirrors the character/group
+  // appliers above (each type builds a different payload chain, so unifying
+  // the three would just braid unrelated field wiring together).
+  void _applyWorldSelection(World world) {
+    _selectedWorld = world;
+    _selected = null;
+    _selectedGroup = null;
+    _name.text = world.name;
+    _setSummaryFrom(world.description);
+    _tagPool = [];
+    _tags = [];
+  }
+
   Future<void> _publish() async {
+    final world = _selectedWorld;
+    if (world != null) {
+      await _publishWorld(world);
+      return;
+    }
     final group = _selectedGroup;
     if (group != null) {
       await _publishGroup(group);
@@ -335,10 +374,49 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     }
   }
 
+  // Publish a place as a WORLD card (same moderation queue as characters).
+  // The payload/cover work lives in publishStoopWorld (stoop_world_share.dart);
+  // this is just the wizard's busy/error scaffolding, mirroring _publishGroup.
+  Future<void> _publishWorld(World world) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final auth = context.read<AuthState>();
+    try {
+      final validation = await publishStoopWorld(
+        api: BackporchApi(),
+        repo: context.read<WorldRepository>(),
+        accessToken: auth.accessToken!,
+        world: world,
+        name: _name.text.trim(),
+        summary: _summary.text.trim(),
+        nsfw: _nsfw,
+        tags: _tags,
+        originalCreator: _originalCreator.text.trim(),
+      );
+      if (validation != null) {
+        if (mounted) setState(() => _error = validation);
+        return;
+      }
+      if (mounted) Navigator.pop(context, true);
+    } on BackporchApiException catch (e) {
+      if (mounted) setState(() => _error = _mapError(e.code));
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Couldn’t share that place. Try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   bool get _canAdvance {
     switch (_currentStep) {
       case 0:
-        return _selected != null || _selectedGroup != null;
+        return _selected != null ||
+            _selectedGroup != null ||
+            _selectedWorld != null;
       case 1:
         return _name.text.trim().isNotEmpty && _summary.text.trim().isNotEmpty;
       case 2:
@@ -360,11 +438,16 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.backgroundOf(context),
+      backgroundColor: stoopBg0(context),
       appBar: AppBar(
-        backgroundColor: AppColors.surfaceOf(context),
-        foregroundColor: AppColors.textPrimary(context),
-        title: Text(widget.isUpdate ? 'Update character' : 'Share a character'),
+        backgroundColor: stoopBg0(context),
+        foregroundColor: stoopCream(context),
+        elevation: 0,
+        shape: Border(bottom: BorderSide(color: stoopBorder(context))),
+        title: Text(
+          widget.isUpdate ? 'Update character' : 'Share to The Stoop',
+          style: stoopDisplay(context, size: 19),
+        ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(48),
           child: Padding(
@@ -373,9 +456,20 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
           ),
         ),
       ),
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 250),
-        child: _stepBody(),
+      body: Column(
+        children: [
+          // Say it before they fill the whole wizard and hit a 403 at the end.
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: StoopVerifyBanner(),
+          ),
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              child: _stepBody(),
+            ),
+          ),
+        ],
       ),
       bottomNavigationBar: _navButtons(),
     );
@@ -393,7 +487,6 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
   Widget _stepDot(int step, String label) {
     final isActive = _currentStep >= step;
     final isCurrent = _currentStep == step;
-    final accent = AppColors.resolve(context, Colors.tealAccent, Colors.teal);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -402,22 +495,29 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
           height: 24,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: isActive ? accent : AppColors.surfaceContainerOf(context),
+            gradient: isActive ? stoopAmberGradient : null,
+            color: isActive ? null : stoopBg1(context),
             border: isCurrent
-                ? Border.all(color: AppColors.textPrimary(context), width: 2)
-                : null,
+                ? Border.all(color: stoopCream(context), width: 2)
+                : isActive
+                ? null
+                : Border.all(color: stoopBorderHi(context)),
           ),
           child: Center(
             child: isActive && !isCurrent
-                ? Icon(Icons.check, size: 14, color: AppColors.background)
+                ? const Icon(
+                    Icons.check,
+                    size: 14,
+                    color: AppColors.stoopAmberInk,
+                  )
                 : Text(
                     '${step + 1}',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                       color: isActive
-                          ? AppColors.background
-                          : AppColors.textSecondary(context),
+                          ? AppColors.stoopAmberInk
+                          : stoopMute(context),
                     ),
                   ),
           ),
@@ -427,9 +527,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
           label,
           style: TextStyle(
             fontSize: 10,
-            color: isCurrent
-                ? AppColors.textPrimary(context)
-                : AppColors.textTertiary(context),
+            color: isCurrent ? stoopAmberText(context) : stoopFaint(context),
           ),
         ),
       ],
@@ -440,7 +538,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     width: 24,
     height: 2,
     margin: const EdgeInsets.only(bottom: 14),
-    color: AppColors.borderOf(context).withValues(alpha: 0.35),
+    color: stoopBorder(context),
   );
 
   Widget _stepBody() {
@@ -456,237 +554,18 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     }
   }
 
-  // Step 0 — pick a local character or a group (only those with an avatar /
-  // members-with-avatars can be shared).
+  // Step 0 — pick a local character, group, or place. Extracted to
+  // StoopPickStep (stoop_pick_step.dart), which is folder-aware: the grids
+  // follow the home grid's folder hierarchy via the shared
+  // buildFolderPickView rules.
   Widget _pickStep() {
-    final allCards = context
-        .read<CharacterRepository>()
-        .characters
-        .where((c) => c.imagePath != null && c.imagePath!.isNotEmpty)
-        .toList();
-    final allGroups = context.read<GroupChatRepository>().groups;
-    if (allCards.isEmpty && allGroups.isEmpty) {
-      return _centeredHint(
-        Icons.person_off_outlined,
-        'Nothing to share yet',
-        'Characters need an avatar image, and groups need members, before they '
-            'can be shared.',
-      );
-    }
-    // Filter by name so a large library stays navigable.
-    final cards = _pickQuery.isEmpty
-        ? allCards
-        : allCards
-              .where((c) => c.name.toLowerCase().contains(_pickQuery))
-              .toList();
-    final groups = _pickQuery.isEmpty
-        ? allGroups
-        : allGroups
-              .where((g) => g.name.toLowerCase().contains(_pickQuery))
-              .toList();
-    const grid = SliverGridDelegateWithMaxCrossAxisExtent(
-      maxCrossAxisExtent: 150,
-      childAspectRatio: 0.78,
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-    );
-    return ListView(
-      key: const ValueKey('pick'),
-      padding: const EdgeInsets.all(16),
-      children: [
-        _pickSearchField(),
-        const SizedBox(height: 14),
-        if (cards.isEmpty && groups.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 40),
-            child: Center(
-              child: Text(
-                'No characters or groups match “$_pickQuery”.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textTertiary(context)),
-              ),
-            ),
-          ),
-        // Groups first — they're the marquee thing to share and shouldn't be
-        // buried under a long character list.
-        if (groups.isNotEmpty) ...[
-          _label('Groups'),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: grid,
-            itemCount: groups.length,
-            itemBuilder: (context, i) => _groupPickTile(groups[i]),
-          ),
-        ],
-        if (cards.isNotEmpty) ...[
-          if (groups.isNotEmpty) const SizedBox(height: 16),
-          _label('Characters'),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: grid,
-            itemCount: cards.length,
-            itemBuilder: (context, i) => _pickTile(cards[i]),
-          ),
-        ],
-      ],
-    );
-  }
-
-  // Name filter for the Pick step — mirrors the browse view's search field.
-  Widget _pickSearchField() {
-    return TextField(
-      controller: _pickSearch,
-      onChanged: (v) => setState(() => _pickQuery = v.trim().toLowerCase()),
-      style: TextStyle(color: AppColors.textPrimary(context)),
-      decoration: InputDecoration(
-        hintText: 'Search your characters and groups',
-        hintStyle: TextStyle(color: AppColors.textTertiary(context)),
-        prefixIcon: Icon(Icons.search, color: AppColors.iconSecondary(context)),
-        suffixIcon: _pickQuery.isEmpty
-            ? null
-            : IconButton(
-                icon: Icon(Icons.close, color: AppColors.iconSecondary(context)),
-                onPressed: () {
-                  _pickSearch.clear();
-                  setState(() => _pickQuery = '');
-                },
-              ),
-        filled: true,
-        fillColor: AppColors.surfaceContainerOf(context),
-        contentPadding: const EdgeInsets.symmetric(vertical: 4),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.borderOf(context)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.borderOf(context)),
-        ),
-      ),
-    );
-  }
-
-  Widget _groupPickTile(GroupChat group) {
-    final selected = _selectedGroup?.id == group.id;
-    final accent = AppColors.resolve(context, Colors.tealAccent, Colors.teal);
-    return GestureDetector(
-      onTap: () => _selectGroup(group),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.cardOf(context),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected ? accent : AppColors.borderOf(context),
-            width: selected ? 2 : 1,
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: ColoredBox(
-                color: AppColors.resolve(
-                  context,
-                  Colors.purple.shade900.withValues(alpha: 0.35),
-                  Colors.purple.shade50,
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: _groupMontage(group),
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              child: Text(
-                group.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: AppColors.textPrimary(context),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // A folder-style montage of a group's member avatars, sized to fill its slot.
-  // Shared by the picker tile and the review-step preview. Falls back to a
-  // groups glyph while members load or if none have an avatar.
-  Widget _groupMontage(GroupChat group) {
-    return FutureBuilder<List<File>>(
-      future: context.read<GroupChatRepository>().getMemberAvatarFiles(group.id),
-      builder: (context, snap) {
-        final files = snap.data ?? const <File>[];
-        if (files.isEmpty) {
-          return const Center(
-            child: Icon(
-              Icons.groups_rounded,
-              size: 44,
-              color: Colors.purpleAccent,
-            ),
-          );
-        }
-        return LayoutBuilder(
-          builder: (context, c) {
-            final side = c.maxWidth < c.maxHeight ? c.maxWidth : c.maxHeight;
-            return Center(
-              child: GroupAvatarMontage(
-                images: files.take(4).toList(),
-                side: side,
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _pickTile(CharacterCard card) {
-    final selected = _selected?.dbId == card.dbId && _selected != null;
-    final accent = AppColors.resolve(context, Colors.tealAccent, Colors.teal);
-    return GestureDetector(
-      onTap: () => _select(card),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.cardOf(context),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected ? accent : AppColors.borderOf(context),
-            width: selected ? 2 : 1,
-          ),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: Image.file(File(card.imagePath!), fit: BoxFit.cover),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              child: Text(
-                card.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: AppColors.textPrimary(context),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+    return StoopPickStep(
+      selectedCard: _selected,
+      selectedGroup: _selectedGroup,
+      selectedWorldId: _selectedWorld?.id,
+      onSelectCard: _select,
+      onSelectGroup: _selectGroup,
+      onSelectWorld: (w) => setState(() => _applyWorldSelection(w)),
     );
   }
 
@@ -696,12 +575,55 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       key: const ValueKey('details'),
       padding: const EdgeInsets.all(24),
       children: [
-        _label('Name'),
+        _label('Display name on The Stoop'),
         TextField(
           controller: _name,
           onChanged: (_) => setState(() {}),
-          style: TextStyle(color: AppColors.textPrimary(context)),
-          decoration: _input('Character name'),
+          style: TextStyle(color: stoopCream(context)),
+          decoration: _input('Name shown on The Stoop'),
+        ),
+        const SizedBox(height: 8),
+        // Unmissable: this box is the LISTING title, not the chat name.
+        // {{char}} keeps mapping to the card's own name, which never changes
+        // here — so "Misty Meadows, Misguided Meteorologist" is safe.
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: stoopAmberSoft(context),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: AppColors.stoopAmber.withValues(alpha: 0.35),
+            ),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                Icons.info_outline_rounded,
+                size: 16,
+                color: stoopAmberText(context),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _selected != null
+                      ? 'This is the display name for the listing only — not '
+                            'the chat name. In chat, {{char}} still maps to '
+                            '“${_selected!.name}”, so replies keep calling '
+                            'them “${_selected!.name}” no matter what you '
+                            'title the post.'
+                      : 'This is the display name for the listing only — in '
+                            'chat, everyone keeps their own name no matter '
+                            'what you title the post.',
+                  style: TextStyle(
+                    color: stoopCream2(context),
+                    fontSize: 12.5,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 18),
         _label('Short summary'),
@@ -710,7 +632,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
           maxLines: 3,
           maxLength: 280,
           onChanged: (_) => setState(() {}),
-          style: TextStyle(color: AppColors.textPrimary(context)),
+          style: TextStyle(color: stoopCream(context)),
           decoration: _input('A one-line hook shown on the card'),
         ),
         const SizedBox(height: 18),
@@ -719,7 +641,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
           controller: _originalCreator,
           maxLength: 120,
           onChanged: (_) => setState(() {}),
-          style: TextStyle(color: AppColors.textPrimary(context)),
+          style: TextStyle(color: stoopCream(context)),
           decoration: _input('Leave blank if this is your own work').copyWith(
             counterText: '',
             helperText:
@@ -727,10 +649,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
                 'card will show “created by …”. The AUP requires this for '
                 'reposts; they don’t need a Stoop account.',
             helperMaxLines: 3,
-            helperStyle: TextStyle(
-              color: AppColors.textTertiary(context),
-              fontSize: 12,
-            ),
+            helperStyle: TextStyle(color: stoopMute(context), fontSize: 12),
           ),
         ),
         const SizedBox(height: 8),
@@ -780,21 +699,29 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       children: [
         Container(
           decoration: BoxDecoration(
-            color: AppColors.surfaceContainerOf(context),
+            gradient: stoopCardGradient(context),
             borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: stoopBorder(context)),
           ),
-          child: SwitchListTile(
-            value: _nsfw,
-            onChanged: (v) => setState(() => _nsfw = v),
-            title: Text(
-              'This character is NSFW (18+)',
-              style: TextStyle(color: AppColors.textPrimary(context)),
-            ),
-            subtitle: Text(
-              'Mark adult content so it’s hidden from people who haven’t opted in.',
-              style: TextStyle(
-                color: AppColors.textTertiary(context),
-                fontSize: 12,
+          // The gradient must stay on the box, so the tile gets its own
+          // transparent Material — ink painted on the nearest Material would
+          // otherwise be hidden under the DecoratedBox (Flutter assertion).
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            clipBehavior: Clip.antiAlias,
+            child: SwitchListTile(
+              value: _nsfw,
+              onChanged: (v) => setState(() => _nsfw = v),
+              activeThumbColor: AppColors.stoopEmber,
+              title: Text(
+                'This content is NSFW (18+)',
+                style: TextStyle(color: stoopCream(context)),
+              ),
+              subtitle: Text(
+                'Mark adult content so it’s hidden from people who haven’t '
+                'opted in.',
+                style: TextStyle(color: stoopMute(context), fontSize: 12),
               ),
             ),
           ),
@@ -806,17 +733,19 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
             onChanged: (v) => setState(() => _standardsAck = v ?? false),
             controlAffinity: ListTileControlAffinity.leading,
             contentPadding: EdgeInsets.zero,
+            activeColor: AppColors.stoopAmber,
+            checkColor: AppColors.stoopAmberInk,
             title: Text(
               'This card meets the Stoop content standards',
               style: TextStyle(
-                color: AppColors.textPrimary(context),
+                color: stoopCream(context),
                 fontWeight: FontWeight.w600,
               ),
             ),
             subtitle: Text(
               'I confirm this card meets every standard above — and complies '
               'with The Stoop Acceptable Use Policy.',
-              style: TextStyle(color: AppColors.textSecondary(context)),
+              style: TextStyle(color: stoopCream2(context)),
             ),
           ),
         ),
@@ -826,21 +755,23 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
 
   // Step 3 — review + publish.
   Widget _reviewStep() {
+    final world = _selectedWorld;
     final isGroup = _selectedGroup != null;
-    final preview = isGroup
+    final preview = world != null
+        ? stoopWorldCoverPreview(
+            context,
+            coverBytes: decodeWorldCoverBytes(world.coverImage),
+          )
+        : isGroup
         ? Container(
             width: 96,
             height: 96,
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: AppColors.resolve(
-                context,
-                Colors.purple.shade900.withValues(alpha: 0.35),
-                Colors.purple.shade50,
-              ),
+              color: stoopTealSoft(context),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: _groupMontage(_selectedGroup!),
+            child: StoopGroupMontage(group: _selectedGroup!),
           )
         : ClipRRect(
             borderRadius: BorderRadius.circular(12),
@@ -866,23 +797,19 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
                 children: [
                   Text(
                     _name.text.trim(),
-                    style: TextStyle(
-                      color: AppColors.textPrimary(context),
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: stoopDisplay(context, size: 21),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     _summary.text.trim(),
-                    style: TextStyle(color: AppColors.textSecondary(context)),
+                    style: TextStyle(color: stoopCream2(context)),
                   ),
                   if (_originalCreator.text.trim().isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text(
                       'created by ${_originalCreator.text.trim()}',
                       style: TextStyle(
-                        color: AppColors.textTertiary(context),
+                        color: stoopFaint(context),
                         fontSize: 12,
                         fontStyle: FontStyle.italic,
                       ),
@@ -890,32 +817,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
                   ],
                   if (_nsfw) ...[
                     const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.resolve(
-                          context,
-                          Colors.pinkAccent,
-                          Colors.pink,
-                        ).withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        'NSFW',
-                        style: TextStyle(
-                          color: AppColors.resolve(
-                            context,
-                            Colors.pinkAccent,
-                            Colors.pink,
-                          ),
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
+                    const StoopBadge(StoopBadgeKind.nsfw),
                   ],
                 ],
               ),
@@ -931,28 +833,22 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
               for (final t in _tags)
                 Text(
                   '#$t',
-                  style: TextStyle(color: AppColors.textTertiary(context)),
+                  style: TextStyle(color: stoopTealText(context)),
                 ),
             ],
           ),
         const SizedBox(height: 20),
         Text(
-          'Your character will be reviewed by a moderator before it appears on '
-          'The Stoop. You’ll get a message in the app when it’s approved or if '
-          'changes are needed.',
-          style: TextStyle(color: AppColors.textTertiary(context), height: 1.5),
+          'Your submission will be reviewed by a moderator before it appears '
+          'on The Stoop. You’ll get a message in the app when it’s approved or '
+          'if changes are needed.',
+          style: TextStyle(color: stoopMute(context), height: 1.5),
         ),
         if (_error != null) ...[
           const SizedBox(height: 16),
           Text(
             _error!,
-            style: TextStyle(
-              color: AppColors.resolve(
-                context,
-                Colors.redAccent,
-                Colors.red.shade700,
-              ),
-            ),
+            style: TextStyle(color: stoopEmberText(context)),
           ),
         ],
       ],
@@ -965,8 +861,8 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
         decoration: BoxDecoration(
-          color: AppColors.surfaceOf(context),
-          border: Border(top: BorderSide(color: AppColors.borderOf(context))),
+          color: stoopBg0(context),
+          border: Border(top: BorderSide(color: stoopBorder(context))),
         ),
         child: Row(
           children: [
@@ -974,24 +870,20 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
             if (_currentStep > (widget.isUpdate ? 1 : 0))
               TextButton(
                 onPressed: _busy ? null : () => setState(() => _currentStep--),
+                style: TextButton.styleFrom(
+                  foregroundColor: stoopCream2(context),
+                ),
                 child: const Text('Back'),
               ),
             const Spacer(),
-            FilledButton(
+            StoopAmberButton(
+              label: isLast ? 'Submit for review' : 'Next',
+              busy: _busy,
               onPressed: (_canAdvance && !_busy) ? _next : null,
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 28,
-                  vertical: 14,
-                ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 28,
+                vertical: 13,
               ),
-              child: _busy
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(isLast ? 'Submit for review' : 'Next'),
             ),
           ],
         ),
@@ -1004,55 +896,13 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     child: Text(
       text,
       style: TextStyle(
-        color: AppColors.textSecondary(context),
+        color: stoopCream2(context),
         fontSize: 13,
         fontWeight: FontWeight.w500,
       ),
     ),
   );
 
-  InputDecoration _input(String hint) => InputDecoration(
-    hintText: hint,
-    hintStyle: TextStyle(color: AppColors.textTertiary(context)),
-    filled: true,
-    fillColor: AppColors.surfaceContainerOf(context),
-    border: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: BorderSide(color: AppColors.borderOf(context)),
-    ),
-    enabledBorder: OutlineInputBorder(
-      borderRadius: BorderRadius.circular(10),
-      borderSide: BorderSide(color: AppColors.borderOf(context)),
-    ),
-  );
+  InputDecoration _input(String hint) => stoopInput(context, hint);
 
-  Widget _centeredHint(IconData icon, String title, String body) {
-    return Center(
-      key: const ValueKey('hint'),
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 48, color: AppColors.iconSecondary(context)),
-            const SizedBox(height: 14),
-            Text(
-              title,
-              style: TextStyle(
-                color: AppColors.textPrimary(context),
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              body,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textTertiary(context)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }

@@ -30,21 +30,17 @@ import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/services/model_file_check.dart';
-import 'package:front_porch_ai/services/model_manager.dart';
 import 'package:front_porch_ai/services/optimization_service.dart';
 import 'package:front_porch_ai/services/web/web_server_host.dart';
-import 'package:front_porch_ai/ui/dialogs/web_access_setup_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/rocm_guidance_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/database_cleanup_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/dialogs.dart';
 
-import 'package:front_porch_ai/ui/settings/widgets/section_header.dart';
+import 'package:front_porch_ai/ui/settings/widgets/widgets.dart';
 import 'package:front_porch_ai/ui/settings/tabs/general_tab.dart';
 import 'package:front_porch_ai/ui/settings/tabs/generation_tab.dart';
 import 'package:front_porch_ai/ui/settings/tabs/backend_tab.dart';
 
 import 'package:front_porch_ai/ui/settings/tabs/voice_media_tab.dart';
-import 'package:front_porch_ai/ui/settings/widgets/web_login_section.dart';
-import 'package:front_porch_ai/utils/picker_prefs.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 // Note: Image Generation *config* options (backend / model / LoRAs) live in a first-class
 // tab-like panel inside the Image Studio (see generation_options_tab.dart + studio integration).
 // Only the discoverable on/off switch was re-surfaced in the Voice & Media tab via
@@ -88,6 +84,26 @@ class _SettingsPageState extends State<SettingsPage> {
   // Remote API state (the fetched model list is shared with the Voice tab;
   // the fetch/check spinners now live in the extracted backend sections).
   List<RemoteModelInfo> _availableModels = [];
+
+  // Session-scoped stale-while-revalidate cache for the remote model list:
+  // Settings used to fire an HTTP fetch on EVERY open, and the page opened
+  // with an empty dropdown until it returned. Seed from the last successful
+  // fetch instantly; the background refresh still runs and replaces it.
+  static List<RemoteModelInfo>? _modelsCache;
+  static String? _modelsCacheKey;
+
+  // Memoized model file size for the VRAM gauge (settings_page.hardware.dart):
+  // the gauge is rebuilt PER FRAME while dragging the context slider, and it
+  // used to existsSync + lengthSync a multi-GB GGUF on every one of those
+  // frames. Resolved once per selected path instead.
+  int _modelSizeMbCache = 0;
+  String? _modelSizeMbForPath;
+
+  // Memoized KV-cost future for the same gauge (a fresh Future per rebuild
+  // made the FutureBuilder flip between exact and heuristic estimates every
+  // frame mid-drag).
+  Future<int?>? _kvBytesFuture;
+  String? _kvBytesFuturePath;
 
   // Local Preset state
   List<File> _localPresets = [];
@@ -175,6 +191,12 @@ class _SettingsPageState extends State<SettingsPage> {
     if (storage.remoteApiUrl.isEmpty) return; // No API URL configured
     if (storage.remoteApiKey.isEmpty && !isLocal) return; // no API configured
 
+    // Instant dropdown from the last successful fetch for this URL; the
+    // network refresh below still replaces it when it lands.
+    if (_modelsCache != null && _modelsCacheKey == storage.remoteApiUrl) {
+      setState(() => _availableModels = _modelsCache!);
+    }
+
     final openRouter = Provider.of<OpenRouterService>(context, listen: false);
     // Explicit-target fetch — configure() here silently re-routed the ACTIVE
     // backend (opening Settings while on oMLX pointed all chat traffic at the
@@ -185,6 +207,8 @@ class _SettingsPageState extends State<SettingsPage> {
         apiKey: storage.remoteApiKey,
       );
       if (mounted && models.isNotEmpty) {
+        _modelsCache = models;
+        _modelsCacheKey = storage.remoteApiUrl;
         setState(() => _availableModels = models);
       }
     } catch (_) {
@@ -256,8 +280,13 @@ class _SettingsPageState extends State<SettingsPage> {
                       setState(() => _dragCallBuffer = v),
                   availableModels: _availableModels,
                 ),
-                _backendTab(),
-                _buildAdvancedTab(context),
+                // Builder defers these two until their tab actually mounts:
+                // both are method calls that subscribe to services and build
+                // their full trees, so evaluating them inline meant every
+                // settings notify re-ran ALL five tabs' construction even
+                // with a different tab visible.
+                Builder(builder: (context) => _backendTab()),
+                Builder(builder: (context) => _buildAdvancedTab(context)),
               ],
             ),
           ),

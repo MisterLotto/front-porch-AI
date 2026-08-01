@@ -24,13 +24,10 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as p;
 
 import 'package:front_porch_ai/database/database.dart';
-import 'package:front_porch_ai/models/group_card.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/backporch/backporch_api.dart';
-import 'package:front_porch_ai/services/character_repository.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/group_card_importer.dart';
-import 'package:front_porch_ai/services/group_chat_repository.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
-import 'package:front_porch_ai/services/v2_card_service.dart';
 
 /// A raw upstream response, passed through to the web client verbatim so the
 /// browser sees exactly the status codes and machine-readable `error` fields
@@ -62,15 +59,18 @@ class StoopFacade {
     this._db, {
     CharacterRepository? characters,
     GroupChatRepository? groups,
+    WorldRepository? worlds,
     BackporchApi? api,
   }) : _characters = characters,
        _groups = groups,
+       _worlds = worlds,
        _api = api ?? BackporchApi();
 
   final StorageService _storage;
   final AppDatabase _db;
   final CharacterRepository? _characters;
   final GroupChatRepository? _groups;
+  final WorldRepository? _worlds;
   final BackporchApi _api;
 
   /// Upstream REST base, e.g. `https://api.frontporchai.app`.
@@ -116,6 +116,33 @@ class StoopFacade {
     } finally {
       client.close();
     }
+  }
+
+  /// Re-wrap browser-supplied image bytes as the backend's multipart avatar
+  /// upload (`POST /me/avatar`), passing the upstream status + body through
+  /// verbatim like [forward].
+  Future<StoopProxyResult> forwardAvatarUpload({
+    required String token,
+    required Uint8List bytes,
+    required String contentType,
+  }) async {
+    _assetToken = token;
+    // Default to jpg, not png: the web client's canvas crop always emits
+    // JPEG, so a stripped/unknown Content-Type is still almost surely jpeg.
+    final ext = contentType.contains('png')
+        ? 'png'
+        : contentType.contains('webp')
+        ? 'webp'
+        : 'jpg';
+    final req = http.MultipartRequest('POST', Uri.parse('$baseUrl/me/avatar'))
+      ..headers['Authorization'] = 'Bearer $token'
+      ..files.add(
+        http.MultipartFile.fromBytes('avatar', bytes, filename: 'avatar.$ext'),
+      );
+    final res = await http.Response.fromStream(
+      await req.send().timeout(const Duration(seconds: 60)),
+    );
+    return StoopProxyResult(res.statusCode, res.body);
   }
 
   /// Fetch a card asset (avatar) for serving to the browser. [token] comes
@@ -173,6 +200,15 @@ class StoopFacade {
     final payload = await _api.download(token, cardId);
     final cardJson = payload['card'] as Map<String, dynamic>?;
     if (cardJson == null) return {'ok': false, 'error': 'no_card_data'};
+
+    // World cards carry the .fpworld envelope — import as a new place (lore +
+    // climate + traits + cover), same as the desktop detail page.
+    if ((payload['type'] as String?) == 'WORLD') {
+      final worlds = _worlds;
+      if (worlds == null) return {'ok': false, 'error': 'library_unavailable'};
+      final imported = await worlds.importWorldJson(cardJson);
+      return {'ok': true, 'name': imported.name, 'type': 'WORLD'};
+    }
 
     // Group cards carry a members list; solo cards are V2 character JSON.
     final isGroup =

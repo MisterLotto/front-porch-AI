@@ -1,10 +1,9 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:front_porch_ai/services/hardware_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/utils/gguf_model_info.dart';
-import 'package:front_porch_ai/utils/vram_estimator.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 class VramUsageSection extends StatelessWidget {
   const VramUsageSection({

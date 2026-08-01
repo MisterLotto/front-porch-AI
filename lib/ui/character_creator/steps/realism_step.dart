@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:front_porch_ai/ui/character_creator/creator_state.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/needs_form_section.dart';
-import 'package:front_porch_ai/ui/widgets/realism_form_section.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 /// Step 4: seed the Realism Engine's initial state for the generated character.
 /// Restored from the god file's `_buildRealismStep` — the full form is now wired

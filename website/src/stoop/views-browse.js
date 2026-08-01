@@ -12,6 +12,7 @@
   var FILTERS = [
     { key: 'solo', label: 'Solo characters', type: 'solo' },
     { key: 'group', label: '👥 Group casts', type: 'group' },
+    { key: 'world', label: '🏞️ Worlds', type: 'world' },
     { key: 'following', label: '☆ Following', type: 'all' },
   ];
   var SORTS = [
@@ -63,6 +64,7 @@
     var moreWrap = el('div', { class: 'hub-more-wrap hub-hidden' }, moreBtn);
     var status = el('div');
     var showcase = el('div', { class: 'hub-showcase' });     // Mod's Picks hero + carousel
+    var followRow = el('div', { class: 'hub-followrow' });     // "From your porch" (followed creators)
     var groupWarn = el('div');                                 // strong FPAI-only warning
 
     function activeFilter() {
@@ -74,6 +76,9 @@
       return {
         sort: browseState.sort,
         type: f.type,
+        // The hub understands worlds, so the personal Following feed opts in
+        // to the mixed view (worlds stay invisible to clients that don't).
+        types: browseState.filter === 'following' ? 'solo,group,world' : undefined,
         following: browseState.filter === 'following' ? 'true' : undefined,
         q: browseState.q || undefined,
         page: p,
@@ -87,8 +92,46 @@
     function refreshChrome() {
       var f = browseState.filter;
       showcase.replaceChildren();
-      if (!browseState.q && f === 'solo') S.viewsPicks.renderPicksShowcase(showcase, 'solo');
-      ui.mountChildren(groupWarn, f === 'group' ? groupWarning() : null);
+      followRow.replaceChildren();
+      if (!browseState.q && f === 'solo') {
+        S.viewsPicks.renderPicksShowcase(showcase, 'solo');
+        renderFollowRow(followRow);
+      }
+      ui.mountChildren(groupWarn, f === 'group' ? groupWarning() : f === 'world' ? worldNote() : null);
+    }
+
+    // "From your porch": the newest cards from creators you follow, tucked
+    // right under Mod's Picks — following someone actually changes your porch.
+    // Signed-in only, and the row vanishes entirely when there's nothing in it
+    // (guests and non-followers see the browse they've always seen).
+    function renderFollowRow(container) {
+      if (!Api.state.user) return;
+      Api.browse({ following: 'true', types: 'solo,group,world', sort: 'newest', take: 8, page: 0 })
+        .then(function (res) {
+          var items = res.items || [];
+          if (!items.length) { container.replaceChildren(); return; }
+          ui.mountChildren(container, [
+            el('div', { class: 'hub-pick-head' }, [
+              el('span', { class: 'hub-pick-eyebrow hub-follow-eyebrow' }, '🪑 From your porch'),
+              el('span', { class: 'hub-dim hub-small' }, 'New cards from creators you follow'),
+            ]),
+            el('div', { class: 'hub-pickrow' }, items.map(followTile)),
+          ]);
+        })
+        .catch(function () { container.replaceChildren(); });
+    }
+
+    function followTile(card) {
+      return el('a', { class: 'hub-picktile', href: '#/card/' + card.id }, [
+        el('div', { class: 'hub-picktile-art' }, [ui.avatarImg(card.primaryAssetId, card.name, 'hub-picktile-img')]),
+        el('div', { class: 'hub-picktile-badges' }, [
+          card.type === 'GROUP' ? el('span', { class: 'hub-badge hub-badge-group' }, '👥') : null,
+          card.type === 'WORLD' ? el('span', { class: 'hub-badge hub-badge-world' }, '🏞️') : null,
+          card.nsfw ? el('span', { class: 'hub-badge hub-badge-nsfw' }, '18+') : null,
+        ]),
+        el('div', { class: 'hub-picktile-name' }, card.name),
+        card.creator ? el('div', { class: 'hub-followrow-by' }, '@' + card.creator.displayName) : null,
+      ]);
     }
 
     function load(p) {
@@ -107,7 +150,12 @@
           status.replaceChildren(ui.emptyState('🪑', 'Nothing here yet',
             browseState.q ? 'No cards match that search. Try @creator or #tag.' :
             browseState.filter === 'following' ? 'Follow some creators and their new cards will show up here.' :
+            browseState.filter === 'world' ? 'No worlds on the porch yet — be the first to share a place.' :
             'Check back soon — the neighbours are still writing.'));
+          if (browseState.filter === 'world' && !browseState.q && Api.state.user) {
+            status.appendChild(el('div', { class: 'hub-empty-cta' },
+              el('a', { class: 'btn btn-amber', href: '#/submit-world' }, '🏞️ Share a world')));
+          }
         }
         moreWrap.classList.toggle('hub-hidden', items.length < TAKE);
         moreBtn.disabled = false;
@@ -173,6 +221,7 @@
       el('div', { class: 'hub-controls' }, [search, sortSel, nsfwBtn]),
       chipRow,
       showcase,
+      followRow,
       groupWarn,
       status,
       grid,
@@ -192,6 +241,28 @@
           el('strong', null, 'No other app can read it'),
           ' — not SillyTavern, not Backyard, nothing. Download one only if you use Front Porch AI. ',
           el('a', { href: 'https://frontporchai.app/#get', target: '_blank', rel: 'noopener' }, 'Get the app →'),
+        ]),
+      ]),
+    ]);
+  }
+
+  // The Worlds tab intro — what a .fpworld is and where it goes after download.
+  function worldNote() {
+    return el('div', { class: 'hub-groupwarn hub-worldnote' }, [
+      el('span', { class: 'hub-groupwarn-ico' }, '🏞️'),
+      el('div', null, [
+        el('strong', null, 'Worlds are complete places for Front Porch AI.'),
+        el('p', null, [
+          'One .fpworld file carries the cover art, lore, custom climate, and place traits. ',
+          'Download one, then import it in the app under ',
+          el('strong', null, 'Worlds → Import Place'),
+          ' and attach it to any character or chat. ',
+          el('a', { href: 'https://frontporchai.app/#get', target: '_blank', rel: 'noopener' }, 'Get the app →'),
+        ]),
+        el('p', null, [
+          '⚠️ ',
+          el('strong', null, 'Rawhide (nightly) builds only for now'),
+          ' — the current stable release can’t import .fpworld files yet. Worlds support reaches stable with the next release.',
         ]),
       ]),
     ]);
@@ -240,10 +311,30 @@
     ]);
   }
 
+  /* .fpworld envelope detail — about / climate / traits / lore. The envelope
+     keys the lorebook `lorebook` (not V2's `character_book`); entry shape is
+     the same, so lorebookSection renders it unchanged. */
+  function worldSections(card) {
+    var biome = card.biome || {};
+    var climate = [biome.displayName, biome.feel, biome.description]
+      .filter(function (v) { return typeof v === 'string' && v.trim(); }).join('\n\n');
+    var traits = card.place_traits || {};
+    var traitBits = ['atmosphere', 'gravity'].filter(function (k) {
+      return typeof traits[k] === 'string' && traits[k].trim();
+    }).map(function (k) { return k + ': ' + traits[k]; }).join('\n');
+    return [
+      textSection('About this place', card.description, true),
+      textSection('Climate', climate, true),
+      textSection('Place traits', traitBits),
+      lorebookSection(card.lorebook),
+    ];
+  }
+
   function renderCard(mount, id) {
     mount.replaceChildren(ui.spinner());
     Api.cardDetail(id).then(function (c) {
       var isGroup = c.type === 'GROUP';
+      var isWorld = c.type === 'WORLD';
       var card = c.card || {};
       var signedIn = !!Api.state.user;
 
@@ -268,7 +359,7 @@
       paintVotes();
 
       /* --- download (everyone, incl. guests) --- */
-      var dlBtn = el('button', { class: 'btn btn-amber', type: 'button' }, '⤓ Download card');
+      var dlBtn = el('button', { class: 'btn btn-amber', type: 'button' }, isWorld ? '⤓ Download world' : '⤓ Download card');
       dlBtn.addEventListener('click', function () {
         ui.downloadCard({ id: id, name: c.name, type: c.type, primaryAssetId: c.primaryAssetId }, dlBtn);
       });
@@ -310,7 +401,20 @@
         ]);
       }
 
-      var caveat = isGroup
+      var caveat = isWorld
+        ? el('div', { class: 'hub-caveat group' }, [
+            el('span', { class: 'hub-caveat-ico' }, '🏞️'),
+            el('div', null, [
+              el('strong', null, 'This is a world for Front Porch AI. '),
+              'The .fpworld file carries the cover art, lore, custom climate, and place traits. ',
+              'Import it in the app under ',
+              el('strong', null, 'Worlds → Import Place'),
+              ', then attach it to any character or chat. ',
+              el('strong', null, '⚠️ Rawhide (nightly) builds only for now'),
+              ' — the current stable release can’t import .fpworld files yet.',
+            ]),
+          ])
+        : isGroup
         ? el('div', { class: 'hub-caveat group' }, [
             el('span', { class: 'hub-caveat-ico' }, '⚠️'),
             el('div', null, [
@@ -343,6 +447,7 @@
           el('div', { class: 'hub-detail-art' }, [ui.avatarImg(c.primaryAssetId, c.name, 'hub-detail-img')]),
           el('div', { class: 'hub-detail-info' }, [
             el('div', { class: 'hub-detail-badges' }, [
+              isWorld ? el('span', { class: 'hub-badge hub-badge-world' }, '🏞️ World') : null,
               isGroup ? el('span', { class: 'hub-badge hub-badge-group' }, '👥 Group cast') : null,
               c.nsfw ? el('span', { class: 'hub-badge hub-badge-nsfw' }, '18+') : null,
               c.modPick ? el('span', { class: 'hub-badge hub-badge-pick' }, '★ Mod’s Pick') : null,
@@ -365,7 +470,7 @@
           ]),
         ]),
         membersBlock,
-        el('div', { class: 'hub-sects' }, [
+        el('div', { class: 'hub-sects' }, isWorld ? worldSections(card) : [
           textSection('Description', card.description, true),
           textSection('Personality', card.personality),
           textSection('Scenario', card.scenario),
@@ -431,9 +536,15 @@
           }))
         : null;
 
+      // Profile avatar when the creator set one; their amber monogram otherwise.
+      var ava = cr.avatarAssetId
+        ? el('div', { class: 'hub-creator-ava' }, [ui.avatarImg(cr.avatarAssetId, cr.displayName, 'hub-creator-ava-img')])
+        : el('div', { class: 'hub-creator-ava hub-creator-mono' }, (cr.displayName || '?').charAt(0).toUpperCase());
+
       mount.replaceChildren(el('div', null, [
         el('a', { class: 'hub-back', href: '#/' }, '← Back to browsing'),
         el('div', { class: 'hub-creator-head' }, [
+          ava,
           el('h2', null, cr.displayName),
           followers,
           statLine,

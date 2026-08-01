@@ -19,8 +19,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:front_porch_ai/services/character_repository.dart';
-import 'package:front_porch_ai/services/user_persona_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/story_setup/setup_widgets.dart';
 import 'package:front_porch_ai/ui/story_setup/story_setup_draft.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';

@@ -1,0 +1,66 @@
+// Copyright (C) 2026 Front Porch AI
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// Barrel for the chat domain leaf services: Realism/Needs simulation, evals,
+// the Journal, Growth Rings, objectives, relationships, chaos, weather, and
+// the ChatService generation/session helpers.
+
+export 'absence_tracker.dart';
+export 'afk_flavor.dart';
+export 'ambition_service.dart';
+export 'biome_preview.dart';
+export 'biome_schedule.dart';
+export 'cast_detector.dart';
+export 'chaos_mode_service.dart';
+export 'chat_command_handler.dart';
+export 'dream_service.dart';
+export 'expression_classifier.dart';
+export 'growth_ops.dart';
+export 'growth_physics.dart';
+export 'growth_prompt.dart';
+export 'growth_review.dart';
+export 'growth_service.dart';
+export 'growth_store.dart';
+export 'image_command_service.dart';
+export 'journal_maintenance.dart';
+export 'journal_ops.dart';
+export 'journal_physics.dart';
+export 'journal_prompt.dart';
+export 'journal_review.dart';
+export 'journal_store.dart';
+export 'llm_eval_engine.dart';
+export 'lorebook_collection.dart';
+export 'lorebook_injector.dart';
+export 'lorebook_matcher.dart';
+export 'lorebook_scanner.dart';
+export 'lorebook_timed_effects.dart';
+export 'member_origin_resolver.dart';
+export 'milestone_feed.dart';
+export 'milestone_providers.dart';
+export 'needs_impact_evaluator.dart';
+export 'needs_simulation.dart';
+export 'nsfw_service.dart';
+export 'objective_proposal.dart';
+export 'pass_support.dart';
+export 'porch_memory_import.dart';
+export 'porch_memory_mailbox.dart';
+export 'porch_memory_models.dart';
+export 'promise_debt_service.dart';
+export 'prompt_plan.dart';
+export 'realism_evals.dart';
+export 'realism_prompt_builder.dart';
+export 'realism_tools.dart';
+export 'realism_verification.dart';
+export 'relationship_milestones.dart';
+export 'relationship_service.dart';
+export 'scene_guest_director.dart';
+export 'scene_guest_factory.dart';
+export 'stop_sequences.dart';
+export 'story_clock.dart';
+export 'time_service.dart';
+export 'tool_support_tester.dart';
+export 'weather_biomes.dart';
+export 'weather_engine.dart';
+export 'weather_providers.dart';
+export 'weather_segments.dart';
+export 'weather_skins.dart';

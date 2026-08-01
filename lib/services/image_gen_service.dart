@@ -26,14 +26,12 @@ import 'package:path/path.dart' as path;
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/grpc/draw_things_grpc_service.dart';
-import 'package:front_porch_ai/services/image_prompt/image_gen_context.dart';
+import 'package:front_porch_ai/services/image_prompt/image_prompt.dart';
 import 'package:front_porch_ai/services/comfy_ui_service.dart';
 import 'package:front_porch_ai/services/image/model_family.dart';
 import 'package:front_porch_ai/services/image/edit_profile.dart';
 import 'package:front_porch_ai/services/image/comfy_edit_presets.dart';
-import 'package:front_porch_ai/services/capability/image_reference_role.dart';
-import 'package:front_porch_ai/services/capability/image_reference_resolver.dart';
-import 'package:front_porch_ai/services/image_prompt/image_prompt_builder.dart';
+import 'package:front_porch_ai/services/capability/capability.dart';
 
 /// Available image generation subjects.
 ///

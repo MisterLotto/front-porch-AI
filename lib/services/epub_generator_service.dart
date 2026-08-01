@@ -19,7 +19,7 @@
 import 'dart:convert';
 import 'package:archive/archive.dart';
 import 'package:uuid/uuid.dart';
-import 'package:front_porch_ai/models/story_project.dart';
+import 'package:front_porch_ai/models/models.dart';
 
 class FormattedEbook {
   final StoryProject project;

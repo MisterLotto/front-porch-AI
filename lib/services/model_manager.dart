@@ -23,10 +23,8 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart' as path;
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/download_manager.dart';
-import 'package:front_porch_ai/utils/gguf_parser.dart'; // for GGUFModelInfo + parser
-import 'package:front_porch_ai/models/hf_model.dart';
-import 'package:front_porch_ai/models/local_model_info.dart';
-import 'package:front_porch_ai/models/download_task.dart';
+import 'package:front_porch_ai/utils/utils.dart'; // GGUFModelInfo + parser, StartupTrace
+import 'package:front_porch_ai/models/models.dart';
 
 /// Manages local model files and HuggingFace model discovery.
 ///
@@ -81,8 +79,20 @@ class ModelManager extends ChangeNotifier {
 
   ModelManager(this._storageService, this._downloadManager) {
     _init();
-    _storageService.addListener(_init);
+    _storageService.addListener(_onStorageChanged);
     _downloadManager.addListener(_onDownloadChanged);
+  }
+
+  // StorageService notifies on EVERY settings mutation, but a full recursive
+  // model-directory rescan (synchronous listSync on the UI isolate) only
+  // matters when the models directory itself moved — re-scanning per notify
+  // made flipping any unrelated settings toggle walk the whole models dir.
+  String? _lastScannedRoot;
+  void _onStorageChanged() {
+    final root = _storageService.rootPath;
+    if (root == _lastScannedRoot) return;
+    _lastScannedRoot = root;
+    _init();
   }
 
   /// Notifies listeners when download state changes.
@@ -152,7 +162,7 @@ class ModelManager extends ChangeNotifier {
 
   @override
   void dispose() {
-    _storageService.removeListener(_init);
+    _storageService.removeListener(_onStorageChanged);
     _downloadManager.removeListener(_onDownloadChanged);
     super.dispose();
   }
@@ -164,11 +174,17 @@ class ModelManager extends ChangeNotifier {
   /// Scans the models directory for .gguf files.
   Future<void> refreshModels() async {
     if (_storageService.rootPath == null) return;
+    final traceStart = DateTime.now();
     final modelDir = _storageService.modelsDir;
 
     if (await modelDir.exists()) {
       try {
-        _models = _safeRecursiveScan(modelDir);
+        // Off the UI isolate: this walk used to listSync + resolve symlinks
+        // recursively on the main thread (a visible startup/settings hitch on
+        // big or networked model dirs). Entities rebuilt from paths — File
+        // objects don't cross isolates.
+        final paths = await compute(_scanGgufPathsSync, modelDir.path);
+        _models = [for (final p in paths) File(p)];
       } catch (e) {
         print('AG_DEBUG: Error scanning models: $e');
         _models = [];
@@ -177,36 +193,10 @@ class ModelManager extends ChangeNotifier {
       _models = [];
     }
     notifyListeners();
-  }
-
-  /// Recursively scans directories for .gguf files.
-  /// Tracks canonical paths to avoid duplicate symlinks.
-  List<FileSystemEntity> _safeRecursiveScan(
-    Directory dir, [
-    Set<String>? _seen,
-  ]) {
-    final seen = _seen ?? <String>{};
-    final results = <FileSystemEntity>[];
-    try {
-      for (final entity in dir.listSync(followLinks: true)) {
-        if (entity is Directory) {
-          results.addAll(_safeRecursiveScan(entity, seen));
-        } else if (entity.path.toLowerCase().endsWith('.gguf')) {
-          String canonical;
-          try {
-            canonical = File(entity.path).resolveSymbolicLinksSync();
-          } catch (_) {
-            canonical = entity.path;
-          }
-          if (seen.add(canonical)) {
-            results.add(entity);
-          }
-        }
-      }
-    } catch (e) {
-      print('AG_DEBUG: Skipping inaccessible directory: ${dir.path} ($e)');
-    }
-    return results;
+    StartupTrace.mark(
+      'ModelManager.refreshModels — ${_models.length} models in '
+      '${DateTime.now().difference(traceStart).inMilliseconds}ms',
+    );
   }
 
   /// Imports a local .gguf file into the models directory.
@@ -409,4 +399,36 @@ class ModelManager extends ChangeNotifier {
         )
         .toList();
   }
+}
+
+/// Isolate entry for the recursive .gguf scan (used via compute above).
+/// Same traversal the old in-place _safeRecursiveScan did: follow links,
+/// dedupe by canonical path, skip inaccessible directories.
+List<String> _scanGgufPathsSync(String rootPath) {
+  final seen = <String>{};
+  final results = <String>[];
+  void walk(Directory dir) {
+    try {
+      for (final entity in dir.listSync(followLinks: true)) {
+        if (entity is Directory) {
+          walk(entity);
+        } else if (entity.path.toLowerCase().endsWith('.gguf')) {
+          String canonical;
+          try {
+            canonical = File(entity.path).resolveSymbolicLinksSync();
+          } catch (_) {
+            canonical = entity.path;
+          }
+          if (seen.add(canonical)) {
+            results.add(entity.path);
+          }
+        }
+      }
+    } catch (e) {
+      print('AG_DEBUG: Skipping inaccessible directory: ${dir.path} ($e)');
+    }
+  }
+
+  walk(Directory(rootPath));
+  return results;
 }

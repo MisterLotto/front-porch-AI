@@ -18,10 +18,9 @@
 
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:front_porch_ai/models/hf_model.dart';
-import 'package:front_porch_ai/models/download_task.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/utils/vram_estimator.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Glassmorphic card displaying a HuggingFace model with expandable quant options.
 ///

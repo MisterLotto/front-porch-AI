@@ -19,8 +19,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/database/database.dart';
-import 'package:front_porch_ai/services/chat/journal_store.dart';
-import 'package:front_porch_ai/services/chat/story_clock.dart';
+import 'package:front_porch_ai/services/chat/chat.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'journal_card_editor.dart';

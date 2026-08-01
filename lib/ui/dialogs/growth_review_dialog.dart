@@ -18,8 +18,7 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/services/chat/growth_ops.dart';
-import 'package:front_porch_ai/services/chat/growth_review.dart';
+import 'package:front_porch_ai/services/chat/chat.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Growth review-first mode (docs/design/growth-rings.md §3.1, default OFF):

@@ -21,8 +21,7 @@ import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/settings/widgets/section_header.dart';
-import 'package:front_porch_ai/ui/settings/widgets/slider_setting.dart';
+import 'package:front_porch_ai/ui/settings/widgets/widgets.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 /// Generation-settings tab extracted from settings_page (Stage 5, remaining

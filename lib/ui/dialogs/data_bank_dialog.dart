@@ -26,8 +26,8 @@ import 'package:path/path.dart' as p;
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/services/embedding_service.dart';
-import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
-import 'package:front_porch_ai/utils/picker_prefs.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Dialog for managing Data Bank entries (per-character knowledge base).
 /// Supports manual text entry and file import (txt, md, json, csv, pdf).

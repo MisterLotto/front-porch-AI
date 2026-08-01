@@ -18,7 +18,7 @@
 
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:front_porch_ai/models/story_project.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/story/faithful_mode.dart';
 import 'package:front_porch_ai/services/story_repository.dart';
 import 'package:front_porch_ai/services/llm_service.dart';

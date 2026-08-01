@@ -22,10 +22,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/database/database.dart' hide AvatarImage;
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/models/chat_message.dart';
-import 'package:front_porch_ai/models/group_chat.dart';
-import 'package:front_porch_ai/services/llm_service.dart';
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/services.dart';
 
 /// Plain (non-ChangeNotifier) leaf sibling to LlmEvalEngine owning the objective
 /// proposal path handling support (autonomous "none" vs value + dedup +

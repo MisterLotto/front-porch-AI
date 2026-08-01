@@ -91,5 +91,59 @@ void main() {
       expect(await facade.delete('nope'), isFalse);
       expect(facade.detail('nope'), isNull);
     });
+
+    test('importWorld keeps place traits and custom climate (shared core)',
+        () async {
+      // A minimal .fpworld envelope with hostile air and a custom biome —
+      // the web import must preserve both, exactly like desktop file import.
+      expect(
+        await facade.importWorld({
+          'formatVersion': 1,
+          'id': 'pkg-123',
+          'name': 'The Cindermaw',
+          'description': 'Black glass and live lava.',
+          'lorebook': {
+            'entries': [
+              {'keys': ['White Peak'], 'content': 'The frozen mountain.'},
+            ],
+          },
+          'place_traits': {'atmosphere': 'hostile', 'gravity': 'low'},
+          'biome': {
+            'id': 'custom',
+            'displayName': 'Cindermaw climate',
+            'description': 'Furnace seasons.',
+            'weights': {
+              'winter': [50, 20, 12, 8, 4, 6, 0],
+              'spring': [50, 20, 12, 8, 4, 6, 0],
+              'summer': [50, 20, 12, 8, 4, 6, 0],
+              'autumn': [50, 20, 12, 8, 4, 6, 0],
+            },
+            'baseTemp': {
+              'winter': 4,
+              'spring': 6,
+              'summer': 7,
+              'autumn': 6,
+            },
+            'bandRange': [3, 6],
+            'displayAnchorsC': {
+              'winter': 62,
+              'spring': 240,
+              'summer': 540,
+              'autumn': 205,
+            },
+            'diurnalAmplitude': 2.6,
+          },
+        }),
+        isTrue,
+      );
+      final detail = facade.list().firstWhere(
+            (m) => m['name'] == 'The Cindermaw',
+          );
+      final imported = facade.detail(detail['id'] as String)!;
+      expect(imported['atmosphere'], 'hostile');
+      expect(imported['gravity'], 'low');
+      expect(imported['biomeId'], 'custom',
+          reason: 'custom climate must survive web import');
+    });
   });
 }

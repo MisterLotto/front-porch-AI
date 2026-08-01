@@ -18,10 +18,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
-import 'package:front_porch_ai/services/voice_manager.dart';
-import 'package:front_porch_ai/services/tts_service.dart';
-import 'package:front_porch_ai/services/tts_voice_info.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/elevenlabs_tts_engine.dart';
 import 'package:front_porch_ai/ui/dialogs/voice_browser_dialog.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
@@ -743,7 +740,9 @@ class _TtsSettingsDialogState extends State<TtsSettingsDialog> {
       const Padding(
         padding: EdgeInsets.symmetric(horizontal: 4),
         child: Text(
-          'All voices are included in the base model — no additional downloads needed.',
+          'All voices are included in the base model — no additional downloads '
+          'needed. This is the default voice; a character with its own voice '
+          'assigned keeps using that one.',
           style: TextStyle(color: Colors.white24, fontSize: 10),
         ),
       ),

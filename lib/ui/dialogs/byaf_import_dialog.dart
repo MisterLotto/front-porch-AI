@@ -376,7 +376,11 @@ class _ByafImportDialogState extends State<ByafImportDialog> {
           color: AppColors.formMasterAccent.withValues(alpha: 0.3),
         ),
       ),
-      child: CheckboxListTile(
+      // Own transparent Material so the tile's ink isn't hidden under the
+      // tinted DecoratedBox (Flutter's ink-visibility assertion).
+      child: Material(
+        color: Colors.transparent,
+        child: CheckboxListTile(
         value: value,
         onChanged: onChanged,
         title: Text(
@@ -399,6 +403,7 @@ class _ByafImportDialogState extends State<ByafImportDialog> {
         contentPadding: EdgeInsets.zero,
         controlAffinity: ListTileControlAffinity.leading,
         dense: true,
+        ),
       ),
     );
   }

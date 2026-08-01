@@ -149,6 +149,64 @@ extension ChatServiceGroupRealismHelpers on ChatService {
     return const <String, int>{};
   }
 
+  /// Give back what a deleted message spent.
+  ///
+  /// A message's chips (`needs_deltas`) ARE the record of what that turn did to
+  /// the speaker's needs, so deleting it subtracts those deltas from the
+  /// CURRENT scores. Deliberately arithmetic rather than time travel: a message
+  /// buried twenty turns back rolls its cost off exactly like the newest one,
+  /// which is what the realism snapshot ("restore the state stamped on the new
+  /// last message") could never do — it only ever rewound the tail, so a reply
+  /// that cost 20 hunger kept costing it forever once deleted.
+  ///
+  /// [liveBefore] is the speaker's needs captured BEFORE the delete path's
+  /// realism time-travel ran. That restore rewinds the whole realism snapshot
+  /// (bond/trust/emotion/time) and its needs half would otherwise fight this
+  /// arithmetic, so needs are settled here and here only.
+  ///
+  /// 1:1/group parity: [groupSid] names the DELETED speaker, so a group refund
+  /// lands in their own `_groupRealism` entry exactly as a 1:1 refund lands in
+  /// the live vector.
+  void _revertNeedsForDeletedMessage(
+    ChatMessage deleted,
+    Map<String, int> liveBefore, {
+    String? groupSid,
+  }) {
+    if (!_needsSimEnabled || liveBefore.isEmpty) return;
+    final raw = deleted.activeMetadata?['needs_deltas'];
+    if (raw is! Map || raw.isEmpty) return;
+
+    final refunded = Map<String, int>.from(liveBefore);
+    var changed = false;
+    for (final entry in raw.entries) {
+      final key = entry.key.toString();
+      final v = entry.value;
+      // Chips are {delta, reason}; tolerate a bare number from older rows.
+      final delta = (v is Map && v['delta'] is num)
+          ? (v['delta'] as num).toInt()
+          : (v is num ? v.toInt() : 0);
+      if (delta == 0 || !refunded.containsKey(key)) continue;
+      refunded[key] = (refunded[key]! - delta).clamp(0, 100);
+      changed = true;
+    }
+    if (!changed) return;
+
+    if (groupSid != null && groupSid.isNotEmpty) {
+      _setGroupNeeds(groupSid, refunded);
+      // Keep the live scalars in step when the refunded speaker is the one
+      // currently loaded, or the sidebar keeps showing the stale figure.
+      if (_getCurrentSpeakerIdForRealism() == groupSid) {
+        _needsSimulation.restoreFromSnapshot({'vector': refunded});
+      }
+    } else {
+      _needsSimulation.restoreFromSnapshot({'vector': refunded});
+    }
+    debugPrint(
+      '[Realism:Needs] Deleted message refunded its deltas to '
+      '${deleted.sender}${groupSid == null ? '' : ' ($groupSid)'}',
+    );
+  }
+
   /// Compute + attach this message's needs-delta chips (`needs_deltas`) from the
   /// speaker's pre-turn baseline to their post-turn (decay + impact) needs.
   ///

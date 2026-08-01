@@ -10,6 +10,7 @@
 
 import 'package:flutter/material.dart';
 
+import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Tag picker for the Stoop upload flow. The card's tags (plus any the creator
@@ -73,7 +74,7 @@ class StoopTagSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = AppColors.resolve(context, Colors.tealAccent, Colors.teal);
+    final accent = stoopTealText(context);
     final atCap = selected.length >= max;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -83,7 +84,7 @@ class StoopTagSelector extends StatelessWidget {
             Text(
               'Tags',
               style: TextStyle(
-                color: AppColors.textSecondary(context),
+                color: stoopCream2(context),
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
@@ -92,7 +93,7 @@ class StoopTagSelector extends StatelessWidget {
             Text(
               '${selected.length}/$max',
               style: TextStyle(
-                color: atCap ? accent : AppColors.textTertiary(context),
+                color: atCap ? accent : stoopFaint(context),
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
@@ -104,10 +105,7 @@ class StoopTagSelector extends StatelessWidget {
           Text(
             'This character has ${pool.length} tags — pick the $max to show on '
             'the Stoop.',
-            style: TextStyle(
-              color: AppColors.textTertiary(context),
-              fontSize: 12,
-            ),
+            style: TextStyle(color: stoopMute(context), fontSize: 12),
           ),
         ],
         const SizedBox(height: 10),
@@ -126,20 +124,20 @@ class StoopTagSelector extends StatelessWidget {
                   onSelected: (selected.contains(t) || !atCap)
                       ? (_) => onToggle(t)
                       : null,
-                  backgroundColor: AppColors.surfaceContainerOf(context),
-                  selectedColor: accent.withValues(alpha: 0.22),
+                  backgroundColor: stoopBg1(context),
+                  selectedColor: stoopTealSoft(context),
                   labelStyle: TextStyle(
                     color: selected.contains(t)
-                        ? AppColors.textPrimary(context)
-                        : AppColors.textTertiary(context),
+                        ? stoopTealText(context)
+                        : stoopMute(context),
                     fontWeight: selected.contains(t)
                         ? FontWeight.w600
                         : FontWeight.normal,
                   ),
                   side: BorderSide(
                     color: selected.contains(t)
-                        ? accent.withValues(alpha: 0.5)
-                        : AppColors.borderOf(context),
+                        ? AppColors.stoopTeal.withValues(alpha: 0.45)
+                        : stoopBorderHi(context),
                   ),
                 ),
             ],
@@ -148,7 +146,7 @@ class StoopTagSelector extends StatelessWidget {
         TextField(
           controller: controller,
           enabled: !atCap,
-          style: TextStyle(color: AppColors.textPrimary(context)),
+          style: TextStyle(color: stoopCream(context)),
           decoration: decorate(
             atCap
                 ? 'Tag limit reached ($max)'

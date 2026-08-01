@@ -20,11 +20,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/services/character_repository.dart';
-import 'package:front_porch_ai/services/folder_service.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
-import 'package:front_porch_ai/services/v2_card_service.dart';
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/services.dart';
 
 /// Write-side adapter for the character *library*: folder CRUD, moving cards
 /// into/out of folders, duplicating a card, and exporting a card (PNG / JSON).
@@ -36,11 +33,21 @@ import 'package:front_porch_ai/services/v2_card_service.dart';
 /// never trusting a client filesystem path. Distinct from [CharacterFacade]
 /// (read/list + create/edit text) so neither file grows a second concern.
 class CharacterLibraryFacade {
-  CharacterLibraryFacade(this._repo, this._folders, this._storage);
+  CharacterLibraryFacade(
+    this._repo,
+    this._folders,
+    this._storage, [
+    this._groups,
+  ]);
 
   final CharacterRepository _repo;
   final FolderService _folders;
   final StorageService _storage;
+
+  /// Lets move/bulk endpoints resolve group-chat ids (`group_…`) so groups
+  /// folder exactly like characters. Null only in auth-only boots where no
+  /// group repository is wired — group ids simply fail to resolve then.
+  final GroupChatRepository? _groups;
 
   /// Resolve a character by its DB id (in-memory card first, DB fallback), or
   /// null when it doesn't exist.
@@ -118,23 +125,54 @@ class CharacterLibraryFacade {
     return deleted;
   }
 
-  /// Mass delete of characters by id (desktop select-mode "Delete N Selected"
-  /// parity). Same per-card pipeline as a single delete. The severe typed
-  /// confirm is enforced client-side. Returns how many were deleted.
+  /// Mass delete by id (desktop select-mode "Delete N Selected" parity).
+  /// Characters run through the same per-card pipeline as a single delete;
+  /// `group_…` ids delete the group chat (its member characters are kept).
+  /// The severe typed confirm is enforced client-side. Returns how many
+  /// items were deleted.
   Future<int> bulkDelete(List<String> ids) async {
     final cards = <CharacterCard>[];
+    var deletedGroups = 0;
     for (final id in ids) {
+      if (id.startsWith('group_')) {
+        if (_groups?.getById(id) != null) {
+          await _groups!.delete(id);
+          deletedGroups++;
+        }
+        continue;
+      }
       final card = await _resolve(id);
       if (card != null) cards.add(card);
     }
-    return _repo.deleteCharacters(cards, chatsDir: _storage.chatsDir);
+    final deletedChars = await _repo.deleteCharacters(
+      cards,
+      chatsDir: _storage.chatsDir,
+    );
+    return deletedChars + deletedGroups;
   }
 
-  /// Move a character into [folderId], or back to the root when [folderId] is
-  /// null/empty. The on-disk path is resolved from the DB row — never trusted
-  /// from the client. Returns false when the character or target folder is
-  /// unknown.
+  /// Move a character OR group chat into [folderId], or back to the root when
+  /// [folderId] is null/empty. Group ids carry their natural `group_` prefix
+  /// (device-local `group_<timestamp>` handles) so one endpoint resolves
+  /// either kind — desktop multi-select parity. The on-disk path is resolved
+  /// from the DB row — never trusted from the client. Returns false when the
+  /// character/group or target folder is unknown.
   Future<bool> moveToFolder(String charId, String? folderId) async {
+    if (charId.startsWith('group_')) {
+      if (_groups?.getById(charId) == null) return false;
+      final target = (folderId != null && folderId.isNotEmpty)
+          ? folderId
+          : null;
+      if (target == null) {
+        final current = _folders.getFolderForGroup(charId);
+        if (current == null) return true; // already at root — idempotent
+        await _folders.removeGroupFromFolder(current.id, charId);
+        return true;
+      }
+      if (!_folderExists(target)) return false;
+      await _folders.addGroupToFolder(target, charId);
+      return true;
+    }
     final card = await _resolve(charId);
     if (card == null || card.imagePath == null || card.imagePath!.isEmpty) {
       return false;
@@ -167,6 +205,9 @@ class CharacterLibraryFacade {
     if (card == null) return null;
     final dup = await _repo.duplicateCharacter(card);
     if (dup == null) return null;
+    // Same folder-inheritance rule as the desktop context menu: the copy
+    // lands beside its source, not on the top level.
+    await _folders.inheritFolder(card.imagePath, dup.imagePath);
     return {'id': dup.dbId, 'name': dup.name};
   }
 

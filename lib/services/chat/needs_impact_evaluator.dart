@@ -20,10 +20,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/models/chat_message.dart';
-import 'package:front_porch_ai/models/group_chat.dart';
-import 'package:front_porch_ai/models/needs_impact.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/chat/needs_simulation.dart';
 import 'package:front_porch_ai/services/chat/realism_verification.dart';
 

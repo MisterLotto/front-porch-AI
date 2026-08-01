@@ -113,10 +113,7 @@ class TimeStrip extends StatelessWidget {
         if (chat.currentWeather != null) ...[
           const SizedBox(height: 4),
           WeatherChip(
-            sessionSeed: chat.currentSessionId ?? '',
-            dayCount: chat.timeService.dayCount,
-            date: chat.timeService.clock,
-            hour: chat.timeService.clock.hour,
+            chat: chat,
             fahrenheit:
                 Provider.of<StorageService>(context).weatherFahrenheit,
           ),

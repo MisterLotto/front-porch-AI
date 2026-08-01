@@ -62,19 +62,51 @@ class ChatMessage {
 
   /// Returns text with &lt;think&gt;...&lt;/think&gt; blocks removed for display.
   /// Also handles in-progress thinking (no closing tag yet during streaming).
+  // ── Parse caches ──
+  // displayText / thinkingContent run regexes over the FULL message text and
+  // are read several times per bubble per rebuild — and during streaming the
+  // whole visible list rebuilds many times a second, so uncached getters
+  // meant thousands of full-text regex scans/sec for messages that never
+  // changed. Cache keyed on the source string: identical() is O(1) for the
+  // unchanged majority (their string object never changes); only the actively
+  // streaming message (whose text is reassigned per flush) recomputes.
+  static final RegExp _closedThinkRe = RegExp(
+    r'<think>[\s\S]*?</think>\s*',
+    caseSensitive: false,
+  );
+  static final RegExp _openThinkRe = RegExp(
+    r'<think>[\s\S]*$',
+    caseSensitive: false,
+  );
+  static final RegExp _closedThinkCaptureRe = RegExp(
+    r'<think>([\s\S]*?)</think>',
+    caseSensitive: false,
+  );
+  static final RegExp _openThinkCaptureRe = RegExp(
+    r'<think>([\s\S]*?)$',
+    caseSensitive: false,
+  );
+  // Fast-path probe: MUST be case-insensitive like the strip regexes above
+  // (<THINK> is valid — there's a dedicated test for it).
+  static final RegExp _hasThinkRe = RegExp(r'<think>', caseSensitive: false);
+  String? _displayTextSource;
+  String? _displayTextCache;
+  String? _thinkingSource;
+  String? _thinkingCache;
+
   String get displayText {
     final raw = text;
-    // Strip completed think blocks
-    var result = raw.replaceAll(
-      RegExp(r'<think>[\s\S]*?</think>\s*', caseSensitive: false),
-      '',
-    );
-    // Strip in-progress think block (opened but not yet closed during streaming)
-    result = result.replaceAll(
-      RegExp(r'<think>[\s\S]*$', caseSensitive: false),
-      '',
-    );
-    return result.trim();
+    if (identical(raw, _displayTextSource)) return _displayTextCache!;
+    // Fast path: no think tag at all (the overwhelming majority of messages).
+    final result = !_hasThinkRe.hasMatch(raw)
+        ? raw.trim()
+        : raw
+              .replaceAll(_closedThinkRe, '')
+              .replaceAll(_openThinkRe, '')
+              .trim();
+    _displayTextSource = raw;
+    _displayTextCache = result;
+    return result;
   }
 
   /// Text to feed LLM prompt/eval CONTEXT for this message: the visible text,
@@ -99,18 +131,18 @@ class ChatMessage {
   /// Returns the thinking content (between &lt;think&gt; tags), or null if none.
   /// Handles both completed and in-progress (streaming) think blocks.
   String? get thinkingContent {
-    // Try completed think block first
-    final closed = RegExp(
-      r'<think>([\s\S]*?)</think>',
-      caseSensitive: false,
-    ).firstMatch(text);
-    if (closed != null) return closed.group(1)?.trim();
-    // Try in-progress think block (no closing tag yet)
-    final open = RegExp(
-      r'<think>([\s\S]*?)$',
-      caseSensitive: false,
-    ).firstMatch(text);
-    return open?.group(1)?.trim();
+    final raw = text;
+    if (identical(raw, _thinkingSource)) return _thinkingCache;
+    String? result;
+    if (_hasThinkRe.hasMatch(raw)) {
+      final closed = _closedThinkCaptureRe.firstMatch(raw);
+      result = closed != null
+          ? closed.group(1)?.trim()
+          : _openThinkCaptureRe.firstMatch(raw)?.group(1)?.trim();
+    }
+    _thinkingSource = raw;
+    _thinkingCache = result;
+    return result;
   }
 
   /// Whether this message has thinking content (either from tags or tracked duration)

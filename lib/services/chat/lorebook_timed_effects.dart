@@ -18,7 +18,7 @@
 
 import 'dart:convert';
 
-import 'package:front_porch_ai/models/lorebook.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/chat/lorebook_matcher.dart';
 
 /// Per-chat lore session state: ST timed effects (sticky / cooldown, in

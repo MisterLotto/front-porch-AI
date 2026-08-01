@@ -1,31 +1,57 @@
-# Front Porch AI — Documentation Index
+# Front Porch AI — Documentation
 
-> **Status:** Scaffold — outlines ready, content to be filled in per-session.
+Everything here is written and current. Start with the install guide if you're
+new, or jump straight to whatever you're stuck on.
 
-## Quick Links
+## Start here
 
-| Document | Description |
-|----------|-------------|
-| [Installation Guide](install.md) | ✅ Done — hardware requirements, install methods, dev setup |
-| [Getting Started](getting-started.md) | 🏗️ Scaffold — first-time user walkthrough |
-| [User Guide](user-guide.md) | 🏗️ Scaffold — full feature reference |
-| [Realism Engine](realism-engine.md) | 🏗️ Scaffold — deep dive on emotion/bond/trust system |
-| [Characters & Import](characters.md) | 🏗️ Scaffold — character creation, V2/V2.5 card spec |
-| [Frequently Asked Questions](faq.md) | 🏗️ Scaffold — common questions and answers |
-| [Troubleshooting](troubleshooting.md) | 🏗️ Scaffold — error diagnosis and fixes |
-| [Keyboard Shortcuts](keyboard-shortcuts.md) | 🏗️ Scaffold — all shortcuts |
-| [Release Notes](release-notes.md) | 🏗️ Scaffold — version history |
-| [Privacy Policy](privacy.html) | ✅ Done |
+| Document | What's in it |
+|---|---|
+| [Installation Guide](install.md) | Hardware requirements, install methods for Windows/macOS/Linux, and building from source |
+| [Getting Started](getting-started.md) | First launch, picking a backend and model, and your first conversation |
+| [User Guide](user-guide.md) | The full feature reference — chats, groups, personas, lorebooks, worlds, TTS, image generation and the web/mobile UI |
 
----
+## Going deeper
 
-## How to Use This Scaffold
+| Document | What's in it |
+|---|---|
+| [The Realism Engine](realism-engine.md) | How emotion, bond/trust, needs, fixation, chaos mode and the passage of time actually work |
+| [Characters](characters.md) | Creating and editing characters, the V2/V2.5 card spec, avatars and expressions, importing from Backyard `.byaf` |
+| [Keyboard Shortcuts](keyboard-shortcuts.md) | Every shortcut, by screen |
+| [Output Sanitizer Syntax](output-sanitizer-syntax.md) | The find/replace rules for cleaning up model output, with worked examples |
+| [MoE-Aware VRAM Estimation](moe-vram-estimation.md) | How GPU layer counts are chosen for mixture-of-experts models |
 
-Each skeleton file contains:
-- `<!-- TODO: ... -->` markers indicating sections that need content
-- A table of contents with anchor links
-- Placeholder summaries to guide writing
-- Cross-references to related docs
+## When something goes wrong
 
-To fill in a doc, pick one file and work through the TODOs top-to-bottom.
+| Document | What's in it |
+|---|---|
+| [Troubleshooting](troubleshooting.md) | Diagnosing common errors, by symptom |
+| [FAQ](faq.md) | The questions that come up most often |
+| [Privacy Policy](privacy.html) | What the app stores, and what it never sends anywhere |
 
+Still stuck? Ask in the [Discord](https://discord.gg/e4tET6rpdv), or
+[open an issue](https://github.com/linux4life1/front-porch-AI/issues/new/choose).
+**Please don't report security problems publicly** — use the
+[Security tab](https://github.com/linux4life1/front-porch-AI/security) instead.
+
+## What changed
+
+| Document | What's in it |
+|---|---|
+| [Release Notes](release-notes.md) | Long-form version history |
+| [What's New](main.md) | The stable-channel notes shown in the in-app update dialog |
+| [Rawhide — What's New](Rawhide.md) | Nightly / rolling-development notes |
+| [STMacro — What's New](STMacro.md) | Notes for the STMacro cutting-edge builds |
+
+## For developers
+
+| Document | What's in it |
+|---|---|
+| [Design docs](design/) | Architecture and design notes per subsystem — the Journal memory system, Living Time, the sidecar retirement, and more |
+| [Character Card Forge Integration](CharacterCardForge_GroupChat_Integration_Guide.md) | For tool authors writing to the database directly, particularly group chats |
+| [Contributing](../CONTRIBUTING.md) | How to set up, what CI checks, and what licence your contributions are under |
+| [CLAUDE.md](../CLAUDE.md) | The project's full engineering rules, for humans and AI agents alike |
+
+Maintainer working notes (refactor logs, release runbook) live in
+[`dev-notes/`](../dev-notes/) and are deliberately kept out of this published
+documentation.

@@ -22,14 +22,17 @@ import 'package:path/path.dart' as p;
 import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/models/lorebook.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/portrait_promotion.dart';
 import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
-import 'package:front_porch_ai/models/avatar_image.dart';
 import 'package:front_porch_ai/database/database.dart' hide AvatarImage;
+// The Drift row class collides with the model of the same name (hidden above),
+// so the grouped-avatar map names the row type through a prefix.
+import 'package:front_porch_ai/database/database.dart' as rows
+    show AvatarImage;
+import 'package:front_porch_ai/utils/utils.dart' show StartupTrace;
 
 class CharacterRepository extends ChangeNotifier {
   AppDatabase _db;
@@ -104,13 +107,28 @@ class CharacterRepository extends ChangeNotifier {
 
     _isLoading = true;
     notifyListeners();
+    final traceStart = DateTime.now();
 
     try {
       final dbChars = await _db.getAllCharacters();
+      StartupTrace.mark(
+        'CharacterRepository: got ${dbChars.length} rows from DB',
+      );
 
       _characters.clear();
 
       final missingPngNames = <String>[];
+      final noCardDataNames = <String>[];
+
+      // Every character's avatars in one query instead of one query per
+      // character. Each Drift call is a round trip to the database isolate, so
+      // the old N+1 cost grew with the size of the library for no reason.
+      Map<String, List<rows.AvatarImage>> avatarsByCharacter = const {};
+      try {
+        avatarsByCharacter = await _db.getAvatarImagesGroupedByCharacter();
+      } catch (e) {
+        debugPrint('[CharacterRepository] Failed to load avatar images: $e');
+      }
 
       for (final c in dbChars) {
         final card = _characterFromRow(c);
@@ -133,20 +151,17 @@ class CharacterRepository extends ChangeNotifier {
           // We intentionally do NOT cache previous in-memory values here:
           // the old cache caused edits to be silently overwritten by stale
           // pre-edit values whenever loadCharacters() ran after an edit.
+          // Logging here is summarised after the loop, not emitted per card:
+          // debugPrint is NOT compiled out of release builds, so a 500-card
+          // library was building 500+ log strings nobody reads on every load.
           try {
             final v2Service = V2CardService();
             final reloaded = await v2Service.readCard(card.imagePath!);
             if (reloaded != null) {
               card.frontPorchExtensions = reloaded.frontPorchExtensions;
               card.rawExtensions = reloaded.rawExtensions;
-              debugPrint(
-                '[CharacterRepository] Loaded PNG extensions for ${card.name}: '
-                'realismEnabled=${reloaded.frontPorchExtensions?.realismEnabled}',
-              );
             } else {
-              debugPrint(
-                '[CharacterRepository] No card data found in PNG for ${card.name}',
-              );
+              noCardDataNames.add(card.name);
             }
           } catch (e) {
             if (e is PathNotFoundException ||
@@ -160,33 +175,23 @@ class CharacterRepository extends ChangeNotifier {
           }
         }
 
-        // Load avatar images from DB so they survive hot reloads
+        // Avatar images come from the one grouped query above, so they still
+        // survive hot reloads without a per-character round trip.
         if (card.dbId != null) {
-          try {
-            final driftAvatars = await _db.getAvatarImagesByCharacterId(
-              card.dbId!,
-            );
-            if (driftAvatars.isNotEmpty) {
-              card.avatarImages = driftAvatars
-                  .map(
-                    (a) => AvatarImage(
-                      id: a.id,
-                      characterId: a.characterId,
-                      filename: a.filename,
-                      label: a.label,
-                      displayOrder: a.displayOrder,
-                      createdAt: a.createdAt,
-                    ),
-                  )
-                  .toList();
-              debugPrint(
-                '[CharacterRepository] Loaded ${card.avatarImages!.length} avatar images for ${card.name}',
-              );
-            }
-          } catch (e) {
-            debugPrint(
-              '[CharacterRepository] Failed to load avatar images for ${card.name}: $e',
-            );
+          final driftAvatars = avatarsByCharacter[card.dbId!];
+          if (driftAvatars != null && driftAvatars.isNotEmpty) {
+            card.avatarImages = driftAvatars
+                .map(
+                  (a) => AvatarImage(
+                    id: a.id,
+                    characterId: a.characterId,
+                    filename: a.filename,
+                    label: a.label,
+                    displayOrder: a.displayOrder,
+                    createdAt: a.createdAt,
+                  ),
+                )
+                .toList();
           }
         }
 
@@ -200,11 +205,22 @@ class CharacterRepository extends ChangeNotifier {
           '(they can be restored via Cloud Sync): ${missingPngNames.join(", ")}',
         );
       }
+      if (noCardDataNames.isNotEmpty) {
+        debugPrint(
+          '[CharacterRepository] ${noCardDataNames.length} PNGs carry no card '
+          'data: ${noCardDataNames.join(", ")}',
+        );
+      }
     } catch (e) {
       debugPrint('[CharacterRepository] Error loading characters from DB: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
+      StartupTrace.mark(
+        'CharacterRepository.loadCharacters DONE — ${_characters.length} chars'
+        ' in ${DateTime.now().difference(traceStart).inMilliseconds}ms'
+        ' (home grid is now populated)',
+      );
     }
   }
 

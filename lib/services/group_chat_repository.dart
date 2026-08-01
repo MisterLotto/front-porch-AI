@@ -23,8 +23,7 @@ import 'package:drift/drift.dart';
 import 'package:path/path.dart' as path;
 import 'package:uuid/uuid.dart';
 import 'package:front_porch_ai/database/database.dart';
-import 'package:front_porch_ai/models/group_chat.dart';
-import 'package:front_porch_ai/models/group_member.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 
 /// Persists group chat definitions to the database.
@@ -144,6 +143,9 @@ class GroupChatRepository extends ChangeNotifier {
       worldIds: Value(jsonEncode(group.worldIds)),
       inheritCharacterLorebooks: Value(group.inheritCharacterLorebooks),
       baselineRealismState: Value(group.baselineRealismState),
+      // updateGroup now uses partial .write() (so folder_id survives saves);
+      // bump updatedAt explicitly since the column default no longer applies.
+      updatedAt: Value(DateTime.now()),
     );
 
     if (existing != null) {

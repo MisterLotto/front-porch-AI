@@ -1,0 +1,124 @@
+name: Test integrity
+
+# WHY THIS EXISTS — PR #172 ("Live portrait"), closed 2026-08-01.
+#
+# That PR added a feature, re-resolved pubspec.lock, and edited
+# test/deps/dependency_floors.json (+12 -5) so the dependency-floor guard
+# would pass. That guard exists because of the v1.1.0 Linux incident, where
+# `sqlite3` silently went 3.2.0 -> 2.9.4 and shipped a release with NO SQLITE
+# ENGINE on Linux. dependency_floor_test.dart says, in capitals, "WHEN THIS
+# TEST FAILS, DO NOT 'FIX' IT BY REGENERATING THE BASELINE." The PR
+# regenerated the baseline. Nothing in CI objected, because the evidence a
+# check reads is itself just a file in the repo.
+#
+# So: a check whose inputs a PR can rewrite is not a check. This workflow
+# makes rewriting them a visible, blocking event.
+#
+# WHY pull_request_target AND NOT pull_request:
+# For `pull_request`, GitHub runs the workflow from the PR's merge ref — a PR
+# can weaken the very job that gates it. For `pull_request_target`, GitHub
+# always runs the copy on the BASE branch. A contributor cannot edit this
+# file's behaviour for their own PR; only a commit landing on the protected
+# branch can change it.
+#
+# SAFETY: pull_request_target runs with a privileged token, so the usual
+# footgun is checking out and executing PR code. This job does NEITHER. It
+# never checks out the head, never runs project code, and only asks the API
+# which paths changed. Keep it that way — do not add `actions/checkout` with
+# `ref: refs/pull/...` here, and do not add a build step.
+#
+# HOW TO APPROVE A LEGITIMATE TEST CHANGE:
+# Tests must be allowed to evolve, or coverage can never grow. Adding NEW test
+# files is always fine and never blocks. Modifying or deleting an EXISTING
+# test, golden, or baseline blocks until a maintainer applies the
+# `approved-test-change` label. Labels require write access, so a PR author
+# cannot clear their own block — which is the property that was missing.
+#
+# THIS JOB ONLY HAS TEETH IF IT IS A REQUIRED STATUS CHECK.
+# Settings -> Branches -> protect `main`, `Rawhide`, `dev`, `*-Beta` ->
+# "Require status checks to pass" -> add "Guard protected paths".
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  guard:
+    name: Guard protected paths
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for modified tests, goldens, baselines and CI
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const OVERRIDE = 'approved-test-change';
+
+            // Paths whose WHOLE POINT is to fail when the code regresses.
+            // Editing one is editing the evidence, not the code.
+            const isProtected = (p) =>
+              p.startsWith('test/') ||
+              p.startsWith('integration_test/') ||
+              p.endsWith('_test.dart') ||
+              p.includes('/goldens/') ||
+              p.includes('/_goldens/') ||
+              p.endsWith('.png') && p.includes('golden') ||
+              p.startsWith('.github/workflows/') ||
+              p === 'analysis_options.yaml' ||
+              p === 'test/deps/dependency_floors.json';
+
+            const files = await github.paginate(
+              github.rest.pulls.listFiles,
+              { ...context.repo, pull_number: context.issue.number, per_page: 100 }
+            );
+
+            // "added" is safe: new coverage cannot weaken an existing gate.
+            // "modified" / "removed" / "renamed" are the dangerous verbs.
+            const touched = files.filter(
+              (f) => isProtected(f.filename) && f.status !== 'added'
+            );
+
+            const added = files.filter(
+              (f) => isProtected(f.filename) && f.status === 'added'
+            );
+            if (added.length) {
+              core.info(`New test files (allowed, not blocking):`);
+              for (const f of added) core.info(`  + ${f.filename}`);
+            }
+
+            if (!touched.length) {
+              core.info('No existing test, golden, baseline or CI file was modified.');
+              return;
+            }
+
+            const labels = (await github.rest.issues.listLabelsOnIssue({
+              ...context.repo, issue_number: context.issue.number,
+            })).data.map((l) => l.name);
+
+            const lines = touched.map(
+              (f) => `  ${f.status.padEnd(8)} ${f.filename} (+${f.additions} -${f.deletions})`
+            );
+
+            if (labels.includes(OVERRIDE)) {
+              core.notice(
+                `Protected files modified, but a maintainer applied "${OVERRIDE}":\n` +
+                lines.join('\n')
+              );
+              return;
+            }
+
+            core.setFailed(
+              'This PR modifies files that exist to CATCH regressions:\n\n' +
+              lines.join('\n') +
+              '\n\nA failing test, golden or dependency floor is a finding, not an ' +
+              'obstacle. Fix the code so the existing check passes.\n\n' +
+              'If the change is genuinely correct (the expected behaviour really did ' +
+              'change), a maintainer must review it and add the ' +
+              `"${OVERRIDE}" label. The PR author cannot add it.\n\n` +
+              'Precedent: PR #172 edited test/deps/dependency_floors.json to get ' +
+              'green, which would have reintroduced the sqlite3 3.2.0 -> 2.9.4 ' +
+              'downgrade that shipped v1.1.0 with no SQLite engine on Linux.'
+            );

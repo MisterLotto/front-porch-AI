@@ -24,30 +24,12 @@ import 'package:flutter/foundation.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
 
 import 'package:front_porch_ai/database/database.dart';
-import 'package:front_porch_ai/services/character_repository.dart';
-import 'package:front_porch_ai/services/chat_service.dart';
-import 'package:front_porch_ai/services/folder_service.dart';
-import 'package:front_porch_ai/services/group_chat_repository.dart';
-import 'package:front_porch_ai/services/hardware_service.dart';
-import 'package:front_porch_ai/services/kobold_service.dart';
-import 'package:front_porch_ai/services/llm_provider.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
-import 'package:front_porch_ai/services/image_gen_service.dart';
-import 'package:front_porch_ai/services/model_manager.dart';
-import 'package:front_porch_ai/services/story_pipeline_service.dart';
-import 'package:front_porch_ai/services/story_repository.dart';
-import 'package:front_porch_ai/services/stt_service.dart';
-import 'package:front_porch_ai/services/tts_service.dart';
-import 'package:front_porch_ai/services/user_persona_service.dart';
-import 'package:front_porch_ai/services/world_repository.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/web/auth/auth_service.dart';
 import 'package:front_porch_ai/services/web/facade/facades.dart';
 import 'package:front_porch_ai/services/web/server_bootstrap.dart';
 import 'package:front_porch_ai/services/web/streaming/stream_hub.dart';
-import 'package:front_porch_ai/services/web/tunnels/tailscale_provider.dart';
-import 'package:front_porch_ai/services/web/tunnels/tunnel_manager.dart';
-import 'package:front_porch_ai/services/web/tunnels/lan_ip.dart';
-import 'package:front_porch_ai/services/web/tunnels/remote_setup_result.dart';
+import 'package:front_porch_ai/services/web/tunnels/tunnels.dart';
 import 'package:front_porch_ai/services/web/web_server_deps.dart';
 
 // Re-export the extracted RemoteSetupResult so existing consumers importing
@@ -450,6 +432,7 @@ class WebServerHost extends ChangeNotifier {
             _characterRepository!,
             folderService,
             _storage,
+            _groupChatRepository,
           )
         : null;
 
@@ -473,7 +456,13 @@ class WebServerHost extends ChangeNotifier {
         : null;
 
     final groupFacade = _groupChatRepository != null
-        ? GroupFacade(_groupChatRepository!, _storage, _characterRepository, db)
+        ? GroupFacade(
+            _groupChatRepository!,
+            _storage,
+            _characterRepository,
+            db,
+            _folderService,
+          )
         : null;
 
     final settingsFacade = _llmProvider != null
@@ -488,6 +477,7 @@ class WebServerHost extends ChangeNotifier {
       db,
       characters: _characterRepository,
       groups: _groupChatRepository,
+      worlds: _worldRepository,
     );
 
     final worldFacade = _worldRepository != null

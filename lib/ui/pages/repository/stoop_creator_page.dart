@@ -17,10 +17,13 @@ import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_card_detail_page.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_card_tile.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_profile_header.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
-/// A creator's public profile: follower count, a Follow button, and a grid of
-/// their approved cards.
+/// A creator's public profile: the shared identity header (avatar, join date,
+/// bio, links, lifetime stats) with Follow + Share, and a grid of their
+/// approved cards.
 class StoopCreatorPage extends StatefulWidget {
   final String creatorId;
   const StoopCreatorPage({super.key, required this.creatorId});
@@ -120,21 +123,21 @@ class _StoopCreatorPageState extends State<StoopCreatorPage> {
   Widget build(BuildContext context) {
     final p = _profile;
     return Scaffold(
-      backgroundColor: AppColors.backgroundOf(context),
+      backgroundColor: stoopBg0(context),
       appBar: AppBar(
-        backgroundColor: AppColors.surfaceOf(context),
-        foregroundColor: AppColors.textPrimary(context),
-        title: Text(p?.displayName ?? 'Creator'),
+        backgroundColor: stoopBg0(context),
+        foregroundColor: stoopCream(context),
+        elevation: 0,
+        shape: Border(bottom: BorderSide(color: stoopBorder(context))),
+        title: Text(
+          p?.displayName ?? 'Creator',
+          style: stoopDisplay(context, size: 19),
+        ),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const StoopLamp()
           : _error != null || p == null
-          ? Center(
-              child: Text(
-                _error ?? 'Not found',
-                style: TextStyle(color: AppColors.textTertiary(context)),
-              ),
-            )
+          ? stoopEmpty(context, glyph: '🌙', title: _error ?? 'Not found')
           : _content(p),
     );
   }
@@ -146,11 +149,10 @@ class _StoopCreatorPageState extends State<StoopCreatorPage> {
         if (p.cards.isEmpty)
           SliverFillRemaining(
             hasScrollBody: false,
-            child: Center(
-              child: Text(
-                'No published characters yet.',
-                style: TextStyle(color: AppColors.textTertiary(context)),
-              ),
+            child: stoopEmpty(
+              context,
+              glyph: '🏮',
+              title: 'No published cards yet',
             ),
           )
         else
@@ -158,10 +160,10 @@ class _StoopCreatorPageState extends State<StoopCreatorPage> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             sliver: SliverGrid(
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 168,
-                childAspectRatio: 0.66,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
+                maxCrossAxisExtent: 230,
+                childAspectRatio: 0.64,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
               ),
               delegate: SliverChildBuilderDelegate(
                 (_, i) => StoopCardTile(
@@ -177,62 +179,45 @@ class _StoopCreatorPageState extends State<StoopCreatorPage> {
   }
 
   Widget _header(StoopCreator p) {
-    final accent = AppColors.resolve(context, Colors.tealAccent, Colors.teal);
     return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 30,
-            backgroundColor: AppColors.surfaceContainerOf(context),
-            child: Text(
-              p.displayName.isNotEmpty
-                  ? p.displayName.characters.first.toUpperCase()
-                  : '?',
-              style: TextStyle(
-                color: AppColors.textPrimary(context),
-                fontWeight: FontWeight.bold,
-                fontSize: 22,
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  p.displayName,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary(context),
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '$_followers ${_followers == 1 ? 'follower' : 'followers'} · '
-                  '${p.cards.length} ${p.cards.length == 1 ? 'character' : 'characters'}',
-                  style: TextStyle(color: AppColors.textTertiary(context)),
-                ),
-              ],
-            ),
-          ),
-          if (!p.isMe) ...[
-            const SizedBox(width: 12),
+      padding: const EdgeInsets.all(16),
+      child: StoopProfileHeader(
+        creator: p,
+        followers: _followers,
+        actions: [
+          if (!p.isMe)
             _following
                 ? OutlinedButton(
                     onPressed: _followBusy ? null : _toggleFollow,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: stoopTealText(context),
+                      side: BorderSide(
+                        color: AppColors.stoopTeal.withValues(alpha: 0.45),
+                      ),
+                    ),
                     child: const Text('Following'),
                   )
-                : FilledButton(
+                : StoopAmberButton(
+                    label: 'Follow',
                     onPressed: _followBusy ? null : _toggleFollow,
-                    style: FilledButton.styleFrom(backgroundColor: accent),
-                    child: Text(
-                      'Follow',
-                      style: TextStyle(color: AppColors.background),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 10,
                     ),
                   ),
-          ],
+          OutlinedButton.icon(
+            onPressed: () => stoopCopyCreatorLink(
+              context,
+              id: p.id,
+              displayName: p.displayName,
+            ),
+            icon: const Icon(Icons.link_rounded, size: 16),
+            label: const Text('Share'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: stoopCream2(context),
+              side: BorderSide(color: stoopBorderHi(context)),
+            ),
+          ),
         ],
       ),
     );

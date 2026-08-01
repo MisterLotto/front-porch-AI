@@ -20,20 +20,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/dialogs.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'package:path/path.dart' as p;
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/models/lorebook.dart';
-import 'package:front_porch_ai/services/character_repository.dart';
-import 'package:front_porch_ai/services/chat_service.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
-import 'package:front_porch_ai/services/v2_card_service.dart';
-import 'package:front_porch_ai/services/world_repository.dart';
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/realism_form_section.dart';
 import 'package:front_porch_ai/ui/widgets/needs_form_section.dart';
-import 'package:front_porch_ai/utils/picker_prefs.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 // ═══════════════════════════════════════════════════════════════
 //  DESIGN TOKENS — Slate / Indigo dark theme
@@ -107,6 +101,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   late TabController _tabController;
   List<LorebookEntry> _loreEntries = [];
   List<String> _selectedWorldNames = [];
+  List<String> _initialWorldNames = const [];
   List<StyledTextController> _altGreetingControllers = [];
   List<String> _tags = [];
   final _tagController = TextEditingController();
@@ -201,6 +196,9 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     }
 
     _selectedWorldNames = List.from(widget.character.worldNames);
+    // Snapshot for the save-time diff: only worlds ADDED in this edit get
+    // pushed onto the character's existing chats.
+    _initialWorldNames = List.from(widget.character.worldNames);
 
     _altGreetingControllers = widget.character.alternateGreetings
         .map((g) => StyledTextController(text: g, preset: StyledTextPreset.prose))
@@ -518,6 +516,35 @@ class _EditCharacterPageState extends State<EditCharacterPage>
             // ChatService not available in this context — that's fine.
           }
         }
+
+        // Worlds added in THIS edit back-fill the character's existing chats
+        // that have none. Creation-time seeding only covers chats made after
+        // the character already had a world, so a chat opened first and given
+        // a world later would otherwise keep its temperate default forever
+        // (climate, Setting prose and the Places panel all read the CHAT's
+        // attachments, never the character's list).
+        final addedWorlds = _selectedWorldNames
+            .where((w) => !_initialWorldNames.contains(w))
+            .toList();
+        final charId = widget.character.dbId;
+        if (addedWorlds.isNotEmpty && charId != null) {
+          try {
+            final worlds = Provider.of<WorldRepository>(context, listen: false);
+            final touched = await worlds.applyAddedCharacterWorldsToChats(
+              characterId: charId,
+              addedRefs: addedWorlds,
+            );
+            if (touched.isNotEmpty && mounted) {
+              final chatService = Provider.of<ChatService>(context, listen: false);
+              if (touched.contains(chatService.currentSessionId)) {
+                await chatService.refreshChatWorlds();
+              }
+            }
+          } catch (_) {
+            // Repository/ChatService not in this context — the chat picks the
+            // world up on its next open regardless.
+          }
+        }
       }
 
       if (widget.onSaved != null) {
@@ -588,6 +615,26 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     );
     if (result != null) {
       setState(() => _loreEntries[index] = result);
+    }
+  }
+
+  Future<void> _importLoreFromCharacter() async {
+    final repo = Provider.of<CharacterRepository>(context, listen: false);
+    final entries = await showImportCharacterLoreDialog(
+      context: context,
+      characters: repo.characters,
+      excludeCharacterName: widget.character.name,
+    );
+    if (entries == null || entries.isEmpty) return;
+    setState(() {
+      _loreEntries.addAll(entries);
+    });
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Added ${entries.length} entries from character.'),
+        ),
+      );
     }
   }
 
@@ -1212,7 +1259,20 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                   ElevatedButton.icon(
                     onPressed: _importLorebookJson,
                     icon: const Icon(Icons.cloud_upload, size: 18),
-                    label: const Text('Import'),
+                    label: const Text('Import file'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.surfaceContainerOf(context),
+                      foregroundColor: AppColors.textPrimary(context),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: _importLoreFromCharacter,
+                    icon: const Icon(Icons.person_search, size: 18),
+                    label: const Text('From character'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.surfaceContainerOf(context),
                       foregroundColor: AppColors.textPrimary(context),
@@ -1456,7 +1516,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Linked Worlds',
+                    'Linked Places',
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -1465,12 +1525,13 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Attach worlds to include their lorebooks in this character\'s conversations.',
+                    'Attach places (Worlds) so their lore and climate apply in this character\'s chats. '
+                    'To copy another character\'s lore into this card, use Lorebook → From character.',
                     style: TextStyle(fontSize: 13, color: AppColors.textSecondary(context)),
                   ),
                   const SizedBox(height: 20),
 
-                  if (repo.worlds.isEmpty)
+                  if (repo.placeWorlds.isEmpty)
                     Container(
                       padding: const EdgeInsets.all(40),
                       decoration: BoxDecoration(
@@ -1488,7 +1549,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              'No worlds found',
+                              'No places found',
                               style: TextStyle(
                                 color: AppColors.textTertiary(context),
                                 fontSize: 15,
@@ -1496,7 +1557,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Create worlds in the Worlds section.',
+                              'Create places in the Worlds section.',
                               style: TextStyle(
                                 color: AppColors.textTertiary(context),
                                 fontSize: 12,
@@ -1507,8 +1568,9 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                       ),
                     )
                   else
-                    ...repo.worlds.map((world) {
-                      final isLinked = _selectedWorldNames.contains(world.name);
+                    ...repo.placeWorlds.map((world) {
+                      final isLinked = _selectedWorldNames.contains(world.id) ||
+                          _selectedWorldNames.contains(world.name);
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         decoration: BoxDecoration(
@@ -1563,8 +1625,12 @@ class _EditCharacterPageState extends State<EditCharacterPage>
                             onChanged: (val) {
                               setState(() {
                                 if (val) {
-                                  _selectedWorldNames.add(world.name);
+                                  _selectedWorldNames.remove(world.name);
+                                  if (!_selectedWorldNames.contains(world.id)) {
+                                    _selectedWorldNames.add(world.id);
+                                  }
                                 } else {
+                                  _selectedWorldNames.remove(world.id);
                                   _selectedWorldNames.remove(world.name);
                                 }
                               });

@@ -19,8 +19,7 @@
 import 'package:path/path.dart' as p;
 
 import 'package:front_porch_ai/services/legacy_model_cleanup.dart';
-import 'package:front_porch_ai/services/llm_provider.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 
 /// Read/write adapter over the core generation + backend settings for the web
 /// Settings page. Reuses the existing StorageService setters (read live at

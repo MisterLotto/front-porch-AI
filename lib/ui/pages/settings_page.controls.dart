@@ -379,9 +379,16 @@ extension _SettingsLaunchControls on _SettingsPageState {
     }
 
     if (backendManager.backendPath == null) {
+      // Not an error state anymore: kick the background acquisition (no-op
+      // when already downloading) and point at the corner chip's progress.
+      backendManager.ensureEngineInstalled();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Backend not found. Please download it first.'),
+        SnackBar(
+          content: Text(
+            backendManager.isDownloading
+                ? 'The AI engine is still downloading — progress is in the corner chip. Launch again once it finishes.'
+                : 'The AI engine isn\'t installed yet — downloading it now in the background (see the corner chip).',
+          ),
         ),
       );
       return;

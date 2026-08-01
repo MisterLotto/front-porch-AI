@@ -16,6 +16,11 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+library;
+
+import 'package:front_porch_ai/services/chat/weather_biomes.dart';
+import 'package:front_porch_ai/services/chat/weather_engine.dart';
+
 /// Intra-day weather + deterministic temperatures (Living Time §3 v3), on
 /// top of the daily walk in weather_engine.dart.
 ///
@@ -34,9 +39,6 @@
 /// per-day seeded °C within the band's range plus a fixed diurnal offset
 /// (coolest at night, peak mid-afternoon). Numbers are for the UI ONLY —
 /// the generation prompt stays words-only per prompt-state-injection.md.
-library;
-
-import 'package:front_porch_ai/services/chat/weather_engine.dart';
 
 enum DaySegment { morning, afternoon, evening, night }
 
@@ -154,12 +156,19 @@ class WeatherSegments {
 
   /// Per-band °C base ranges (min, max inclusive) — the day's base is drawn
   /// seeded within its band, so the number always agrees with the band word.
+  /// Extreme entries are the ANCHORLESS fallback only: Biome.validate
+  /// requires a displayAnchorsC entry for every season that can REACH an
+  /// extreme (jitter included), so a valid biome never lands here — this
+  /// covers unvalidated JSON at runtime.
   static const Map<TempBand, (int, int)> _bandRangeC = {
+    TempBand.cryogenic: (-90, -55),
     TempBand.cold: (-8, 2),
     TempBand.cool: (3, 10),
     TempBand.mild: (11, 17),
     TempBand.warm: (18, 25),
     TempBand.hot: (26, 34),
+    TempBand.furnace: (180, 320),
+    TempBand.inferno: (480, 650),
   };
 
   /// Fixed diurnal offsets from the day's base °C — coolest deep at night,
@@ -179,11 +188,15 @@ class WeatherSegments {
     required String sessionSeed,
     required int dayCount,
     required DateTime date,
+    Biome? biome,
+    Biome Function(int day)? biomeAtDay,
   }) {
     final day = WeatherEngine.weatherFor(
       sessionSeed: sessionSeed,
       dayCount: dayCount,
       date: date,
+      biome: biome,
+      biomeAtDay: biomeAtDay,
     );
     final scripts = _scripts[day.condition]!;
     final rng = WeatherRng(
@@ -206,32 +219,62 @@ class WeatherSegments {
     required int dayCount,
     required DateTime date,
     required int hour,
+    Biome? biome,
+    Biome Function(int day)? biomeAtDay,
   }) {
     final day = WeatherEngine.weatherFor(
       sessionSeed: sessionSeed,
       dayCount: dayCount,
       date: date,
+      biome: biome,
+      biomeAtDay: biomeAtDay,
     );
     final segment = segmentForHour(hour);
     final conditions = segmentConditionsFor(
       sessionSeed: sessionSeed,
       dayCount: dayCount,
       date: date,
+      biome: biome,
+      biomeAtDay: biomeAtDay,
     );
+    // Living Worlds: desert swings hard day/night; temperate amp is 1.0 so
+    // pre-biome °C goldens stay bit-identical. Use the climate active today.
+    final climateForDay = biomeAtDay != null
+        ? biomeAtDay(dayCount < 1 ? 1 : dayCount)
+        : (biome ?? Biome.temperate);
     final (lo, hi) = _bandRangeC[day.temp]!;
     final tempRng = WeatherRng(
       WeatherEngine.seedFor(sessionSeed) ^ (dayCount * _kTempMix),
     );
-    final baseC = lo + (tempRng.next() % (hi - lo + 1));
+    // ONE draw on either path, so the classic °C stream stays byte-identical
+    // (pinned) whether or not this climate carries anchors.
+    final draw = tempRng.next();
+    final anchor = day.temp.isExtreme
+        ? climateForDay.displayAnchorsC[day.season]
+        : null;
+    // Extreme bands show the AUTHORED number (±3° of life) when the season
+    // has one; classic bands always use the band's own °C range.
+    final baseC = anchor != null
+        ? (anchor + (draw % 7) - 3).clamp(-273, 2000)
+        : lo + (draw % (hi - lo + 1));
+    final amp = climateForDay.diurnalAmplitude;
+    final offset = (_diurnalOffsetC[segment]! * amp).round();
     return SegmentWeather(
       day: day,
       segment: segment,
       condition: conditions[segment.index],
-      tempC: baseC + _diurnalOffsetC[segment]!,
+      tempC: baseC + offset,
     );
   }
 
   // ── Display helpers (UI + web facade; numbers never enter prompts) ──
+
+  /// A band's representative °C (its range midpoint) — the climate editor's
+  /// preview shows this for seasons without an authored anchor.
+  static int typicalBaseC(TempBand t) {
+    final (lo, hi) = _bandRangeC[t]!;
+    return ((lo + hi) / 2).round();
+  }
 
   static int tempF(int c) => (c * 9 / 5 + 32).round();
 
@@ -255,9 +298,14 @@ class WeatherSegments {
   // ── Prompt prose (words only, no numbers — prompt-state contract) ──
 
   /// Banded dressing cue — the wardrobe signal the maintainer asked for,
-  /// delivered in words the model actually acts on.
+  /// delivered in words the model actually acts on. Extreme bands stop being
+  /// about clothing and become code-owned survival cues (living-worlds.md §3
+  /// Rev.3): a minimal-effort custom world still behaves.
   static String dressCue(TempBand t) {
     switch (t) {
+      case TempBand.cryogenic:
+        return 'cold that kills exposed skin in minutes — sealed protection '
+            'or stay inside';
       case TempBand.cold:
         return 'coat-and-gloves cold';
       case TempBand.cool:
@@ -268,6 +316,12 @@ class WeatherSegments {
         return 'shirtsleeve warmth';
       case TempBand.hot:
         return 'seek-the-shade heat';
+      case TempBand.furnace:
+        return 'heat no one survives unshielded — thermal protection or '
+            'stay under cover';
+      case TempBand.inferno:
+        return 'incinerating heat — nothing living goes outside unshielded, '
+            'and not for long even then';
     }
   }
 

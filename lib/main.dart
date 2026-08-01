@@ -43,6 +43,7 @@ import 'package:front_porch_ai/services/backporch/backporch.dart';
 import 'package:front_porch_ai/ui/layout/main_layout.dart'; // Keep original import for MainLayout
 import 'package:front_porch_ai/app_version.dart';
 import 'package:front_porch_ai/utils/native_exit.dart';
+import 'package:front_porch_ai/utils/utils.dart' show StartupTrace;
 import 'package:front_porch_ai/database/database.dart';
 // ignore: unused_import — used in the commented-out auto-cleanup block below
 import 'package:front_porch_ai/database/database_cleanup.dart';
@@ -53,7 +54,6 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 // Services and modules not yet in the services barrel (internal, low-frequency, or side-effect heavy)
-import 'package:front_porch_ai/services/model_manager.dart';
 import 'package:front_porch_ai/services/download_manager.dart';
 import 'package:front_porch_ai/services/setup_service.dart';
 import 'package:front_porch_ai/services/db_reunification_service.dart';
@@ -64,8 +64,7 @@ import 'package:front_porch_ai/services/file_consolidation_service.dart';
 import 'package:front_porch_ai/services/web/web_server_host.dart';
 
 // Dialogs and specific widgets used only in main.dart (direct imports are appropriate)
-import 'package:front_porch_ai/ui/dialogs/update_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/stable_db_import_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/dialogs.dart';
 
 /// Prefix SharedPreferences keys for beta builds so window state is
 /// isolated from the stable installation.  Unchanged for stable builds.
@@ -196,9 +195,13 @@ class _DbInitErrorApp extends StatelessWidget {
   }
 }
 
+void _mark(String step) => StartupTrace.mark(step);
+
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  _mark('binding ready');
   await windowManager.ensureInitialized();
+  _mark('windowManager.ensureInitialized');
 
   // Intercept SIGINT (Ctrl+C) and SIGTERM on Linux/macOS to prevent
   // the Flutter engine from doing an unclean teardown that triggers:
@@ -234,6 +237,7 @@ void main(List<String> args) async {
   } catch (e) {
     debugPrint('Fatal error during file consolidation: $e');
   }
+  _mark('FileConsolidationService.consolidate');
 
   // Initialize database. This is the last thing that can die BEFORE any window
   // exists — a disk-full/permissions failure, or a second copy of the app
@@ -247,8 +251,19 @@ void main(List<String> args) async {
   final bool dbHealthy;
   try {
     db = await AppDatabase.instance();
+    _mark('AppDatabase.instance (incl. schema migration)');
     needsMigration = !await DataMigrationService.isMigrated();
-    dbHealthy = await db.integrityCheck();
+    _mark('DataMigrationService.isMigrated');
+    // Cheap first-query probe: forces the lazily-opened file to actually
+    // open, so a locked/unreadable DB still fails fast into
+    // _DbInitErrorApp. The EXPENSIVE health check (PRAGMA quick_check reads
+    // and validates the whole file — seconds on a big chat DB) used to run
+    // right here, before the window even existed, and was the single
+    // largest fixed startup cost; it now runs post-first-frame in
+    // _checkDbHealth, which owns the corrupt-DB restore overlay anyway.
+    await db.customSelect('SELECT 1').get();
+    _mark('first DB query (SELECT 1)');
+    dbHealthy = true;
   } catch (e, st) {
     debugPrint('[DB] FATAL: could not open the database: $e\n$st');
     runApp(_DbInitErrorApp(details: e.toString()));
@@ -256,15 +271,9 @@ void main(List<String> args) async {
   }
   _MyAppState._dbHealthy = dbHealthy;
 
-  // Purge rows that were soft-deleted more than 30 days ago
-  try {
-    await db.purgeSoftDeletes();
-  } catch (_) {}
-
-  // Clean up legacy JSON files from pre-0.8.0 (idempotent, safe to run every startup)
-  try {
-    await DataMigrationService.cleanupLegacyFiles();
-  } catch (_) {}
+  // Soft-delete purge + legacy JSON cleanup are idempotent maintenance —
+  // they moved to the post-first-frame block in _MyAppState.initState so
+  // launch doesn't wait on them (they used to run before the window showed).
 
   // TODO: Enable after verifying DatabaseCleanup behaves correctly in production
   // try {
@@ -348,6 +357,7 @@ void main(List<String> args) async {
     await windowManager.focus();
     await windowManager.setPreventClose(true);
   });
+  _mark('window shown (waitUntilReadyToShow)');
   runApp(
     // ProviderScope: Riverpod root for new-code state (CLAUDE.md Riverpod
     // migration; first consumer: Living Time weather). Wraps the existing
@@ -421,9 +431,10 @@ void main(List<String> args) async {
               previous ?? GroupChatRepository(storage, db),
         ),
         ChangeNotifierProvider(create: (context) => FolderService(db)),
-        ChangeNotifierProxyProvider2<
+        ChangeNotifierProxyProvider3<
           CharacterRepository,
           StorageService,
+          GroupChatRepository,
           WorldRepository
         >(
           create: (context) {
@@ -435,12 +446,16 @@ void main(List<String> args) async {
             repo.setCharacterRepository(
               Provider.of<CharacterRepository>(context, listen: false),
             );
+            repo.setGroupChatRepository(
+              Provider.of<GroupChatRepository>(context, listen: false),
+            );
             return repo;
           },
-          update: (context, charRepo, storage, previous) {
+          update: (context, charRepo, storage, groups, previous) {
             final newRepo = previous ?? WorldRepository(storage, db);
             // Re-wire CharacterRepository if changed
             newRepo.setCharacterRepository(charRepo);
+            newRepo.setGroupChatRepository(groups);
             return newRepo;
           },
         ),
@@ -768,6 +783,10 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> with WindowListener {
   static bool _dbHealthy = true; // set from main() before runApp
+
+  /// False for exactly the first frame — gates the service-graph-touching
+  /// overlays so first paint happens before the providers spin up.
+  bool _overlaysArmed = false;
   bool _updateChecked = false;
   bool _isMigrating = false;
   bool _isDbCorrupt = false;
@@ -805,6 +824,9 @@ class _MyAppState extends State<MyApp> with WindowListener {
     }
     // Run migration after first frame, then reunification if needed
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      _mark('FIRST FRAME (user sees the app)');
+      // First frame is up — arm the deferred overlays (see the home Stack).
+      if (mounted) setState(() => _overlaysArmed = true);
       // Capture initial window bounds after restore so tracking is correct
       // even if user maximizes without any interactive resize this session.
       try {
@@ -824,6 +846,15 @@ class _MyAppState extends State<MyApp> with WindowListener {
       await _showStableDbImportIfNeeded();
       await _runMigrationIfNeeded();
       await _runReunificationIfNeeded();
+      // Deferred idempotent maintenance (moved out of main()'s pre-window
+      // path): purge month-old soft-deletes + pre-0.8.0 legacy JSON files.
+      try {
+        final db = await AppDatabase.instance();
+        await db.purgeSoftDeletes();
+      } catch (_) {}
+      try {
+        await DataMigrationService.cleanupLegacyFiles();
+      } catch (_) {}
     });
   }
 
@@ -1120,10 +1151,12 @@ class _MyAppState extends State<MyApp> with WindowListener {
   @override
   Widget build(BuildContext context) {
     // StorageService is the single source of truth for isDark (persisted + notifies on load/toggle).
-    // Using Consumer2 ensures the entire MaterialApp tree (and thus ThemeData) rebuilds when the user
-    // toggles or when the async prefs load completes. AppState is kept only for selectedIndex.
-    return Consumer2<StorageService, AppState>(
-      builder: (context, storage, appState, child) {
+    // The Consumer ensures the entire MaterialApp tree (and thus ThemeData) rebuilds when the user
+    // toggles or when the async prefs load completes. AppState was in the tuple historically but
+    // never read here — subscribing meant every sidebar NAV TAP re-ran ColorScheme.fromSeed and
+    // re-derived the whole app theme. MainLayout watches AppState itself for navigation.
+    return Consumer<StorageService>(
+      builder: (context, storage, child) {
         final isDark = storage.uiSettings.isDark;
         return MaterialApp(
           title: 'Front Porch AI',
@@ -1249,8 +1282,16 @@ class _MyAppState extends State<MyApp> with WindowListener {
                 child: Stack(
                   children: [
                     const MainLayout(),
-                    const SetupOverlay(),
-                    const RemoteLockOverlay(),
+                    // Mounted one frame late ON PURPOSE: SetupOverlay reads
+                    // SetupService/BackendManager and RemoteLockOverlay
+                    // consumes WebServerHost — whose provider reads ~15
+                    // others — so building them in the FIRST frame defeated
+                    // every lazy provider and constructed the whole service
+                    // graph (process spawns, dir scans, DB loads) before
+                    // anything had painted. One frame (~16 ms) later is
+                    // imperceptible; first paint no longer waits on it.
+                    if (_overlaysArmed) const SetupOverlay(),
+                    if (_overlaysArmed) const RemoteLockOverlay(),
                     if (_isDbCorrupt) _buildCorruptionOverlay(),
                     if (_isMigrating) _buildMigrationOverlay(),
                     if (_isReunifying) _buildReunificationOverlay(),
@@ -1267,6 +1308,18 @@ class _MyAppState extends State<MyApp> with WindowListener {
   // ── DB Health Check ─────────────────────────────────────────────────
 
   Future<void> _checkDbHealth() async {
+    // The full quick_check runs HERE, after first paint (see main() — only a
+    // cheap open-probe runs before the window shows). A corrupt DB now
+    // surfaces its restore overlay a moment after launch instead of holding
+    // the whole window hostage while the file is validated.
+    if (_dbHealthy) {
+      try {
+        final db = await AppDatabase.instance();
+        _dbHealthy = await db.integrityCheck();
+      } catch (_) {
+        _dbHealthy = false;
+      }
+    }
     if (_dbHealthy) return;
 
     // DB is corrupt — load available backups and show overlay

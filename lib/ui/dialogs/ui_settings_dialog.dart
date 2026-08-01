@@ -18,13 +18,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
-import 'package:front_porch_ai/services/chat_service.dart';
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/models/lorebook.dart';
-import 'package:front_porch_ai/models/chat_theme_preset.dart';
-import 'package:front_porch_ai/models/chat_theme_overrides.dart';
-import 'package:front_porch_ai/services/character_repository.dart';
+import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:flex_color_picker/flex_color_picker.dart';
 import 'background_settings_dialog.dart';

@@ -50,11 +50,33 @@ class SummarySectionState extends State<SummarySection> {
     widget.chatService.addListener(_onChatChanged);
   }
 
+  // ChatService notifies constantly during streaming (every token batch);
+  // this section only renders the recap + a few journal scalars, so rebuild
+  // ONLY when one of them actually changed — the unconditional setState here
+  // used to re-render the whole section at the full streaming rate. (Same
+  // guarded-listener pattern as journal_panel.dart next door.)
+  String _lastSummary = '';
+  bool _lastGenerating = false;
+  bool _lastPaused = false;
+  int _lastIndex = -1;
+
   void _onChatChanged() {
-    if (_controller.text != widget.chatService.summary) {
-      _controller.text = widget.chatService.summary;
+    if (!mounted) return;
+    final c = widget.chatService;
+    final changed =
+        c.summary != _lastSummary ||
+        c.isSummaryGenerating != _lastGenerating ||
+        c.summaryPaused != _lastPaused ||
+        c.summaryLastIndex != _lastIndex;
+    if (!changed) return;
+    _lastSummary = c.summary;
+    _lastGenerating = c.isSummaryGenerating;
+    _lastPaused = c.summaryPaused;
+    _lastIndex = c.summaryLastIndex;
+    if (_controller.text != c.summary) {
+      _controller.text = c.summary;
     }
-    if (mounted) setState(() {});
+    setState(() {});
   }
 
   @override

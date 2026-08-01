@@ -139,391 +139,52 @@ class KokoroEngine implements TtsEngine {
   }
 
   @override
-  List<TtsVoiceInfo> get availableVoices => _voices;
+  List<TtsVoiceInfo> get availableVoices => catalog;
 
-  /// Built-in Kokoro voice catalog.
-  static const _voices = [
-    // American English — Female
-    TtsVoiceInfo(
-      id: 'af_heart',
-      name: 'Heart',
-      gender: 'Female',
-      language: 'American English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'af_alloy',
-      name: 'Alloy',
-      gender: 'Female',
-      language: 'American English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'af_aoede',
-      name: 'Aoede',
-      gender: 'Female',
-      language: 'American English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'af_bella',
-      name: 'Bella',
-      gender: 'Female',
-      language: 'American English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'af_jessica',
-      name: 'Jessica',
-      gender: 'Female',
-      language: 'American English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'af_kore',
-      name: 'Kore',
-      gender: 'Female',
-      language: 'American English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'af_nicole',
-      name: 'Nicole',
-      gender: 'Female',
-      language: 'American English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'af_nova',
-      name: 'Nova',
-      gender: 'Female',
-      language: 'American English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'af_river',
-      name: 'River',
-      gender: 'Female',
-      language: 'American English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'af_sarah',
-      name: 'Sarah',
-      gender: 'Female',
-      language: 'American English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'af_sky',
-      name: 'Sky',
-      gender: 'Female',
-      language: 'American English',
-      engine: 'kokoro',
-    ),
-    // American English — Male
-    TtsVoiceInfo(
-      id: 'am_adam',
-      name: 'Adam',
-      gender: 'Male',
-      language: 'American English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'am_echo',
-      name: 'Echo',
-      gender: 'Male',
-      language: 'American English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'am_eric',
-      name: 'Eric',
-      gender: 'Male',
-      language: 'American English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'am_fenrir',
-      name: 'Fenrir',
-      gender: 'Male',
-      language: 'American English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'am_liam',
-      name: 'Liam',
-      gender: 'Male',
-      language: 'American English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'am_michael',
-      name: 'Michael',
-      gender: 'Male',
-      language: 'American English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'am_onyx',
-      name: 'Onyx',
-      gender: 'Male',
-      language: 'American English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'am_puck',
-      name: 'Puck',
-      gender: 'Male',
-      language: 'American English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'am_santa',
-      name: 'Santa',
-      gender: 'Male',
-      language: 'American English',
-      engine: 'kokoro',
-    ),
-    // British English — Female
-    TtsVoiceInfo(
-      id: 'bf_alice',
-      name: 'Alice',
-      gender: 'Female',
-      language: 'British English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'bf_emma',
-      name: 'Emma',
-      gender: 'Female',
-      language: 'British English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'bf_isabella',
-      name: 'Isabella',
-      gender: 'Female',
-      language: 'British English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'bf_lily',
-      name: 'Lily',
-      gender: 'Female',
-      language: 'British English',
-      engine: 'kokoro',
-    ),
-    // British English — Male
-    TtsVoiceInfo(
-      id: 'bm_daniel',
-      name: 'Daniel',
-      gender: 'Male',
-      language: 'British English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'bm_fable',
-      name: 'Fable',
-      gender: 'Male',
-      language: 'British English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'bm_george',
-      name: 'George',
-      gender: 'Male',
-      language: 'British English',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'bm_lewis',
-      name: 'Lewis',
-      gender: 'Male',
-      language: 'British English',
-      engine: 'kokoro',
-    ),
-    // Japanese
-    TtsVoiceInfo(
-      id: 'jf_alpha',
-      name: 'Alpha',
-      gender: 'Female',
-      language: 'Japanese',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'jf_gongitsune',
-      name: 'Gongitsune',
-      gender: 'Female',
-      language: 'Japanese',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'jm_beta',
-      name: 'Beta',
-      gender: 'Male',
-      language: 'Japanese',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'jm_kumo',
-      name: 'Kumo',
-      gender: 'Male',
-      language: 'Japanese',
-      engine: 'kokoro',
-    ),
-    // Spanish
-    TtsVoiceInfo(
-      id: 'ef_dora',
-      name: 'Dora',
-      gender: 'Female',
-      language: 'Spanish',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'em_alex',
-      name: 'Alex',
-      gender: 'Male',
-      language: 'Spanish',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'em_santa',
-      name: 'Santa',
-      gender: 'Male',
-      language: 'Spanish',
-      engine: 'kokoro',
-    ),
-    // French
-    TtsVoiceInfo(
-      id: 'ff_siwis',
-      name: 'Siwis',
-      gender: 'Female',
-      language: 'French',
-      engine: 'kokoro',
-    ),
-    // Hindi
-    TtsVoiceInfo(
-      id: 'hf_alpha',
-      name: 'Alpha',
-      gender: 'Female',
-      language: 'Hindi',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'hf_beta',
-      name: 'Beta',
-      gender: 'Female',
-      language: 'Hindi',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'hm_omega',
-      name: 'Omega',
-      gender: 'Male',
-      language: 'Hindi',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'hm_psi',
-      name: 'Psi',
-      gender: 'Male',
-      language: 'Hindi',
-      engine: 'kokoro',
-    ),
-    // Italian
-    TtsVoiceInfo(
-      id: 'if_sara',
-      name: 'Sara',
-      gender: 'Female',
-      language: 'Italian',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'im_nicola',
-      name: 'Nicola',
-      gender: 'Male',
-      language: 'Italian',
-      engine: 'kokoro',
-    ),
-    // Brazilian Portuguese
-    TtsVoiceInfo(
-      id: 'pf_dora',
-      name: 'Dora',
-      gender: 'Female',
-      language: 'Brazilian Portuguese',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'pm_alex',
-      name: 'Alex',
-      gender: 'Male',
-      language: 'Brazilian Portuguese',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'pm_santa',
-      name: 'Santa',
-      gender: 'Male',
-      language: 'Brazilian Portuguese',
-      engine: 'kokoro',
-    ),
-    // Mandarin Chinese
-    TtsVoiceInfo(
-      id: 'zf_xiaobei',
-      name: 'Xiaobei',
-      gender: 'Female',
-      language: 'Mandarin Chinese',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'zf_xiaoni',
-      name: 'Xiaoni',
-      gender: 'Female',
-      language: 'Mandarin Chinese',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'zf_xiaoxiao',
-      name: 'Xiaoxiao',
-      gender: 'Female',
-      language: 'Mandarin Chinese',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'zf_xiaoyi',
-      name: 'Xiaoyi',
-      gender: 'Female',
-      language: 'Mandarin Chinese',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'zm_yibo',
-      name: 'Yibo',
-      gender: 'Male',
-      language: 'Mandarin Chinese',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'zm_yunxi',
-      name: 'Yunxi',
-      gender: 'Male',
-      language: 'Mandarin Chinese',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'zm_yunxia',
-      name: 'Yunxia',
-      gender: 'Male',
-      language: 'Mandarin Chinese',
-      engine: 'kokoro',
-    ),
-    TtsVoiceInfo(
-      id: 'zm_yunyang',
-      name: 'Yunyang',
-      gender: 'Male',
-      language: 'Mandarin Chinese',
-      engine: 'kokoro',
-    ),
-  ];
+  /// The Kokoro voice catalog, derived from the model's own speaker table
+  /// ([SherpaKokoroEngine.speakerIds]) so the picker can never again offer a
+  /// voice the shipped model does not actually have.
+  ///
+  /// This used to be ~380 lines of hand-written entries, and it had drifted:
+  /// it offered `jm_beta`, `em_santa` and `zm_yibo` — all labelled Male —
+  /// which the model never contained, so choosing one silently synthesised
+  /// `af_heart`, a female voice. It also hid `jf_nezumi`, `jf_tebukuro` and
+  /// `zm_yunjian`, which the model does contain. Voice ids are
+  /// self-describing (`<language><gender>_<name>`, so `am_adam` is American
+  /// English, male), so the catalog falls out of the id list rather than
+  /// restating it by hand.
+  static final List<TtsVoiceInfo> catalog = _buildCatalog();
+
+  static const Map<String, String> _languageByPrefix = {
+    'a': 'American English',
+    'b': 'British English',
+    'e': 'Spanish',
+    'f': 'French',
+    'h': 'Hindi',
+    'i': 'Italian',
+    'j': 'Japanese',
+    'p': 'Brazilian Portuguese',
+    'z': 'Mandarin Chinese',
+  };
+
+  static List<TtsVoiceInfo> _buildCatalog() {
+    final ids = SherpaKokoroEngine.speakerIds.keys.toList();
+    // The model lists voices alphabetically; hoist the default so it stays the
+    // first entry in the picker, the way the old hand-written list had it.
+    if (ids.remove(SherpaKokoroEngine.defaultVoice)) {
+      ids.insert(0, SherpaKokoroEngine.defaultVoice);
+    }
+    return List.unmodifiable(
+      ids.map((id) {
+        final shortName = id.substring(3);
+        return TtsVoiceInfo(
+          id: id,
+          name: shortName[0].toUpperCase() + shortName.substring(1),
+          gender: id[1] == 'm' ? 'Male' : 'Female',
+          language: _languageByPrefix[id[0]] ?? 'Other',
+          engine: 'kokoro',
+        );
+      }),
+    );
+  }
 }

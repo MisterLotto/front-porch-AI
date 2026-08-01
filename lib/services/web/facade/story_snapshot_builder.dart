@@ -16,9 +16,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'package:front_porch_ai/models/story_project.dart';
-import 'package:front_porch_ai/services/character_repository.dart';
-import 'package:front_porch_ai/services/user_persona_service.dart';
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/services.dart';
 
 /// Reconstructs `character_card_snapshots` on the server from authoritative
 /// character-card text + a role map, mirroring the desktop setup wizard

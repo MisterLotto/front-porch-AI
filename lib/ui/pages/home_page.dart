@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -28,7 +29,7 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 // Barrel imports (preferred during major refactor per project guidelines)
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
-import 'package:front_porch_ai/utils/character_id.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 // Specific pages, dialogs, and internal services not in barrels
@@ -41,12 +42,8 @@ import 'package:front_porch_ai/ui/pages/character_creator_page.dart';
 import 'package:front_porch_ai/ui/pages/story_home_view.dart';
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_controller.dart';
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/byaf_import_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/import_name_collision_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/tag_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/type_delete_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/dialogs.dart';
 import 'package:front_porch_ai/services/byaf_service.dart';
-import 'package:front_porch_ai/utils/picker_prefs.dart';
 
 // _HomePageState is split across these part files (each a private extension on
 // the State) to keep every file under the 500-line cap while preserving full
@@ -67,7 +64,6 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   String _searchQuery = '';
   String? _activeFolderId; // null = top level view
-  List<String> _folderStack = []; // navigation breadcrumb for subfolder back
   SearchScope _searchScope = SearchScope.currentFolder;
   final _searchController = TextEditingController();
 
@@ -76,6 +72,7 @@ class _HomePageState extends State<HomePage> {
   // Multi-select for folder organization
   bool _isOrganizing = false;
   final Set<String> _selectedCharacterIds = {}; // imagePath-based IDs
+  final Set<String> _selectedGroupIds = {}; // GroupChat.id keys
 
   // Sorting
   String _sortMode = 'name'; // 'name', 'recent', 'importDate', 'messages'
@@ -143,11 +140,42 @@ class _HomePageState extends State<HomePage> {
       charRepo.removeListener(_onCharactersChanged);
       charRepo.addListener(_onCharactersChanged);
     } catch (_) {}
+    // Re-tapping the sidebar's Home entry bumps AppState.homeResetTick —
+    // treat it as "take me back to the main screen" (library top level).
+    try {
+      final appState = Provider.of<AppState>(context, listen: false);
+      _lastHomeResetTick ??= appState.homeResetTick;
+      appState.removeListener(_onAppStateChanged);
+      appState.addListener(_onAppStateChanged);
+    } catch (_) {}
   }
+
+  int? _lastHomeResetTick;
+
+  void _onAppStateChanged() {
+    if (!mounted) return;
+    try {
+      final appState = Provider.of<AppState>(context, listen: false);
+      if (appState.homeResetTick != _lastHomeResetTick) {
+        _lastHomeResetTick = appState.homeResetTick;
+        setState(() => _activeFolderId = null);
+      }
+    } catch (_) {}
+  }
+
+  // CharacterRepository notifies for every mutation (a favourite toggle, a
+  // cover change…) and the activity refresh runs two full-table aggregates —
+  // so rapid notifies used to fire overlapping DB scans alongside the grid
+  // rebuild the Consumer already does. Coalesce bursts into one refresh.
+  Timer? _activityRefreshDebounce;
 
   void _onCharactersChanged() {
     if (!mounted) return;
-    _refreshLastActivityCache();
+    _activityRefreshDebounce?.cancel();
+    _activityRefreshDebounce = Timer(const Duration(milliseconds: 250), () {
+      _activityRefreshDebounce = null;
+      if (mounted) _refreshLastActivityCache();
+    });
   }
 
   void _onKoboldUpdate() {
@@ -244,7 +272,10 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _isSelecting = !_isSelecting;
       _isOrganizing = false;
-      if (!_isSelecting) _selectedCharacterIds.clear();
+      if (!_isSelecting) {
+        _selectedCharacterIds.clear();
+        _selectedGroupIds.clear();
+      }
     });
   }
 
@@ -252,7 +283,10 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _isOrganizing = !_isOrganizing;
       _isSelecting = false;
-      if (!_isOrganizing) _selectedCharacterIds.clear();
+      if (!_isOrganizing) {
+        _selectedCharacterIds.clear();
+        _selectedGroupIds.clear();
+      }
     });
   }
 
@@ -265,7 +299,7 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       if (_selectedCharacterIds.contains(id)) {
         _selectedCharacterIds.remove(id);
-        if (_selectedCharacterIds.isEmpty) {
+        if (_selectedCharacterIds.isEmpty && _selectedGroupIds.isEmpty) {
           _isSelecting = false;
           _isOrganizing = false;
         }
@@ -275,19 +309,42 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
+  /// Group analogue of [_toggleSelect] — groups are selected by their id
+  /// (they have no image-filename key).
+  void _toggleSelectGroup(GroupChat group) {
+    setState(() {
+      if (_selectedGroupIds.contains(group.id)) {
+        _selectedGroupIds.remove(group.id);
+        if (_selectedCharacterIds.isEmpty && _selectedGroupIds.isEmpty) {
+          _isSelecting = false;
+          _isOrganizing = false;
+        }
+      } else {
+        _selectedGroupIds.add(group.id);
+      }
+    });
+  }
+
   void _cancelSelection() {
     setState(() {
       _isSelecting = false;
       _isOrganizing = false;
       _selectedCharacterIds.clear();
+      _selectedGroupIds.clear();
     });
   }
 
   @override
   void dispose() {
+    _activityRefreshDebounce?.cancel();
     _searchController.dispose();
     _gridScrollController.dispose();
-
+    try {
+      Provider.of<AppState>(
+        context,
+        listen: false,
+      ).removeListener(_onAppStateChanged);
+    } catch (_) {}
     super.dispose();
   }
 
@@ -400,6 +457,7 @@ class _HomePageState extends State<HomePage> {
             isSelecting: _isSelecting,
             isOrganizing: _isOrganizing,
             selectedCharacterIds: _selectedCharacterIds,
+            selectedGroupIds: _selectedGroupIds,
             searchController: _searchController,
             gridScrollController: _gridScrollController,
             repo: repo,
@@ -409,6 +467,7 @@ class _HomePageState extends State<HomePage> {
             onTapCharacter: _handleTapCharacter,
             onTapGroup: _handleTapGroup,
             onToggleSelect: _toggleSelect,
+            onToggleSelectGroup: _toggleSelectGroup,
             onToggleSelectMode: _toggleSelectMode,
             onToggleOrganizeMode: _toggleOrganizeMode,
             onContextMenuAction: _handleContextMenuAction,
@@ -417,6 +476,7 @@ class _HomePageState extends State<HomePage> {
             onFolderDialogAction: _handleFolderDialogAction,
             onFolderTap: _handleFolderTap,
             onFolderNavigateBack: _handleFolderNavigateBack,
+            onFolderJump: (id) => setState(() => _activeFolderId = id),
             onCancelSelection: _cancelSelection,
             onDeleteSelected: _massDeleteSelected,
             // onCreateGroup no longer wired — old select-for-group path deprecated.

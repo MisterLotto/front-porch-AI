@@ -30,6 +30,9 @@
 
 export 'ai_engine_status_card.dart';
 export 'app_text_field.dart';
+export 'engine_status_chip.dart';
+export 'folder_character_picker.dart';
+export 'realism_form_section.dart';
 export 'styled_text_controller.dart';
 export 'sidebar.dart';
 export 'model_selector.dart';

@@ -16,7 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'package:front_porch_ai/models/character_card.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/chat/ambition_service.dart';
 
 /// Ambition fragment for the words-only state block (Living Time §6): one

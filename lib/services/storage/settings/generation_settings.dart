@@ -18,7 +18,7 @@
 
 import 'dart:convert';
 
-import 'package:front_porch_ai/models/output_sanitizer_rule.dart';
+import 'package:front_porch_ai/models/models.dart';
 
 import 'settings_base.dart';
 

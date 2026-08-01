@@ -20,15 +20,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:front_porch_ai/services/model_manager.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
-import 'package:front_porch_ai/services/hardware_service.dart';
-import 'package:front_porch_ai/models/hf_model.dart';
+import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/ui/widgets/hf_model_card.dart';
 import 'package:front_porch_ai/ui/widgets/local_model_card.dart';
 import 'package:front_porch_ai/ui/widgets/download_queue_panel.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/utils/picker_prefs.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 class ModelManagerPage extends StatefulWidget {
   const ModelManagerPage({super.key});
@@ -114,6 +112,10 @@ class _ModelManagerPageState extends State<ModelManagerPage>
   void _onDownload(HFModelFile file) {
     final modelManager = Provider.of<ModelManager>(context, listen: false);
     modelManager.queueDownload(file);
+    // Downloading a model IS local intent: fetch the managed engine alongside
+    // it (a no-op when installed/downloading/remote) so both finish together
+    // instead of the engine wait landing right when the user starts chatting.
+    Provider.of<BackendManager>(context, listen: false).ensureEngineInstalled();
   }
 
   void _confirmDelete(BuildContext context, String path) {

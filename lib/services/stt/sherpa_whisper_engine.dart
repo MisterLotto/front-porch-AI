@@ -24,7 +24,7 @@ import 'dart:typed_data';
 import 'package:path/path.dart' as p;
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
-import 'package:front_porch_ai/services/model_fetch.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/sherpa_runtime.dart';
 
 /// In-process Whisper STT via sherpa-onnx (phase 3 of

@@ -30,34 +30,21 @@ import 'package:front_porch_ai/utils/utils.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'package:front_porch_ai/ui/chat_components/chat_components.dart';
 import 'package:front_porch_ai/ui/chat_components/overlays/absence_recap_banner.dart';
-import 'package:front_porch_ai/ui/dialogs/chat_to_story_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/dialogs.dart';
 
 // Specific dialogs and modules not covered by the barrels (or intentionally direct)
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_controller.dart';
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/image_prompt_review_dialog.dart';
 import 'package:front_porch_ai/ui/pages/edit_character_page.dart';
-import 'package:front_porch_ai/ui/dialogs/ui_settings_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/chat_settings_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/model_settings_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/tts_settings_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/user_persona_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/context_viewer_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/group_settings_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/scene_guest_detected_dialog.dart';
 import 'package:front_porch_ai/services/chat/chat_command_handler.dart';
 import 'package:front_porch_ai/services/avatar_gallery.dart';
-import 'package:front_porch_ai/services/capability/model_capabilities.dart';
-import 'package:front_porch_ai/services/capability/vision_support_resolver.dart';
+import 'package:front_porch_ai/services/capability/capability.dart';
 import 'package:front_porch_ai/services/caption/local_caption_service.dart';
-import 'package:front_porch_ai/ui/dialogs/scene_guest_picker_dialog.dart';
 // Old ImageGenDialog removed in Stage 3 (full from-scratch Image Studio).
 // Studio launched below; see lib/ui/image_studio/ and _showImageGenDialog.
-import 'package:front_porch_ai/ui/dialogs/kobold_log_dialog.dart';
 // Stage 3 Image Studio (replaces old image_gen_dialog completely)
 import 'package:front_porch_ai/ui/image_studio/image_studio.dart';
-import 'package:front_porch_ai/utils/picker_prefs.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -493,12 +480,21 @@ class _ChatPageState extends State<ChatPage> {
 
   void _scrollToBottom() {
     if (_scrollController.hasClients && _autoScroll) {
-      // ListView is reversed: position 0 = visual bottom (most recent)
-      _scrollController.animateTo(
-        0,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
+      // ListView is reversed: position 0 = visual bottom (most recent).
+      // While streaming this fires per token batch — each animateTo would
+      // interrupt and restart the previous 300 ms curve, churning the scroll
+      // position every frame. Jump instantly during generation; keep the
+      // smooth ease for one-shot scrolls (send, page open).
+      final chat = context.read<ChatService>();
+      if (chat.isGenerating) {
+        _scrollController.jumpTo(0);
+      } else {
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
     }
   }
 
@@ -1979,6 +1975,12 @@ class _ChatPageState extends State<ChatPage> {
     final pending = chatService.observerMode ? null : _pendingImageBytes;
     final text = _controller.text;
     if ((text.trim().isEmpty && pending == null) ||
+        // Mirrors sendMessage's guard set EXACTLY. If this list is ever
+        // narrower than the service's, we fall through to _controller.clear()
+        // below for a send the service silently refused, and the user's typed
+        // text and pending photo are consumed into the void. Note sendMessage
+        // deliberately guards on isGenerating (streaming) and NOT on
+        // isSettlingTurn — see the comment there.
         chatService.isGenerating ||
         chatService.isGuestBusy ||
         chatService.isPhotoTurnInFlight ||
@@ -2107,6 +2109,16 @@ class _ChatPageState extends State<ChatPage> {
             if (matches.isEmpty) return const SizedBox.shrink();
             return _buildCommandHelper(context, matches);
           },
+        ),
+
+        // ── @-mention helper ─────────────────────────────────────────────
+        // The cast-name twin of the slash helper: while the cursor token is
+        // "@…", lists who can be addressed (host + guests, or group
+        // members); tapping fills in "@Name " and that character answers
+        // the turn (the sendMessage direct-address router).
+        MentionAutocomplete(
+          controller: _controller,
+          focusNode: _chatFocusNode,
         ),
 
         // ── Input bar ────────────────────────────────────────────────────

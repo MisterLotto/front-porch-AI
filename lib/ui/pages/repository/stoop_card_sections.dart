@@ -39,26 +39,35 @@ class StoopCollapsible extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (child == null) return const SizedBox.shrink();
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        tilePadding: EdgeInsets.zero,
-        initiallyExpanded: initiallyExpanded,
-        title: Text(title, style: stoopSectionTitleStyle(context)),
-        childrenPadding: const EdgeInsets.only(bottom: 12),
-        children: [
-          Align(alignment: Alignment.centerLeft, child: child!),
-        ],
+    // Hub .hub-sect: a bordered card row whose disclosure marker is amber.
+    return Container(
+      margin: const EdgeInsets.only(top: 10),
+      decoration: BoxDecoration(
+        gradient: stoopCardGradient(context),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: stoopBorder(context)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+          initiallyExpanded: initiallyExpanded,
+          iconColor: stoopAmberText(context),
+          collapsedIconColor: stoopAmberText(context),
+          title: Text(title, style: stoopSectionTitleStyle(context)),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+          children: [
+            Align(alignment: Alignment.centerLeft, child: child!),
+          ],
+        ),
       ),
     );
   }
 }
 
 TextStyle stoopSectionTitleStyle(BuildContext context) =>
-    Theme.of(context).textTheme.titleMedium!.copyWith(
-      fontWeight: FontWeight.w700,
-      color: AppColors.textPrimary(context),
-    );
+    stoopDisplay(context, size: 16.5, weight: FontWeight.w600);
 
 /// A collapsible holding a plain text body. Renders nothing when [body] is blank.
 Widget stoopTextSection(
@@ -73,7 +82,7 @@ Widget stoopTextSection(
     initiallyExpanded: initiallyExpanded,
     child: Text(
       body,
-      style: TextStyle(color: AppColors.textSecondary(context), height: 1.5),
+      style: TextStyle(color: stoopCream2(context), height: 1.5),
     ),
   );
 }
@@ -115,6 +124,45 @@ List<Widget> stoopStandardSections(
           'Post-history:\n${s('post_history_instructions')}',
       ].join('\n\n'),
     ),
+  ];
+}
+
+/// The collapsible field set for a WORLD card — the .fpworld envelope's
+/// description, climate, place traits, and lore. Reuses the same section
+/// chrome as characters so places read native on the detail panel.
+List<Widget> stoopWorldSections(
+  BuildContext context,
+  Map<String, dynamic> card,
+) {
+  final name = (card['name'] ?? '').toString();
+  final biome = card['biome'];
+  final climate = biome is Map
+      ? [
+          (biome['displayName'] ?? '').toString(),
+          (biome['feel'] ?? biome['description'] ?? '').toString(),
+        ].where((x) => x.isNotEmpty).join(' — ')
+      : '';
+  final traits = card['place_traits'];
+  final traitLines = traits is Map
+      ? [
+          for (final e in traits.entries)
+            '${e.key.toString().replaceAll('_', ' ')}: ${e.value}',
+        ]
+      : const <String>[];
+  final lore = card['lorebook'];
+  final entries = (lore is Map ? lore['entries'] : null) as List?;
+  final valid = entries?.whereType<Map>().toList() ?? const [];
+  return [
+    stoopTextSection(
+      context,
+      'About this place',
+      (card['description'] ?? '').toString(),
+      initiallyExpanded: true,
+    ),
+    stoopTextSection(context, 'Climate', climate),
+    stoopTextSection(context, 'Traits', traitLines.join('\n')),
+    if (valid.isNotEmpty)
+      stoopLorebookEntries(context, 'Lore (${valid.length})', valid, name),
   ];
 }
 
@@ -190,11 +238,11 @@ Widget stoopNeedsSection(BuildContext context, Map<String, dynamic> re) {
     ('Comfort', 'comfort'),
   ];
   final head = TextStyle(
-    color: AppColors.textTertiary(context),
+    color: stoopMute(context),
     fontSize: 12,
     fontWeight: FontWeight.w600,
   );
-  final cell = TextStyle(color: AppColors.textSecondary(context), fontSize: 13);
+  final cell = TextStyle(color: stoopCream2(context), fontSize: 13);
   TableRow tableRow(List<Widget> cells) => TableRow(
     children: cells
         .map(
@@ -277,7 +325,7 @@ Widget stoopLorebookEntries(
                 Text(
                   stoopResolveMacros((e['content'] ?? '').toString(), name),
                   style: TextStyle(
-                    color: AppColors.textTertiary(context),
+                    color: stoopMute(context),
                     height: 1.45,
                   ),
                 ),
@@ -296,7 +344,7 @@ Widget _lorebookTriggers(BuildContext context, Map e) {
     return Text(
       (e['name'] ?? e['comment'] ?? 'Entry').toString(),
       style: TextStyle(
-        color: AppColors.textSecondary(context),
+        color: stoopCream2(context),
         fontWeight: FontWeight.w600,
         fontSize: 13,
       ),
@@ -310,13 +358,16 @@ Widget _lorebookTriggers(BuildContext context, Map e) {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
-            color: stoopAccent(context).withValues(alpha: 0.14),
-            borderRadius: BorderRadius.circular(6),
+            color: stoopTealSoft(context),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: AppColors.stoopTeal.withValues(alpha: 0.35),
+            ),
           ),
           child: Text(
             k,
             style: TextStyle(
-              color: stoopAccent(context),
+              color: stoopTealText(context),
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
@@ -341,7 +392,7 @@ Widget _kvList(BuildContext context, List<(String, String)> rows) {
                 child: Text(
                   k,
                   style: TextStyle(
-                    color: AppColors.textTertiary(context),
+                    color: stoopMute(context),
                     fontSize: 13,
                   ),
                 ),
@@ -350,7 +401,7 @@ Widget _kvList(BuildContext context, List<(String, String)> rows) {
                 child: Text(
                   v,
                   style: TextStyle(
-                    color: AppColors.textSecondary(context),
+                    color: stoopCream2(context),
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),

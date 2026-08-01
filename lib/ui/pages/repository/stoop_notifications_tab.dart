@@ -11,6 +11,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/services/backporch/backporch.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// The Notifications tab of the Stoop inbox: automated decision notices
@@ -24,36 +25,13 @@ class StoopNotificationsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (notices.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.campaign_outlined,
-                size: 48,
-                color: AppColors.iconSecondary(context),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'No notifications yet',
-                style: TextStyle(
-                  color: AppColors.textPrimary(context),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Approvals and review notes for your shared characters land '
-                'here automatically.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textTertiary(context)),
-              ),
-            ],
-          ),
-        ),
+      return stoopEmpty(
+        context,
+        glyph: '📣',
+        title: 'No notifications yet',
+        body:
+            'Approvals and review notes for your shared characters land '
+            'here automatically.',
       );
     }
     final newestFirst = notices.reversed.toList();
@@ -77,17 +55,27 @@ class _NoticeCard extends StatelessWidget {
     final approved = body.contains('approved and') || body.contains('is approved');
     final rejected = body.contains('wasn’t approved') || body.contains("wasn't approved");
     final accent = approved
-        ? AppColors.resolve(context, Colors.teal.shade300, Colors.teal.shade700)
+        ? stoopTealText(context)
         : rejected
-        ? AppColors.resolve(context, Colors.orange.shade300, Colors.orange.shade800)
-        : AppColors.textSecondary(context);
+        ? stoopEmberText(context)
+        : stoopDusk(context);
+    final edge = approved
+        ? AppColors.stoopTeal
+        : rejected
+        ? AppColors.stoopEmber
+        : stoopDusk(context);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerOf(context),
-        borderRadius: BorderRadius.circular(12),
-        border: Border(left: BorderSide(color: accent, width: 3)),
+        color: stoopCard(context),
+        borderRadius: BorderRadius.circular(9),
+        border: Border(
+          left: BorderSide(color: edge, width: 3),
+          top: BorderSide(color: stoopBorder(context)),
+          right: BorderSide(color: stoopBorder(context)),
+          bottom: BorderSide(color: stoopBorder(context)),
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,10 +96,7 @@ class _NoticeCard extends StatelessWidget {
               children: [
                 Text(
                   body,
-                  style: TextStyle(
-                    color: AppColors.textPrimary(context),
-                    height: 1.3,
-                  ),
+                  style: TextStyle(color: stoopCream2(context), height: 1.35),
                 ),
                 const SizedBox(height: 4),
                 Row(
@@ -130,7 +115,7 @@ class _NoticeCard extends StatelessWidget {
                       _timeAgo(notice.createdAt),
                       style: TextStyle(
                         fontSize: 12,
-                        color: AppColors.textTertiary(context),
+                        color: stoopFaint(context),
                       ),
                     ),
                   ],

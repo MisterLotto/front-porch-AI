@@ -148,22 +148,38 @@ export function FolderCard({
 
 export function GroupCard({
   group,
+  selecting,
+  selected,
   onOpen,
+  onToggleSelect,
   onMenu,
+  dndEnabled,
+  onDragStart,
 }: {
   group: LibGroup;
+  selecting: boolean;
+  selected: boolean;
   onOpen: () => void;
+  onToggleSelect: () => void;
   onMenu: (e: MouseEvent) => void;
+  dndEnabled: boolean;
+  onDragStart: () => void;
 }) {
   return (
     <div
-      className="lib-card group-card"
+      className={`lib-card group-card${selected ? ' selected' : ''}`}
+      draggable={dndEnabled && !selecting}
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', group.id);
+        onDragStart();
+      }}
       onContextMenu={(e) => {
         e.preventDefault();
         onMenu(e);
       }}
     >
-      <button className="lib-open" onClick={onOpen}>
+      <button className="lib-open" onClick={() => (selecting ? onToggleSelect() : onOpen())}>
         <div className="lib-art group-art" data-count={Math.min(group.members.length, 4)}>
           {group.members.slice(0, 4).map((m) =>
             m.hasAvatar ? (
@@ -194,17 +210,23 @@ export function GroupCard({
           <span className="lib-sub">{group.memberCount} members</span>
         </div>
       </button>
-      <button
-        className="icon-btn card-kebab"
-        title="More actions"
-        aria-label="More actions"
-        onClick={(e) => {
-          e.stopPropagation();
-          onMenu(e);
-        }}
-      >
-        ⋮
-      </button>
+      {selecting ? (
+        <span className={`select-check${selected ? ' on' : ''}`} aria-hidden>
+          {selected ? '✓' : ''}
+        </span>
+      ) : (
+        <button
+          className="icon-btn card-kebab"
+          title="More actions"
+          aria-label="More actions"
+          onClick={(e) => {
+            e.stopPropagation();
+            onMenu(e);
+          }}
+        >
+          ⋮
+        </button>
+      )}
     </div>
   );
 }

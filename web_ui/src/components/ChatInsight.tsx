@@ -8,6 +8,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { ChatLorebookModal } from './ChatLorebookModal';
+import { ImportLorebookWizard } from './ImportLorebookWizard';
+import { ChatPlacesSection } from './ChatPlacesSection';
 import { ChatTools } from './ChatTools';
 import { type CastMember } from './CastBar';
 import { LookSwiper } from './ChatAvatar';
@@ -148,6 +150,10 @@ export function ChatInsight({
     return () => clearTimeout(t);
   }, [draft]);
   const [showChatBook, setShowChatBook] = useState(false);
+  // Import Lorebook wizard entry (desktop "This Chat" sidebar download icon
+  // parity — the Worlds tab no longer hosts this).
+  const [showImportBook, setShowImportBook] = useState(false);
+  const [importMsg, setImportMsg] = useState('');
   useEffect(() => setNote(authorNote), [authorNote]);
   // Author's Note strength (injection depth/weight, 1–10) — desktop parity.
   const [strength, setStrength] = useState(authorNoteDepth);
@@ -241,6 +247,8 @@ export function ChatInsight({
 
       <ChatTools reloadKey={toolsKey} focusedId={focusedId} groupId={groupId} onCommand={onCommand} />
 
+      <ChatPlacesSection reloadKey={toolsKey} />
+
       <h4 className="section-label">Lorebook</h4>
       {typeof loreBudget === 'number' && loreBudget > 0 && (
         <div className={`lore-meter${(loreOverflow?.length ?? 0) > 0 ? ' over' : ''}`}>
@@ -294,7 +302,17 @@ export function ChatInsight({
       <button className="ghost lore-chat-btn" onClick={() => setShowChatBook(true)}>
         Manage this chat's lore…
       </button>
+      <button className="ghost lore-chat-btn" onClick={() => setShowImportBook(true)}>
+        Import a lorebook…
+      </button>
+      {importMsg && <p className="muted small">{importMsg}</p>}
       {showChatBook && <ChatLorebookModal onClose={() => setShowChatBook(false)} />}
+      {showImportBook && (
+        <ImportLorebookWizard
+          onClose={() => setShowImportBook(false)}
+          onImported={setImportMsg}
+        />
+      )}
     </div>
   );
 }

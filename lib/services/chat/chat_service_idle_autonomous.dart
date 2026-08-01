@@ -64,7 +64,7 @@ extension ChatServiceIdleAutonomous on ChatService {
 
   void _onIdleTimerFired() {
     if (_disposed) return;
-    if (_isGenerating) {
+    if (_isTurnBusy) {
       _resetIdleTimer();
       return;
     }

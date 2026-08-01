@@ -232,6 +232,56 @@ export const stoop = {
     call<MeResult>('POST', '/api/stoop/me/display-name', { displayName }),
   setNsfwEnabled: (enabled: boolean) =>
     call<MeResult>('POST', '/api/stoop/me/nsfw', { enabled }),
+  /** Edit the public creator profile (bio ≤ 300 chars, up to 4 http(s) links). */
+  updateProfile: (bio: string, links: string[]) =>
+    call<MeResult>('POST', '/api/stoop/me/profile', { bio, links }),
+  /** Change the sign-in email. Confirmation goes to the NEW address; nothing
+   *  changes until it's clicked (shows as user.pendingEmail meanwhile). */
+  changeEmail: (newEmail: string, password: string, totp?: string) =>
+    call<MeResult>('POST', '/api/stoop/me/email', {
+      newEmail,
+      ...(password ? { password } : {}),
+      ...(totp ? { totp } : {}),
+    }),
+  cancelEmailChange: () => call<MeResult>('DELETE', '/api/stoop/me/email'),
+  /** Ask for a password-reset email (always answers ok — never reveals whether
+   *  the address has an account). The emailed link opens the hub's reset page. */
+  forgot: (email: string) =>
+    raw<{ ok: boolean }>('POST', '/api/stoop/auth/forgot', { email }, false),
+  resendVerification: () =>
+    call<{ ok: boolean }>('POST', '/api/stoop/me/resend-verification', {}),
+  /** Upload a profile photo (raw image bytes; live instantly, post-moderated). */
+  uploadAvatar: async (blob: Blob): Promise<MeResult> => {
+    const doPost = async () => {
+      const token = accessToken();
+      const res = await fetch('/api/stoop/me/avatar', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': blob.type || 'image/jpeg',
+          ...(token ? { 'X-Stoop-Token': token } : {}),
+        },
+        body: blob,
+      });
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) {
+        throw new StoopError(res.status, (data.error as string) || `http_${res.status}`);
+      }
+      return data as unknown as MeResult;
+    };
+    try {
+      return await doPost();
+    } catch (e) {
+      if (e instanceof StoopError && e.status === 401 && (await tryRefresh())) {
+        return doPost();
+      }
+      throw e;
+    }
+  },
+  deleteAvatar: () => call<MeResult>('DELETE', '/api/stoop/me/avatar'),
+  /** Delete one of YOUR OWN uploads (the backend enforces ownership). */
+  deleteCharacter: (id: string) =>
+    call<{ ok: boolean }>('DELETE', `/api/stoop/cards/${encodeURIComponent(id)}`),
   deleteAccount: async (): Promise<void> => {
     await call('DELETE', '/api/stoop/me');
     clearStoopSession();
@@ -266,7 +316,7 @@ export const stoop = {
       { value },
     ),
   /** Download + import into the desktop library (runs server-side). */
-  download: (id: string, type: 'SOLO' | 'GROUP') =>
+  download: (id: string, type: 'SOLO' | 'GROUP' | 'WORLD') =>
     call<{ ok: boolean; name: string; type: string }>(
       'POST',
       `/api/stoop/cards/${encodeURIComponent(id)}/download`,
@@ -327,6 +377,10 @@ export function stoopErrorText(e: unknown): string {
       return 'That code didn’t work — try again.';
     case 'email_taken':
       return 'An account with that email already exists.';
+    case 'disposable_email':
+      return "Please use a permanent email address — throwaway addresses aren't accepted. You can browse The Stoop without an account.";
+    case 'undeliverable_email':
+      return "That domain can't receive email. Check the address and try again.";
     case 'underage':
       return 'You must be 18 or older to use The Stoop.';
     case 'account_banned':
@@ -337,6 +391,20 @@ export function stoopErrorText(e: unknown): string {
       return 'Your Stoop session expired — please sign in again.';
     case 'library_unavailable':
       return 'The desktop library isn’t ready yet — try again in a moment.';
+    case 'display_name_taken':
+      return 'That display name is already taken — pick another.';
+    case 'email_not_verified':
+      return 'Confirm your email first — profile photos need a verified address.';
+    case 'avatar_locked':
+      return 'A moderator has disabled profile pictures for this account.';
+    case 'unsupported_image_type':
+      return 'Use a PNG, JPEG, or WebP image.';
+    case 'resend_too_soon':
+      return 'Hang on a minute before requesting another email.';
+    case 'same_email':
+      return 'That’s already your sign-in email.';
+    case 'wrong_password':
+      return 'That password didn’t match.';
     default:
       return `Something went wrong (${e.code}).`;
   }

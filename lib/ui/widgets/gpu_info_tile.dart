@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:front_porch_ai/services/hardware_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 class GpuInfoTile extends StatelessWidget {

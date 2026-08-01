@@ -18,7 +18,7 @@
 
 import 'package:flutter/foundation.dart';
 
-import 'package:front_porch_ai/models/needs_impact.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
 
 /// Documented decay modifier for the `tickDecay` pipeline.
@@ -300,10 +300,11 @@ class NeedsSimulation {
         if (key != 'comfort') return false;
         final w = ctx.getWeather?.call();
         if (w == null) return false;
+        // Rank-based so extremes count too; identical for classic bands.
         return w.condition == WeatherCondition.storm ||
             w.condition == WeatherCondition.rain ||
-            w.temp == TempBand.hot ||
-            w.temp == TempBand.cold;
+            w.temp.rank >= TempBand.hot.rank ||
+            w.temp.rank <= TempBand.cold.rank;
       },
       factor: (key, current, ctx) => 1.25,
     ),

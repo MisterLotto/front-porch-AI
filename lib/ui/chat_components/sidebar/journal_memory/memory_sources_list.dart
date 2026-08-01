@@ -104,6 +104,8 @@ class MemorySourcesList extends StatelessWidget {
                       height: 20,
                       fit: BoxFit.cover,
                       alignment: Alignment.topCenter,
+                      // 20 px avatar — never decode a full portrait for it.
+                      cacheWidth: 64,
                       errorBuilder: (_, _, _) => Icon(
                         Icons.person,
                         size: 16,

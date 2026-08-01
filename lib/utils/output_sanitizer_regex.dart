@@ -16,7 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'package:front_porch_ai/models/output_sanitizer_rule.dart';
+import 'package:front_porch_ai/models/models.dart';
 
 /// Limited regex support for the Output Sanitizer find field.
 ///

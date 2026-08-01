@@ -19,8 +19,7 @@
 import 'package:flutter/material.dart';
 import 'package:front_porch_ai/services/image_gen_service.dart'
     show ImageGenMode;
-import 'package:front_porch_ai/services/image_prompt/image_gen_context.dart';
-import 'package:front_porch_ai/services/image_prompt/image_prompt_builder.dart';
+import 'package:front_porch_ai/services/image_prompt/image_prompt.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// The heart of pre-gen control (per Stage 3 spec).

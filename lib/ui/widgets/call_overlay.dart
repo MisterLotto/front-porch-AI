@@ -21,10 +21,8 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:front_porch_ai/services/stt_service.dart';
-import 'package:front_porch_ai/services/chat_service.dart';
-import 'package:front_porch_ai/services/tts_service.dart';
-import 'package:front_porch_ai/models/character_card.dart';
+import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Full-screen voice call overlay.

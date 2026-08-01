@@ -16,8 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/models/story_project.dart';
+import 'package:front_porch_ai/models/models.dart';
 
 /// Living Time §4 — "turn this chat into a story": the faithful-mode prompt
 /// directives and the ONE pre-configured-project builder shared by the

@@ -18,7 +18,7 @@
 
 import 'dart:math';
 
-import 'package:front_porch_ai/models/lorebook.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/chat/lorebook_collection.dart';
 import 'package:front_porch_ai/services/chat/lorebook_matcher.dart';
 import 'package:front_porch_ai/services/storage/settings/lorebook_settings.dart';

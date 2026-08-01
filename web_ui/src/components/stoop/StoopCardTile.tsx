@@ -45,6 +45,7 @@ export function StoopBadges({ card }: { card: StoopCard }) {
         </span>
       )}
       {card.type === 'GROUP' && <span className="stoop-badge group">Group</span>}
+      {card.type === 'WORLD' && <span className="stoop-badge world">World</span>}
       {card.nsfw && <span className="stoop-badge nsfw">NSFW</span>}
     </span>
   );

@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// The login / create-account gate shown when no repository account is signed
@@ -62,6 +63,12 @@ class _RepositoryAuthViewState extends State<RepositoryAuthView> {
         return 'Incorrect email or password.';
       case 'email_taken':
         return 'That email is already registered. Try signing in.';
+      case 'disposable_email':
+        return 'Please use a permanent email address — throwaway addresses '
+            "aren't accepted. You can browse The Stoop without an account.";
+      case 'undeliverable_email':
+        return "That domain can't receive email. Check the address and try "
+            'again.';
       case 'underage':
         return 'You must be 18 or older to use The Stoop.';
       case 'account_banned':
@@ -144,6 +151,71 @@ class _RepositoryAuthViewState extends State<RepositoryAuthView> {
     }
   }
 
+  // Ask the server for a reset email. The emailed link opens the hub's reset
+  // page in a browser (email links can't land inside the app); once the new
+  // password is set, signing in here works again. The server never reveals
+  // whether an address has an account.
+  Future<void> _forgotPassword() async {
+    final controller = TextEditingController(text: _email.text.trim());
+    final sent = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: stoopCard2(ctx),
+        title: Text('Locked out?', style: TextStyle(color: stoopCream(ctx))),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Enter your account email and we’ll send a link to choose a new '
+              'password. The link opens in your browser and works for '
+              '45 minutes.',
+              style: TextStyle(color: stoopCream2(ctx), fontSize: 13.5),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.emailAddress,
+              style: TextStyle(color: stoopCream(ctx)),
+              decoration: stoopInput(ctx, 'you@example.com'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final email = controller.text.trim();
+              if (!email.contains('@')) return;
+              try {
+                await BackporchApi().forgotPassword(email);
+              } catch (_) {
+                // Deliberately quiet — the answer is the same either way.
+              }
+              if (ctx.mounted) Navigator.pop(ctx, true);
+            },
+            child: const Text('Email me a link'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (sent == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'If that address has a Stoop account, a reset link is on its way. '
+            'Check your email (and spam).',
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _pickDob() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -164,29 +236,43 @@ class _RepositoryAuthViewState extends State<RepositoryAuthView> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
           child: Container(
-            padding: const EdgeInsets.all(28),
+            padding: const EdgeInsets.all(30),
             decoration: BoxDecoration(
-              color: AppColors.cardOf(context),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.borderOf(context)),
+              gradient: stoopCardGradient(context),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: stoopBorder(context)),
+              boxShadow: [
+                const BoxShadow(
+                  color: Color(0x59000000),
+                  blurRadius: 30,
+                  offset: Offset(0, 10),
+                ),
+                BoxShadow(
+                  color: AppColors.stoopAmber.withValues(alpha: 0.04),
+                  blurRadius: 60,
+                ),
+              ],
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
+                  '🏡',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 26),
+                ),
+                const SizedBox(height: 6),
+                Text(
                   'The Stoop',
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary(context),
-                  ),
+                  style: stoopDisplay(context, size: 24),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Sign in to browse and share characters',
+                  'Pull up a chair — sign in to browse and share.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: AppColors.textSecondary(context)),
+                  style: TextStyle(color: stoopMute(context)),
                 ),
                 const SizedBox(height: 20),
                 _modeToggle(),
@@ -216,37 +302,45 @@ class _RepositoryAuthViewState extends State<RepositoryAuthView> {
                   Text(
                     _error!,
                     style: TextStyle(
-                      color: AppColors.resolve(
-                        context,
-                        Colors.redAccent,
-                        Colors.red.shade700,
-                      ),
+                      color: stoopEmberText(context),
                       fontSize: 13,
                     ),
                   ),
                 ],
                 const SizedBox(height: 20),
-                FilledButton(
+                StoopAmberButton(
+                  label: _isSignup ? 'Create account' : 'Sign in',
+                  busy: _busy,
                   onPressed: _busy ? null : _submit,
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  child: _busy
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Text(_isSignup ? 'Create account' : 'Sign in'),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
+                if (!_isSignup) ...[
+                  const SizedBox(height: 12),
+                  Center(
+                    child: InkWell(
+                      onTap: _busy ? null : _forgotPassword,
+                      borderRadius: BorderRadius.circular(6),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        child: Text(
+                          'Forgot password?',
+                          style: TextStyle(
+                            color: stoopTealText(context),
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Text(
                   '18+ only · one account works everywhere in Front Porch',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.textTertiary(context),
-                    fontSize: 12,
-                  ),
+                  style: TextStyle(color: stoopFaint(context), fontSize: 12),
                 ),
               ],
             ),
@@ -259,8 +353,9 @@ class _RepositoryAuthViewState extends State<RepositoryAuthView> {
   Widget _modeToggle() {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerOf(context),
+        color: stoopBg1(context),
         borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: stoopBorder(context)),
       ),
       padding: const EdgeInsets.all(4),
       child: Row(
@@ -295,16 +390,14 @@ class _RepositoryAuthViewState extends State<RepositoryAuthView> {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: selected ? AppColors.cardOf(context) : Colors.transparent,
+            color: selected ? stoopAmberSoft(context) : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
             label,
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: selected
-                  ? AppColors.textPrimary(context)
-                  : AppColors.textSecondary(context),
+              color: selected ? stoopAmberText(context) : stoopMute(context),
               fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
             ),
           ),
@@ -325,9 +418,9 @@ class _RepositoryAuthViewState extends State<RepositoryAuthView> {
         Text(
           label,
           style: TextStyle(
-            color: AppColors.textSecondary(context),
+            color: stoopCream2(context),
             fontSize: 13,
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 6),
@@ -335,25 +428,8 @@ class _RepositoryAuthViewState extends State<RepositoryAuthView> {
           controller: controller,
           obscureText: obscure,
           enabled: !_busy,
-          style: TextStyle(color: AppColors.textPrimary(context)),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: TextStyle(color: AppColors.textTertiary(context)),
-            filled: true,
-            fillColor: AppColors.surfaceContainerOf(context),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 12,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: AppColors.borderOf(context)),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: AppColors.borderOf(context)),
-            ),
-          ),
+          style: TextStyle(color: stoopCream(context)),
+          decoration: stoopInput(context, hint ?? ''),
         ),
       ],
     );
@@ -369,9 +445,9 @@ class _RepositoryAuthViewState extends State<RepositoryAuthView> {
         Text(
           'Date of birth',
           style: TextStyle(
-            color: AppColors.textSecondary(context),
+            color: stoopCream2(context),
             fontSize: 13,
-            fontWeight: FontWeight.w500,
+            fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 6),
@@ -381,24 +457,20 @@ class _RepositoryAuthViewState extends State<RepositoryAuthView> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
             decoration: BoxDecoration(
-              color: AppColors.surfaceContainerOf(context),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: AppColors.borderOf(context)),
+              color: stoopBg1(context),
+              borderRadius: BorderRadius.circular(9),
+              border: Border.all(color: stoopBorderHi(context)),
             ),
             child: Row(
               children: [
-                Icon(
-                  Icons.cake_outlined,
-                  size: 18,
-                  color: AppColors.iconSecondary(context),
-                ),
+                Icon(Icons.cake_outlined, size: 18, color: stoopMute(context)),
                 const SizedBox(width: 10),
                 Text(
                   label,
                   style: TextStyle(
                     color: _dob == null
-                        ? AppColors.textTertiary(context)
-                        : AppColors.textPrimary(context),
+                        ? stoopFaint(context)
+                        : stoopCream(context),
                   ),
                 ),
               ],

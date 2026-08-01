@@ -31,6 +31,10 @@
 // Direct imports of individual service files remain fully supported and are
 // the correct choice when only one or two niche services are needed.
 
+export 'engine_health.dart';
+export 'expression_pack_service.dart';
+export 'model_fetch.dart';
+export 'model_manager.dart';
 export 'storage_service.dart';
 export 'character_repository.dart';
 export 'group_chat_repository.dart';

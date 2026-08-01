@@ -14,7 +14,6 @@ import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/ui/pages/repository/stoop_card_sections.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
-import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Group-level sections for the Stoop detail panel — the "overview" shown above
 /// the per-member carousel: the group's own scenario / greeting / system prompt,
@@ -84,7 +83,7 @@ Widget stoopGroupDynamicsSection(
             Text(
               nm(entry.key),
               style: TextStyle(
-                color: AppColors.textSecondary(context),
+                color: stoopCream2(context),
                 fontWeight: FontWeight.w600,
                 fontSize: 13,
               ),
@@ -93,10 +92,7 @@ Widget stoopGroupDynamicsSection(
             Text(
               'Bond $bond · Trust $trust'
               '${emotion.isNotEmpty ? ' · $emotion' : ''}',
-              style: TextStyle(
-                color: AppColors.textTertiary(context),
-                fontSize: 13,
-              ),
+              style: TextStyle(color: stoopMute(context), fontSize: 13),
             ),
             for (final r in rel.entries)
               Padding(
@@ -104,7 +100,7 @@ Widget stoopGroupDynamicsSection(
                 child: Text(
                   '→ ${nm(r.key)}: ${_relationshipText(r.value)}',
                   style: TextStyle(
-                    color: AppColors.textTertiary(context),
+                    color: stoopMute(context),
                     fontSize: 12.5,
                   ),
                 ),

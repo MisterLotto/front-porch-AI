@@ -40,7 +40,11 @@ class GroupAvatarMontage extends StatelessWidget {
       color: AppColors.surfaceContainerOf(context),
       borderRadius: BorderRadius.circular(6),
       image: img != null
-          ? DecorationImage(image: FileImage(img), fit: BoxFit.cover)
+          // Montage cells are tiny (quarter of a tile); decode small.
+          ? DecorationImage(
+              image: ResizeImage(FileImage(img), width: 256),
+              fit: BoxFit.cover,
+            )
           : null,
     ),
   );

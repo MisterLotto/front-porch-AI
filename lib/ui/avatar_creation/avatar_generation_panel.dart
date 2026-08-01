@@ -23,11 +23,7 @@ import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/capability/vision_support_resolver.dart';
-import 'package:front_porch_ai/services/character_repository.dart';
-import 'package:front_porch_ai/services/expression_pack_service.dart';
-import 'package:front_porch_ai/services/image_gen_service.dart';
-import 'package:front_porch_ai/services/llm_provider.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/image_studio/vision_gate.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 

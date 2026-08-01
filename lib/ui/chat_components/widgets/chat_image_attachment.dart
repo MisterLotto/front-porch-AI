@@ -22,7 +22,7 @@ import 'package:image/image.dart' as img;
 
 import 'package:front_porch_ai/services/caption/local_caption_service.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/utils/picker_prefs.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Pick a photo to attach to the next chat message and normalize it for the
 /// vision transport: long side capped at 1024 (the avatar-import precedent —

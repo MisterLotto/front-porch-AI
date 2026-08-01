@@ -156,10 +156,11 @@
   function cardTile(card) {
     var badges = el('div', { class: 'hub-tile-badges' }, [
       card.type === 'GROUP' ? el('span', { class: 'hub-badge hub-badge-group', title: 'Group cast — Front Porch AI only' }, '👥 Group') : null,
+      card.type === 'WORLD' ? el('span', { class: 'hub-badge hub-badge-world', title: 'World — a Front Porch AI place (.fpworld)' }, '🏞️ World') : null,
       card.nsfw ? el('span', { class: 'hub-badge hub-badge-nsfw' }, '18+') : null,
       card.modPick ? el('span', { class: 'hub-badge hub-badge-pick', title: 'Mod’s Pick' }, '★ Pick') : null,
     ]);
-    return el('a', { class: 'hub-tile', href: '#/card/' + card.id }, [
+    return el('a', { class: 'hub-tile' + (card.type === 'WORLD' ? ' hub-tile-world' : ''), href: '#/card/' + card.id }, [
       el('div', { class: 'hub-tile-art' }, [avatarImg(card.primaryAssetId, card.name, 'hub-tile-img'), badges]),
       el('div', { class: 'hub-tile-body' }, [
         el('div', { class: 'hub-tile-name' }, card.name),
@@ -204,6 +205,7 @@
       progress. Returns a Promise. */
   function downloadCard(item, btn) {
     var isGroup = item.type === 'GROUP';
+    var isWorld = item.type === 'WORLD';
     var label = btn ? btn.textContent : '';
     if (btn) { btn.disabled = true; btn.textContent = 'Packing it up…'; }
     var restore = function () { if (btn) { btn.disabled = false; btn.textContent = label; } };
@@ -213,6 +215,15 @@
       var json = res.card;
       var assetId = res.primaryAssetId || item.primaryAssetId;
       var safe = (item.name || 'character').replace(/[^\w. -]+/g, '_').trim() || 'character';
+      // Worlds ARE their card JSON — the .fpworld envelope already embeds the
+      // cover image, so no PNG assembly: hand it over as <name>.fpworld.
+      if (isWorld) {
+        if (!json) { restore(); toast('That world couldn’t be downloaded.', 'err'); return; }
+        saveFile(JSON.stringify(json, null, 2), safe + '.fpworld', 'application/json');
+        restore();
+        toast('World saved! Import it under Worlds → Import Place — Rawhide (nightly) builds only for now.');
+        return;
+      }
       var done = function () {
         restore();
         toast(isGroup
@@ -250,6 +261,45 @@
     ]);
   }
 
+  /** Banner for a signed-in user whose address isn't confirmed yet. Sharing is
+      the ONLY thing this blocks — browsing and downloading stay open — so the
+      wording says exactly that instead of sounding like a lockout. Returns null
+      when there's nothing to say (verified, or an older server that doesn't
+      report the field at all). */
+  function verifyBanner(onVerified) {
+    Api = Api || window.Stoop.api;
+    var u = Api.state.user;
+    if (!u || u.emailVerified !== false) return null;
+    var btn = el('button', { class: 'btn btn-amber', type: 'button' }, 'Send it again');
+    btn.addEventListener('click', function () {
+      btn.disabled = true;
+      Api.resendVerification()
+        .then(function (r) {
+          if (r && r.alreadyVerified) {
+            toast('Already confirmed \u2014 you\u2019re good to go.');
+            if (onVerified) onVerified();
+          } else {
+            toast('Sent. Check your inbox, and the spam folder just in case.');
+          }
+        })
+        .catch(function (e) {
+          toast(e.code === 'resend_too_soon'
+            ? 'One just went out \u2014 give it a couple of minutes before asking again.'
+            : e.message, 'err');
+        })
+        .finally(function () { btn.disabled = false; });
+    });
+    return el('div', { class: 'hub-verify-banner' }, [
+      el('span', { class: 'hub-verify-ico' }, '\u2709\uFE0F'),
+      el('div', { class: 'hub-verify-text' }, [
+        el('strong', null, 'Confirm your email to share your own cards.'),
+        el('p', null, 'We sent a link to ' + (u.email || 'your address') +
+          '. Browsing and downloading work without it \u2014 confirming is only needed to upload.'),
+      ]),
+      btn,
+    ]);
+  }
+
   /** The "plays best in Front Porch AI" strip used on browse + detail. */
   function fpaiBanner(compact) {
     return el('div', { class: 'hub-fpai' + (compact ? ' compact' : '') }, [
@@ -281,5 +331,6 @@
     downloadCard: downloadCard,
     confirmAdult: confirmAdult,
     fpaiBanner: fpaiBanner,
+    verifyBanner: verifyBanner,
   };
 })();

@@ -22,8 +22,7 @@ import 'package:flutter/foundation.dart';
 import 'package:front_porch_ai/services/kokoro_debug.dart';
 import 'package:front_porch_ai/services/kokoro_chunk.dart';
 import 'package:front_porch_ai/services/ordered_audio_collector.dart';
-import 'package:front_porch_ai/utils/think_tags.dart';
-import 'package:front_porch_ai/utils/wav_utils.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/services/engine_health.dart';
@@ -225,13 +224,23 @@ class TtsService extends ChangeNotifier {
     _lastError = null;
     await stop();
 
-    // Resolve voice
+    // Resolve voice. A character's own voice deliberately wins over the
+    // global one — say so in the log, because "I changed the voice in
+    // Settings and it kept talking in the old one" is otherwise invisible.
     var voice = (voiceKey != null && voiceKey.isNotEmpty)
         ? voiceKey
         : _storageService.ttsVoiceModel;
     if (voice.isEmpty) {
       print('TTS: no voice configured');
       return;
+    }
+    if (voiceKey != null &&
+        voiceKey.isNotEmpty &&
+        voiceKey != _storageService.ttsVoiceModel) {
+      print(
+        'TTS: using this character\'s assigned voice "$voiceKey" instead of '
+        'the global voice "${_storageService.ttsVoiceModel}".',
+      );
     }
 
     // Defensive check: if the resolved voice key is clearly incompatible

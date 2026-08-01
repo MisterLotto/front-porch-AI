@@ -81,6 +81,15 @@
     use_dashboard: 'Moderator accounts are managed from the dashboard.',
     payload_too_large: 'That file is too big.',
     unsupported_media: 'That image type isn’t supported — use PNG, JPEG, or WebP.',
+    unsupported_image_type: 'That image type isn’t supported — use PNG, JPEG, or WebP.',
+    invalid_or_expired_token: 'That reset link isn’t valid anymore — request a new one.',
+    email_not_verified: 'Confirm your email first — profile pictures need a verified address.',
+    avatar_locked: 'A moderator has disabled profile pictures for this account.',
+    missing_avatar: 'Pick an image first.',
+    upload_failed: 'The upload didn’t make it — try again.',
+    resend_too_soon: 'Hang on a minute before requesting another email.',
+    same_email: 'That’s already your sign-in email.',
+    wrong_password: 'That password didn’t match.',
   };
 
   function ApiError(status, code, detail) {
@@ -217,6 +226,17 @@
     updateProfile: function (bio, links) {
       return api('POST', '/me/profile', { bio: bio, links: links }).then(applyAuthPayload);
     },
+    // Change the sign-in email: the confirmation link goes to the NEW address;
+    // the account keeps its current one until that link is opened.
+    changeEmail: function (newEmail, password, totp) {
+      var body = { newEmail: newEmail };
+      if (password) body.password = password;
+      if (totp) body.totp = totp;
+      return api('POST', '/auth/change-email', body).then(applyAuthPayload);
+    },
+    cancelEmailChange: function () {
+      return api('DELETE', '/auth/change-email').then(applyAuthPayload);
+    },
     changePassword: function (currentPassword, newPassword) {
       return api('POST', '/auth/change-password', { currentPassword: currentPassword, newPassword: newPassword });
     },
@@ -260,14 +280,38 @@
     },
 
     /* creators */
-    creator: function (id) { return api('GET', '/creators/' + encodeURIComponent(id)); },
+    // The hub understands worlds — opt in to the mixed view (older API
+    // versions simply ignore the extra param).
+    creator: function (id) { return api('GET', '/creators/' + encodeURIComponent(id) + '?types=solo,group,world'); },
     follow: function (id) { return api('POST', '/creators/' + encodeURIComponent(id) + '/follow', {}); },
     unfollow: function (id) { return api('DELETE', '/creators/' + encodeURIComponent(id) + '/follow'); },
     following: function () { return api('GET', '/me/following'); },
 
+    resendVerification: function () { return api('POST', '/auth/resend-verification', {}); },
+
+    /* password recovery (no auth — these ARE how you get back in) */
+    forgot: function (email) {
+      return api('POST', '/auth/forgot', { email: email }, { noAuth: true });
+    },
+    resetPassword: function (token, newPassword, totp) {
+      var body = { token: token, newPassword: newPassword };
+      if (totp) body.totp = totp;
+      return api('POST', '/auth/reset', body, { noAuth: true });
+    },
+
+    /* profile avatar (live instantly; post-moderated) */
+    uploadAvatar: function (blob, name) {
+      var fd = new FormData();
+      fd.append('avatar', blob, name || 'avatar.png');
+      return api('POST', '/me/avatar', fd).then(applyAuthPayload);
+    },
+    deleteAvatar: function () {
+      return api('DELETE', '/me/avatar').then(applyAuthPayload);
+    },
+
     /* own cards */
-    myCharacters: function () { return api('GET', '/me/characters'); },
-    myDownloads: function () { return api('GET', '/me/downloads'); },
+    myCharacters: function () { return api('GET', '/me/characters?types=solo,group,world'); },
+    myDownloads: function () { return api('GET', '/me/downloads?types=solo,group,world'); },
     deleteCharacter: function (id) { return api('DELETE', '/characters/' + encodeURIComponent(id)); },
     uploadCharacter: function (payload, avatarBlob, avatarName) {
       var fd = new FormData();

@@ -18,6 +18,11 @@
 
 part of '../chat_service.dart';
 
+// Sentence/clause boundary regexes for TTS sentence streaming — hoisted:
+// these used to be constructed (and recompiled) inside the per-token loop.
+final RegExp _sentenceEndRe = RegExp(r'[.!?]\s|[.!?]$|\n');
+final RegExp _clauseEndRe = RegExp(r',\s|;\s|\s[—–-]\s');
+
 /// Absolute ceiling on the RAG memories block, applied on top of the
 /// percentage budget (1:1's 10% / the group's configurable %). The block is
 /// verbatim old transcript injected AFTER the history; past ~2,500 tokens
@@ -364,13 +369,24 @@ extension ChatServiceGeneration on ChatService {
           // Host turn with guests present: hard ban on ventriloquising them, or
           // the host writes the guests' lines too (the "generated both at once"
           // bug). Acknowledging/reacting is allowed; speaking for them is not.
+          // The handoff sentence targets the cast-detection case: a promoted
+          // guest was detected FROM the host's own narration, so the transcript
+          // above is full of the host voicing them — without an explicit "that
+          // has ended" the many-shot momentum beats the ban (Discord
+          // double-response report, 2026-07-28). The defer clause covers an
+          // addressed guest the sendMessage vocative router didn't catch.
           final names = _sceneGuestCards.map((g) => g.name).join(', ');
           authorNoteBlock +=
-              '[Also present in the scene: $names. Each of them speaks ONLY on '
-              'their own turn. Do NOT write any dialogue, actions, or inner '
-              'thoughts for them — not a single line. Stay entirely as '
-              '$hostName; you may have $hostName notice or react to them, but '
-              'never put words or actions on them.]\n';
+              '[Also present in the scene: $names — each is a separate '
+              'character played by another actor, replying in their own '
+              'separate messages. Do NOT write any dialogue, actions, or inner '
+              'thoughts for them — not a single line. If earlier messages '
+              'above included lines spoken by these characters, that has '
+              'ended: from now on they speak only for themselves. Stay '
+              'entirely as $hostName; you may have $hostName notice or react '
+              'to them, but never put words or actions on them. If $userName '
+              'just addressed one of them, reply only with $hostName\'s own '
+              'brief reaction and leave the answer to that character.]\n';
         }
         // One-shot guest departure (armed by /exit) — narrated by the primary
         // on this turn only, then cleared so it never persists.
@@ -536,6 +552,24 @@ extension ChatServiceGeneration on ChatService {
                   section: 'realism',
                 );
         }
+
+        // Living Worlds — place prose from attached worlds (budget-capped).
+        final attachedWorlds = [
+          for (final id in _chatWorldIds)
+            if (_worldRepository.resolveWorld(id) != null)
+              _worldRepository.resolveWorld(id)!,
+        ];
+        // Fallback: group template worlds when chat_worlds not yet seeded.
+        if (attachedWorlds.isEmpty && _activeGroup != null) {
+          for (final ref in _activeGroup!.worldIds) {
+            final w = _worldRepository.resolveWorld(ref);
+            if (w != null) attachedWorlds.add(w);
+          }
+        }
+        final rawWorld = buildWorldInjection(attachedWorlds);
+        final worldBlock = rawWorld.isEmpty
+            ? ''
+            : _macroResolver.resolve(rawWorld, macroCtx, section: 'world');
 
         // Chance Time injection — independent of realism mode
         final chanceTimeBlock = _getChanceTimeInjection();
@@ -704,6 +738,7 @@ extension ChatServiceGeneration on ChatService {
           rendered: false, // spliced into the history lines, paid for here
         );
         plan.add(id: 'objectives', label: 'Objectives', text: objectiveBlock);
+        plan.add(id: 'world', label: 'World / Place', text: worldBlock);
         plan.add(id: 'realism', label: 'Realism Mode', text: realismBlock);
         plan.add(
           id: 'catastrophe',
@@ -1195,12 +1230,20 @@ extension ChatServiceGeneration on ChatService {
         _pendingRealismMetadata = null;
       }
 
-      // Helper to update the visible message from buffer
+      // Helper to update the visible message from buffer. Incremental: only
+      // tokens newly admitted to display are appended to the running buffer
+      // (the old `.take(n).join()` re-joined the ENTIRE response per token —
+      // O(n²) over a long reply and the largest allocator on this path).
+      final displayedBuf = StringBuffer();
+      var displayedInBuf = 0;
       void _flushBufferToDisplay() {
         if (epoch != _generationEpoch) return; // stale generation
         if (_tokenBuffer.isEmpty && _displayedTokenCount == 0) return;
-        // Build displayed text from all tokens up to _displayedTokenCount
-        final displayTokens = _tokenBuffer.take(_displayedTokenCount).join();
+        while (displayedInBuf < _displayedTokenCount &&
+            displayedInBuf < _tokenBuffer.length) {
+          displayedBuf.write(_tokenBuffer[displayedInBuf++]);
+        }
+        final displayTokens = displayedBuf.toString();
         String displayText;
         if (mode == GenerationMode.continue_) {
           displayText = originalText + displayTokens;
@@ -1211,7 +1254,7 @@ extension ChatServiceGeneration on ChatService {
         // _messages.last — the list can shift mid-turn) to preserve
         // thinkingStartTime and other metadata.
         streamTarget.text = displayText;
-        notifyListeners();
+        _notifyStreamListeners();
       }
 
       // Read display buffer settings — disable for remote APIs (they're fast enough)
@@ -1243,12 +1286,27 @@ extension ChatServiceGeneration on ChatService {
         });
       }
 
+      // Scan window for stop sequences / think tags: only the newly-appended
+      // token can COMPLETE a match, so scanning the trailing
+      // (token + longestNeedle - 1) chars finds exactly what a full scan
+      // would — without re-reading the whole response per token (O(n²)).
+      final maxStopLen = stopList.fold<int>(0, (m, s) => s.length > m ? s.length : m);
+      // Cursor for the rolling-TPS window: timestamps are appended in order,
+      // so entries before the cutoff can be skipped permanently instead of
+      // re-filtered with two O(n) where() passes per token.
+      var tpsWindowStart = 0;
+
       // Consume the stream — tokens go into buffer (or display immediately)
       await for (final token in stream) {
         if (_cancelRequested) break;
         accumulatedResponse += token;
         _tokensGenerated++;
         _tokenTimestamps.add(DateTime.now());
+        final tailStart = (accumulatedResponse.length -
+                token.length -
+                (maxStopLen > 8 ? maxStopLen : 8) +
+                1)
+            .clamp(0, accumulatedResponse.length);
 
         // ── Phase transition: first token marks end of prefill ──
         if (_tokensGenerated == 1) {
@@ -1283,9 +1341,8 @@ extension ChatServiceGeneration on ChatService {
           emitted = false;
 
           // First try sentence boundaries
-          final sentenceEnd = RegExp(r'[.!?]\s|[.!?]$|\n');
-          if (sentenceEnd.hasMatch(_sentenceBuffer)) {
-            final match = sentenceEnd.firstMatch(_sentenceBuffer)!;
+          if (_sentenceEndRe.hasMatch(_sentenceBuffer)) {
+            final match = _sentenceEndRe.firstMatch(_sentenceBuffer)!;
             final sentence = _sentenceBuffer.substring(0, match.end).trim();
             _sentenceBuffer = _sentenceBuffer.substring(match.end);
             if (sentence.isNotEmpty) {
@@ -1297,11 +1354,10 @@ extension ChatServiceGeneration on ChatService {
 
           // For long buffers, split at clause boundaries to keep TTS fast
           if (_sentenceBuffer.length > 80) {
-            final clauseEnd = RegExp(r',\s|;\s|\s[—–-]\s');
-            if (clauseEnd.hasMatch(_sentenceBuffer)) {
+            if (_clauseEndRe.hasMatch(_sentenceBuffer)) {
               // Find the LAST clause boundary to maximize chunk size
               Match? lastMatch;
-              for (final m in clauseEnd.allMatches(_sentenceBuffer)) {
+              for (final m in _clauseEndRe.allMatches(_sentenceBuffer)) {
                 if (m.start > 30) lastMatch = m; // at least 30 chars per chunk
               }
               if (lastMatch != null) {
@@ -1318,10 +1374,11 @@ extension ChatServiceGeneration on ChatService {
           }
         }
 
-        // Client-side safety trim check (mid-stream)
+        // Client-side safety trim check (mid-stream). Tail-window scan: a
+        // match ending before this token was already caught last iteration.
         for (final stop in stopList) {
-          if (accumulatedResponse.contains(stop)) {
-            int index = accumulatedResponse.indexOf(stop);
+          final index = accumulatedResponse.indexOf(stop, tailStart);
+          if (index != -1) {
             final trimmedTotal = accumulatedResponse.substring(0, index);
             final previousTotal = _tokenBuffer.join();
             final lastTokenContribution = trimmedTotal.substring(
@@ -1340,8 +1397,9 @@ extension ChatServiceGeneration on ChatService {
           _tokenBuffer.add(token);
         }
 
-        // Track think timing
-        if (!_thinkStarted && accumulatedResponse.contains('<think>')) {
+        // Track think timing (tail-window scans, same reasoning as above)
+        if (!_thinkStarted &&
+            accumulatedResponse.indexOf('<think>', tailStart) != -1) {
           _thinkStarted = true;
           _thinkStartTime = DateTime.now();
           _generationPhase = GenerationPhase.thinking;
@@ -1350,7 +1408,7 @@ extension ChatServiceGeneration on ChatService {
         }
         if (_thinkStarted &&
             !_thinkEnded &&
-            accumulatedResponse.contains('</think>')) {
+            accumulatedResponse.indexOf('</think>', tailStart) != -1) {
           _thinkEnded = true;
           // Transition out of thinking to buffering/generating
           _generationPhase = bufferEnabled
@@ -1371,15 +1429,19 @@ extension ChatServiceGeneration on ChatService {
         }
 
         if (bufferEnabled) {
-          // Calculate current rolling TPS (last 3 seconds)
+          // Calculate current rolling TPS (last 3 seconds). Timestamps are
+          // appended in order, so advance a cursor past expired entries once
+          // instead of re-filtering the whole list twice per token.
           final now = DateTime.now();
           final cutoff = now.subtract(const Duration(seconds: 3));
-          final recentCount = _tokenTimestamps
-              .where((t) => t.isAfter(cutoff))
-              .length;
-          final windowStart =
-              _tokenTimestamps.where((t) => t.isAfter(cutoff)).firstOrNull ??
-              _generationStartTime!;
+          while (tpsWindowStart < _tokenTimestamps.length &&
+              !_tokenTimestamps[tpsWindowStart].isAfter(cutoff)) {
+            tpsWindowStart++;
+          }
+          final recentCount = _tokenTimestamps.length - tpsWindowStart;
+          final windowStart = tpsWindowStart < _tokenTimestamps.length
+              ? _tokenTimestamps[tpsWindowStart]
+              : _generationStartTime!;
           final windowElapsed =
               now.difference(windowStart).inMilliseconds / 1000.0;
           final currentTps = (recentCount >= 2 && windowElapsed > 0)
@@ -1431,15 +1493,20 @@ extension ChatServiceGeneration on ChatService {
           _flushBufferToDisplay();
         }
 
-        // Update TPS/progress in the bar even during buffering
-        notifyListeners();
+        // Update TPS/progress in the bar even during buffering — coalesced;
+        // the non-buffered flush above already went through the throttle, so
+        // this is a no-op there unless the interval elapsed.
+        _notifyStreamListeners();
 
         if (stopFound) break;
       }
 
-      // Mark stream as done
+      // Mark stream as done. From here on state changes are terminal, so
+      // drop any pending throttled notify — the finalize paths below (cancel
+      // AND normal) both end in an unthrottled notifyListeners().
       streamDone = true;
       _isBuffering = false;
+      _cancelStreamNotifyThrottle();
 
       if (_cancelRequested) {
         // Cancelled mid-stream: do NOT drain the undisplayed backlog. A
@@ -1619,70 +1686,96 @@ extension ChatServiceGeneration on ChatService {
           // to the prior speaker; the thin delegate relies on the pointer for cbs. We restore the
           // pointer after the checks (scalars remain correct for the persist below).
           CharacterCard? prePostActiveChar;
-          if (_activeGroup != null && !_observerMode) {
-            prePostActiveChar = _activeCharacter;
-            _activeCharacter = speakingCharacter;
-            final sid = _getCharacterIdFromCard(speakingCharacter);
-            if (sid.isNotEmpty) {
-              _loadGroupRealismIntoScalars(sid);
+          // Everything from here to the chip attach is the awaited post-gen
+          // critical section: it mutates _activeCharacter, the needs scalars
+          // and _groupRealism, across two awaits. _isGenerating is already
+          // false by now (cleared when the last token landed), so without this
+          // flag every re-entrancy guard stands open for the duration — a
+          // delete could shift the timeline under a running eval, and a new
+          // turn could interleave with this one's persist.
+          //
+          // The try/finally is not decoration. If _runPostGenNeedsChecks
+          // throws, the inline restore below is skipped and _activeCharacter
+          // stays pinned to this speaker with their scalars loaded — the next
+          // turn's save would then write to the wrong member. The finally
+          // makes both the pointer restore and the flag clear unconditional.
+          _isPostGenerating = true;
+          try {
+            if (_activeGroup != null && !_observerMode) {
+              prePostActiveChar = _activeCharacter;
+              _activeCharacter = speakingCharacter;
+              final sid = _getCharacterIdFromCard(speakingCharacter);
+              if (sid.isNotEmpty) {
+                _loadGroupRealismIntoScalars(sid);
+              }
             }
-          }
 
-          await _runPostGenNeedsChecks(finalResponse);
+            await _runPostGenNeedsChecks(finalResponse);
 
-          // Re-stamp the needs vector inside THIS message's realism_state snapshot
-          // with the now-final (post-impact) vector. The snapshot was captured
-          // during the pre-generation realism eval — BEFORE _runPostGenNeedsChecks
-          // applied this turn's needs impact (scene rewards like a bath's +Hygiene).
-          // Every other field in it is already the final post-turn value; only the
-          // needs vector was frozen pre-impact. Consumers that restore a message's
-          // realism_state as a baseline — regenerating a LATER message, navigating
-          // swipes, objective checks — would otherwise revert this turn's accepted
-          // needs deltas (the reported "Hygiene snaps back after regenerating the
-          // next message"). metadata and swipeMetadata[i] share one map instance, so
-          // this in-place update sticks and persists. 1:1 and group alike: the
-          // per-speaker vector is loaded above and is final here (before the group
-          // persist below).
-          if (_needsSimEnabled &&
-              !streamTarget.isUser &&
-              _needsSimulation.vector.isNotEmpty) {
-            final rs = streamTarget.activeMetadata?['realism_state'];
-            if (rs is Map && rs['needs'] is Map) {
-              (rs['needs'] as Map)['vector'] = Map<String, int>.from(
-                _needsSimulation.vector,
-              );
+            // Re-stamp the needs vector inside THIS message's realism_state snapshot
+            // with the now-final (post-impact) vector. The snapshot was captured
+            // during the pre-generation realism eval — BEFORE _runPostGenNeedsChecks
+            // applied this turn's needs impact (scene rewards like a bath's +Hygiene).
+            // Every other field in it is already the final post-turn value; only the
+            // needs vector was frozen pre-impact. Consumers that restore a message's
+            // realism_state as a baseline — regenerating a LATER message, navigating
+            // swipes, objective checks — would otherwise revert this turn's accepted
+            // needs deltas (the reported "Hygiene snaps back after regenerating the
+            // next message"). metadata and swipeMetadata[i] share one map instance, so
+            // this in-place update sticks and persists. 1:1 and group alike: the
+            // per-speaker vector is loaded above and is final here (before the group
+            // persist below).
+            if (_needsSimEnabled &&
+                !streamTarget.isUser &&
+                _needsSimulation.vector.isNotEmpty) {
+              final rs = streamTarget.activeMetadata?['realism_state'];
+              if (rs is Map && rs['needs'] is Map) {
+                (rs['needs'] as Map)['vector'] = Map<String, int>.from(
+                  _needsSimulation.vector,
+                );
+              }
             }
-          }
 
-          if (prePostActiveChar != null) {
-            _activeCharacter = prePostActiveChar;
-          }
-
-          // For group non-observer, persist the post-scene + long-gen-decay needs changes (and any
-          // other scalars mutated by the checks) back into _groupRealism for this speaker. This is
-          // what makes sidebar member cards + getNeedsForGroupCharacter() + future loads see the
-          // effects of the just-generated response. (Pre-eval saved the pre-turn state for bond/etc;
-          // this captures the *response* effects on needs.)
-          if (_activeGroup != null &&
-              !_observerMode &&
-              finalResponse.isNotEmpty &&
-              _messages.isNotEmpty) {
-            // The ACTUAL speaker of this turn — not a by-name lookup with a
-            // first-member fallback (duplicate display names would persist the
-            // critical scalar save to the wrong member's _groupRealism entry).
-            final sid = _getCharacterIdFromCard(speakingCharacter);
-            if (sid.isNotEmpty) {
-              _saveScalarsIntoGroupRealism(sid);
+            if (prePostActiveChar != null) {
+              _activeCharacter = prePostActiveChar;
             }
-          }
 
-          // Per-message needs chips for whoever just spoke. Lives here (not in
-          // sendMessage) so EVERY speaker gets them — group auto-advance, /speak
-          // and chime-ins reach _generateResponse but never sendMessage's old
-          // chip block, which is why only the first responder showed chips.
-          // Normal turns only; regen/continue manage their own chips.
-          if (mode == GenerationMode.normal) {
-            await _attachNeedsDeltaChipToLastMessage();
+            // For group non-observer, persist the post-scene + long-gen-decay needs changes (and any
+            // other scalars mutated by the checks) back into _groupRealism for this speaker. This is
+            // what makes sidebar member cards + getNeedsForGroupCharacter() + future loads see the
+            // effects of the just-generated response. (Pre-eval saved the pre-turn state for bond/etc;
+            // this captures the *response* effects on needs.)
+            if (_activeGroup != null &&
+                !_observerMode &&
+                finalResponse.isNotEmpty &&
+                _messages.isNotEmpty) {
+              // The ACTUAL speaker of this turn — not a by-name lookup with a
+              // first-member fallback (duplicate display names would persist the
+              // critical scalar save to the wrong member's _groupRealism entry).
+              final sid = _getCharacterIdFromCard(speakingCharacter);
+              if (sid.isNotEmpty) {
+                _saveScalarsIntoGroupRealism(sid);
+              }
+            }
+
+            // Per-message needs chips for whoever just spoke. Lives here (not in
+            // sendMessage) so EVERY speaker gets them — group auto-advance, /speak
+            // and chime-ins reach _generateResponse but never sendMessage's old
+            // chip block, which is why only the first responder showed chips.
+            // Normal turns only; regen/continue manage their own chips.
+            if (mode == GenerationMode.normal) {
+              await _attachNeedsDeltaChipToLastMessage();
+            }
+          } finally {
+            // Unconditional: an exception inside the critical section must
+            // not leave the group impersonating this speaker (the inline
+            // restore above is skipped on a throw), and must never leave the
+            // guard latched — a stuck flag would silently refuse deletes,
+            // regenerates and group edits for the rest of the session.
+            if (prePostActiveChar != null) {
+              _activeCharacter = prePostActiveChar;
+            }
+            _isPostGenerating = false;
           }
 
           // Journal maintenance pass if due (fire-and-forget): memory cards +

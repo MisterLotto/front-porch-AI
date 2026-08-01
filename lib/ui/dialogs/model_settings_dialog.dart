@@ -27,7 +27,6 @@ import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 // Not in barrels (internal or low-frequency)
 import 'package:front_porch_ai/services/model_file_check.dart';
-import 'package:front_porch_ai/services/model_manager.dart';
 import 'package:front_porch_ai/services/optimization_service.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
@@ -192,9 +191,18 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
     final backendManager = Provider.of<BackendManager>(context, listen: false);
 
     if (backendManager.backendPath == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Backend not found.')));
+      // Not an error state anymore: kick the background acquisition (no-op
+      // when already downloading) and point at the corner chip's progress.
+      backendManager.ensureEngineInstalled();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            backendManager.isDownloading
+                ? 'The AI engine is still downloading — progress is in the corner chip.'
+                : 'The AI engine isn\'t installed yet — downloading it now in the background (see the corner chip).',
+          ),
+        ),
+      );
       return;
     }
 

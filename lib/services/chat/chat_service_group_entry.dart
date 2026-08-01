@@ -283,6 +283,8 @@ extension ChatServiceGroupEntry on ChatService {
         _lorebookScanner.scanLatest();
       }
       _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
+      // Seed chat worlds from the group's template (Living Worlds).
+      await _seedChatWorldsForNewSession();
       await _saveChat();
     }
 

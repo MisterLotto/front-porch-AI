@@ -18,6 +18,7 @@ import 'package:front_porch_ai/models/chat_message.dart';
 import 'package:front_porch_ai/models/group_chat.dart';
 import 'package:front_porch_ai/services/chat/journal_maintenance.dart';
 import 'package:front_porch_ai/services/chat/journal_ops.dart';
+import 'package:front_porch_ai/services/chat/journal_prompt.dart';
 import 'package:front_porch_ai/services/chat/journal_review.dart';
 import 'package:front_porch_ai/services/chat/journal_store.dart';
 import 'package:front_porch_ai/services/chat/pass_support.dart';
@@ -171,6 +172,61 @@ void main() {
       ]);
       expect(ops, isEmpty);
       expect(recap, isNull);
+    });
+
+    test('clampJournalAdds keeps first N adds, never drops other ops', () {
+      final ops = [
+        for (var i = 0; i < 20; i++)
+          JournalOp(action: JournalOpAction.add, text: 'memory $i'),
+        const JournalOp(action: JournalOpAction.retire, handle: 3),
+        JournalOp(
+          action: JournalOpAction.revise,
+          handle: 1,
+          text: 'revised',
+        ),
+      ];
+      final clamped = clampJournalAdds(ops, 12);
+      expect(
+        clamped.where((o) => o.action == JournalOpAction.add),
+        hasLength(12),
+      );
+      expect(clamped.first.text, 'memory 0', reason: 'first adds win');
+      expect(
+        clamped.any((o) => o.action == JournalOpAction.retire),
+        isTrue,
+        reason: 'non-add ops survive the clamp',
+      );
+      expect(
+        clamped.any((o) => o.action == JournalOpAction.revise),
+        isTrue,
+      );
+    });
+
+    test('prompt asks for capped memories and a never-skipped recap', () {
+      for (final toolsMode in [true, false]) {
+        final prompt = buildJournalPrompt(
+          ownerName: 'Misty',
+          userName: 'Linus',
+          recap: '',
+          cards: const [],
+          window: [
+            ChatMessage(text: 'hello', sender: 'Linus', isUser: true),
+          ],
+          windowStart: 0,
+          includeRecap: true,
+          toolsMode: toolsMode,
+        );
+        expect(
+          prompt,
+          contains('at most $kJournalMaxNewMemories new memories'),
+          reason: 'cap line missing (toolsMode=$toolsMode)',
+        );
+        expect(
+          prompt.toLowerCase(),
+          contains('never skip'),
+          reason: 'recap never-skip line missing (toolsMode=$toolsMode)',
+        );
+      }
     });
   });
 

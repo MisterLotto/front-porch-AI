@@ -5,7 +5,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/services/chat_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 
 /// Shared helpers for the Group Settings tab files (extracted from the old
 /// 4,251-line group_settings_dialog.dart god file — these were byte-identical

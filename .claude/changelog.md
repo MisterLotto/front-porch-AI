@@ -1,5 +1,219 @@
 # Changelog
 
+## 2026-07-31 — fix(worlds): the real fix — chats that predate their character's world now adopt it (DB v43)
+- **Why:** my first attempt only propagated worlds ADDED IN AN EDIT, which cannot help the maintainer's actual chat — Cindermaw was already attached to Violet, so re-saving produced an empty diff and nothing happened. He hot-reloaded, saw "Clear 55°F" again, and correctly said the fix did nothing.
+- **The hard part** is that an empty attachment list means two different things: "this chat predates the character having a world" (should adopt it) and "the user deliberately detached" (must never be overridden). Nothing distinguished them, which is exactly why I'd rejected a blanket runtime fallback twice.
+- **Did:** additive `sessions.worlds_initialized` (DB v42→v43, defaulted, nullable-safe for Character-Card-Forge's raw writes; existing rows default 0 = undecided, which is what rescues old chats). It flips to 1 whenever the decision is genuinely made: creation-time seeding (including seeding to nothing), and ANY explicit `setChatWorlds` — so emptying the Places panel is recorded as a choice. `backfillChatWorldsFromCharacter` runs on session load for undecided 1:1 chats only, and the earlier edit-time propagation stays for the live-refresh case.
+- **Tests:** back-fill fires for a pre-existing chat, then a deliberate detach is NOT undone by a subsequent back-fill, and back-fill is once-only. Schema pin 42→43.
+- **Gates:** analyze clean, 2758 tests, macOS build green, drift regenerated.
+- **Files:** `lib/database/database.dart`(+`.g.dart`), `lib/services/world_repository.dart`, `lib/services/chat_service.dart`, `lib/services/chat/chat_service_session_manage.dart`, `test/services/world_repository_test.dart`, `test/services/avatar_repository_test.dart`.
+
+## 2026-07-31 — fix(worlds): attaching a world to a character left existing chats on temperate
+- **Why (maintainer field report):** opened Violet → a chat was created → attached The Cindermaw to the CHARACTER → reopened that chat → weather still read "Clear 55°F". Correct diagnosis: yesterday's fix seeds chat worlds at SESSION CREATION only. A chat opened before the character had a world never gets one, and climate + the "Setting" prose + the Places panel all read the CHAT's attachments, never the character's list. So the world was attached and completely inert.
+- **Did:** `WorldRepository.applyAddedCharacterWorldsToChats(characterId:, addedRefs:)` — back-fills the character's existing sessions that have an EMPTY attachment list, and returns which chats changed. Wired into the character editor's save beside the existing `refreshEnjoysLowHygieneFromActiveCharacter` hook; new `ChatService.refreshChatWorlds()` (in the session-manage extension, NOT the god file) re-reads live when the currently-open chat is one of them, so the sidebar/weather update without reopening.
+- **Two deliberate narrowings** (this is where the bug's opposite lives): only worlds ADDED IN THIS EDIT propagate — diffed against a snapshot taken in initState — so editing a character for unrelated reasons never re-attaches anything; and only chats with NO worlds are touched, so a chat the user deliberately sent elsewhere is never dragged back. Both are the reason I rejected Grok's blanket "fall back to character.worldNames at runtime" suggestion earlier: that would silently revert deliberate detaches on every load.
+- **Tests:** 2 new cases pinning exactly that — back-fills the empty chat, leaves a chat that already has a different world, ignores another character's chats, and writes nothing when the diff is empty (`world_repository_test.dart`, names-not-ids path since characters store world NAMES).
+- **Gates:** analyze clean, 2756 tests, macOS build green.
+- **Files:** `lib/services/world_repository.dart`, `lib/services/chat/chat_service_session_manage.dart`, `lib/ui/pages/edit_character_page.dart`, `test/services/world_repository_test.dart`.
+
+
+## 2026-07-31 — feat(stoop): worlds go live in the app — flags flipped + the two flip-time client items
+- **Why:** Backend + hub have been live since yesterday; maintainer asked to connect the app now. This is living-worlds.md §4 item 9, the piece deliberately deferred to him.
+- **Did:** `kStoopWorldsLive` (Dart) and `STOOP_WORLDS_LIVE` (web PWA) → true. New `kStoopWorldTypes = 'solo,group,world'` beside the flag, sent on the four list endpoints that can carry worlds: browse (only when `type == 'all'` — the server keeps `type=all` meaning solo+group forever so shipped apps never receive a WORLD), `/me/characters`, `/me/downloads`, `/creators/:id`. **Re-share identity fixed:** `publishStoopWorld` now stamps `meta.sourceId = world.sourceId ?? world.id` — `encodeFpWorld` only emits sourceId for IMPORTED worlds, so a locally-authored place had none and every re-share would have created another duplicate PENDING row instead of a new version. The web PWA needed no API work: it proxies through the Dart facade, so it inherits the opt-in.
+- **Verified against LIVE production, with real data:** planted an APPROVED world, then confirmed the app's new mixed-view request returns it (11 total, 1 world), the Worlds-tab request isolates it (1/1), and the request shape a CURRENTLY-SHIPPED app sends still returns zero worlds (10 total, 0 leaked) — the mixed-fleet guarantee holds by measurement, not assumption. Test row deleted.
+- **Gates:** analyze clean, 2754 tests, macOS debug build, web PWA build, and the Linux golden suite via ci-local all green.
+- **Follow-up (maintainer: "there is no option to upload one"):** traced the entry point — it IS the share wizard's Pick step, a Places section under Characters — and found a real defect the flag flip exposed. `StoopWorldsPickSection` lists only places that HAVE cover art and did `if (worlds.isEmpty) return SizedBox.shrink()`, so a user whose places have no covers (the maintainer's Cindermaw included) saw NOTHING at all — strictly worse than the pre-flip "coming soon" banner, and indistinguishable from the feature not existing. Now shows a "NEEDS COVER ART" notice explaining the one step required, silent only while searching or when the user has no places at all. Generalized the existing `_comingSoonBanner` into `_noticeBanner(badge:, body:)` rather than adding a second banner method (net new private methods: 0).
+- **Files:** `lib/services/backporch/stoop_card.dart`, `backporch_api.dart`, `lib/ui/pages/repository/stoop_world_share.dart`, `web_ui/src/stoop/stoopTypes.ts`, `assets/web_app/*`.
+
+
+## 2026-07-31 — feat(stoop): email verification gate + hub/desktop UI (DEPLOYED); session work recovered from stash
+- **Policy (maintainer-approved):** browsing and downloading are NEVER gated; only UPLOADING requires a confirmed address. Keeps the front door open while stopping throwaway accounts from flooding the moderation queue.
+- **Backend:** additive migration (`emailVerified` + hashed token/expiry/sent-at columns) whose UPDATE **grandfathers every pre-existing account as verified** — without it the gate would have locked out the entire user base on deploy (137 production accounts, all verified post-migration, confirmed by query). New `src/lib/email-verify.ts`: single-use token, only its SHA-256 stored, 24h expiry, constant-time digest compare, 2-minute resend cooldown. Signup sends the mail fire-and-forget (a mail failure can't fail a signup). `GET /auth/verify-email` returns a small styled HTML page (it's opened in a browser, not by an API client) and bounces to the hub; `POST /auth/resend-verification` is rate-limited 5/hour. Gate added at BOTH upload sites (create + /versions). Google sign-ups arrive pre-verified (the provider asserts email_verified, which the callback now requires) — dormant today since Google OAuth is disabled in prod; maintainer is enabling it later and asked to keep the route.
+- **Hub:** shared `verifyBanner` (My cards + both submit forms), resend button with friendly cooldown copy, post-signup toast, and `email_not_verified` mapped to plain English on both upload forms.
+- **Desktop parity (mandatory):** new `stoop_verify_banner.dart` (warm-porch styled, AppColors-only) mounted above the upload wizard, `resendVerification` on the API client, `emailVerified` on the user model **defaulting true** so an older server that omits the field can't make the app nag, and the same friendly copy in `_mapError`.
+- **Verified on PRODUCTION end-to-end:** signed up a throwaway account at the domain itself (catch-all → admin mailbox, so no real person involved), confirmed the email arrived DKIM-signed with a working link, clicked it (200 → `emailVerified=t`, token cleared), replayed it (400 — single use), and deleted the test account. Local pre-deploy tests also proved the gate itself: unverified upload → 403 with a helpful message, browsing → 200, resend → 429 on cooldown, verified → passes.
+- **Session-work recovery:** Rawhide had advanced past this session's base commit and all uncommitted work (worlds + import-button removal, 22 files) had been stashed. Applied `stash@{0}` cleanly (no conflicts), verified the Worlds hub code + Dart seeding fix intact, analyze clean and 2754 tests green against the NEWER Rawhide, then committed locally as 9bd1cb24. **Lesson recorded:** work now gets committed locally (never pushed) instead of left uncommitted — a local commit survives a branch move, an uncommitted tree does not. Nearly shipped a regression here: this checkout's hub source predated the Worlds work, so a routine build+deploy would have wiped the Worlds tab off production. Caught by diffing local source against the live bundle before deploying.
+- **Files:** backporch `src/lib/email-verify.ts` (new), `src/lib/serialize.ts`, `src/routes/auth.ts`, `src/routes/characters.ts`, `src/routes/oauth.ts`, `prisma/schema.prisma` + migration; app `lib/ui/pages/repository/stoop_verify_banner.dart` (new), `stoop_upload_page.dart`, `lib/services/backporch/backporch_api.dart`, `backporch_user.dart`; hub `website/src/stoop/{api,ui,views-my,views-auth,stoop.css}`.
+
+
+## 2026-07-31 — feat(backporch/mail): self-hosted mailserver on the droplet + operator alerts (DEPLOYED)
+- **Why:** Maintainer wants registration-verification email and an alert whenever a character/world is submitted or reported — and everything must run through frontporchai.app, with his personal address never involved anywhere (explicit ruling). That rules out registrar forwarding (needs a destination mailbox), so a real send+receive mailserver was the answer.
+- **Chose:** self-hosted, relay-ready (maintainer decision). Postfix (send+receive) + Dovecot (IMAP) + OpenDKIM on the droplet; a smarthost line stays one config change away if deliverability sours. Deliberately NO ClamAV/rspamd — the box is 1 vCPU / 1.9 GB with Synapse + Docker + Postgres resident (653 MB free), so spam blocking is postscreen's connect-time DNSBL + greet test instead (near-zero RAM).
+- **CAUGHT BEFORE EXPOSING (would have been catastrophic):** the stock DNSBL list included zen.spamhaus.org, but DigitalOcean's resolvers are blocked by Spamhaus — every lookup, including a known-CLEAN test vector, returned 127.255.255.254 ("query refused"), which postscreen counts as listed. Left in, it would have rejected **100% of inbound mail** silently. Verified each list with Spamhaus's own test vectors; kept only bl.spamcop.net + b.barracudacentral.org (both answer correctly), threshold 2 so a sender must be on BOTH to be refused. SORBS also checked — defunct, answers nothing.
+- **Security (this is a newly internet-exposed service):** verified NOT an open relay with a careful non-pipelined SMTP session from an outside source — relay to gmail.com gets `554 5.7.1 Relay access denied` while mail TO the domain gets `250 Ok`. Submission (587) requires STARTTLS + SASL and permits nothing anonymous. ufw opened for 25/587/993 only; fail2ban jails active on postfix, postfix-sasl, dovecot. VRFY disabled. IPv4-only delivery (no IPv6 PTR exists → Google rejects). Every replaced config backed up under /root/mail-backup-*.
+- **Mailboxes:** virtual (no unix accounts) under /var/mail/vhosts. admin@ + noreply@, with a catch-all so ANY address @frontporchai.app — contact@, postmaster@, bounces — lands in the one admin mailbox. Password generated and handed over.
+- **API integration (deployed + verified live):** new `src/lib/mailer.ts` speaks minimal SMTP to the host Postfix over the docker gateway (172.18.0.1) — no third party, no API key, no credential to leak (the container network is in mynetworks). Header-injection guarded (CR/LF stripped from every interpolated value), dot-stuffed bodies, 15s timeout, and **never throws**: a mail failure can't break the request that triggered it. Alerts wired at 3 submission sites (new upload, idempotent re-upload, explicit /versions) + report creation, with world/group/character-aware subject lines. `MAIL_*` env added to env.ts + docker-compose (default OFF so dev machines don't stall).
+- **Verified end-to-end on the live droplet:** DKIM signs real messages (`SIGNED ✓`), container→Postfix reachable, and a send through the exact production code path arrived in the admin mailbox DKIM-signed with the right From/To/Subject/body.
+- **DNS COMPLETED by maintainer 2026-07-31 — all six records verified live:** PTR (`mail.frontporchai.app.`), A, MX (10), SPF (`v=spf1 a mx ip4:178.128.71.63 -all`), DMARC (`p=quarantine`), and DKIM — the published key byte-matches the server's private key (both 392 chars). Diagnosis note: the three TXT records appeared absent for ~15 min (authoritative server returned NOERROR/0-answers at root and NXDOMAIN for the DKIM name) — pure NameSilo propagation lag, confirmed by polling until they appeared, not a mistake by the maintainer. A red herring along the way: NameSilo's template blurb references an unrelated domain (bidguru.de); checked it, records weren't there either.
+- **TLS + live delivery verified:** added a minimal Caddy site block for mail.frontporchai.app (backed up + `caddy validate` + reload), Let's Encrypt issued, `/root/use-caddy-cert.sh` repointed Postfix/Dovecot off the snakeoil cert — SMTP now presents a real cert (CN=mail.frontporchai.app, expires 2026-10-29) and a weekly cron reloads for renewals. Outbound proven against Google's MX: banner, EHLO, STARTTLS offered, and `MAIL FROM:<noreply@frontporchai.app>` accepted with `250 2.1.0 OK` — no IP-level block. (port25's verifier service was tried first and is defunct — its port 25 times out; stuck test message flushed from the queue.)
+- **PREVIOUSLY BLOCKED, NOW DONE:** reverse DNS (rename droplet to mail.frontporchai.app in the DO panel) + 5 NameSilo records (A, MX, SPF, DKIM, DMARC). Until those land, mail can't reach or leave the outside world. All values written to ~/Desktop/fpai-review/MAIL-DNS-RECORDS.md; /root/use-caddy-cert.sh swaps the temporary self-signed cert for Caddy's real one afterwards.
+- **NOT STARTED — deliberately (CLAUDE.md "no partial implementations"):** registration-verification email. It needs a DB migration + token model + endpoints + hub UI + Flutter app parity, and a product decision on what being unverified actually blocks. Too large to finish in one turn, so per project rules it wasn't begun.
+- **Files:** droplet `/etc/postfix/*`, `/etc/dovecot/local.conf`, `/etc/opendkim*`, `/etc/fail2ban/jail.d/mail.local`, `/root/mail-setup.sh`, `/root/use-caddy-cert.sh`; repo `src/lib/mailer.ts` (new), `src/env.ts`, `src/routes/characters.ts`, `src/routes/reports.ts`, `docker-compose.yml`.
+
+## 2026-07-30 — fix(backporch/SECURITY): hostile-actor hardening pass — 9 fixes deployed (2 CRITICAL, 3 HIGH, 4 MEDIUM)
+- **Why:** Maintainer set a standing threat model: the API is internet-exposed and WILL be attacked. Ran a full read-only hostile audit (unauth + hostile-account) of every route, then verified each finding myself before acting — two of the audit's headline claims did NOT hold in production and are recorded as such rather than "fixed".
+- **VERIFIED-FALSE / already mitigated (no panic, no bogus fix):** (a) audit's #1 CRITICAL claimed `trustProxy: true` let a spoofed `X-Forwarded-For` reset every rate limit. Probed live: buckets kept decrementing across spoofed IPs — Caddy replaces untrusted inbound XFF, so limits were never bypassable. Still hardened to `trustProxy: 1` (defense in depth; reproduced both behaviors locally: `true` → req.ip = spoofed, `1` → real peer) and re-verified live after deploy. (b) OAuth pre-hijack takeover (below) was real in code but NOT live-exploitable: `/auth/google` returns 503 `google_oauth_disabled` in prod. Fixed anyway so enabling Google sign-in is safe.
+- **CRITICAL fixed:** tokenizer event-loop DoS (separate entry below, deployed earlier). OAuth account-takeover chain in `oauth.ts`: now requires `email_verified === true`; **never** auto-adopts an existing account by email (signup doesn't verify ownership, so an attacker could pre-register a victim's address and inherit their Google login — now 409 `email_already_registered`); Google signups get a uniqueness-checked display name (`uniqueDisplayName`, was arbitrary + duplicate-able → creator impersonation + vanity-URL DoS via ambiguous lookup); Google path now runs `checkBanEvasion` + `recordDeviceSignal` (banned users could previously re-register via the Google button, leaving no device trace); callback token exchange wrapped (was an unauth 500).
+- **HIGH fixed:** version-upload type confusion (`parseCard` — MY code from today): payload `type` outranked the parent's, so `{"type":"GROUP"}` on a solo card's version lifted its 256 KB cap to 24 MB; `fallbackType` now wins unconditionally. Multipart `fields: 10 → 2` (busboy buffers each field to `fieldSize`, so one request could pin ~240 MB before any check; the route reads exactly one field).
+- **MEDIUM fixed:** 5xx responses no longer echo internals (Prisma messages embed absolute server paths + query args) — fixed `{error:"internal"}` after logging; `page` bounded (`max(500)`) on browse/mod-queue/mod-admin (was unbounded → `page=1e307` → `skip: Infinity` → 500 + leak; verified 400 live); login user-enumeration timing oracle closed with a real decoy argon2 compare (`burnPasswordCompare`) — the old comment claimed this but the code returned early; measured after: unknown 21–36 ms vs known 20–22 ms (was ~2 ms vs ~100 ms); per-route caps added to `/auth/refresh` + all three `/2fa/*` routes (2FA-disable is the last gate before mod 2FA removal); `q` bounded on mod-admin search.
+- **Verified live after deploy:** browse 200, worlds 200, bad login 401 (not 500), signup validation 400, `page=1e307` 400, rate-limit still keyed to the real client, hub 200.
+- **Known/accepted, NOT fixed today (documented for the maintainer):** `X-Bot-Key` blast radius (single static header can approve/reject + read uploader emails); WS auth is JWT-claim-only (demoted mod keeps mod socket reads until token expiry ≤15 min) and the token rides the query string; guest NSFW gate is a spoofable `X-Guest-Adult` header (a product decision, not a bug); no email verification at signup; access tokens unrevokable within their 15-min TTL; uploaded bytes never magic-byte validated. None are one-request outages; all want a deliberate decision.
+- **Files:** `src/server.ts`, `src/routes/oauth.ts`, `src/routes/auth.ts`, `src/routes/twofa.ts`, `src/routes/characters.ts`, `src/routes/browse.ts`, `src/routes/mod-admin.ts`, `src/routes/mod-content.ts`, `src/lib/password.ts`, `src/lib/card-tokens.ts`.
+
+## 2026-07-30 — fix(backporch/SECURITY): one upload could freeze the whole server for 15 seconds (tokenizer event-loop DoS)
+- **Why:** Maintainer flagged the standing threat model — the API is internet-exposed and WILL see hostile actors. First measured finding, and a self-inflicted one: raising the WORLD card cap to 8 MB widened an existing hole. `countCardTokens` runs llama-tokenizer-js SYNCHRONOUSLY on all card text, so one 8 MB world of prose blocked the event loop **14,658 ms** (measured) — every other request on the server stalls behind it. Any signed-in hub account could fire it (world upload is live), and the upload rate limit still allows ~20/hour/IP ≈ 5 minutes of cumulative freeze per IP. Group cards (24 MB cap) were already worse pre-existing.
+- **Did:** `MAX_TOKENIZE_CHARS = 256 KB` in `card-tokens.ts`: tokenize at most that much text, extrapolate the remainder by character ratio (the count is documented as an approximation). Applies to EVERY caller — upload, versions, card-detail self-heal, boot backfill — so no path can stall the server.
+- **Measured:** 8 MB world 14,658 ms → **283 ms** (52× faster, count off by 0.003%: 1,800,004 → 1,800,055); 24 MB group text → 75 ms; normal solo card → 2 ms.
+- **Deployed** to the droplet immediately (live hole, live upload path). Broader hostile-actor audit of the whole API in progress.
+
+## 2026-07-30 — deploy(stoop): Worlds backend + website DEPLOYED to droplet (maintainer-requested; Dart flags still off)
+- **Backend:** rsync src+prisma+public → /opt/backporch, compose rebuild; migration applied (live enum SOLO/GROUP/WORLD). Live smoke: `type=world` 200 empty, `type=all` 10 cards no leak, `type=banana` 400, `types=` mixed OK.
+- **Website:** build.mjs + rsync dist→/var/www/frontporch, dist-hub→/var/www/hub. Verified in a live browser as guest: 🏞️ Worlds tab renders with intro note + "No worlds on the porch yet" empty state (screenshot embedded in session; MCP container holds the file).
+- **Fleet impact:** zero — worlds are invisible to every shipped client until content exists AND the client opts in; nothing can upload WORLD until the gated app flips.
+- **Follow-up 5 (same day):** maintainer probed wrong-file handling on Share-a-world — validation already rejected non-JSON / non-envelope / coverless files with specific messages; hardened the two gaps found while answering: a 10 MB pre-read size gate (a dropped video no longer gets fully read into memory just to fail JSON.parse) and the dropzone caption resets to "No world loaded yet." on any parse error (was stale beside the error). Deployed + live-verified.
+- **Follow-up 4 (same day, maintainer wording ruling):** world NSFW checkbox label → "This world is NSFW — suggestive cover art or 18+ themes in its lore (…)". "Explicit" is banned in NSFW-adjacent copy (maintainer reads it as full nudity, which the AUP bans for cover art) — memory saved (feedback_nsfw_wording). Deployed + live-verified.
+- **Follow-up 3 (same day):** maintainer couldn't find the world share (it was only on My cards) — "🏞️ Share a world" added to the signed-in NAV next to "+ Share a card" (`app.js` header), plus a share CTA in the Worlds tab's signed-in empty state (`views-browse.js` + `.hub-empty-cta`). Deployed + live-verified.
+- **Follow-up 2 (same day, maintainer request):** hub gained its own world upload path — a distinct "🏞️ Share a world" button beside "+ Share a card" on My cards → new `#/submit-world` route/form (`views-my.js` `renderSubmitWorld` + router entry in `app.js` BEFORE the `#/submit` prefix match): drop a `.fpworld`, envelope validated client-side (mirrors the server's shape check), cover decoded from the envelope's data URL for the required avatar upload (clear error when the world has no cover — covers are mandatory to share), name/summary prefilled, `type: 'WORLD'` through the existing upload API into the same moderation queue. Mine rows: 🏞️ badge + Update hidden for WORLD (new-upload-only v1, matches the app). Cover-decode path proven against a real PNG (280 KB envelope — confirms the 8 MB WORLD cap was needed). Deployed; live asset verified.
+- **Follow-up (same day, maintainer request):** hub Worlds surfaces now warn "⚠️ Rawhide (nightly) builds only for now — the current stable release can't import .fpworld files yet" in three places: the Worlds-tab intro note, the world detail caveat (share links skip the tab), and the download toast (`views-browse.js` + `ui.js`). Rebuilt + redeployed; verified live in-browser (warning renders on the tab). Remove the three lines when worlds support reaches stable.
+
+## 2026-07-30 — feat(stoop): Worlds on The Stoop — backend + mod UI + hub implemented (NOT deployed; Dart flags stay off)
+- **Why:** Maintainer approved implementing the validated living-worlds.md §4 checklist. Explicit scope rule: do NOT connect the Dart client (kStoopWorldsLive/STOOP_WORLDS_LIVE stay false; maintainer flips later).
+- **Backend (~/dev/backporch-server, uncommitted):** Prisma `CharacterType` += WORLD + additive `ALTER TYPE` migration (20260730000000). `parseCard` per-type cap: WORLD → 8 MB (envelope embeds cover data-URL; solo 256 KB would reject real covers). NEW `src/lib/card-visibility.ts`: `parseTypesParam` CSV (`types=solo,group,world`) + `DEFAULT_CARD_TYPES` (solo+group). Visibility predicate landed at browse (`type=all` now maps to solo+group — the inversion that stops worlds leaking to shipped apps), `/me/downloads`, `/me/characters`, `/creators/:id`; mod queue deliberately unfiltered (mods must see worlds). Global `setErrorHandler`: ZodError → 400 (was raw 500). `card-tokens.ts`: envelope `lorebook`/`biome` text counted (Cindermaw: 528 tokens vs ~90 before); `cardStableId` falls back to envelope `meta.sourceId`. `share.ts` world copy. Mod admin SPA (`public/admin`): `typeBadge` helper (3 sites), WORLD badge CSS, and world detail sections (climate/traits/lore entries) so moderation isn't blind.
+- **Hub website (`website/src/stoop`, uncommitted):** 🏞️ Worlds tab (`type=world`), Worlds intro note, tile+detail WORLD badges, world detail sections (about/climate/traits/lore via existing lorebookSection over `card.lorebook`), download as `<name>.fpworld` JSON (no PNG assembly), hub opts into `types=solo,group,world` on following/mine/downloads/creator. `node build.mjs` green. **Deploy order: backend BEFORE hub** (live API 400s `type=world` until migrated).
+- **Dupe bot (`moderation/scripts/dupecheck.py`):** `card_type` detection (envelope heuristic), world lore+climate in the text blob, hard type partition → `NOT_COMPARABLE` (verified live: Cindermaw-vs-Violet NOT_COMPARABLE 0.0; Cindermaw-vs-self DUPLICATE_SUSPECTED 0.7).
+- **Verify:** `tsc` typecheck+build clean; tsx runtime checks (types param, stable-id both paths, envelope tokens); FULL local Docker stack smoke: migration applied (enum shows WORLD), `type=banana` → 400, and with a planted APPROVED world: `type=all` 7 (invisible ✓), `type=world` 1 ✓, `types=` mixed 8 ✓, solo/picks unaffected ✓. Smoke row deleted, stack downed. NOTHING deployed to the droplet.
+- **Flip-time client TODO (documented in living-worlds.md item 9):** send `types=` CSV from world-aware app calls + upload `meta.sourceId` (`world.sourceId ?? world.id`) for re-share idempotency.
+- **Grok review round (backporch):** 10 findings → FIXED: version-path size cap (parseCard gains fallbackType from the parent row — real bug), cross-type stable-id collision (idempotent append now requires matching type; mismatch creates a fresh row with null originStableId to dodge the unique key), extract_card.py world branch (mod scripts were blind to world content — real gap), place_traits in tokenCount, pycache gitignore. PARTIAL: WORLD uploads must look like a .fpworld envelope (400 otherwise); solo/group stay shape-unpinned by long-standing design. REJECTED with rationale: by-id world fetch from old apps (share links open the world-aware hub; the app has no deep-link surface), error-handler concerns (reply.send preserves statusCode), "empty V2 sections in mod UI" (section() skips falsy — verified). All gates re-run green after fixes.
+
+## 2026-07-30 — docs(worlds): validated the Stoop worlds backend checklist against the real backend; corrected it
+- **Why:** Maintainer asked to validate living-worlds.md §4's backend requirements for workability before backend work starts.
+- **Findings folded into the doc:** (1) "one new enum value" is really a Postgres `ALTER TYPE` migration (zod derives from the Prisma enum). (2) NEW BLOCKER: `parseCard` gives WORLD the 256 KB solo cap while the envelope embeds the cover as a data URL — real covers alone bust it; WORLD needs its own cap. (3) Visibility rule was missing `/me/characters` (Mine) + share/OG page; `type=all` currently means NO predicate (default must invert to solo+group); no shared query builder (~5 separate `where`s); unknown `type` → unhandled ZodError → HTTP 500. (4) tokenCount reads `character_book`, envelope says `lorebook` → near-zero counts (returns 0, never crashes). (5) NEW GAP: stable-id idempotency path doesn't exist in the envelope → every re-share creates a duplicate PENDING row; teach extractor `meta.sourceId`. (6) Dupe bot compares worlds against characters with V2-only fields + 30% art weight → type partitioning needed. Validated-fine: avatar-required matches cover-required, versions endpoint needs no gate (no type field), WS cardStats safe for old clients, moderation queue/statuses as assumed, client claims about shipped `type=solo|group|all` params confirmed.
+- **Files:** `docs/design/living-worlds.md` (§4 contract + checklist, now 9 items).
+
+## 2026-07-30 — fix(worlds): new chats never inherited the character's attached world (climate stayed temperate 72°F)
+- **Why:** Field-tested with the Violet Vance / Cindermaw pair: attaching a world to a CHARACTER only fed the lore pool (`lorebook_collection.dart` worldNames). The chat's climate default (`_worldDefaultBiome`), the "Setting" prose injection, and the Places panel all read worlds attached to the SESSION — and nothing ever seeded a 1:1 session from `character.worldNames`. Groups DID seed (applyGroupTemplateToChat on first entry), so this was also a 1:1↔group asymmetry. Bonus latent bugs: startNewChat never reset/persisted `_chatWorldIds` (stale in memory, empty after reload) and forks lost the parent chat's attachments on reload.
+- **Did:** ONE new private helper `ChatService._seedChatWorldsForNewSession({carryRefs})` (chat_service.dart, next to the other chat-world plumbing): groups copy the group template, 1:1 copies the character's attached worlds, forks pass `carryRefs` to keep the parent's attachments; always ends in `_reloadChatWorldIds()` so a fresh session can't inherit the previous chat's list. Called at ALL five session-creation sites: fresh 1:1 entry (chat_entry, replaces the bare `_chatWorldIds = const []`), group first entry (group_entry, replaces the inline apply+reload), forkSession + both startNewChat branches (session_manage), and SillyTavern chat import. Renamed `WorldRepository.applyGroupTemplateToChat` → `applyTemplateWorldsToChat` (it now serves character world NAMES as well as group ids; resolver already handled both). Existing sessions untouched — loads read what the chat has, so deliberate detaches stick. Web parity by construction (shared service; facade reads the same attachment).
+- **Test:** `world_repository_test.dart` gained an `applyTemplateWorldsToChat` group pinning the names-OR-ids-with-unresolved-dropped contract the 1:1 seeding relies on.
+- **Grok review round:** (1) CONFIRMED cold-start race — seeding could resolve against a not-yet-loaded worlds cache and silently seed nothing, permanently; fixed at the root with `WorldRepository.ready` (first-load future, constructor-armed) awaited in `applyTemplateWorldsToChat` (rejected Grok's alternative of a runtime `character.worldNames` fallback in `_worldDefaultBiome`: it would make deliberate per-chat detaches silently revert). (2) Helper moved out of the god file into the existing `ChatServiceSessionManage` extension (chat_service.dart net −0 growth). (3) Was stale — the diff snapshot predated the changelog/Rawhide entries. (4) `docs/design/living-worlds.md` API name updated.
+- **Files:** `lib/services/chat_service.dart`, `lib/services/world_repository.dart`, `lib/services/chat/chat_service_chat_entry.dart`, `chat_service_group_entry.dart`, `chat_service_session_manage.dart`, `chat_service_sillytavern.dart`, `test/services/world_repository_test.dart`.
+
+## 2026-07-30 — fix(worlds): removed the leftover Import Lorebook button from the Worlds tab (desktop + web)
+- **Why:** The Worlds header still carried a download-icon "Import Lorebook" button from before the Lorebook-parity rework; the import wizard's home is the chat sidebar's lore tools now. Maintainer flagged it as no longer belonging there.
+- **Did:** Desktop: removed the IconButton + now-dead `import_lorebook_page.dart` import from `world_management_page.dart` (ImportLorebookPage stays reachable via the chat sidebar's "This Chat" download icon in `lorebook_chat_book.dart`). Web parity: removed the "⬆ Import lore" button + wizard wiring from `WorldsPage.tsx` — but that was the web's ONLY entry to `ImportLorebookWizard`, so `ChatInsight.tsx`'s Lorebook section gained an "Import a lorebook…" button (mirrors the desktop sidebar entry; wizard itself unchanged, all destinations intact). Web bundle rebuilt.
+- **Verify:** flutter analyze clean; dart fix nothing; tsc+vite green. No new private methods; deletions: the two Worlds-tab buttons + one dead import.
+- **Files:** `lib/ui/pages/world_management_page.dart`, `web_ui/src/pages/WorldsPage.tsx`, `web_ui/src/components/ChatInsight.tsx`, `assets/web_app/*`.
+
+## 2026-07-29 — fix(worlds): climate editor rebuilt to the approved mockup 1:1 (maintainer rejection)
+- **Why:** Field test against the approved artifact failed — clipped anchor values (suffix text inside narrow fields), no temperatures in the preview, default widgets instead of the mockup's visual system. Maintainer mandate: all colors, emojis, and visual effects of the artifact, no questions asked.
+- **Did:** Full UI rebuild: amber-gradient header; 4-across season CARDS (mono amber anchor inputs, captions outside the field); weights grid with mono numerals/dimmed zeros/amber-edged dominant cells; glowing swing slider; carded rename rows (condition → emoji → name → stance PILL with tinted borders, italic flavour, red Acid-Mist error state); preview column on a darker inset with legend-colored share bars + per-season ~temps, bordered week tiles (midday °C/°F, danger-edged on dangerous skins), tinted notices, survival-prose quote; preview auto-computes on open; pill footer with dimmed disabled Save. `biome_preview` gained `typicalTempC` + SegmentWeather sample week; `WeatherSegments.typicalBaseC` added. Files split under the cap: `climate_editor_chrome.dart` + `climate_skin_row.dart` (new). Commits 6f04429b (emoji+flavour rows, ClimatePreviewPanel split) + b8f6af87 (rebuild); CI green both.
+- **Post-mortem (memory saved: mockup-is-pixel-spec):** the divergence shipped because nothing in the verification loop RENDERS new UI — analyze/tests/reviews read code, not pixels. Rule going forward: approved mockup = binding pixel spec; render-and-compare before done.
+
+## 2026-07-29 — feat(worlds): custom climate editor + condition skins (Phase 2 steps ③+④ — Mars is buildable)
+- **Editor (desktop-only by ruling; mockup-approved):** `climate_editor_dialog.dart` + `climate_editor_widgets.dart` — start-from templates, per-season thermal band pickers with unit-aware display-°C anchor fields (unlock when an extreme is jitter-reachable; stored °C canonical), 4×7 weather-odds grid, day-night swing slider, rename rows with the mandatory danger level (Save disabled until picked), preview-as-validation panel over the new pure `biome_preview.dart` harness (distributions, share-based demotion warnings, deterministic sample week). Entry: world editor's climate picker gains "Custom climate…" (biomeJson carries it, biomeId clears; feel card shows the custom + Edit button).
+- **Selection coherence (Grok NO-SHIP → fixed at the root):** custom snapshots are branded `world:<worldId>` at every set-site (new `Biome.withId`; desktop Places panel, facade `setChatClimate`, `_worldDefaultBiome`), so the active climate matches its picker option by ID on both surfaces — the displayName heuristic died before shipping. Facade `chatPlaces()` emits additive `climateOptions`; web ChatPlacesSection prefers them with old-server fallback + a labelled entry for detached-source snapshots; `places[].biomeId` reports 'custom' truthfully (+`hasCustomClimate`). Also from Grok's pass: editor controllers allocate once (leak on template switch fixed); dialog trimmed under the 500 cap; dead `fahrenheit` param dropped.
+- **Skins live (step ④):** new pure `weather_skins.dart` shared by the prompt injection, the sidebar WeatherChip, and the web facade (parity by construction): renamed conditions speak by their new name + emoji on every surface; stance drives code-owned behavior lines; at dangerous+ the stance REPLACES the dress cue (the cardigan-into-acid guard); author flavour capped at 140 chars beside the directive; renamed transitions never leak the stock word; a skinned dangerous/deadly tomorrow foreshadows as a deadline. Built-ins and unskinned conditions are byte-identical pass-throughs.
+- **Tests:** `biome_preview_test` (4), `weather_skins_test` (11); pins + extremes green throughout. Full suite 2723, analyze clean, macOS debug build green, web bundle rebuilt.
+- **Files:** `lib/services/chat/biome_preview.dart` (new), `weather_skins.dart` (new), `weather_biomes.dart` (withId), `prompt_injection/weather_injection.dart`, `chat_service.dart` (getBiome + world-default branding), `lib/ui/pages/worlds/climate_editor_dialog.dart` (new), `climate_editor_widgets.dart` (new), `world_management_page.dart`, `chat_places_panel.dart`, `weather_chip.dart`, `web/facade/world_facade.dart`, `chat_tools_facade.dart`, `web_ui/src/components/ChatPlacesSection.tsx`, `assets/web_app/*`, tests.
+
+## 2026-07-29 — feat(worlds): place traits — atmosphere + gravity (no more breathable-air Mars)
+- **Why:** Standing facts about a place aren't weather. Mockup-approved stance-recipe design: small structured pick, app-written behavior line, silent defaults.
+- **Did:** v41 additive `worlds.place_traits` (one flexible JSON column — future traits need no migration; unknown keys survive round-trips). `World` gains WorldAtmosphere (breathable/thin/unbreathable/hostile) + WorldGravity (earth/low/high/micro) typed over the raw map. `world_injection` appends one code-owned line per non-default trait — trait lines ride even when description injection is off, and survive budget truncation (behavior beats flavor). Desktop: `PlaceTraitsEditor` widget (extracted — world_management_page is over-cap) in the world editor with live line preview. Web: same two selects in WorldsPage edit modal, facade emits + accepts trait names, bundle rebuilt. `.fpworld` envelope carries `place_traits` additively. Schema pin test → 41.
+- **Tests:** `world_place_traits_test.dart` (13: silent defaults, round-trips, unknown-key survival, garbage degradation, injection lines incl. budget behavior, envelope carriage). Full suite 2711 green; analyze clean; tsc+vite green.
+- **Files:** `lib/database/database.dart`(+g), `lib/models/world.dart`, `lib/models/fp_world_package.dart`, `lib/services/world_repository.dart`, `lib/services/chat/prompt_injection/world_injection.dart`, `lib/ui/pages/worlds/place_traits_editor.dart` (new), `lib/ui/pages/world_management_page.dart`, `lib/services/web/facade/world_facade.dart`, `web_ui/src/pages/WorldsPage.tsx`, `web_ui/src/styles/ws-g.css`, `assets/web_app/*`, tests.
+
+## 2026-07-29 — feat(worlds): Phase 2 step ② — extreme temperature bands (Mars −80°C, volcano 600°C)
+- **Why:** Custom biomes (maintainer-greenlit Phase 2) need temperatures the Earth-banded engine couldn't express. Maintainer chose the REAL path (engine understands extremes) over display-only fakery, with authored display-°C anchors folded in.
+- **Engine:** `TempBand` APPENDS `cryogenic`/`furnace`/`inferno` (declaration order = storage order; biome JSON persists raw indices 0..4, so never reorder). Thermal ordering lives in `kTempBandRankByIndex` (weather_biomes — storage layer, single source; engine's `TempBandThermal.rank` + derived `fromRank` delegate). Per-biome `bandRange` clamp (default classic `(0,4)` = `kClassicBandRange`); `displayAnchorsC` authored per-season °C for extreme-reachable seasons (chip number only; ±3 wobble, single-RNG-draw parity, clamped ≥ −273); survival dressCue prose for extremes; snow keeps below cold (CO₂ frost) + rain freezes out as snow below cold; lethal band transitions get dedicated foreshadow lines (classic text untouched). afk_flavor + needs_simulation "extreme weather" checks are rank-based (provably identical for classic bands; 1:1/group parity by shared rule).
+- **Adversarial verification (ultracode 4-lens workflow + fixes):** determinism lens REPLICATED the old engine and proved two history-rewrite paths in my first cut — legacy out-of-spec biome JSON (unvalidated imports accepted `baseTemp: 5`/negatives) flipped permanent-hot chats to permanent-cold under the rank decode, and the clamp-order change rewrote ~16% of negative-base days. Fixed with the classic-span BYTE-IDENTITY path: when `bandRange` is classic, `_tempFor` reproduces the ORIGINAL raw-int formula exactly (do-not-clean-up comment in place). Correctness lens: garbage `bandRange` now REJECTS to classic instead of clamping INTO extremes (`[10,20]` no longer yields permanent inferno), string elements can't throw away the whole biome, negative-width ranges can't crash the walk. Hygiene lens: validate() requires anchors for jitter-REACHABLE extremes (not just extreme bases), dead skin-validation loop deleted, rank/fromRank derived from one table, span literals → consts.
+- **Tests:** `weather_extreme_bands_test.dart` (~34: rank/round-trip, clamp guard across all built-ins × 400 days, Mars CO₂ frost, legacy out-of-spec byte-identity, garbage-JSON battery, jitter-reachable validation, lethal foreshadow, anchors ±window, °F @600=1112, words-only prose). All 15 per-biome pins + temperate golden byte-identical throughout.
+- **Docs:** living-worlds.md Rev.3 marked step ② done; place-traits (atmosphere/gravity enums on the WORLD, one additive `place_traits` JSON column) + °C-canonical/°F-toggle rules folded in (mockup-approved).
+- **Files:** `lib/services/chat/weather_engine.dart`, `weather_biomes.dart`, `weather_segments.dart`, `afk_flavor.dart`, `needs_simulation.dart`, `test/services/chat/weather_extreme_bands_test.dart` (new), `docs/design/living-worlds.md`.
+
+## 2026-07-29 — test(worlds)+docs: Phase 2 prep — per-biome weather pins + extreme-bands design addendum
+- **Why:** Maintainer greenlit Living Worlds Phase 2 (custom biomes — "Mars", volcanic worlds) and chose the REAL extreme-temperature path (extend `TempBand` both ends) over display-only fakery. Before any engine change, every shipped climate needs its own byte-identical fence: the pinned sequence previously covered only temperate, so a clamp mistake could rewrite desert/rainforest/etc. history without failing CI.
+- **Did:** (1) `test/services/chat/weather_biome_pins_test.dart` — pinned 8-day sequences for all 7 built-ins × winter+summer (15 tests incl. a temperate≡null identity tie to the original pin); sequences generated from the live engine and sanity-checked against each biome's signature (desert bone-dry, continental snow, tropical collapsed seasons, mediterranean dry summer). (2) `docs/design/living-worlds.md` — Rev.3 addendum: extreme bands (`cryogenic`/`furnace`/`inferno`), per-biome jitter-clamp range (the determinism guard), authored per-season display-°C anchors for extreme bands (UI-only; prompts stay words-only), stance floors at extremes, water-condition preview warnings, mixed-fleet `.fpworld` import tolerance, locked build order (pins → engine → editor → skins/stance); §5 gate marked maintainer-overridden.
+- **Mockup:** custom-climate editor sketch published as an Artifact (Mars fixture, mandatory-stance error state, preview-as-validation panel) — awaiting maintainer approval before any UI work.
+- **Files:** `test/services/chat/weather_biome_pins_test.dart` (new), `docs/design/living-worlds.md`.
+
+## 2026-07-29 — chore(ci): ci-local docker gate rebuilt on Flutter 3.44.8 (+ Dockerfile committed)
+- **Why:** The local pre-push gate image (`fpai-golden:3.41.1`) predated ci.yml's move to 3.44.8 — its `pub get` fails against the refreshed lockfile, so the gate was silently unusable (part of how a red tip reached Rawhide). The image's Dockerfile was never committed; rebuilding required reconstructing it from `docker history`.
+- **Did:** Dockerfile now at `scripts/ci-golden.Dockerfile` (FLUTTER_VERSION build-arg, rebuild command + lock-step rule documented); `ci-local.sh` defaults to `fpai-golden:3.44.8`. Built the image (linux/amd64) and verified the golden gate end-to-end: 94 tests green in-container against the current tree. Old 3.41.1 image left in place (user can `docker rmi` to reclaim ~5GB).
+- **Also:** goldens for the Living Worlds UI churn were refreshed via the `update-goldens.yml` runner artifact earlier tonight (commit 4e9205e7); the golden fakes grew the new ChatService/WorldRepository surface (dd08cbaf).
+- **Files:** `scripts/ci-golden.Dockerfile` (new), `scripts/ci-local.sh`. Commit 4a10af60.
+
+## 2026-07-29 — fix(worlds): CI-red scanner test + Claude review of b3f775ce (blockers + hardening)
+- **CI red (blocker):** origin/Rawhide's "Tests (unit+integration)" job failed since 229b6e9b on `lorebook_scanner_test` "same world reachable twice rolls probability at most once" — the Worlds work moved world dedup INTO the enumerator (`seenWorldIds`), while the test still asserted the old contract (entry yielded 3× via group+A+B, deduped at roll time). The protected behavior (single evaluation) is intact and now structural; updated the expectation to 1 + rewrote the comments to document the moved contract.
+- **Purge gating (blocker):** the `.fpworld` recovery export ran in a try/catch that logged and fell through to the hard delete — a failed export (disk full, encode error) still destroyed the world, defeating the safety fix. Now a failed export SKIPS that world's delete, ref-stripping only covers actually-deleted worlds (`deletedIds`/`deletedNames`), the method returns `({deleted, skipped})`, and the one-shot pref is only set when skipped == 0 so failures retry next launch.
+- **Same-day climate switch:** `insertBiomeSpan` now deletes any existing span for the same (chat, effective_from_day) before inserting — re-switching climate within one story day replaces rather than stacking rows whose winner depended on incidental row order.
+- **Cover encode off the UI thread:** `encodeWorldCoverDataUrl` now runs via `compute()` at the pick site (decode+resize+JPEG of a multi-MB photo froze the UI; design doc promised off-thread). Added `foundation.dart show compute` import.
+- **Web climate honesty:** `setChatClimate` errors on an unknown climate id instead of silently applying temperate.
+- **Second stale pin (also CI-red):** `avatar_repository_test` still asserted `schemaVersion == 39`; the full-suite run caught it (targeted runs missed it). Updated to 40 with a Living Worlds note.
+- **Grok counter-review round (2 findings, both fixed):** (a) pref-lock hole — strip-after-delete meant a partial run (deletes done, strip threw) left dangling character/group refs, and the NEXT launch saw zero doomed worlds, reported clean, and locked the one-shot pref forever; purge now strips refs BEFORE deleting rows, so any failure point leaves a state the next launch fully retries. (b) `insertBiomeSpan`'s delete-then-insert is now wrapped in a DB transaction so a mid-upsert failure can't silently drop the day's span. Plus Grok's test ask: new end-to-end purge-safety test (blocked recovery dir → world kept + pref unset; unblocked → exported, deleted, pref locked, `.fpworld` present).
+- **Hygiene:** intent comment on the cover-scrim raw white/black (text-on-photo, deliberately theme-independent); removed 2 unused imports in `world_repository_test.dart`.
+- **Files:** `test/services/chat/lorebook_scanner_test.dart`, `test/services/avatar_repository_test.dart`, `lib/services/world_repository.dart`, `lib/database/database.dart`, `lib/ui/pages/world_management_page.dart`, `lib/services/web/facade/world_facade.dart`, `lib/ui/pages/worlds/world_place_card.dart`, `test/services/world_repository_test.dart`.
+
+## 2026-07-28 — docs(worlds): Living Worlds status complete through b3f775ce
+- **Why:** Reviewers need an accurate done map after medium batch + Claude review fixes.
+- **Did:** Phase 0 COMPLETE; Phase 1 COMPLETE (optional run-length/goldens open); commit table `229b6e9b` / `b3f775ce`; Claude finding disposition; test-strategy gates refreshed.
+- **Files:** docs/design/living-worlds.md
+
+## 2026-07-28 — fix(worlds): Claude review of Living Worlds high batch
+- **#1 purge safety:** export each character-linked clone as `.fpworld` to `worlds/recovered_character_lore_clones/` before hard delete (user-edited lore on the world row is no longer silently destroyed).
+- **#2 web bundle:** `npm run build` → refreshed `assets/web_app` (Edit Message, Places climate, covers now in the shipped PWA).
+- **#3 weather chip:** already fixed in medium batch (reads ChatService / active biome) — verified still true.
+- **#4 migration honesty:** comments + design doc: data mutations single-run; `groups.world_ids` rewritten in place (backup only for originals); chat_worlds skip existing pairs; collapsed double inject UPDATE.
+- **Cleanup:** `group_world_refs` key; resolve name→UUID when counting/fixing.
+- **Files:** world_repository, database.dart, database_cleanup(+dialog), assets/web_app/*, living-worlds.md.
+
+## 2026-07-28 — feat(worlds): medium batch — mid-chat climate, covers, card polish
+- **Climate spans:** `biome_schedule.dart`; ChatService hydrates spans; weather walk uses `biomeAtDay`; foreshadow suppress on span day-0; diurnalAmplitude in segments (temperate 1.0 keeps °C).
+- **UI:** Places panel climate dropdown (Story Tools); web `/api/chat/climate` + ChatPlacesSection; WeatherChip reads ChatService (correct biome).
+- **Covers:** `world_cover.dart` size-capped JPEG data URLs; desktop edit pick + WorldPlaceCard thumbs; web Worlds edit + WorldCard.
+- **Polish:** warm-porch Worlds chrome; group card dual `world_ids`/`world_names` export.
+- **Tests added:** biome_schedule_test, world_cover_test. **Before push:** regen widget goldens if world_management/time_strip fail.
+- **Deferred:** run-length prose, custom biomes (phase 2), cleanup rename.
+
+## 2026-07-28 — docs(worlds): Living Worlds implementation status for review
+- **Why:** Another agent needs a trustworthy done/partial/not-started map; design prose alone overstates phase 1.
+- **Did:** `docs/design/living-worlds.md` — Phase 0 DONE, Phase 1 PARTIAL (spans table + engine + world default; spans not wired / no mid-chat UI), Phase 2/3 not started; checklist with file pointers; test-strategy gates marked; medium batch + golden regen callout.
+- **Files:** docs/design/living-worlds.md
+
+## 2026-07-29 — feat(worlds): chat place attach + web Places parity + place-only pickers
+- **Desktop:** ChatPlacesPanel in Story Tools (1:1 + group) mutates chatWorldIds; group/character/edit pickers use placeWorlds + UUIDs.
+- **Web:** WorldsPage climates/inject/fpworld export; /api/worlds/climates; /api/chat/places GET/POST; ChatPlacesSection in insight; WorldCard climate chip.
+- **Files:** chat_places_panel, story_tools_group, edit_group/character, lorebook_worlds_tab, world_facade/routes, chat_facade, WorldsPage, ChatInsight, ChatPlacesSection, WorldCard, styles, Rawhide.
+
+## 2026-07-29 — feat(worlds): purge character-linked world clones; import lore from character
+- **Why:** Worlds tab was cluttered with auto-cloned "X's Lorebook" rows; Living Worlds makes worlds *places*, not character lore mirrors.
+- **Did:** Detect+purge character-linked worlds once (pref `purged_character_linked_worlds_v1`); strip refs from characters.world_names / groups.world_ids / chat_worlds; saveWorld clears linkedCharacter fields; Edit Character + group lore "From character" dialog; web CharacterEdit "From character…"; placeWorlds filter on group attach.
+- **Safe:** Character card lorebooks untouched; only world rows that were linked clones deleted.
+- **Files:** character_linked_world.dart, world_repository, database strip refs, main.dart wiring, import_character_lore_dialog, edit_character_page, lorebook_worlds_tab, CharacterEditPage, tests, Rawhide.
+
+## 2026-07-29 — feat(worlds): Living Worlds phase 0+1 foundation (portable places + biomes)
+- **Why:** Worlds were name-keyed lore folders; no climate, no safe export of a whole *place*, group rename cascade, no chat-level attach path.
+- **Did:** schema v40 (world columns, chat_worlds, chat_biome_spans, name→UUID group backfill); World model + id; .fpworld encode/decode; WorldRepository by id + exportFpWorld + chat attach; lorebook_collection chatWorldIds; weather Biome tables + engine biome param (temperate ≡ legacy); world description injection; desktop editor climate + inject toggle; .fpworld export; group create stores world UUIDs.
+- **Files:** database.dart(+g), world.dart, fp_world_package.dart, world_ref_resolver.dart, weather_biomes.dart, world_repository.dart, lorebook_collection.dart, weather_engine.dart, world_injection.dart, chat_service*, world_management_page, create_group_chat_page, world_facade, tests, docs/design/living-worlds.md, docs/Rawhide.md.
+
+## 2026-07-28 — feat(cast): @Name addressing — the mentioned character answers (guests AND groups)
+- **Why:** Maintainer follow-up to the double-response fix: the "@Evelyn" form should be a first-class mechanic. The vocative router required punctuation shapes; groups had NO way to address a member by text at all (round-robin/random/manual pick only).
+- **Fix:** New static `SceneGuestDirector.atMentionedCard` (+ `_atMentionHit`): matches `@Name`/`@FirstName` anywhere in the line — `@` must not follow a word char/dot/hyphen/plus (so "me@evelyn.com" never matches while ",@Evelyn" / "[@Evelyn]" do), name ends at a hyphen-rejecting word boundary (so "@Mara-Lynn" isn't guest "Mara"), earliest @ in text order wins, and on the same @ the LONGER name wins ("@Mara Vance" can't be stolen by another card's "Mara" nickname). **1:1:** `directlyAddressedGuest` checks @-mentions first, no punctuation needed; `@Host` anywhere keeps the whole turn with the host — absolute veto, it also beats a guest vocative later in the line; vocative patterns unchanged as fallback. **Group:** `_directAddressRoutedGuest` (scene-guest leaf) now resolves `@Member` against `_groupCharacters` and forces them via the SAME public `setNextCharacter` path the group UI's manual pick uses (objectives switch + per-speaker realism dance follow the pick — parity by reuse, zero new realism surface); the turn proceeds normally. Group @ is deliberately NOT gated on autoChimeEnabled (that's a 1:1 chime preference). `_nameVariants` became static.
+- **Grok review (delta):** 4 findings; fixed the real bug (host-@ veto didn't beat a trailing guest vocative), the same-@ tie-break, and the punctuation-before-@ gaps (allow-list → negative lookbehind); accepted the 1:1-veto vs group-earliest-@ semantics split as intentional (host is the default speaker in 1:1; members are peers in a group).
+- **Web parity:** automatic for the engine — shared ChatService, no new engine UI surface.
+- **Autocomplete popup (maintainer follow-up, same day):** typing `@` opens the cast list above the composer, "just like the popup if you type /" — same panel visuals as each surface's slash helper, filter-as-you-type (full name or any name token prefix), tap fills `@Name `. Desktop: new `MentionAutocomplete` widget (`lib/ui/chat_components/widgets/mention_autocomplete.dart`, exported from the chat_components barrel) wired under the slash helper in chat_page's input column; pure static helpers (`activeMentionQuery`, `nameMatches`) unit-tested; hidden in group observer mode; candidates = host + guests (1:1, only when guests present) or group members; warm-porch accent (`porchAmberOf`). Web: `ChatComposer` gains a `cast` prop (from ChatPage's existing `state.cast`), caret-tracked `@`-token detection mirroring the engine's boundary rule (emails never trigger), popup reuses the existing `.slash-cheatsheet` styles verbatim, Escape dismisses like the slash sheet; `npm run build` regenerated `assets/web_app` (tsc clean).
+- **Files:** `lib/services/chat/scene_guest_director.dart`, `lib/services/chat/chat_service_scene_guest.dart`, `lib/services/chat_service.dart` (seam comment only), `lib/ui/chat_components/widgets/mention_autocomplete.dart` (new), `lib/ui/chat_components/chat_components.dart`, `lib/ui/pages/chat_page.dart` (+9 lines), `web_ui/src/components/ChatComposer.tsx`, `web_ui/src/pages/ChatPage.tsx`, `test/services/chat/scene_guest_director_test.dart`, `test/ui/chat_components/mention_autocomplete_test.dart` (new; 37/37 director + 10/10 popup helpers, 743 chat-leaf suite green, analyze clean, dart fix clean).
+
+## 2026-07-28 — feat(chat): fullscreen Edit Message editor with RP highlight + think split
+- **Why:** The chat Edit Message UI was an old cramped AlertDialog: plain text, no syntax highlighting, raw `<think>` tags, non-expandable small box.
+- **Fix:** New `showMessageEditDialog` fullscreen editor (StyledTextController prose preset for dialogue/action/macros), collapsible Thinking section (split/join via pure helpers in `think_tags.dart` so tags never appear in either field), dirty discard confirm, char count, Esc / ⌘↵ shortcuts. Web/mobile parity via `MessageEditModal` + `messageEdit.ts` (same split/join, RP backdrop coloring). Bubble now opens the dialog instead of the AlertDialog.
+- **Files:** `lib/ui/dialogs/message_edit_dialog.dart`, `lib/utils/think_tags.dart`, `lib/ui/chat_components/bubbles/message_bubble.dart`, `web_ui/src/components/MessageEditModal.tsx`, `messageEdit.ts`, `ChatMessageList.tsx`, `ChatPage.tsx`, `styles.css`, tests, `docs/Rawhide.md`.
+
+## 2026-07-28 — fix(scene-guests): promoted guest answered twice per message (Discord report by adv997)
+- **Why:** After cast detection promoted a narrated side character (e.g. "Evelyn") to a Scene Guest, the host card kept writing the guest's dialogue inline (the transcript is full of the host voicing them — that's WHY they were detected — so the existing "do NOT write dialogue for them" ban lost to many-shot momentum), and the chime-in director then ALSO ran the guest's own turn (name-mention heuristic) → the same character answered twice per user message.
+- **Fix:** (1) Deterministic routing: `SceneGuestDirector.directlyAddressedGuest` detects a vocative of a present guest in the user's line (leading "Evelyn - …"/"Evelyn, …"/"@Evelyn …", bare "Evelyn?", trailing "…, Evelyn?"; host name outranks; title first-names like "Major" never match; gated on autoChimeEnabled) and `sendMessage` then runs the GUEST's parity-safe turn instead of the host turn — skipping host-turn prep (chaos tick/wheel, mood/needs/nsfw decay, pre-gen realism eval; guests carry zero Realism/Needs, the host simply didn't take a turn) — and excludes that guest from the follow-up chime-in pass (new `exclude` param) so they can't speak twice. (2) Prompt: the host-turn ban now carries an explicit handoff ("if earlier messages included their lines, that has ended") plus a defer clause for fuzzily-addressed guests. `_mentionsGuest` consolidated over a shared `_nameVariants` helper.
+- **Parity:** Scene Guests are 1:1-only, so no group divergence; guest turns were already realism-free by construction. On a routed turn the host's sim clocks (needs/mood/nsfw decay, chaos pressure) deliberately don't tick — the host didn't take a turn.
+- **Grok review:** 5 findings. Fixed: routing decision extracted to `_directAddressRoutedGuest` in the scene-guest leaf (god-file growth); plus my own catch: hyphenated OTHER names ("Mara-Lynn", "Anna-Mara") no longer false-match — a dash only separates a vocative with whitespace next to it. Accepted-by-design (Grok concurred, "ship as-is"): non-vocative addresses ("Evelyn what did you mean") stay on the host path with the strengthened ban (widening would steal host turns on narration); routing gated on autoChimeEnabled (with chime OFF the double cannot occur); host outranks a shared first name.
+- **Files:** `lib/services/chat/scene_guest_director.dart`, `lib/services/chat/chat_service_scene_guest.dart`, `lib/services/chat_service.dart`, `lib/services/chat/chat_service_generation.dart`, `test/services/chat/scene_guest_director_test.dart` (12 new tests; 29/29 green, chat suites 763 green, analyze clean).
+
 ## 2026-07-28 — fix(ci): stabilize Linux E2E smoke (no remote Kobold download + retry)
 - **Why:** E2E smoke (linux) failed with exit 79 "No tests were found" after ~5s mid-boot — process death with no Dart stack. Same SHA's macos/windows E2E and unit/goldens were green; prior commits on Rawhide had green Linux E2E (flake). Successful Linux runs were also downloading ~131MB of KoboldCpp during smoke despite the fake openRouter backend.
 - **Fix:** `SetupService.runAutoSetup` skips local binary download when backend is already openRouter/omlx (correct for remote-only users + E2E). Smoke test treats window_manager placement as best-effort. CI Linux E2E retries once after a failed attempt (clears build/linux between tries).
@@ -6248,3 +6462,1675 @@ full E2E green in ~8s; analyze clean; build_runner regenerated.
 **What:** Linux e2e-smoke passed both of its first two CI executions (xvfb +
 GTK/GStreamer recipe worked untouched). experimental → false. The full-array
 E2E suite now BLOCKS PRs on all three desktop platforms.
+
+## 2026-07-29 (UTC) — frontporchai.app was advertising v1.0.0; version now self-updating
+
+**Files:** `website/build.mjs`, `website/src/index.html`, `website/src/main.js`
+
+**What:** The live site showed "Latest release · v1.0.0" + a "Version 1.0 is
+here" hero banner while the real latest stable was v1.1.2 — the version was a
+hardcoded build.mjs constant nobody bumped across v1.1.0/v1.1.1/v1.1.2.
+build.mjs now fetches the latest release (tag + name) from the GitHub API at
+build time (hardcoded value demoted to offline fallback with a warning), and
+main.js refreshes the banner/version client-side on load so the page stays
+correct even between deploys. Scrubbed dated launch copy ("New in 1.0",
+Stoop "New!" tag). Rebuilt + rsynced to the droplet; verified live via
+headless browser (correct text, zero console errors); screenshot in
+~/Desktop/fpai-review/website-v112-live.png. Commit a4f4161c (Rawhide,
+local only — not pushed).
+
+## 2026-07-29 (UTC) — Climate editor: °F confusion, clipped captions, emoji picker
+
+**Files:** `lib/ui/pages/worlds/climate_editor_widgets.dart`,
+`lib/ui/pages/worlds/climate_editor_dialog.dart`,
+`lib/ui/pages/worlds/climate_skin_row.dart`,
+`lib/ui/pages/worlds/climate_emoji_picker.dart` (new),
+`test/ui/dialogs/climate_editor_layout_test.dart` (new), `docs/Rawhide.md`,
+`docs/design/living-worlds.md`
+
+**What:** Maintainer field report on the rebuilt editor. (1) It looked like
+°F was the default — actually this machine's Settings → General °F toggle
+was ON (`flutter.weather_fahrenheit = 1` in the dev build's prefs; the code
+default is °C) and the dialog had dropped the mockup's "Units follow
+Settings → General (default °C)" sentence, so nothing on screen explained
+where the unit came from. Sentence restored, and the blocking warnings now
+speak the active display unit ("set a display °F") instead of hardcoded °C.
+(2) The "°F shown" caption overflowed the season cards by 11px — anchor
+field 62→56px, caption 11px inside a Flexible so the row can never overflow.
+(3) The mock's emoji cell had shipped as a cramped disabled TextField — now
+a tappable cell opening a warm-porch picker (36 curated weird-weather emojis
+— acid ☣️, blood 🩸, volcano 🌋 … — plus free typing and Clear); the
+dialog's per-condition emoji controllers were deleted (draft.emoji is the
+single source of truth). New layout regression test pins zero overflow at
+spec size in BOTH units using the harness's real Roboto metrics, including a
+full-visibility assertion on the caption (a faded caption fails, not just a
+thrown overflow) and the °F wording of warnings. Renders verified against
+the mockup via a throwaway capture probe (deleted before commit; PNGs kept
+in ~/Desktop/fpai-review/climate-editor-fix/).
+Grok review (topic 'review'): no blockers; three follow-ups applied in the
+same commit — `context.mounted` guard after the picker await, the °C→°F
+rewrite narrowed to the exact anchor message, and the picker split into
+`climate_emoji_picker.dart` (skin row 261 lines, picker 189).
+
+## 2026-07-29 (UTC) — Desktop couldn't import .fpworld at all; Import Place button added
+
+**Files:** `lib/ui/pages/worlds/world_io.dart` (new),
+`lib/ui/pages/world_management_page.dart`,
+`test/services/world_repository_test.dart`, `docs/Rawhide.md`
+
+**What:** Maintainer field report: "no option to export or import .fpworlds".
+Export existed (world card ⋮ menu → Export), but import was genuinely
+impossible on desktop: the lorebook import page's file picker only allowed
+.json (a .fpworld could not even be selected), and its "World" destination
+built a bare lorebook-world — `WorldRepository.importWorld` (the full-package
+path that keeps climate + place traits + lore) had zero desktop callers; only
+the web API used it. Fix: new `world_io.dart` holds both flows —
+`importFpWorldFlow` (picker accepting .fpworld/.json → repo.importWorld →
+snackbar) and `exportFpWorldFlow` (moved out of the >500-line page, whose
+`_exportWorld` was deleted, so the page shrank). Worlds toolbar gained an
+"Import Place (.fpworld)" button beside Import Lorebook. New repo test pins
+the import contract: custom climate (extreme bands + skins) survives as
+biomeJson, place traits survive, fresh local id with package id kept as
+sourceId provenance, and re-importing the same file keeps both with a
+uniquified name.
+
+Grok review caught a second, pre-existing bug behind my wrong claim that
+"web already had both directions": the web facade's importWorld hand-rolled
+its own package logic and DROPPED place_traits (hostile air imported as
+breathable) and skipped name-uniquifying. Consolidated per the
+no-parallel-implementations rule: `WorldRepository.importWorldJson` is now
+the ONE full-package import core; desktop `importWorld(File)` is a thin
+wrapper and the web facade calls the same core (its ~35-line duplicate
+deleted, along with a dead lorebook-format validation block whose body was
+only a comment, and the lorebook_codec import that block held alive). New
+facade test pins traits + custom climate surviving web import; repo test
+temp dir now cleaned via addTearDown (Grok nit).
+Second Grok verify pass then flagged the web UI layer: the Places page's
+Import button only opened the lorebook wizard (accept=".json", posts to
+/api/lorebook/import) — the ready /api/worlds/import route had no UI
+caller, so a .fpworld was unselectable on web too. Added an
+"Import .fpworld" button (hidden file input → JSON.parse → POST
+/api/worlds/import → toast + list refresh), relabeled the wizard button
+"Import lore", rebuilt assets/web_app, strengthened the facade test to
+also assert biomeId=custom survives, and corrected the Rawhide bullet.
+Files add: `web_ui/src/pages/WorldsPage.tsx`, `assets/web_app/*` (rebuild).
+Golden follow-up: the Worlds page goldens (dark+light) pixel-failed on CI
+because the toolbar gained the Import Place button — regenerated on the CI
+runner via update-goldens.yml (run 30478708564), both PNGs visually
+reviewed (only change: second amber toolbar icon), committed.
+
+## 2026-07-30 (UTC) — Worlds on The Stoop: Dart client fully wired, tagged "coming soon"
+
+Files: lib/services/backporch/stoop_card.dart,
+lib/services/world_repository.dart,
+lib/ui/pages/repository/stoop_world_share.dart (new),
+lib/ui/pages/repository/stoop_upload_page.dart,
+lib/ui/pages/repository/stoop_card_detail_page.dart,
+lib/ui/pages/repository/stoop_card_sections.dart,
+lib/ui/pages/repository/stoop_card_tile.dart,
+lib/ui/pages/repository/stoop_browse_view.dart,
+lib/ui/pages/repository/stoop_home_view.dart,
+lib/services/web/facade/stoop_facade.dart,
+lib/services/web/web_server_host.dart,
+web_ui/src/stoop/stoopTypes.ts, web_ui/src/stoop/stoopApi.ts,
+web_ui/src/pages/stoop/StoopBrowsePage.tsx,
+web_ui/src/pages/stoop/StoopCardPage.tsx,
+web_ui/src/pages/stoop/StoopSection.tsx,
+web_ui/src/components/stoop/StoopCardTile.tsx, web_ui/src/styles.css,
+test/services/backporch/stoop_card_world_test.dart (new),
+test/services/web/stoop_routes_test.dart,
+docs/design/living-worlds.md, docs/Rawhide.md
+
+Maintainer asked for The Stoop to support uploading + downloading
+(auto-importing) .fpworld places, app-side only, tagged "coming soon" until
+the backend ships. Design: worlds ride the EXISTING card endpoints as a third
+type 'WORLD' whose card payload is the .fpworld envelope — zero new
+endpoints, additive-only server change, and (per explicit maintainer
+requirement) the same moderation pipeline as characters by construction
+(POST /characters → PENDING → mod review). The place cover image is required
+and uploads as the card avatar so every Stoop surface displays it via the
+normal primaryAssetId pipeline; the same cover also travels inside the
+envelope, so downloads restore it.
+
+Gates: kStoopWorldsLive (Dart) + STOOP_WORLDS_LIVE (web), both false. While
+off: browse "Worlds" filter (new desktop segment + web select option) shows
+a coming-soon panel without querying the server; the upload wizard's Places
+section shows a coming-soon banner; web Share tab copy mentions worlds. When
+flipped: wizard lists shareable places (cover required) → publishStoopWorld;
+downloads auto-import via WorldRepository.importWorldJson on BOTH the desktop
+detail page and the web facade; WORLD pills/badges on tiles; world-specific
+detail sections (stoopWorldSections: about/climate/traits/lore).
+
+Consolidations: exportFpWorld's biome-resolve+encode became
+WorldRepository.fpWorldJson (ONE envelope builder for file export AND Stoop
+upload). Mine-tab Update button hidden for WORLD posts (worlds are
+new-upload-only v1; routing them to the character update path would
+dead-end). New tests: WORLD card parsing; end-to-end web route test proving
+a WORLD download lands as a local place with provenance + lore intact.
+
+## 2026-07-30 (UTC) — Stoop worlds: endpoint decision + mixed-fleet visibility rule codified
+
+Files: docs/design/living-worlds.md
+
+Maintainer confirmed worlds hit /characters (not a new /worlds endpoint):
+the requirement is the shared moderation PROCESS, and the shared endpoint
+gives it by construction along with the whole social layer (votes,
+downloads, reports, creator pages, mod messaging, stat pushes). Codified in
+§4 with a hard backend requirement before the coming-soon flags flip: WORLD
+items must be opt-in per request on every card list endpoint (browse,
+picks, following, creator profiles, /me/downloads), because shipped clients
+render unknown-type cards as solo characters and fail at download. Rollout
+order documented: backend accepts WORLD + opt-in visibility first, then
+flip kStoopWorldsLive / STOOP_WORLDS_LIVE.
+
+
+## 2026-07-30 (UTC) — Stoop redesign: "porch at dusk" hub parity (desktop + web polish)
+
+Files: lib/ui/theme/app_colors.dart (stoop palette block),
+lib/ui/pages/repository/*.dart (all 20 files restyled; stoop_glass.dart
+rewritten as the design core), lib/ui/pages/repository_page.dart,
+web_ui/src/styles.css (stoop component polish), assets/web_app/* (rebuild),
+docs/Rawhide.md
+
+Maintainer: the in-app Stoop looked low-quality next to hub.frontporchai.app.
+Extracted the hub's real design system from its live site.css/stoop.css
+(porch-at-dusk: bg #0e0c09→#201a13, amber #f5a623/#ffc44d, teal #4cb8a4,
+cream #f3ecdd, Fraunces serif display, radius 14/9, amber glows, "no purple,
+ever") and rebuilt the desktop Stoop on it. Maintainer decision: adapt to
+light mode (dark = exact hub parity; light = warm-daylight derivation) —
+palette pairs live in AppColors (stoop* constants), context helpers +
+building blocks in stoop_glass.dart (StoopBadge, StoopAmberButton, StoopLamp,
+stoopInput, stoopPanel, stoopEmpty, stoopDisplay via google_fonts Fraunces —
+same pattern chat fonts already use).
+
+Structural matches (not just recolors): card tiles rebuilt to hub anatomy
+(square art + badges over it, body with serif name/@creator/2-line summary/
+stats foot, hover lift + amber glow; compact pick-row variant); browse got
+the eyebrow section heads, Mod's Picks hero (blurred zoomed fill + dusk
+scrim + sharp 3:4 portrait + View card CTA), pick rows, chip type filters
+(amber-lit active) replacing the SegmentedButton; detail panel got the
+joined ▲/▼ votebox (amber/ember gradients when lit), lamplight download CTA,
+teal tag pills, hub-sect collapsibles with amber markers; Mine rows got hub
+status pills (PENDING amber / APPROVED teal / REJECTED ember); inbox bubbles
+match .hub-msg (me = amber-soft right, mod = card left); auth panel matches
+.hub-auth-panel; 🏮 lantern art placeholder; StoopLamp loader everywhere.
+Deliberately NOT copied: the hub's web navigation/flows — the desktop keeps
+its slide-in detail panel, 4-step wizard, and tab shell (form-factor
+adaptation). Purple is gone from the Stoop (group accents are teal now).
+
+Deleted: StoopGlass (frosted-glass panel), StoopPill, stoopAccent,
+stoopAccent2, stoopGradient — the entire old glass/teal-purple language;
+audit confirms zero references remain and every new helper has call sites.
+
+Web UI: the web stoop keeps its native warm-porch shell (already the same
+family) and adopts the hub component language where the desktop did — tile
+hover lift + amber border/glow, uppercase badge pills (PICK on amber ink,
+WORLD amber to match desktop), amber eyebrow carousel heads, amber-lit
+active vote, tinted uppercase status pills. tsc + vitest green; bundle
+rebuilt.
+
+flutter analyze clean; dart fix nothing; stoop test suites green.
+
+## 2026-07-30 (UTC) — Stoop personal tab shows the user's name instead of "Mine"
+
+Files: lib/ui/pages/repository/stoop_signed_in.dart,
+web_ui/src/pages/stoop/StoopSection.tsx, web_ui/src/styles.css,
+assets/web_app/* (rebuild)
+
+Maintainer disliked the "Mine" tab label. The desktop personal tab now wears
+the signed-in display name as "@Name" (context.select on AuthState so an
+Account rename updates it live; ellipsized at 160px so long names can't
+stretch the bar; falls back to "Mine" if the user is somehow null). Web
+parity: the web UI's equivalent personal surface is its Account tab — it now
+shows "@Name" the same way (ellipsized at 140px, falls back to "Account").
+
+## 2026-07-30 (UTC) — Stoop display names: listing title ≠ in-chat name
+
+Files: lib/ui/pages/repository/stoop_upload_page.dart,
+lib/ui/pages/repository/stoop_home_view.dart,
+lib/ui/pages/repository/stoop_card_detail_page.dart,
+docs/design/stoop-display-name.md (new), docs/Rawhide.md
+
+Maintainer wants "Misty Meadows, Misguided Meteorologist" as the Stoop
+listing while {{char}}/chat stays "Misty". Key insight: the post's `name`
+was ALWAYS a separate field from the card's embedded name — zero server
+work needed. Three client gaps fixed: (1) wizard field renamed "Display
+name on The Stoop" with helper text showing the real in-chat name; (2)
+update mode now receives initialName/initialSummary from the stored post
+(both were silently re-seeded from the local card, so a custom title
+would've reverted on every version publish — same clobber class as the
+existing initialNsfw/initialOriginalCreator fix); (3) the detail panel
+resolves {{char}} previews against the EMBEDDED card's name (post-name
+fallback) so previews read like chat will. V3 nickname explicitly not
+supported (maintainer decision). Web UI needs nothing (Share tab is the
+approved coming-soon deferral; its detail renders macros raw). New
+docs/design/stoop-display-name.md is the handoff spec for the agent doing
+the hub-website side (submit-form helper + update-form seed + preview
+macro fix; optional tagline/chatName additive fields spec'd but not
+requested).
+
+## 2026-07-30 (UTC) — Display-name notice made unmissable in the share wizard
+
+Files: lib/ui/pages/repository/stoop_upload_page.dart
+
+Maintainer follow-up on display names: the small grey helperText under the
+name field was too easy to miss. Replaced with an amber-soft info callout
+box directly under the field, stating explicitly that the box is the
+LISTING display name, not the chat name — for solo characters it names the
+actual card name twice ("{{char}} still maps to 'Misty', so replies keep
+calling them 'Misty'"); groups/worlds get the generic version. HelperText
+deleted (superseded, not duplicated).
+
+## 2026-07-30 (UTC) — living-worlds §4 gains the executable backend checklist
+
+Files: docs/design/living-worlds.md
+
+Maintainer asked whether the doc lists the remaining backend work — it had
+the contract/constraints but not a task list, and two server items lived
+only in conversation (mod-review rendering of the envelope, tokenCount
+handling for world payloads). Added a 7-item "Backend work checklist" in
+rollout order: accept WORLD, opt-in visibility (same deploy), tokenCount,
+mod review UI, hub website (badge/filter/detail/.fpworld download; no hub
+submit v1), no-op confirmations, and the flag flip (including the one
+follow-up client patch to send the backend-chosen mixed-view opt-in param).
+
+## 2026-07-30 (UTC) — Perf Phase 1: streaming render path (the "slow and clunky" fix)
+
+Files: lib/services/chat_service.dart,
+lib/services/chat/chat_service_generation.dart,
+lib/services/chat/expression_classifier.dart, lib/models/chat_message.dart,
+lib/ui/chat_components/bubbles/styled_chat_message.dart,
+lib/ui/chat_components/bubbles/message_bubble.dart,
+lib/ui/chat_components/sidebar/journal_memory/summary_section.dart,
+lib/ui/pages/chat_page.dart, docs/Rawhide.md
+
+Four-agent audit traced "app feels slow and clunky" to the streaming path:
+2 unthrottled notifyListeners() per token (~55-80 full chat-page rebuilds/s)
+× every visible bubble re-running full-text regex parsing × an expression
+avatar re-randomized inside build() that kept an AnimatedSwitcher
+cross-fade thrashing all generation. Fixes, all behavior-preserving:
+
+1. _notifyStreamListeners(): 33 ms coalescing throttle with guaranteed
+   trailing notify (the repo's own 150 ms eval-debounce insight, finally
+   applied to the main token loop). End-of-turn paths keep unthrottled
+   notifies so terminal state always paints. Cancelled in dispose.
+2. O(n²) kills in the token loop: incremental StringBuffer display text
+   (was .take(n).join() per token), tail-window stop-sequence and
+   think-tag scans (only the new token can complete a match), hoisted
+   sentence/clause RegExps (were compiled per token), cursor-based TPS
+   window (was two O(n) where() passes per token).
+3. resolveExpressionAvatar: stable pick per character+label via
+   _stableExpressionPicks map (replaces _lastExpressionAvatarId; per-key so
+   group chats can't evict each other); re-rolls only on explicit reroll or
+   label change. Kills the endless full-screen cross-fade.
+4. ChatMessage.displayText/thinkingContent: cached keyed on source string
+   (identical() fast path) + static regexes + no-think fast path. Was up to
+   8 regex compiles + 8 full-text scans per message per rebuild.
+5. StyledChatMessage → StatefulWidget with parse caches (markdown image
+   matches + tokenizeChat results keyed on text, resolved GoogleFonts
+   styles keyed on inputs). Widgets still rebuilt fresh (callbacks never
+   stale); only parsing is cached.
+6. message_bubble: duplicate listening Provider.of<StorageService> removed.
+7. summary_section: guarded listener (rebuild only when summary scalars
+   change — was unconditional setState at full streaming rate; same pattern
+   as journal_panel next door).
+8. chat_page auto-scroll: jumpTo during generation (animateTo restarted a
+   300 ms curve per token batch), animateTo kept for one-shot scrolls.
+
+flutter analyze clean; 1087 tests green (chat + realism + models) + 144 UI
+tests. Realism/Needs behavior untouched — throttling affects only WHEN the
+UI repaints, never what state is computed.
+
+## 2026-07-30 (UTC) — Perf Phase 2: navigation dead time (chat open, Settings, theme reseed)
+
+Files: lib/database/database.dart,
+lib/services/chat/chat_service_session_load.dart, lib/main.dart,
+lib/services/backend_manager.dart, lib/services/model_manager.dart,
+lib/ui/pages/settings_page.dart, lib/ui/pages/settings_page.hardware.dart,
+docs/Rawhide.md
+
+Phase 2 of the responsiveness work (audit-driven):
+
+1. Tap-to-chat dead time: getSessionsForId hydrated EVERY message row of
+   EVERY session to compute 50-char previews + counts, all before the route
+   push began. New AppDatabase.getSessionListStats: two aggregate queries
+   (COUNT/SUM grouped by session + a ROW_NUMBER() window for the second
+   message's swipes) replace the O(sessions × messages) loop. Query-only —
+   no schema change, mirrors the existing getMessageCountsPerCharacter
+   customSelect style; bundled SQLite 3.52 has window functions.
+2. Settings: remote-model dropdown seeds instantly from a
+   stale-while-revalidate session cache (HTTP refresh still replaces it);
+   VRAM gauge memoizes the GGUF file size per path (was existsSync +
+   lengthSync on a multi-GB file PER FRAME during context-slider drags —
+   grandfathered io-lint violation, now carries io-ok) and memoizes the
+   KV-cost future (was a fresh Future per rebuild, flickering
+   exact↔heuristic estimates); the Backend + Advanced tabs are wrapped in
+   Builder so their service subscriptions + full trees only construct when
+   the tab actually mounts.
+3. MaterialApp Consumer2<StorageService, AppState> → Consumer<Storage>:
+   appState was never read in the builder, so every sidebar nav tap re-ran
+   ColorScheme.fromSeed + GoogleFonts.interTextTheme for the whole app.
+4. BackendManager/ModelManager listened to ALL StorageService notifies and
+   re-ran _init (process spawns / sync recursive model-dir walk) on every
+   settings mutation. Both now guard on the inputs _init actually reads
+   (rootPath + useRocm; rootPath respectively).
+
+flutter analyze clean; 170 UI + session/database tests green; dart fix
+clean.
+
+## 2026-07-30 (UTC) — Perf Phase 3: image decode sizes + grid churn
+
+Files: lib/ui/pages/home/cards/character_grid_card.dart,
+lib/ui/pages/home/cards/group_grid_card.dart,
+lib/ui/widgets/group_avatar_montage.dart,
+lib/ui/dialogs/avatar_gallery/avatar_tile.dart,
+lib/ui/image_studio/generation_history.dart,
+lib/ui/chat_components/sidebar/journal_memory/memory_sources_list.dart,
+lib/ui/pages/worlds/world_place_card.dart, lib/ui/pages/home_page.dart,
+docs/Rawhide.md
+
+Phase 3 of the responsiveness audit (images + grids). The codebase had ZERO
+cacheWidth/ResizeImage hints — every thumbnail decoded at source
+resolution (~4 MB per 1024² portrait), thrashing Flutter's 100 MB image
+cache on any real library and re-decoding on every scroll:
+
+1. Decode-size hints: home character tiles (512), group montage cells
+   (ResizeImage 256), avatar gallery tiles (384), image-studio history
+   strip (192), journal memory-source 20 px avatars (64), world place-card
+   covers (512).
+2. GroupGridCard → stateful: the member-avatar future was constructed
+   inline in build, issuing a fresh SQLite query per tile per rebuild and
+   scroll recycle (with an empty-montage flash while each resolved). Future
+   now created once per group, refreshed when the group instance changes
+   (repo reloads produce new instances after edits).
+3. World place-card cover: base64+PNG decode ran per build and the fresh
+   byte list defeated MemoryImage's cache identity → full re-decode per
+   rebuild. Memoized on the source string (stoop_world_share pattern).
+4. Home activity cache: CharacterRepository notifies now debounce 250 ms
+   before re-running the two full-table aggregates (was: every mutation —
+   even a favourite toggle — fired both scans immediately, overlapping
+   with the Consumer3 grid rebuild). Timer cancelled in dispose.
+
+Deferred to a later pass (explicitly, not silently): per-character
+coverEpoch (global epoch still invalidates every tile on any cover change)
+and the folder-filter O(n·m) recompute in character_card_grid — both need
+repo-semantics care. flutter analyze clean; 258 UI + golden tests green.
+
+## 2026-07-30 (UTC) — Hotfix: displayText fast path broke case-insensitive <THINK> stripping
+
+Files: lib/models/chat_message.dart
+
+The Phase-1 parse cache added a `raw.contains('<think>')` fast-path gate,
+but the strip regexes are caseSensitive: false — so an uppercase <THINK>
+block skipped stripping entirely. Caught by CI on Rawhide
+(chat_message_test "displayText case-insensitive tag matching"), which I
+had not run locally (partial suite selection — process failure, not
+flake). Gate is now a case-insensitive hasMatch probe shared by
+displayText and thinkingContent. Full flutter test suite (2828 pass, 0
+fail) now gates every push.
+
+## 2026-07-30 (UTC) — Perf Phase 4: startup critical path (maintainer-approved main.dart work)
+
+Files: lib/main.dart, lib/services/model_manager.dart, docs/Rawhide.md
+
+Maintainer explicitly approved the delicate main.dart work ("do phase 4
+carefully"). Scoped to the safe subset of the audit:
+
+1. Pre-window DB work deferred: main() kept only a cheap `SELECT 1` open
+   probe (so a locked/unreadable DB still fails fast into _DbInitErrorApp),
+   while the full PRAGMA quick_check — which reads/validates the whole DB
+   file and was the single largest fixed pre-window cost — moved into
+   _checkDbHealth (already post-first-frame, already owns the corrupt-DB
+   restore overlay; the restore path's own integrityCheck at line ~885 is
+   unchanged). purgeSoftDeletes + cleanupLegacyFiles moved to the same
+   post-frame block, after migration/reunification.
+2. First-frame laziness restored: SetupOverlay + RemoteLockOverlay now
+   mount one frame late (_overlaysArmed, set in the existing post-frame
+   callback). They were the two widgets whose provider reads defeated every
+   lazy provider and constructed ~20 services (process spawns, dir scans,
+   full DB collection loads) before anything painted. One frame ≈16 ms —
+   imperceptible; the lock overlay's gate is UX, not auth, so a 1-frame gap
+   is harmless.
+3. ModelManager's recursive .gguf scan moved to a background isolate
+   (compute + top-level _scanGgufPathsSync, same traversal semantics:
+   followLinks, canonical-path dedupe, inaccessible-dir skip). The old
+   in-class sync method deleted; File entities rebuilt from paths.
+4. Checked and deliberately NOT changed: StoryPipelineService's
+   recreate-on-update (CLAUDE.md mandates it; EmbeddingService's ctor is a
+   bare field assignment, so the churn is trivial), service init ORDER in
+   the provider graph (untouched), HardwareService's async detection,
+   window-restore sequence, and the FileConsolidation step.
+
+Full flutter test suite run before push per maintainer instruction: 2828
+passed, 0 failed. analyze + dart fix clean.
+## 2026-07-30 (UTC) — ListTile ink-visibility assertion (Stoop sheet + 5 older sites)
+
+**Files:** `lib/ui/pages/repository/repository_account_sheet.dart`,
+`lib/ui/pages/repository/stoop_upload_page.dart`,
+`lib/ui/pages/repository/stoop_standards.dart`,
+`lib/ui/settings/tabs/backend/managed_backend_section.dart`,
+`lib/ui/dialogs/byaf_import_dialog.dart`,
+`lib/ui/widgets/group_realism_dynamics_editor.dart`
+
+**What:** Maintainer hit Flutter's "ListTile background color or ink splashes
+may be invisible" assertion (debug) on the Stoop account sheet — the two
+SwitchListTiles sat inside stoopBg1-colored rounded Containers, and ListTile
+paints fill/ink on the nearest Material, which a colored DecoratedBox hides.
+Swept the whole of lib/ui for the pattern (awk BoxDecoration→*ListTile scan):
+8 tiles in 6 files, including 4 pre-existing sites outside the new Stoop
+work. Fix strategy: plain color+radius wrappers became tileColor + shape on
+the tile itself (wrapper deleted — account sheet ×2, backend auto-start ×2,
+group realism toggle via shape-with-side for its border); gradient/tinted
+boxes that can't be tileColor got a transparent Material inside the box
+(upload NSFW switch, standards-card footer slot, BYAF checkbox).
+
+
+## 2026-07-30 (UTC) — Fix CI flake: theme inheritance picked an arbitrary session on same-second ties
+
+Files: lib/database/database.dart
+
+theme_overrides_test ("retrieves last theme from previous sessions")
+started failing on Rawhide CI after the perf pushes shifted suite timing.
+Latent bug, not a perf regression: sessions.created_at is second-resolution,
+so two sessions created back-to-back tie on ORDER BY created_at DESC and
+LIMIT 1 returned an arbitrary row — if that was the fresh themeless
+session, the inherited theme came back null. Also a real (rare) prod bug:
+starting two chats within a second could drop theme inheritance.
+getLastSessionThemeOverrides now filters to sessions that actually carry
+overrides (the query's intent — "the last theme the user used") with a
+rowid tie-break. Verified 5 consecutive runs of the test + full suite
+(2828 pass, 0 fail) before push.
+## 2026-07-30 (UTC) — "Where we are" recap never persisted on GLM-5.2 (and verbose tool-callers generally)
+
+**Files:** `lib/services/chat/journal_prompt.dart`,
+`lib/services/chat/journal_ops.dart`,
+`lib/services/chat/journal_maintenance.dart`,
+`test/services/chat/journal_test.dart`
+
+**What:** Maintainer report: the sidebar's "Where we are" recap doesn't
+survive an app restart. Traced with the live DB: the active chat (Misty,
+1:1, Nano-GPT `zai-org/glm-5.2:thinking`) had 74 messages, cursor 73, **200
+journal cards (cap saturated in one evening)** and `Sessions.summary` NULL —
+passes ran and persisted fine; the recap text specifically never arrived.
+Save/load/UI plumbing all verified correct. Live-fired the exact pass
+payload at the user's provider: with the old prompt GLM returns add_memory
+calls and **omits the final write_recap even when the response isn't
+truncated** (finish=tool_calls, 4 adds, no recap); on the real chat its
+~40-adds-per-pass flood also ran into the 4000-token response budget, and
+recap-last means truncation always kills exactly the recap. Fix, shared
+prompt body (both transports, 1:1↔group parity by construction): cap the
+ask at kJournalMaxNewMemories (6) new memories per pass, and both closings
+now say "Never skip the (write_)recap, even when you add few or no
+memories". Defense in depth: `clampJournalAdds` (journal_ops, pure) caps
+parsed add-ops at 2× the ask at the ONE shared resolve site so a flooding
+model can't churn the card cap; owner-0 passes that return ops but no recap
+now debugPrint a loud warning. Live re-verified: fixed prompt → 5 adds +
+write_recap present. New tests: clamp behavior + both prompt lines in both
+transports.
+Grok follow-ups applied same-commit: warning gated on ops.isNotEmpty
+(quiet passes no longer log a false truncation alarm); capture rule
+reworded to defer to the cap on dense windows instead of contradicting it.
+
+## 2026-07-30 (UTC) — Duplicate character lands in the source's folder
+
+Files: lib/services/folder_service.dart,
+lib/ui/pages/home/home_page_dialogs.dart,
+lib/services/web/facade/character_library_facade.dart,
+test/services/folder_service_inherit_test.dart (new), docs/Rawhide.md
+
+Maintainer report: duplicating a foldered character dropped the copy on
+the Home Screen top level. Root cause: folder membership is keyed by image
+filename, the duplicate gets a fresh file, and neither duplicate call site
+assigned it anywhere. ONE shared rule added — FolderService.inheritFolder
+(source path → copy path; no-op when unfoldered or imageless) — called
+from the desktop context-menu flow AND the web facade's duplicate endpoint
+(which had the identical bug). New unit test covers inherit + no-op paths.
+Full suite green before push (2830 pass).
+
+## 2026-07-30 (UTC) — Multi-select toolbar gains Move to Folder
+
+Files: lib/ui/widgets/character_card_grid.dart, docs/Rawhide.md
+
+Maintainer ask: ride the mass-deletion multi-select to move several
+characters to a folder. Everything already existed — the folder-picker
+dialog (_showMoveToFolderDialog), the bulk handler
+(_moveSelectedToFolder), and the onMoveToFolder grid callback — but it was
+only reachable from the separate "organize" mode's toolbar, which users
+never found. The main multi-select toolbar now shows Move to Folder (amber)
+beside Delete Selected, wired to the same existing callback/dialog; the
+organize mode keeps working unchanged. Web already had multi-select move
+(bulkMove + folder dialog) — parity confirmed, no web change needed.
+
+NOT yet done (queued next): the group-chat creation wizard's character
+picker is a flat list that ignores the folder hierarchy — needs a
+folder-aware picker on desktop AND the web wizard; too large to bundle
+safely into this commit. Full suite green before push (2832 pass).
+
+## 2026-07-30 (UTC) — Handoff spec: groups must be movable through folders
+
+Files: docs/design/folder-groups.md (new)
+
+Maintainer report: group cards are pinned to the Home Screen top level —
+no folder membership exists for groups at all (Characters.folderId has no
+group_chats counterpart, and the grid renders groups unconditionally).
+Proper fix needs an additive nullable group_chats.folder_id migration +
+FolderService group membership + grid filtering + context menu +
+multi-select + web-library parity — too large to execute safely at this
+session's context tail, so the executable spec (8 ordered work items,
+including the CCF-safety note that group_chats is not an
+externally-written table) is committed for the next session, alongside
+the already-queued folder-aware wizard picker item.
+
+## 2026-07-31 (UTC) — Groups move through folders like characters (folder-groups.md implemented)
+
+Files: lib/database/database.dart, lib/database/database.g.dart (generated),
+lib/services/folder_service.dart, lib/services/group_chat_repository.dart,
+lib/ui/widgets/character_card_grid.dart,
+lib/ui/pages/home/cards/group_grid_card.dart,
+lib/ui/pages/home/cards/folder_grid_card.dart,
+lib/ui/pages/home_page.dart, lib/ui/pages/home/home_page_chrome.dart,
+lib/ui/pages/home/home_page_handlers.dart,
+lib/ui/pages/home/home_page_dialogs.dart,
+lib/services/web/facade/character_library_facade.dart,
+lib/services/web/facade/group_facade.dart,
+lib/services/web/web_server_host.dart,
+web_ui/src/hooks/useLibrary.ts, web_ui/src/pages/CharactersPage.tsx,
+web_ui/src/components/library/LibraryCards.tsx,
+test/services/folder_service_groups_test.dart (new),
+test/golden/widget/home_golden_test.dart, docs/Rawhide.md,
+docs/design/folder-groups.md (status note)
+
+Implements docs/design/folder-groups.md (all 8 work items). Schema v42 adds
+nullable groups.folder_id (additive; groups is NOT a Character-Card-Forge
+table) + onUpgrade step + _repairMissingSchemaColumns entry. FolderService
+now buckets group ids per folder in _load and gains
+addGroupToFolder/removeGroupFromFolder/getFolderForGroup/groupIdsInFolder
+(+Recursive); deleteFolder unassigns groups back to root.
+
+Load-bearing fix: AppDatabase.updateGroup switched from .replace() to
+partial .write() (same rationale as updateCharacter's existing comment) —
+with .replace(), every GroupChatRepository.save() would have nulled
+folder_id since the save companion doesn't carry it. save() now bumps
+updatedAt explicitly (the column default no longer fires). Regression test
+covers a partial write preserving folder membership. New
+updateGroupFolderId helper mirrors updateCharacterImagePath.
+
+Grid: groups filter by active folder / search scope exactly like
+characters (the old bucket pinned all groups to top level and hid them in
+select/organize modes); top-level view hides foldered groups. Group cards
+are now selectable (parallel _selectedGroupIds set, per the spec), the
+move/delete toolbars act on both sets (mass delete extends the ONE
+_runMassDelete pipeline with a groups list), and the group context menu
+gains Move to Folder / Remove from Folder. _showMoveToFolderDialog was
+generalized to take a title + onMove callback (one dialog, three callers)
+instead of being hard-wired to the character selection.
+
+Web parity (same body of work): GroupFacade.list() reports folderId ('' at
+root, additive field); CharacterLibraryFacade.moveToFolder/bulkMove/
+bulkDelete resolve group_-prefixed ids (group ids natively carry the
+prefix) via an optional GroupChatRepository; useLibrary/CharactersPage
+filter groups per folder + search scope, GroupCard is selectable +
+draggable into folders, group card menu gains move/remove, mixed
+selections move and delete in one call.
+
+Deliberately NOT done: folder-preview montages still sample characters
+only (group previews would need per-folder async DB avatar loads inside a
+stateless build — the exact per-rebuild-I/O pattern io-lint exists to
+ban); counts include groups instead. The folder-aware wizard picker
+remains queued (explicitly out of scope in the spec).
+
+Gates: flutter analyze clean (0 issues), dart fix --dry-run clean, web tsc
++ vitest green, full flutter test suite + goldens green before push.
+
+## 2026-07-31 (UTC) — Folder-aware character picker in the group-creation wizard
+
+Files: lib/ui/widgets/folder_character_picker.dart (new),
+lib/ui/widgets/widgets.dart, lib/ui/pages/create_group_chat_page.dart,
+web_ui/src/components/FolderCharacterPicker.tsx (new),
+web_ui/src/pages/CreateGroupChatPage.tsx, web_ui/src/styles.css,
+test/ui/widgets/folder_character_picker_test.dart (new),
+docs/Rawhide.md, docs/design/folder-groups.md (status)
+
+Implements the folder-groups.md "related queued item" for the group-chat
+creation wizard: the Members step's "Add Characters" browser was a flat
+search+Wrap over the whole library. It's now the shared
+FolderCharacterPicker (one component per platform — Dart widget + React
+component — per the spec's "shared, not duplicated" directive), mirroring
+the home grid's rules: browsing shows the current level's characters plus
+navigable folder tiles (folders holding zero eligible candidates are
+hidden; tiles badge their eligible count), searching hides folders and
+matches every eligible character so nested ones stay findable. The web
+wizard fetches /api/folders and uses the same component; the characters
+endpoint already returned folderId.
+
+Cleanup while in there: the wizard's dead _memberSearchController/
+_memberSearchQuery/_filteredAvailable browser state deleted (the picker
+owns its own search), and the old tile's off-palette purple 0xFF7C3AED
+add-icon is gone — the picker uses porch amber per the warm-porch
+standard. Picker avatars degrade gracefully (no decode exception) when a
+portrait file is missing.
+
+Deliberately still open (per design-doc status note): adopting the shared
+picker in the Scene Guest picker and the Stoop share Pick step — both
+keep their existing flat pattern for now; the Stoop step also lists
+groups so its adoption needs a group-row variant.
+
+Widget tests cover folder navigation, empty-folder hiding, and
+folder-crossing search (drift work wrapped in tester.runAsync — real DB
+I/O never completes under the fake-async test zone).
+
+## 2026-07-31 (UTC) — Stoop share Pick step is folder-aware (extracted from the upload god file)
+
+Files: lib/ui/pages/repository/stoop_pick_step.dart (new),
+lib/ui/pages/repository/stoop_upload_page.dart,
+lib/ui/widgets/folder_character_picker.dart,
+test/ui/widgets/folder_character_picker_test.dart,
+docs/Rawhide.md, docs/design/folder-groups.md (status)
+
+Maintainer request: folder support for Stoop uploads; Scene Guest picker
+deferral explicitly approved for now.
+
+The desktop folder-pick rules moved out of FolderCharacterPicker's State
+into the pure buildFolderPickView helper (same file) and grew group
+support: eligible counts and folder filtering now cover characters AND
+groups (groups gained folder membership earlier today). The wizard's
+picker delegates to it — its private _folderOf/_eligibleCountIn/
+_visibleCharacters copies are deleted, so the group wizard and the Stoop
+step literally share one rule set and cannot drift.
+
+The Pick step itself was extracted from stoop_upload_page.dart (1152
+lines, over the 500 cap — "do not grow" honored by shrinking it to 899)
+into stoop_pick_step.dart (489 lines): StoopPickStep owns the search +
+folder navigation state and renders Folders (count badges) → Groups →
+Characters → Places in The Stoop's own visual language; Places aren't
+foldered so that section shows only at the top level or while searching.
+StoopGroupMontage became a public widget reused by the review-step
+preview — and went stateful to cache its member-avatar future (the old
+inline FutureBuilder issued a fresh SQLite query per tile per rebuild,
+i.e. per search keystroke — the exact GroupGridCard incident pattern).
+Deleted from the page: _pickStep's inline body, _pickSearchField,
+_groupPickTile, _pickTile, _groupMontage, _centeredHint, _pickSearch/
+_pickQuery state.
+
+Web parity: none required — the web Stoop Share tab is a
+desktop-browser-only coming-soon placeholder (no upload flow exists);
+noted in the design doc so the pattern is inherited when it lands.
+
+Tests: pure-logic coverage of buildFolderPickView with groups (root
+browse + folder counts including group-only folders, in-folder listing,
+name search across folders) added beside the existing picker widget
+tests.
+
+## 2026-07-31 (UTC) — Folder breadcrumbs + sidebar Home actually goes home
+
+Files: lib/providers/app_state.dart, lib/ui/pages/home_page.dart,
+lib/ui/pages/home/home_page_chrome.dart,
+lib/ui/pages/home/home_page_handlers.dart,
+lib/ui/pages/home/widgets/home_grid_toolbar.dart,
+lib/ui/widgets/character_card_grid.dart,
+test/golden/widget/home_golden_test.dart, docs/Rawhide.md
+
+Maintainer reports: (1) clicking the sidebar's Home while standing inside
+a folder was a no-op (setIndex(0) with index already 0 changed nothing);
+(2) deep nesting (folder1/folder2/folder3) had no way to jump to an
+ancestor or the main screen — only single-step back.
+
+Fixes: AppState gains homeResetTick, bumped when Home is tapped while
+already selected; HomePage listens (same listener pattern as its
+KoboldService/CharacterRepository hooks) and clears _activeFolderId. The
+toolbar's single folder-name header became a clickable breadcrumb path
+("My Characters / f1 / f2 / current") — every segment but the current one
+jumps straight there; horizontal scroll (reverse:true) keeps the tail
+visible on long paths.
+
+Consolidation: the _folderStack navigation-history list is DELETED —
+subfolder cards only render inside their parent, so the parent chain IS
+the history; back ("Up one level") now derives the parent from
+FolderService, and _leaveDeletedFolder takes the folder (jumping to its
+parentId) instead of popping a stack. _getActiveFolderName was replaced
+by the _trail/_breadcrumb pair that renders the same data clickable.
+
+Web parity: none needed — the web library already has the clickable
+Home + ancestor-trail breadcrumb this brings the desktop up to.
+
+## 2026-07-31 (UTC) — First-launch rework: intent-first choice + background engine download
+
+Files: lib/services/setup_service.dart, lib/services/backend_manager.dart,
+lib/services/llm_provider.dart,
+lib/services/storage/settings/backend_settings.dart,
+lib/services/storage_service.dart, lib/ui/widgets/setup_overlay.dart,
+lib/ui/widgets/engine_status_chip.dart (new),
+lib/ui/layout/main_layout.dart, lib/ui/pages/model_manager_page.dart,
+lib/ui/pages/settings_page.controls.dart,
+lib/ui/dialogs/model_settings_dialog.dart,
+lib/services/web/facade/backend_facade.dart,
+lib/services/web/routes/backend_routes.dart,
+web_ui/src/components/models/types.ts, web_ui/src/pages/ModelsPage.tsx,
+test/services/setup_service_test.dart (new), docs/Rawhide.md
+
+Maintainer direction (after design discussion): boot must not force the
+KoboldCpp download on users who may never use it, but deferring the fetch
+to the moment of chat intent is worse on slow connections — so: ask
+intent ONCE at first launch, then download immediately in the BACKGROUND.
+
+Boot never downloads anymore. SetupStep.downloadingBackend is deleted;
+SetupStep.firstRunChoice replaces it — shown only on a genuine first
+launch (no engine on disk, no recorded choice; a found binary or a
+remote backendType resolves the choice silently, so existing installs
+never see it). The overlay's choice card offers: "KoboldCpp — managed by
+Front Porch AI (recommended)" / "I have my own backend" (OpenRouter,
+Nano-GPT, oMLX, LM Studio, any OpenAI-compatible API — wording avoids
+"local", which would misdescribe oMLX/LM Studio; sets
+backendType=openRouter, downloads nothing, points at Settings → Backend)
+/ "Not sure yet" (fetches like the managed choice — the app's default
+path). LowPerfCpuWarning rides the choice card so weak hosts are warned
+BEFORE picking local. New backend_choice_done pref in backend_settings.
+
+BackendManager.ensureEngineInstalled() is the ONE guarded background
+acquisition entry (no-op when installed / downloading / remote / Intel
+Mac), reusing downloadBackend()'s existing progress fields. Funnels into
+it: the first-run choice, boot with a recorded choice but missing binary
+(interrupted download / wiped bin dir), the new EngineStatusChip
+(mounted once over MainLayout's page area: download progress with
+%/speed/ETA, or install/retry affordances; hidden when installed or
+remote), model download queueing (desktop _onDownload AND the web
+facade's queueDownload — a model fetch IS local intent, so both run
+concurrently and the engine wait never lands at chat time),
+LLMProvider.ensureManagedBackendIsRunning's previously-silent missing-
+binary return, and the two "Backend not found." launch snackbars (now
+kick the fetch and point at the chip instead of dead-ending).
+
+Web parity: /api/backend/status gains additive engineInstalled/
+engineDownloading/engineProgress/engineStatusMessage/engineError; new
+POST /api/backend/engine/install; the web Models page's backend card
+shows the same states with a download/retry button and polls while a
+fetch is running (the fetch can also be started desktop-side).
+
+Tests: setup_service_test.dart covers all six flows (first-launch ask
+with zero network calls, managed choice → background fetch, own-backend
+→ no download + type flip, missing-binary re-acquire, remote implicit
+choice, installed-engine implicit choice).
+
+## 2026-07-31 (UTC) — Group casts drag into folders; drag hold-time halved
+
+Files: lib/ui/widgets/character_card_grid.dart,
+lib/ui/pages/home/cards/character_grid_card.dart,
+lib/ui/pages/home/cards/group_grid_card.dart,
+lib/ui/pages/home/cards/folder_grid_card.dart,
+lib/ui/pages/home/home_page_chrome.dart,
+test/ui/widgets/folder_drag_drop_test.dart (new), docs/Rawhide.md
+
+Two maintainer bug reports on the home grid's drag-to-folder system.
+
+(1) Group casts could not be dragged into folders. Two independent
+causes: GroupGridCard was never wrapped in a Draggable at all, and the
+folder drop target was typed `DragTarget<CharacterCard>` — so even a
+dragged group would have been rejected. GroupGridCard now wraps its card
+in LongPressDraggable<GroupChat> (feedback = the member montage,
+childWhenDragging = the dimmed card, mirroring CharacterGridCard), and
+FolderGridCard became `DragTarget<Object>` with an explicit
+onWillAcceptWithDetails guard (`is CharacterCard || is GroupChat`) so
+unrelated draggables neither highlight the folder nor fire the callback.
+onAcceptFolderDrop's signature generalized from CharacterCard to Object,
+and _handleAcceptFolderDrop branches once on the type (characters key by
+image filename, groups by group id) — ONE drop handler, not parallel
+character/group paths.
+
+(2) The press-and-hold before a drag began was Flutter's stock
+kLongPressTimeout (500 ms), which read as "the app didn't register my
+click". New shared const kFolderDragHoldDelay = 250 ms (exactly half),
+declared in character_card_grid.dart beside the other shared home-grid
+symbols and used by BOTH draggable cards so they can't drift.
+
+Web parity: none required. The web library already drags groups into
+folders (shipped with the group-foldering work) and uses native HTML5
+drag, which has no hold delay to tune — the tuned delay is a
+touch/long-press concern specific to the desktop grid.
+
+Tests: folder_drag_drop_test.dart drives real gestures — a group dropping
+on a folder, a character still dropping (no regression from the generic
+drop target), and a short press NOT dragging. The successful drags hold
+for 300 ms: longer than the new delay but SHORTER than the old 500 ms
+stock value, so reverting either fix fails the suite.
+
+## 2026-07-31 (UTC) — "Start New Chat" from card menus, with an explicit persona step
+
+Files: lib/services/chat/chat_service_session_manage.dart,
+lib/ui/dialogs/persona_picker_dialog.dart (new),
+lib/ui/pages/home/cards/home_card_menu.dart (new),
+lib/ui/pages/home/cards/character_grid_card.dart,
+lib/ui/pages/home/cards/group_grid_card.dart,
+lib/ui/pages/home/home_page_chrome.dart, lib/ui/pages/home_page.dart,
+lib/services/web/facade/chat_facade.dart,
+lib/services/web/routes/chat_routes.dart,
+web_ui/src/components/library/LibraryDialogs.tsx,
+web_ui/src/hooks/useLibrary.ts, web_ui/src/pages/CharactersPage.tsx,
+web_ui/src/styles.css,
+test/services/chat/start_fresh_chat_test.dart (new), docs/Rawhide.md
+
+Maintainer request: a "start a new chat" action on the character/group
+card context menu, with a persona picker as a second step — "we can not
+assume what persona the user wants to use for this new chat".
+
+Core: ChatService.startFreshChatWith({character|group, personaId}) —
+ONE implementation shared by the desktop menu and the web card menu.
+Its ordering is load-bearing and commented as such: setActiveCharacter/
+setActiveGroup load the cast's most recent session, and a session load
+RESTORES that session's persona, so the chosen persona must be applied
+AFTER entry and before startNewChat (whose save stamps whatever persona
+is active). An empty personaId (picker cancelled) leaves the active
+persona untouched; no character and no group is a no-op.
+
+Desktop: new persona_picker_dialog.dart (warm dialog, avatar + display
+label + persona blurb, "Current" badge on the active one, cancel starts
+nothing) titled "Start a new chat with <name> as…". Both card menus gain
+'new_chat' as the FIRST entry; one _startNewChatWith handler serves
+characters and groups.
+
+Size-cap compliance: character_grid_card was already 577 lines (over the
+500 cap), so rather than grow it, the ~18-line PopupMenuItem/ListTile
+shape repeated ~14 times across both cards was extracted into
+home_card_menu.dart's homeCardMenuItem(). character_grid_card 577 → 508
+and group_grid_card shrank too, WITH the new entry added — colours
+preserved exactly (default / amber accent / destructive red).
+
+Web parity: POST /api/chat/start-fresh {characterId|groupId, personaId}
+→ ChatFacade.startFreshChat → the same shared ChatService method, so the
+web client never reimplements the ordering. PersonaPickerDialog +
+"Start new chat" on both card menus; personas are fetched when the
+dialog opens (not on page load) so a persona added elsewhere appears.
+
+Tests: start_fresh_chat_test.dart runs the REAL ChatService against an
+in-memory DB — seeds a prior session under persona A, starts fresh under
+persona B, and asserts B survived entry (the exact failure mode of the
+wrong ordering), that the stored session row carries B, that an empty id
+is a no-op, and that no-target is a no-op. Note for future readers: the
+stored-row test gives its card a greeting on purpose — ChatService
+deliberately skips persisting an empty session.
+
+## 2026-08-01 (UTC) — Deleting a message refunds its needs deltas
+
+Files: lib/services/chat_service.dart,
+lib/services/chat/chat_service_group_realism_helpers.dart,
+test/services/chat/delete_message_needs_rollback_test.dart (new),
+docs/Rawhide.md
+
+Maintainer report: deleting a message did not roll back its needs
+deltas — a reply that cost 20 hunger left the character 20 hunger poorer
+forever, even though the chip on the message still recorded the spend.
+Stated rule: the deltas are kept on the message, so ANY deletion,
+however far back, adds/subtracts them from the CURRENT score.
+
+Root cause: needs rollback on delete was only ever attempted by the
+realism "time travel" (restore the snapshot stamped on the NEW LAST
+message). That mechanism can only rewind the tail — deleting anything
+older left the spend applied — and in the reproduction it did not
+restore needs at all.
+
+Fix: needs are now settled by ARITHMETIC, in a new leaf helper
+_revertNeedsForDeletedMessage (chat_service_group_realism_helpers.dart,
+beside the chip-attach logic that WRITES those same deltas). deleteMessage
+captures the deleted speaker's needs BEFORE the time-travel restores run,
+then subtracts the deleted message's own needs_deltas from that baseline
+and writes the result LAST, so the snapshot's needs half can't fight the
+arithmetic. Position-independent by construction: a message buried twenty
+turns back rolls off exactly like the newest one. Reuses the chips'
+existing {delta, reason} shape (tolerating a bare number from older rows)
+and clamps to 0..100.
+
+1:1/group parity: the refund lands in the DELETED SPEAKER'S own
+_groupRealism entry (not the live scalars of whoever is currently
+loaded), and the live scalars are re-synced only when that speaker is the
+one loaded. A group speaker whose name is ambiguous in the roster is
+SKIPPED rather than refunding the wrong member — same guard the existing
+group rewind uses.
+
+Tests: delete_message_needs_rollback_test.dart drives the real
+ChatService + in-memory DB and reproduced the report before the fix
+(hunger stuck at 40 instead of 60). Covers last-message refund,
+buried-message refund, positive deltas taken back rather than given
+again, and no-op when a message carries no deltas. Group branch is
+covered by review, not a test — no group-chat harness (repository +
+members + session) exists in this suite; noted in the test file.
+
+## 2026-08-01 (UTC) — Barrel import sweep (maintainer-directed) + policy change
+
+Files: 248 changed. CLAUDE.md (policy), lib/models/models.dart,
+lib/utils/utils.dart, lib/services/services.dart,
+lib/ui/widgets/widgets.dart (barrel exports), + 116 files swept to barrel
+imports, + collision/redundancy fixes.
+
+Maintainer directive: sweep imports to barrels in one pass, and make
+barrels + boilerplate reduction MANDATORY on every file touched going
+forward. This directly overrode the previous policy ("no dedicated import
+cleanup effort", "mass automated find/replace across dozens of files is
+forbidden", "direct single-file imports remain legal forever"). CLAUDE.md
+is updated in this same commit so the docs don't contradict the tree: the
+mass-sweep override is recorded as SPENT (no second sweep), per-file
+conversion is now mandatory, and the Hygiene Summary must report it.
+
+Net: 648 import lines removed, 436 added (-212 net).
+
+Root cause of the accumulation was NOT the swept files — it was six
+high-frequency files missing from their barrels, so every caller had to
+hand-write the single-file import: picker_prefs.dart (24 importers),
+model_manager.dart (11), engine_health.dart, expression_pack_service.dart,
+model_fetch.dart, realism_form_section.dart. All six are now exported, and
+the policy's "add it to the barrel in the same PR" rule is what prevents a
+repeat. The sweep only cleared the symptom.
+
+Sweep was mechanical but deliberately conservative — it SKIPS: files in
+their own barrel's directory (self-import), part files (cannot carry
+imports), and imports whose trailing comment documents why that specific
+symbol is needed. Pre-flight verified the four barrels are symbol-disjoint
+(0 shared names), so no file importing two barrels can go ambiguous.
+
+Two things a blind find/replace would have shipped broken, both caught:
+  1. world_repository.dart — models.dart exports world.dart, whose `World`
+     collides with the Drift `World` row from database.dart. Kept the
+     barrel with `hide World` (the file reaches the model via its `model.`
+     prefix) + a comment naming which World is which.
+  2. Five files importing BOTH a barrel and a file it now covers, incl.
+     chat_service.dart's annotated group_realism_blobs.dart import that
+     the sweep had skipped on purpose but utils.dart now supersedes.
+
+Still solo by design: 1,101 imports live in directories with NO barrel
+(services/chat, services/web/util, ui/pages/repository, ui/dialogs, …).
+Converting cannot reach those, so the policy now carries a self-extending
+rule: importing 2+ siblings from an un-barrelled directory obliges you to
+create that barrel. The seven highest-value targets are listed in
+CLAUDE.md with measured counts.
+
+Verification: flutter analyze 0 issues, dart fix clean, full suite +
+goldens + Linux build green before push. Import changes are compile-time
+only — a clean analyze plus a compiling test suite IS the behavioural
+proof here.
+
+## 2026-08-01 — Folder UX: discoverable folder actions + an always-reachable way out
+
+Files:
+- lib/ui/pages/home/cards/folder_grid_card.dart
+- lib/ui/pages/home/cards/character_grid_card.dart
+- lib/ui/pages/home/home_page_chrome.dart
+- lib/ui/pages/home/home_page_handlers.dart
+- lib/services/folder_service.dart
+- test/services/folder_service_groups_test.dart
+- test/services/folder_service_inherit_test.dart
+- web_ui/src/pages/CharactersPage.tsx
+- docs/Rawhide.md
+
+Reason: a user reported they could not figure out how to delete a folder,
+and separately that there is no way to move a character back out of a
+folder (or up one level when nested).
+
+Root causes, three separate ones:
+
+1. Folder Rename/Delete lived in an inline icon row gated behind
+   `if (!isSmall)` where `isSmall = constraints.maxHeight < 200`. Below
+   that card height the buttons were not rendered AT ALL — not shrunk,
+   not scrolled, absent. Folder cards also had no `onSecondaryTapUp`, so
+   right-click offered nothing either. At the default grid scale most
+   users never saw the buttons, which reads exactly like "there is no way
+   to delete a folder". Fixed by deleting the size-gated row and putting
+   the actions in an always-present corner ⋮ button plus a right-click
+   handler, both routed through ONE `_showFolderMenu` so the two surfaces
+   cannot drift apart. The menu also picked up New Subfolder, which
+   previously had no per-folder entry point at all.
+
+2. Character cards had no `move_folder` menu item (group cards did), so
+   the only way to file a character was drag-and-drop. Added, reusing the
+   already-generalized `_showMoveToFolderDialog`.
+
+3. Getting OUT of a folder only existed as "Remove from Folder", which is
+   conditional on `activeFolderId != null` — i.e. it appears only while
+   you are browsing inside that folder. A character found via global
+   search, or reached from a breadcrumb view, had no exit. The move
+   picker now leads with a "Home (no folder)" destination.
+
+To support (3) the picker's callback became
+`Future<void> Function(String? folderId)` (null = root), and
+`FolderService.removeFromFolder` / `removeGroupFromFolder` took a
+NULLABLE folder id: non-null keeps the existing stale-card guard (do not
+yank a character out of a folder it has since been moved to), null means
+"whatever folder it is in" — which is all the picker can know. No new
+service methods; the two existing removers were relaxed rather than
+duplicated by a `moveToRoot` pair. The web facade already passed a
+concrete current-folder id on its root path, so it is unaffected.
+
+Note this is desktop catching up to web, not the usual direction: the web
+library already had Move-to-folder for both kinds, folder Rename/Delete
+in a kebab, and a "No folder (root)" row in its move dialog. The one item
+web was missing — New subfolder — was added there in the same change so
+both sides now offer the same folder actions.
+
+Tests: two added (one per kind) covering the null-folder-id removal AND
+that a non-null id still guards correctly.
+
+Verification: flutter analyze 0 issues; full Dart suite, goldens and the
+Linux build green; web tsc + vitest (34) green.
+
+## 2026-08-01 — Startup instrumentation + the library-load benchmark
+
+Files:
+- lib/utils/startup_trace.dart (new)
+- lib/utils/utils.dart
+- lib/main.dart
+- lib/services/character_repository.dart
+- lib/services/hardware_service.dart
+- lib/services/model_manager.dart
+- test/perf/character_load_bench_test.dart (new)
+- dart_test.yaml
+
+Reason: asked to make the app faster in wall-clock terms. "Feels slow" is
+unactionable without numbers, and the startup path is spread across
+main(), the provider-tree constructors and the post-first-frame block, so
+no single file could time it.
+
+What the measurements found (release build, run headless under xvfb
+against a seeded library of 120 characters / 200 chats / 20k messages):
+
+  FIRST FRAME lands at 156ms with a realistic library (416ms on a truly
+  empty first run, where 299ms of that is one-time DB creation). The
+  pre-first-frame path is NOT the problem — moving PRAGMA quick_check off
+  it already took that win.
+
+  The cost is after first frame, in CharacterRepository.loadCharacters():
+  it re-reads EVERY character PNG in full, every launch, to recover the
+  V2.5 extension fields that live only in the PNG tEXt chunk.
+
+    readCard x120 (1.1MB cards) : 501-743ms
+    bytes read                  : 142.0 MB
+    64KB prefix read instead    : 54ms  (9.3x, chunk found in 120/120)
+
+  142MB of disk I/O to recover a few KB of JSON. Projected at 500
+  characters: ~2.1-3.1s today vs ~0.23s. Warm-cache on container ext4, so
+  Windows-under-Defender is materially worse — the same platform-
+  asymmetric shape as the coverImageFileFor incident.
+
+Also found, not yet fixed: HardwareService spawns up to 4 PowerShell
+processes on Windows from its CONSTRUCTOR on every launch and never
+persists the result (no prefs/cache reference exists in the file); the
+per-character avatar lookup is an N+1 (4.2x slower than one batched
+query, and each is an isolate round-trip under createInBackground); and
+three debugPrints run per character inside the load loop (debugPrint is
+not compiled out in release).
+
+This commit lands the MEASUREMENT only — the fixes touch performance-
+critical paths that CLAUDE.md puts under architecture review, and the
+hardware-detection change alters when detection happens, which is
+user-visible. Proposed separately.
+
+StartupTrace is env-gated (FP_STARTUP_TRACE=1); a normal run costs one
+bool read per call site. The benchmark is tagged `perf`, self-skips
+without FP_BENCH_DIR, and PRINTS rather than asserts, so a shared CI
+runner's timing variance can never turn it red.
+
+Verification: flutter analyze 0 issues, dart fix clean, full suite
+2774 passed / 12 skipped / 0 failed.
+
+## 2026-08-01 — Library load: stop reading 142MB to find a few KB of JSON
+
+Files:
+- lib/utils/png_metadata_utils.dart
+- lib/services/v2_card_service.dart
+- lib/services/character_repository.dart
+- lib/services/hardware_service.dart
+- lib/services/group_card_service.dart
+- lib/database/database.dart
+- lib/utils/utils.dart
+- test/utils/png_metadata_seek_test.dart (new)
+- test/services/hardware_info_cache_test.dart (new)
+- docs/Rawhide.md
+
+Reason: acting on the measurements from the previous commit (b4ea4cf).
+First frame was already fast (156ms); the cost was everything between the
+window appearing and the home grid being usable.
+
+1. PNG metadata is now read by SEEKING the chunk table
+   (PngMetadataUtils.extractTextChunkFromFile) instead of loading the file.
+   readCard pulled the ENTIRE multi-megabyte card off disk to reach a
+   'chara' tEXt chunk sitting in the header — 142MB for a 120-card library.
+   Walking the chunk table reads 8-byte headers plus the matching chunk and
+   never touches IDAT.
+
+   Measured, same 120 cards at 1.1MB each: 501-743ms -> 214ms (~3.5x).
+   The residual is JSON parse + model construction, i.e. real work. Chosen
+   over the 64KB-prefix approach originally proposed because seeking also
+   (a) does not degrade as card art resolution grows and (b) still finds
+   cards that write 'chara' AFTER IDAT, which the PNG spec permits and a
+   prefix read would have missed. The whole-file path is retained verbatim
+   as the fallback, so nothing that loaded before stops loading.
+
+   The per-chunk decode was factored into ONE _parseTextChunk shared by the
+   byte walker and the file walker — the two cannot disagree about how a
+   chunk decodes.
+
+2. Avatar loading was an N+1: one getAvatarImagesByCharacterId per
+   character, each a round trip to the Drift background isolate. Replaced
+   with getAvatarImagesGroupedByCharacter (one query, grouped in memory).
+
+3. Three debugPrints ran per character inside the load loop. debugPrint is
+   NOT compiled out in release, so a 500-card library built 500+ log
+   strings nobody reads on every load. Replaced with two summaries.
+
+4. HardwareService no longer re-detects from its constructor. It spawned up
+   to four PowerShell processes (plus nvidia-smi) on Windows during
+   provider-tree construction, every launch, and never persisted the
+   result. It now restores a cached HardwareInfo immediately (correct VRAM
+   + cpuOnlyLowPerf from the first frame) and re-detects after the first
+   frame — same freshness, no contention with the library load.
+
+   WidgetsBinding.instance is guarded with try/catch because it THROWS when
+   no binding exists; without it, constructing HardwareService headlessly
+   (script, web server host) would crash. Tests use a fake, so they would
+   not have caught this.
+
+Barrels: png_metadata_utils, group_avatar_compositor and cpu_features were
+all missing from the utils barrel, which is exactly the absence the
+self-extending rule exists to prevent — added, and their importers
+(v2_card_service, group_card_service, hardware_service, model_manager)
+converted to the barrel.
+
+Tests: 9 new. The chunk walker is pinned to the whole-file path's contract
+including where it returns null (null is what triggers the fallback), and
+covers iTXt, chunks after IDAT, non-matching keywords, non-PNG input,
+mid-chunk truncation and a missing file. The cache tests cover an entry
+written by an older build degrading to defaults rather than throwing —
+a startup crash over a stale cache would be worse than the slow detection
+this replaced.
+
+Note on process: the first truncation test FAILED and the test was wrong,
+not the code — lopping bytes off the end only removes IEND, leaving the
+chara chunk intact and correctly returned. Rewritten to truncate inside
+the chunk, with a cross-check that the byte path rejects it too.
+
+## 2026-08-01 — CONTRIBUTING.md: add inbound licensing, delete the sidecar era
+
+File: CONTRIBUTING.md
+
+Reason: the file had no licensing statement at all — the only inbound grant
+was GitHub's ToS default. Asked to state explicitly that contributions are
+AGPL-3.0-or-later. While in there, the rest of the file turned out to be
+badly stale and in two places actively wrong.
+
+Added a Licensing section: contributions are AGPL-3.0-or-later, the
+contributor confirms they have the right to submit, no CLA and no copyright
+assignment (contributors keep their copyright). Plus practical notes on the
+AGPL header for new files, dependency licensing, and the fact that
+runtime-downloaded model weights are covered by third-party terms rather
+than this license — several Piper voices carry non-commercial dataset terms
+(en_US-lessac-medium is research-only; en_US-ryan-medium is CC BY-NC-SA).
+
+Deleted, all describing a build that has not existed since the 2026-07
+sidecar retirement:
+  - "Rust toolchain (for embedding server)" prerequisite
+  - "Python 3.8+ (for TTS/STT scripts)" prerequisite
+  - the `cargo build --manifest-path tools/embed_server/Cargo.toml` step
+  - `pip install -r requirements.txt` ("for sidecars")
+  - two `cp .../embed_server` post-build copy steps (Linux + Windows)
+None of tools/embed_server, requirements.txt or the Rust crate exist.
+
+Two entries were worse than merely stale — they told contributors to do
+things the project forbids:
+  - `flutter format --set-exit-if-changed .` as a required check, which
+    directly contradicts the tall-style migration rule (a whole-file format
+    rewraps hundreds of unrelated lines).
+  - "Version bumped in pubspec.yaml" in the release checklist, when
+    pubspec.yaml is explicitly do-not-edit and CI/CD normalizes the version.
+
+Also fixed: "up-to-date with the main branch" replaced with the real branch
+table (Rawhide / dev / *-Beta / main), since the old text pointed
+contributors at main; Flutter version corrected from "3.10.8 or later"
+(which was the DART sdk constraint misread as a Flutter version) to 3.44.8,
+what CI actually pins; added the Linux desktop build deps.
+
+Added, because none of it was documented: the real CI gate list
+(analyze / test / E2E smoke / web-tests / theme-lint / io-lint / golden),
+what the dependency-floor guard is and why regenerating its baseline is the
+wrong fix, the io-lint rationale, the web_ui npm commands, the
+build_runner step for schema changes, and a short "rules that trip people
+up" section (500-line cap, WebUI parity, Realism/Needs parity, AppColors,
+barrels, Character Card Forge's raw-SQL dependency).
+
+Every path and command in the new file was verified to exist.
+
+Docs-only change: no Dart touched, so the code gates do not apply.
+
+## 2026-08-01 — Real PR template file
+
+Files: .github/pull_request_template.md (new), CONTRIBUTING.md
+
+Reason: CONTRIBUTING.md used to embed a PR template as a markdown code
+block for contributors to hand-copy, but no .github/pull_request_template.md
+existed, so GitHub never applied it. The previous commit removed the dead
+block; this adds the real file.
+
+Deliberately scoped to what CI CANNOT catch, rather than duplicating it:
+
+  - Target branch. The old text told contributors to sync with "main";
+    getting the branch wrong is the single most common correction.
+  - What was actually tested, and on WHICH PLATFORM. Cross-platform
+    verification is mandatory here and is the thing most often skipped.
+  - WebUI + Realism/Needs parity, with an explicit "deferral agreed with the
+    maintainer" option so the answer is recorded in the PR rather than
+    assumed.
+  - Dependency floor + licensing of any downloaded model/asset, with a free
+    text field for source and license. Directly prompted by the three open
+    PRs: one silently downgraded five packages and edited the floor baseline
+    to match, another adds a TTS engine whose model weights have no stated
+    license.
+  - AGPL header, AppColors, no whole-file dart format, no pubspec version
+    edit, no silently swallowed errors — the recurring review findings.
+  - An explicit affirmation that the contribution is AGPL-3.0-or-later and
+    the submitter has the right to submit it, mirroring the new CONTRIBUTING
+    licensing section. Not a CLA; just an on-the-record acknowledgement.
+
+Drafts are invited in the leading comment, since two of the three open PRs
+would have been better served that way.
+
+Every checkbox is one a reviewer would otherwise have to ask about by hand.
+Sections are marked deletable so the template shrinks to fit small PRs
+instead of being abandoned.
+
+The branch-guidance link is an absolute URL — relative links do not resolve
+reliably inside a PR description.
+
+## 2026-08-01 — Repo hygiene: security policy, issue templates, dependabot, CI badge
+
+Files:
+- SECURITY.md (new)
+- .github/ISSUE_TEMPLATE/bug_report.yml (new)
+- .github/ISSUE_TEMPLATE/feature_request.yml (new)
+- .github/ISSUE_TEMPLATE/config.yml (new)
+- .github/dependabot.yml (new)
+- README.md
+- test_mod.dart (deleted)
+- FEATURE_PLAN_IMAGE_GEN_CONTROLS.md (deleted)
+
+Reason: audit of what separates this repo from a well-run open-source
+project. The engineering was already strong (2,783 tests, 94 goldens, 8 CI
+jobs, the dependency-floor guard); the gaps were all project-hygiene.
+
+1. SECURITY.md — there was NO private way to report a vulnerability. For an
+   app that stores third-party API keys, runs a LAN/tailnet-exposed web
+   server, and holds auth tokens for an account-gated backend, the only
+   option was a public issue. Routes reports through GitHub private
+   vulnerability reporting (needs enabling in repo settings), and states
+   scope explicitly — the web server, stored credentials, the Stoop client,
+   character-card parsing as untrusted input — plus out-of-scope, which
+   notably rules out "the model said something bad" and local-filesystem
+   attacks (the app stores data unencrypted by design).
+
+2. Deleted test_mod.dart — a 4-line scratch file at the REPO ROOT printing
+   the result of `-1 % 6`. Also FEATURE_PLAN_IMAGE_GEN_CONTROLS.md, an
+   11KB planning doc for a shipped feature, referenced by nothing. Verified
+   neither had any inbound reference.
+
+3. Issue templates as YAML forms rather than markdown, so the fields are
+   actually required. The bug form asks for app version, OS + version,
+   install source (installer / AUR / nightly / source), backend, and
+   desktop-vs-web — the axes on which a bug here is reproducible or not,
+   given three platforms and seven backends. config.yml routes questions to
+   Discord and security reports away from public issues.
+
+4. dependabot.yml — dependabot had been running with NO config file (7
+   commits, most recently 2026-07-20) and in June was still bumping a
+   `cargo` group for the Rust embedding server deleted in the sidecar
+   retirement. Now explicitly covers pub, npm (web_ui) and github-actions,
+   all with target-branch: Rawhide, because the default branch is `main`
+   and main is tagged releases only — without that, every dependabot PR
+   would have violated the project's own branch workflow. Minor/patch
+   grouped to cut noise; majors stay individual. Header warns that a pub
+   downgrade will trip the floor guard and must not be "fixed" by
+   regenerating the baseline.
+
+5. README gained a live CI status badge. The four existing badges (license,
+   Flutter, platform, branch) are all static decoration; none showed whether
+   the build passes.
+
+Caught during validation: the bug-report backend dropdown had `default: 8`
+on an 8-option list (valid indices 0-7), which GitHub rejects outright — the
+template would have silently failed to load. Fixed to 7. All four YAML files
+parse and every dropdown default is now in range.
+
+flutter analyze clean after removing test_mod.dart from the package.
+
+## 2026-08-01 — AGENTS.md reduced to a pointer (it was teaching the forbidden architecture)
+
+Files: AGENTS.md, CONTRIBUTING.md, README.md
+
+Reason: two agent-guidance files existed and had silently diverged.
+CLAUDE.md is auto-loaded by Claude Code and is maintained; AGENTS.md is the
+filename other AI tools (Codex, Cursor, Aider, Gemini CLI) look for, and had
+not been touched since the sidecar era.
+
+How bad the drift was, measured:
+
+  topic            AGENTS.md   CLAUDE.md
+  Realism engine       0          38
+  AppColors            0           2
+  web_ui parity        0           3
+  500-line cap         0           2
+  io-lint              0           1
+
+Beyond the omissions it actively documented the deleted architecture: a
+"Python Sidecar Conventions" section, "EmbeddingSidecar: Rust-based local
+embedding server", `Process.start('python', ['kokoro_tts.py'])` sample code,
+and — worst — a worked example at line 417 headed "Good: Python Sidecar
+Implementation". That is an exemplar teaching an agent to build the exact
+thing CLAUDE.md forbids ("Do not reintroduce sidecar processes"). Any
+contributor using a non-Claude tool was being coached to violate the
+architecture while knowing nothing about Realism/Needs parity.
+
+Fixed by making AGENTS.md a short pointer to CLAUDE.md rather than rewriting
+it — two maintained copies is how it rotted in the first place. The stub
+keeps a ~10-line "short version" of the rules most likely to be violated
+before an agent gets as far as opening CLAUDE.md (no sidecars, 500-line cap,
+Realism parity, web parity, AppColors, barrels, no whole-file format, no
+pubspec version edit, no destructive git), and explains why it is a stub so
+nobody "helpfully" refills it.
+
+Also repointed links that presented AGENTS.md as the full guide:
+  CONTRIBUTING.md x3 (commit-message standard, "full guide", resources)
+  README.md x2 (branch workflow, commit conventions)
+These were partly self-inflicted — the CONTRIBUTING rewrite earlier today
+added two of them, linking a file that had not been read on the assumption
+it was current.
+
+## 2026-08-01 — Docs index was calling finished documentation "scaffold"
+
+Files: docs/README.md, dev-notes/ (4 files moved in + new README), CLAUDE.md
+untouched
+
+Reason: continued repo-hygiene sweep.
+
+1. docs/README.md — the index for the PUBLISHED documentation site
+   (.github/workflows/pages.yml uploads path: 'docs') opened with
+   "**Status:** Scaffold — outlines ready, content to be filled in
+   per-session", marked 9 of 10 documents with a 🏗️ Scaffold badge, and
+   carried a "How to Use This Scaffold" section telling readers to work
+   through <!-- TODO --> markers.
+
+   The documents are finished. Measured TODO markers:
+     user-guide.md        409 lines   0 TODOs
+     troubleshooting.md   315 lines   0
+     faq.md               311 lines   0
+     realism-engine.md    266 lines   0
+     getting-started.md   239 lines   0
+     release-notes.md     194 lines   0
+     characters.md        185 lines   0
+     keyboard-shortcuts.md 46 lines   0
+
+   ~1,900 lines of real documentation behind an index announcing it as
+   unwritten. Anyone arriving from the README read "scaffold" and left.
+   Rewritten as a real index grouped by intent (start here / going deeper /
+   when something goes wrong / what changed / for developers), with the
+   security-reporting pointer so nobody files a vulnerability publicly.
+
+2. Moved 4 internal engineering docs out of the published path into
+   dev-notes/: refactor-god-file-modularization.md (916 KB progress log —
+   nearly half of docs/ by size, and titled so that visitors learn the
+   codebase has god files), refactoring-guide.md, release-promotion.md (the
+   release runbook) and web-parity.md (a "W8 sign-off" checklist). Since
+   Pages does a static upload of docs/ with no Jekyll config, there is no
+   exclude mechanism — moving them out is the only way to stop serving them.
+
+   148 internal cross-references inside those files were rewritten from
+   docs/... to dev-notes/... . No inbound links existed from anywhere else
+   (checked all .md/.yml/.html), so nothing else needed touching. The
+   .claude/changelog.md history was deliberately NOT rewritten — those
+   entries describe where files were at the time.
+
+   dev-notes/README.md explains what the directory is, why it sits outside
+   docs/, and that CLAUDE.md wins wherever a note disagrees with it.
+
+Every relative link in both new index files was programmatically verified to
+resolve.
+
+Left alone deliberately: docs/design/ stays published — architecture notes
+are legitimate public documentation for an open-source project, and several
+are referenced from CLAUDE.md.
+
+## 2026-08-01 — Stoop profile overhaul + avatars + password recovery + theme hit-test fix
+
+**Files (app):** lib/services/backporch/{backporch_api,backporch_user,stoop_creator}.dart,
+lib/providers/auth_state.dart, lib/ui/pages/repository/{stoop_home_view,stoop_creator_page,
+repository_auth_view,repository_account_sheet}.dart, NEW lib/ui/pages/repository/
+{stoop_profile_header,stoop_edit_profile_dialog,stoop_my_upload_tile,repository}.dart (barrel),
+lib/ui/pages/repository_page.dart (barrel import), lib/services/web/routes/stoop_routes.dart,
+lib/services/web/facade/stoop_facade.dart, web_ui/src/stoop/{stoopApi,stoopTypes}.ts,
+web_ui/src/pages/stoop/{StoopAccountPage,StoopCreatorPage,StoopAuthView}.tsx,
+NEW web_ui/src/components/stoop/StoopCreatorAvatar.tsx, web_ui/src/styles.css,
+website/src/stoop/{api,app,views-auth,views-browse,views-inbox}.js, website/src/stoop/stoop.css,
+lib/ui/chat_components/bubbles/{message_bubble,border_painters}.dart,
+NEW test/ui/border_painters_hit_test_test.dart.
+
+**Why:** (1) The @you Stoop tab was a bare uploads list; per the approved mockup it is now a real
+profile (avatar/monogram, join date, followers + lifetime stats via /creators/:id, bio, links,
+Edit Profile dialog, hub Share link, Following chips via the previously-unused /me/following,
+Delete-own-upload, verify banner). Creator pages share the same header (StoopProfileHeader).
+Display-name editing moved from the account sheet into Edit Profile (sheet keeps security items).
+(2) User avatars: post-moderated (live instantly; mod strip = formal warning; verified email
+required server-side; avatarLocked revocation). Client crops square ≤512 in an isolate (compute).
+(3) Password recovery: "Forgot password?" on the sign-in card → POST /auth/forgot; the emailed
+link opens the hub's #/reset page. Same flows shipped to web_ui (new facade routes /me/profile,
+/me/avatar raw-bytes upload, /auth/forgot, DELETE /cards/:id, resend-verification) and the hub
+site (renderForgot/renderReset, account avatar editor, creator avatars, "From your porch" row —
+desktop already had that row). (4) BUGFIX: all 10 community theme presets made every message-bubble
+button dead — the Positioned.fill border CustomPaint is hit-test opaque by default. Fixed with
+IgnorePointer + hitTest=false on ThemeBorderPainter + regression tests.
+
+Backend (separate private repo): additive migration (avatar fields + reset-token fields on User),
+POST/DELETE /me/avatar, avatar fallback on /assets/:id/raw, POST /auth/forgot + /auth/reset
+(2FA still required when enabled; all sessions revoked), owner-only /mod/users/:id/force-reset,
+/mod/avatars feed + avatar-strip/lock, dashboard Avatars view + Message/Reset-PW user actions.
+Deploy pending maintainer approval. flutter analyze clean; debug macOS build OK; web_ui tsc clean
++ bundle rebuilt; hub bundle rebuilt; new tests pass.
+
+## 2026-08-01 (later) — Your-cards list → art grid (maintainer live-test feedback)
+
+**Files:** lib/ui/pages/repository/{stoop_my_upload_tile,stoop_home_view}.dart,
+web_ui/src/pages/stoop/StoopAccountPage.tsx, web_ui/src/styles.css (+ dead
+.stoop-mine list CSS pruned), assets/web_app rebuilt, docs/Rawhide.md.
+
+**Why:** Live-testing the new profile tab, the maintainer flagged the "Your
+cards" text list — "will look really bad when people start submitting a lot
+of characters" (he has 17). Rebuilt as an art-forward grid on desktop AND the
+web account page: card art fills the tile, status chip rides the art,
+Update/Delete are compact icons, and a rejection's moderator note moved into
+a tappable ember pill → dialog (it can't fit on a grid tile). The hub site's
+My-cards rows already show art; unchanged. analyze clean, tsc clean, bundle +
+debug build OK.
+
+## 2026-08-01 (later still) — Change-email flow + deploys
+
+**Files (app):** lib/services/backporch/{backporch_api,backporch_user}.dart,
+lib/providers/auth_state.dart, lib/ui/pages/repository/repository_account_sheet.dart,
+NEW lib/ui/pages/repository/stoop_change_email_dialog.dart (+barrel entry),
+lib/services/web/routes/stoop_routes.dart, web_ui (stoopApi/types/StoopAccountPage/styles),
+website/src/stoop/{api,views-inbox}.js; bundles rebuilt.
+
+**Why:** Maintainer wanted grandfathered accounts to be able to genuinely prove an
+address (their emailVerified flag was rubber-stamped by the rollout migration) and a
+way to fix wrong/dead emails so recovery mail actually arrives. New change-email flow:
+confirmation link goes to the NEW address (ownership proven → also sets emailVerified),
+heads-up mail to the old address, re-auth with current password + TOTP when enabled,
+pending state visible + cancellable on all three surfaces. Backend deployed to droplet
+(avatars/recovery/mod tools + email-change, sessionEpoch); hub dist-hub deployed
+(reset pages, avatars, From-your-porch row, signup-toast fix). Dashboard now flags
+unverified emails on the Users list.
+
+## 2026-08-01 (v1.2 production-proofing) — Kokoro voices, cleanup data loss, E2E, barrels
+
+**Files:** lib/services/kokoro_engine.dart, lib/services/tts/sherpa_kokoro_engine.dart,
+lib/services/tts_service.dart, lib/ui/dialogs/tts_settings_dialog.dart,
+lib/database/database_cleanup.dart, lib/utils/character_id.dart,
+lib/services/chat/chat_service_reprocess.dart, lib/services/chat_service.dart,
+NEW test/services/kokoro_voice_catalog_test.dart,
+NEW test/database/database_cleanup_identity_test.dart,
+integration_test/app_smoke_test.dart, integration_test/support/fake_backend.dart,
+10 NEW barrels + 72 importers, docs/Rawhide.md.
+
+**Why — Kokoro (Discord report, Dazpants Games 2026-07-31):** "Kokoro falls back to a
+default voice." Two causes. (1) The hand-written 53-entry voice catalog had drifted from
+the shipped model: it offered jm_beta/em_santa/zm_yibo (all labelled Male) which
+kokoro-multi-lang-v1_0 does not contain, and hid jf_nezumi/jf_tebukuro/zm_yunjian which it
+does. (2) `speakerIds[voice] ?? speakerIds['af_heart']!` silently substituted a FEMALE
+voice for any unresolved name, with no log. Ground truth came from the model itself —
+model.onnx embeds `af_alloy->0,…,am_adam->11,…` and voices.bin is exactly 53×522,240 B —
+which confirmed the speaker map was correct and the catalog was not. The catalog is now
+DERIVED from speakerIds (385 lines -> ~35), so drift is structurally impossible, and
+unknown voices fall back within the same language+gender. Third cause, UX: a character's
+own ttsVoice overrides the global Settings voice with nothing saying so — now stated in
+the dialog and logged in TtsService.
+
+**Why — Database Cleanup (release blocker, found by audit, verified against the real DB):**
+`objectives.character_id` / `message_embeddings.character_id` hold a **stableGroupId**
+(image-filename basename, e.g. `Jennifer_1782587668376`) but `_deleteOrphanRows` joined
+them against `characters.id` (a UUID). Nothing ever matched, so every row was an "orphan."
+Measured on the maintainer's live DB: 107/107 objectives and 68/68 embeddings would have
+been deleted by the Settings dialog; avatar_images was unaffected (it does use UUIDs).
+The file already warned about this exact trap for journal_memories — it was never applied
+here. Fixed by resolving the true identity space (characters.id ∪ stableGroupId ∪
+group_members.id); after the fix only 8 objectives delete, all belonging to characters with
+a non-null deleted_at. `stableGroupIdFrom()` extracted in character_id.dart so the
+derivation has ONE implementation (a drifted copy here is a DELETE).
+
+**Why — regenerate cancel (data loss):** regenerate pops the reply at reprocess.dart:417 so
+the prompt excludes it; both `_realismEvalCancelled` early-returns fired before
+_generateResponse appends the replacement, destroying the message and all its swipes. The
+backend gate above already guarded this ("aborting after removeLast would drop the popped
+reply"); the cancel paths never learned it. Both now restore + save.
+
+**E2E:** six new phases — session-reload persistence (realism + messages reaching SQLite),
+weather determinism across reload, needs refund + delete persistence, backend-500
+resilience (guards released, chat recovers), worlds biome swap, and lorebook keyword
+injection asserted against the real outbound prompt. fake_backend gained
+`failNextChatCompletion`. Runtime ~21s.
+
+**Barrels:** 10 new directory barrels (services/chat — named by CLAUDE.md as needed —
+web/util, capability, image_prompt, web/tunnels, ui/dialogs, ui/pages, ui/character_creator
++ its widgets, ui/settings/widgets); 263 solo imports collapsed across 72 files. 76 remain,
+all single-sibling (the documented exemption). One redundant import removed from
+chat_service.dart.
+
+**Verification:** flutter analyze clean; 2797 unit tests pass; E2E green.
+NOT fixed (deliberate, maintainer's call): `_isGenerating` is cleared at
+chat_service_generation.dart:1575 while post-gen evals run at 1698-1760, leaving every
+re-entrancy guard open for seconds. Real, but changing generation-completion timing hours
+before a release is the wrong trade.
+
+**Follow-up (same day):** lib/services/update_service.dart — `/releases` had no
+`per_page`, so the update check saw GitHub's default 30 entries. That endpoint orders by
+tag created_at and nightlies publish daily, so the page held ~1 month of history and only
+4 stable releases. v1.2 is fine at launch (newest tag → index 0), but ~30 days later it
+falls off page 1 and selectTargetRelease returns null — stable users silently stop being
+offered any update. `per_page=100` now returns the full 86-release history (15 stable).
+selectTargetRelease unchanged; it already ranks by publish timestamp rather than list
+order — its window was just too small. Verified live against the GitHub API.
+
+## 2026-08-01 (later) — Blocker 1: post-generation re-entrancy window
+
+**Files:** lib/services/chat_service.dart, lib/services/chat/{chat_service_generation,
+chat_service_group_membership, chat_service_idle_autonomous, chat_service_reprocess,
+chat_service_cast, chat_service_images, chat_service_impersonate, chat_service_scene_guest}.dart,
+integration_test/{app_smoke_test.dart, support/chat_driver.dart}, docs/Rawhide.md.
+
+**Why:** `_isGenerating` cleared at generation.dart:1575 while post-gen ran to ~1760 —
+needs-impact eval, realism re-stamp, `_saveScalarsIntoGroupRealism`, chip attach, plus the
+group impersonation dance. Every re-entrancy guard stood open for seconds of live LLM work.
+
+**Fix:** `_isPostGenerating` across the AWAITED region only (1702-1779), cleared in a
+`finally`; NOT across the fire-and-forget passes (they can run indefinitely — gating on them
+trades a race for a wedged UI). The `finally` also fixes a latent bug: a throw in
+`_runPostGenNeedsChecks` skipped the inline `_activeCharacter` restore, leaving a group pinned
+to the wrong speaker with their scalars loaded.
+
+**The public getter is part of the fix.** v1 of this change widened internal guards but left
+`isGenerating` narrow; a 4-agent adversarial review found that ships SILENT DATA LOSS — both
+composers (chat_page.dart, ChatComposer.tsx) clear the input BEFORE calling through, so a
+message typed during post-gen vanished. `isGenerating` now means "turn not finished";
+`isStreamingTokens` keeps the narrow meaning. chat_facade.dart:146 serves the public getter,
+so web was fixed by the same line.
+
+**Deliberately NOT broadened** (a mechanical sweep would have broken both): `stopGeneration`
+(inverted do-work-if; would leak `_cancelRequested` into the next turn, aborting it on its
+first token) and `_cancelAndWaitForGeneration` (spins on the flag; would freeze the UI).
+Also reverted an over-built auto-play re-arm — both schedulers arm AFTER the awaited section,
+so the flag is already clear when they fire.
+
+**Left open, documented:** window opens after `await _saveChat()`; bool not depth counter
+(overlapping turns); hung backend holds it silently behind the 180s eval timeout; chat-switch
+mid-post-gen still bypasses it (wants the `_generationEpoch`/session-token pattern).
+
+**Test:** every `waitSendable()` now also requires `!isSettlingTurn`, so a latched flag fails
+all three E2E suites loudly. analyze clean; 2797 unit; 3/3 E2E green.
+
+## 2026-08-01 (later) — Folder/character card hit target + layout
+
+**Files:** lib/ui/pages/home/cards/{folder_grid_card,character_grid_card}.dart, docs/Rawhide.md.
+
+**Why:** A folder card was only clickable down a narrow strip on its left, its contents
+looked left-aligned, and the "N characters" line clipped past the rounded corner.
+
+**One root cause for all three:** `InkWell` was a BARE child of the card's `Stack`.
+Non-positioned Stack children get LOOSE constraints and top-left alignment, so the InkWell
+shrink-wrapped to its widest line ("0 characters") and sat against the left edge — the tap
+target literally was only that wide, the column centred inside its shrunken box rather than
+the card, and `LayoutBuilder` reported a bogus `maxWidth` that `previewSide = maxWidth *
+0.78` was computed from. The giveaway was in the same file: the right-click handler already
+used `Positioned.fill`, so right-click covered the whole card while tap did not.
+`group_grid_card` avoids it by putting the InkWell OUTSIDE the Stack.
+
+**Also:** the count label lacked the padding/textAlign/ellipsis the folder name directly
+above it already had, so it rendered edge-to-edge and was clipped on narrow grids.
+
+**character_grid_card had the identical Stack-with-bare-InkWell shape** — masked because its
+content is an image that fills anyway, but the same latent defect (and the same wrong
+LayoutBuilder width). Fixed in the same pass rather than left to surface later.
+
+**Verification:** analyze clean; 2797 unit tests; 94 Linux-gated pixel goldens via
+scripts/ci-local.sh (these never run on macOS and this was a layout change, so they were the
+gate that mattered).
+
+**Note for later:** this is exactly the "renders but isn't reachable" class the
+theme_interaction_test hit-test sweep catches. That sweep covers chat bubbles only —
+extending it to the home grid would have caught this mechanically.
+
+## 2026-08-01 — CLAUDE.md factual rewrite (LANDED IN f40d1f39, mis-attributed)
+
+**Recorded here because the git log will not lead you to it.** The rewrite went out inside
+f40d1f39 ("test(e2e): survive the Send/Stop swap") via a `git add -A`, not under a docs
+commit. Content is complete and verified (119 insertions / 22 deletions); only the
+attribution is wrong. Noted rather than rebased — the commit is already pushed.
+
+**Why:** CLAUDE.md is the first thing every agent reads, so a wrong line there degrades all
+of them silently. It demonstrably did during this session: an agent twice repeated "time
+advances every 6 turns" in a pre-promotion briefing when time_service.dart's own doc says
+that gate is gone.
+
+**Corrected (verified against the code, not assumed):**
+- `flutter format --set-exit-if-changed .` → the subcommand does not exist in Flutter 3.44.8
+  ("Could not find a command named format"). Now `dart format`.
+- `lib/services/prompt_injection/` → real path is `lib/services/chat/prompt_injection/`
+- `lib/services/cloud_providers/` → does not exist (removed with Cloud Sync)
+- `chat/evolution_service.dart` → deleted; Growth Rings replaced it
+- `database/migrations/` (the FIRST "never touch without discussion" entry) → never existed
+- 6 of 9 named DB tables did not exist; replaced with the real 21 + the stableGroupId-vs-UUID
+  identity trap that caused the Database Cleanup data loss
+- Time: the 6-turn gate is gone; advancement is continuous per-turn via TimeService
+- Needs buffers (afterglow / lust-haze / post-climax-crash / arousal-suppression) were
+  removed but still documented as live
+- Tracing section: `groupSpeakerPreDecayNeeds`, `_evaluateRealismForUpcomingGroupSpeaker`,
+  `applyLongGenerationNeedsDecay` and `realism_section.dart` all return ZERO hits
+
+**Added (absence caused real failures this session):**
+- `scripts/ci-local.sh` as the mandatory pre-push gate + why (18 golden files are
+  `@TestOn('linux')`, so a green macOS run never executes them)
+- `flutter test --concurrency=1 --exclude-tags golden` — what CI actually runs
+- one-invocation-per-file for integration tests, and why the directory form breaks
+- the whole `web_ui/` toolchain, incl. that `npm run build` writes the bundle the app serves
+- the test-integrity guard, CODEOWNERS, and the `pull_request_target`/cron base-branch rule
+- ChatService is a 28-part-file library; the Stoop has a second client via `/api/stoop/*`
+
+**Verification:** all 38 referenced paths resolve; headers intact; fences balanced.

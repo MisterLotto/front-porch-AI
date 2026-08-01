@@ -21,8 +21,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_io.dart';
-import 'package:front_porch_ai/ui/dialogs/image_crop_dialog.dart';
-import 'package:front_porch_ai/ui/dialogs/image_gen_settings_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/dialogs.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 import 'avatar_creation_controller.dart';

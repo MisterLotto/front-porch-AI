@@ -21,7 +21,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/utils/emotion_labels.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Inline emotion picker for adding an expression image: a preview of the
 /// just-picked image plus a grid of emotion chips. Preserves the old dialog's

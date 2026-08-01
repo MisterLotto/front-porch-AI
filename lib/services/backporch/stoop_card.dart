@@ -8,6 +8,27 @@
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
+/// Worlds on The Stoop — client readiness flag.
+///
+/// Portable places (.fpworld packages) ride the SAME card endpoints as a third
+/// `type: 'WORLD'` whose `card` payload is the .fpworld envelope
+/// (`encodeFpWorld` / `decodeFpWorld` in `models/fp_world_package.dart`), with
+/// the place's cover image attached as the card avatar — so worlds get browse,
+/// search, votes, downloads, creator pages, AND the exact moderation pipeline
+/// characters already go through (PENDING → mod review → APPROVED before
+/// anyone can see them). This keeps the backend change purely additive (one
+/// new enum value; no new endpoints), per the mixed-fleet API contract.
+///
+/// The backend does not accept `WORLD` yet. The Dart client is fully wired —
+/// upload, browse, download + auto-import — behind this flag; flip it to true
+/// when the backend ships. While false, the UI shows Worlds as "coming soon".
+const bool kStoopWorldsLive = true;
+
+/// The mixed-view opt-in the API expects when a caller understands worlds.
+/// Sent on list endpoints only; `type=all` deliberately still means
+/// solo+group server-side so already-shipped apps never receive a WORLD item.
+const String kStoopWorldTypes = 'solo,group,world';
+
 /// A creator reference as it appears on a card (`@handle`).
 class StoopCreatorRef {
   final String id;
@@ -26,7 +47,7 @@ class StoopCard {
   final String name;
   final String summary;
 
-  /// `SOLO` or `GROUP`.
+  /// `SOLO`, `GROUP`, or `WORLD` (a .fpworld place package).
   final String type;
   final bool nsfw;
 
@@ -63,6 +84,7 @@ class StoopCard {
   });
 
   bool get isGroup => type == 'GROUP';
+  bool get isWorld => type == 'WORLD';
 
   /// This card with fresh live counters (from a [StoopCardStats] push).
   StoopCard withStats({required int score, required int downloadCount}) =>
@@ -177,8 +199,9 @@ class StoopCardDetail {
   /// the author. Null = the uploader's own work.
   final String? originalCreator;
 
-  /// The V2/V2.5 card payload (description, personality, scenario, first_mes,
-  /// alternate_greetings, mes_example, character_book, etc.).
+  /// The card payload: V2/V2.5 character JSON for `SOLO`, a group card for
+  /// `GROUP`, or the .fpworld envelope (lore + climate + traits + cover) for
+  /// `WORLD`.
   final Map<String, dynamic> card;
   final List<String> tags;
   final String? primaryAssetId;
@@ -205,6 +228,7 @@ class StoopCardDetail {
   });
 
   bool get isGroup => type == 'GROUP';
+  bool get isWorld => type == 'WORLD';
 
   factory StoopCardDetail.fromJson(Map<String, dynamic> j) => StoopCardDetail(
     id: j['id'] as String? ?? '',

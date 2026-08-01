@@ -18,7 +18,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:front_porch_ai/services/expression_classifier.dart';
+import 'package:front_porch_ai/services/services.dart';
 
 /// Glassmorphic overlay widget showing ONNX model download progress.
 ///

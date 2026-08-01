@@ -194,6 +194,74 @@ class AuthState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // Unlike the older toggles above, these THROW when no session exists —
+  // callers show a success snackbar on a completed await, so a silent no-op
+  // would read as "saved" while nothing reached the server.
+  BackporchApiException get _noSession =>
+      const BackporchApiException(401, 'not_signed_in');
+
+  /// Edit the public creator profile (bio + links, persisted server-side).
+  Future<void> updateProfile({
+    required String bio,
+    required List<String> links,
+  }) async {
+    if (_accessToken == null) throw _noSession;
+    final me = await _api.updateProfile(_accessToken!, bio: bio, links: links);
+    _user = me.user;
+    _policyVersion = me.policyVersion;
+    notifyListeners();
+  }
+
+  /// Upload a new profile picture (live instantly; post-moderated).
+  Future<void> uploadAvatar(Uint8List bytes, String filename) async {
+    if (_accessToken == null) throw _noSession;
+    final me = await _api.uploadAvatar(
+      accessToken: _accessToken!,
+      bytes: bytes,
+      filename: filename,
+    );
+    _user = me.user;
+    _policyVersion = me.policyVersion;
+    notifyListeners();
+  }
+
+  /// Remove the profile picture (back to the amber monogram).
+  Future<void> removeAvatar() async {
+    if (_accessToken == null) throw _noSession;
+    final me = await _api.deleteAvatar(_accessToken!);
+    _user = me.user;
+    _policyVersion = me.policyVersion;
+    notifyListeners();
+  }
+
+  /// Ask to change the sign-in email (confirmation link goes to the NEW
+  /// address; the account keeps the old one until it's clicked).
+  Future<void> changeEmail({
+    required String newEmail,
+    String? password,
+    String? totp,
+  }) async {
+    if (_accessToken == null) throw _noSession;
+    final me = await _api.changeEmail(
+      _accessToken!,
+      newEmail: newEmail.trim(),
+      password: password,
+      totp: totp,
+    );
+    _user = me.user;
+    _policyVersion = me.policyVersion;
+    notifyListeners();
+  }
+
+  /// Abandon a pending email change.
+  Future<void> cancelEmailChange() async {
+    if (_accessToken == null) throw _noSession;
+    final me = await _api.cancelEmailChange(_accessToken!);
+    _user = me.user;
+    _policyVersion = me.policyVersion;
+    notifyListeners();
+  }
+
   /// Toggle the NSFW content preference (persisted server-side).
   Future<void> setNsfwEnabled(bool enabled) async {
     if (_accessToken == null) return;

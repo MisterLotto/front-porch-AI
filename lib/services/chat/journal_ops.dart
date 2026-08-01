@@ -401,3 +401,16 @@ const List<Map<String, dynamic>> kJournalTools = [
   }
   return (ops, recap);
 }
+
+/// Hard ceiling on ADD ops per pass (applied after parse, both transports —
+/// one site, so 1:1/group parity holds). A flooding model would churn the
+/// card cap and drown the hot set even when its response wasn't truncated;
+/// the first [max] adds are kept (models lead with what they consider
+/// important). Revise/retire/pin ops are never dropped.
+List<JournalOp> clampJournalAdds(List<JournalOp> ops, int max) {
+  var adds = 0;
+  return [
+    for (final op in ops)
+      if (op.action != JournalOpAction.add || ++adds <= max) op,
+  ];
+}

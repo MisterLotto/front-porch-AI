@@ -247,6 +247,52 @@ interface FolderRow {
   depth: number;
 }
 
+export interface PickerPersona {
+  id: string;
+  label: string;
+  name: string;
+  active: boolean;
+}
+
+/** Step 2 of "Start new chat": which persona walks into the scene. A fresh
+ *  chat must never silently inherit the last one's persona, so this asks
+ *  outright (the desktop context menu shows the same step). */
+export function PersonaPickerDialog({
+  subject,
+  personas,
+  onPick,
+  onClose,
+}: {
+  subject: string;
+  personas: PickerPersona[];
+  onPick: (personaId: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="drawer-backdrop center" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="drawer-head">
+          <span>Start a new chat with {subject} as…</span>
+          <button className="link-btn" onClick={onClose}>
+            Close
+          </button>
+        </div>
+        <div className="move-list">
+          {personas.map((p) => (
+            <button key={p.id} className="move-row" onClick={() => onPick(p.id)}>
+              <span aria-hidden>🧑</span> {p.label}
+              {p.active && <span className="persona-current">Current</span>}
+            </button>
+          ))}
+          {personas.length === 0 && (
+            <p className="muted dialog-msg">No personas yet — your default will be used.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Move picker: a flat, depth-indented folder list plus a "No folder (root)"
  *  target. [excludeId] hides a folder from being moved into itself. */
 export function MoveToFolderDialog({

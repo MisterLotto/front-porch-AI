@@ -27,7 +27,7 @@ part of '../chat_service.dart';
 extension ChatServiceReprocess on ChatService {
   Future<bool> manualReprocessNeeds(int index, String critique) async {
     if (index < 0 || index >= _messages.length) return false;
-    if (_isGenerating) return false;
+    if (_isTurnBusy) return false;
 
     final msg = _messages[index];
     if (msg.isUser || msg.sender == 'System') return false;
@@ -229,7 +229,7 @@ extension ChatServiceReprocess on ChatService {
   /// Returns true on success.
   Future<bool> revertNeedsReprocess(int index) async {
     if (index < 0 || index >= _messages.length) return false;
-    if (_isGenerating) return false;
+    if (_isTurnBusy) return false;
     final msg = _messages[index];
     final meta = msg.activeMetadata;
     if (meta == null || !meta.containsKey('needs_deltas_pre_reprocess')) {
@@ -348,7 +348,7 @@ extension ChatServiceReprocess on ChatService {
   /// When the host message is already last (no trailing guests) this simply
   /// delegates to [regenerateLastMessage].
   Future<void> regenerateMainCharacter() async {
-    if (_messages.isEmpty || _isGenerating || _guestBusy) return;
+    if (_messages.isEmpty || _isTurnBusy || _guestBusy) return;
     // Backend gate BEFORE any guest-tail splice — same restore problem as
     // regenerateLastMessage (see _abortIfBackendDown).
     if (await _abortIfBackendDown()) return;
@@ -399,11 +399,32 @@ extension ChatServiceReprocess on ChatService {
   }
 
   Future<void> regenerateLastMessage() async {
-    if (_messages.isEmpty || _isGenerating || _guestBusy) return;
+    if (_messages.isEmpty || _isTurnBusy || _guestBusy) return;
     // Backend gate BEFORE the pop below — aborting after removeLast would
     // drop the popped reply (the deep guard in _generateResponse cannot
     // restore it; see _abortIfBackendDown).
     if (await _abortIfBackendDown()) return;
+
+    // A failed turn leaves `user -> System(error banner)`, and that matched
+    // NEITHER branch below: not a character message (the first), not a user
+    // message (the second). So regenerate was a silent no-op after any failed
+    // generation, and the only recovery a user could find was to copy their
+    // own text out, delete the message, and retype it.
+    //
+    // Drop the banner when a USER turn is sitting directly behind it — the
+    // "last message is a user turn" branch below then regenerates from that
+    // prompt, which is precisely the intent. The test is structural rather
+    // than tagged by producer because that is what makes it safe: all three
+    // System banners (generation error, backend-down, failed entrance) are
+    // only discardable when there is an unanswered user turn behind them. A
+    // banner following a CHARACTER message is left alone.
+    if (_messages.length >= 2 &&
+        !_messages.last.isUser &&
+        _messages.last.sender == 'System' &&
+        _messages[_messages.length - 2].isUser) {
+      _messages.removeLast();
+      await _saveChat();
+    }
 
     // Check if the last message is from the character. Narration banners
     // (dreams, Chance Time) carry a character-name sender but must never be
@@ -777,11 +798,20 @@ extension ChatServiceReprocess on ChatService {
           debugPrint(
             '[Realism] Evaluation cancelled during regenerate, aborting',
           );
+          // Put the popped reply back BEFORE bailing. The regen removed it at
+          // the top so the outbound prompt wouldn't contain it, and
+          // _generateResponse — the thing that appends the replacement — is
+          // still below us. Returning without this destroys the message and
+          // every swipe it carried. It is the same hazard the backend gate
+          // further up already guards ("aborting after removeLast would drop
+          // the popped reply"); the cancel path just never learned it.
+          _messages.add(lastMsg);
           _realismEvalCancelled = false;
           _evalChunkTimer?.cancel();
           _evalChunkTimer = null;
           _isEvaluatingRealism = false;
           notifyListeners();
+          await _saveChat();
           return;
         }
 
@@ -813,10 +843,15 @@ extension ChatServiceReprocess on ChatService {
           preTurn: regenPreTurn,
         );
 
-        // If cancellation was requested during realism evaluation, abort generation
+        // If cancellation was requested during realism evaluation, abort
+        // generation — restoring the popped reply first, for the same reason
+        // as the cancel point above: _generateResponse has still not run, so
+        // this local is the only place the message still exists.
         if (_realismEvalCancelled) {
+          _messages.add(lastMsg);
           _realismEvalCancelled = false;
           notifyListeners();
+          await _saveChat();
           return;
         }
       }

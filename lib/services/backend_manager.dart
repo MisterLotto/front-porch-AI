@@ -89,12 +89,28 @@ class BackendManager extends ChangeNotifier {
 
   BackendManager(this._storageService) {
     _init();
-    _storageService.addListener(_init); // React to path changes
+    _storageService.addListener(_onStorageChanged); // React to path changes
+  }
+
+  // StorageService notifies on EVERY settings mutation (any slider, any
+  // toggle) — but _init spawns processes (uname / nvidia-smi) and re-reads
+  // the binary version from disk, so re-running it per notify made flipping
+  // an unrelated switch spawn a process. Only the inputs _init actually
+  // reads matter: the data root (bin dir) and the ROCm opt-in.
+  String? _lastInitRoot;
+  bool? _lastInitUseRocm;
+  void _onStorageChanged() {
+    final root = _storageService.rootPath;
+    final useRocm = _storageService.backendSettings.useRocm == true;
+    if (root == _lastInitRoot && useRocm == _lastInitUseRocm) return;
+    _lastInitRoot = root;
+    _lastInitUseRocm = useRocm;
+    _init();
   }
 
   @override // IMPORTANT
   void dispose() {
-    _storageService.removeListener(_init);
+    _storageService.removeListener(_onStorageChanged);
     super.dispose();
   }
 
@@ -250,6 +266,23 @@ class BackendManager extends ChangeNotifier {
       _isCheckingVersion = false;
       notifyListeners();
     }
+  }
+
+  /// The ONE background-acquisition entry point for the managed KoboldCpp
+  /// engine (first-launch choice, engine-status chip, model-download trigger,
+  /// and every "backend not found" launch path funnel through here). A no-op
+  /// whenever downloading would be wrong: engine already installed, download
+  /// already running, a remote/own backend selected, or an Intel Mac.
+  /// Progress rides the existing [isDownloading]/[downloadProgress]/
+  /// [statusMessage] notifier fields — callers just fire and forget.
+  Future<void> ensureEngineInstalled() async {
+    if (_isDownloading || _backendPath != null || isIntelMac) return;
+    await _storageService.initialized;
+    final backendType = _storageService.backendType;
+    if (backendType == 'openRouter' || backendType == 'omlx') return;
+    await checkBackendAvailability();
+    if (_backendPath != null) return; // found an existing binary after all
+    await downloadBackend();
   }
 
   Future<void> downloadBackend() async {

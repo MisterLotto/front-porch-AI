@@ -4,8 +4,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/services/chat_service.dart';
-import 'package:front_porch_ai/services/group_chat_repository.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/dialogs/group_settings/prompt_engineering_tab.dart';
 import 'package:front_porch_ai/ui/dialogs/group_settings/memory_rag_tab.dart';
 import 'package:front_porch_ai/ui/dialogs/group_settings/realism_needs_tab.dart';

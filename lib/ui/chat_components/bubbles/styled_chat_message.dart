@@ -23,7 +23,7 @@ import 'package:provider/provider.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 
-import 'package:front_porch_ai/ui/widgets/styled_text_controller.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'external_image_widget.dart';
 
 /// Applies a font family to a base TextStyle dynamically.
@@ -83,8 +83,16 @@ TextStyle _applyGoogleFont(String? fontFamily, TextStyle baseStyle) {
 final _markdownImageRegex = RegExp(r'!\[([^\]]*)\]\((https?://[^)]+)\)');
 
 /// Styled chat message with quote/action coloring and external image support.
-/// Extracted verbatim (public rename).
-class StyledChatMessage extends StatelessWidget {
+///
+/// Stateful purely for PARSE CACHING: during streaming the whole visible
+/// message list rebuilds many times a second, and re-running the markdown
+/// scan + dialogue/action tokenizer + Google-Fonts style resolution for
+/// every unchanged message was the dominant UI-thread cost. Parse results
+/// are cached keyed on the source text (identical() fast path — unchanged
+/// messages keep the same string object; only the streaming bubble re-parses)
+/// and the three resolved styles are cached on their inputs. Widgets are
+/// still constructed fresh each build (cheap), so callbacks never go stale.
+class StyledChatMessage extends StatefulWidget {
   final String text;
   final bool isUser;
   final bool? externalImagesAllowed;
@@ -105,18 +113,100 @@ class StyledChatMessage extends StatelessWidget {
   });
 
   @override
+  State<StyledChatMessage> createState() => _StyledChatMessageState();
+}
+
+class _StyledChatMessageState extends State<StyledChatMessage> {
+  // Text-derived caches (invalidated when the source string changes).
+  String? _parseSource;
+  List<RegExpMatch>? _imageMatches;
+  final Map<
+    String,
+    List<({int start, int end, String matchText, StyledTokenType type})>
+  >
+  _tokenCache = {};
+
+  // Style caches (invalidated when any styling input changes).
+  (String?, Color, Color, Color, double)? _styleKey;
+  TextStyle? _plainStyle;
+  TextStyle? _dialogueStyle;
+  TextStyle? _actionStyle;
+  TextStyle? _rootStyle;
+
+  List<({int start, int end, String matchText, StyledTokenType type})>
+  _tokensFor(String segment) =>
+      _tokenCache.putIfAbsent(segment, () => tokenizeChat(segment).toList());
+
+  void _refreshStyles(StorageService storageService, double scaledSize) {
+    final character = widget.character;
+    final fontFamily = storageService.getChatFontFamily(
+      character,
+      widget.themePreset,
+      widget.themeOverrides,
+    );
+    final textColor = widget.isUser
+        ? storageService.getUserTextColor(
+            character,
+            widget.themePreset,
+            widget.themeOverrides,
+          )
+        : storageService.getAiTextColor(
+            character,
+            widget.themePreset,
+            widget.themeOverrides,
+          );
+    final dialogueColor = storageService.getDialogueColor(
+      character,
+      widget.themePreset,
+      widget.themeOverrides,
+    );
+    final actionColor = storageService.getActionColor(
+      character,
+      widget.themePreset,
+      widget.themeOverrides,
+    );
+    final key = (fontFamily, textColor, dialogueColor, actionColor, scaledSize);
+    if (key == _styleKey) return;
+    _styleKey = key;
+    _plainStyle = _applyGoogleFont(
+      fontFamily,
+      TextStyle(color: textColor, fontSize: scaledSize),
+    );
+    _dialogueStyle = _applyGoogleFont(
+      fontFamily,
+      TextStyle(
+        color: dialogueColor,
+        fontWeight: FontWeight.w500,
+        fontSize: scaledSize,
+      ),
+    );
+    _actionStyle = _applyGoogleFont(
+      fontFamily,
+      TextStyle(color: actionColor, fontSize: scaledSize),
+    );
+    _rootStyle = _applyGoogleFont(
+      fontFamily,
+      TextStyle(color: textColor, fontSize: scaledSize, height: 1.4),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final storageService = Provider.of<StorageService>(context);
     final scaledSize = 14.0 * storageService.textScale;
+    final text = widget.text;
+    _refreshStyles(storageService, scaledSize);
 
-    // Check for markdown images
-    final imageMatches = _markdownImageRegex.allMatches(text).toList();
+    // Check for markdown images (cached per source text).
+    if (!identical(text, _parseSource)) {
+      _parseSource = text;
+      _tokenCache.clear();
+      _imageMatches = _markdownImageRegex.allMatches(text).toList();
+    }
+    final imageMatches = _imageMatches!;
     if (imageMatches.isEmpty) {
       // No images — use existing fast path
-      return _buildStyledText(
-        context, text, scaledSize, character,
-        themePreset: themePreset, themeOverrides: themeOverrides,
-      );
+      return _buildStyledText(text);
     }
 
     // Split text into segments: [text, image, text, image, text]
@@ -128,12 +218,7 @@ class StyledChatMessage extends StatelessWidget {
       if (match.start > lastEnd) {
         final textBefore = text.substring(lastEnd, match.start).trim();
         if (textBefore.isNotEmpty) {
-          widgets.add(
-            _buildStyledText(
-              context, textBefore, scaledSize, character,
-              themePreset: themePreset, themeOverrides: themeOverrides,
-            ),
-          );
+          widgets.add(_buildStyledText(textBefore));
         }
       }
 
@@ -145,8 +230,8 @@ class StyledChatMessage extends StatelessWidget {
         ExternalImageWidget(
           url: imageUrl,
           altText: altText,
-          allowed: externalImagesAllowed,
-          onRequestPermission: onRequestImagePermission,
+          allowed: widget.externalImagesAllowed,
+          onRequestPermission: widget.onRequestImagePermission,
         ),
       );
 
@@ -157,12 +242,7 @@ class StyledChatMessage extends StatelessWidget {
     if (lastEnd < text.length) {
       final textAfter = text.substring(lastEnd).trim();
       if (textAfter.isNotEmpty) {
-        widgets.add(
-          _buildStyledText(
-            context, textAfter, scaledSize, character,
-            themePreset: themePreset, themeOverrides: themeOverrides,
-          ),
-        );
+        widgets.add(_buildStyledText(textAfter));
       }
     }
 
@@ -172,54 +252,8 @@ class StyledChatMessage extends StatelessWidget {
     );
   }
 
-  Widget _buildStyledText(
-    BuildContext context,
-    String segment,
-    double scaledSize,
-    CharacterCard? character, {
-    ChatThemePreset? themePreset,
-    ChatThemeOverrides? themeOverrides,
-  }) {
-    final storageService = Provider.of<StorageService>(context);
-    final fontFamily = storageService.getChatFontFamily(
-      character, themePreset, themeOverrides,
-    );
-    final textColor = isUser
-        ? storageService.getUserTextColor(
-            character, themePreset, themeOverrides,
-          )
-        : storageService.getAiTextColor(
-            character, themePreset, themeOverrides,
-          );
-    final plainStyle = _applyGoogleFont(
-      fontFamily,
-      TextStyle(color: textColor, fontSize: scaledSize),
-    );
-    final dialogueStyle = _applyGoogleFont(
-      fontFamily,
-      TextStyle(
-        color: storageService.getDialogueColor(
-          character,
-          themePreset,
-          themeOverrides,
-        ),
-        fontWeight: FontWeight.w500,
-        fontSize: scaledSize,
-      ),
-    );
-    final actionStyle = _applyGoogleFont(
-      fontFamily,
-      TextStyle(
-        color: storageService.getActionColor(
-          character,
-          themePreset,
-          themeOverrides,
-        ),
-        fontSize: scaledSize,
-      ),
-    );
-
-    final tokens = tokenizeChat(segment);
+  Widget _buildStyledText(String segment) {
+    final tokens = _tokensFor(segment);
 
     final spans = <TextSpan>[];
     int lastEnd = 0;
@@ -227,43 +261,31 @@ class StyledChatMessage extends StatelessWidget {
       if (t.start > lastEnd) {
         spans.add(TextSpan(
           text: segment.substring(lastEnd, t.start),
-          style: plainStyle,
+          style: _plainStyle,
         ));
       }
       spans.add(TextSpan(
         text: t.matchText,
-        style: t.type == StyledTokenType.dialogue ? dialogueStyle : actionStyle,
+        style: t.type == StyledTokenType.dialogue
+            ? _dialogueStyle
+            : _actionStyle,
       ));
       lastEnd = t.end;
     }
     if (lastEnd < segment.length) {
       spans.add(TextSpan(
         text: segment.substring(lastEnd),
-        style: plainStyle,
+        style: _plainStyle,
       ));
     }
 
     if (spans.isEmpty) {
-      return SelectionArea(
-        child: Text(
-          segment,
-          style: _applyGoogleFont(
-            fontFamily,
-            TextStyle(color: textColor, fontSize: scaledSize, height: 1.4),
-          ),
-        ),
-      );
+      return SelectionArea(child: Text(segment, style: _rootStyle));
     }
 
     return SelectionArea(
       child: RichText(
-        text: TextSpan(
-          style: _applyGoogleFont(
-            fontFamily,
-            TextStyle(color: textColor, fontSize: scaledSize, height: 1.4),
-          ),
-          children: spans,
-        ),
+        text: TextSpan(style: _rootStyle, children: spans),
       ),
     );
   }

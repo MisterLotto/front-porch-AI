@@ -16,7 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'package:front_porch_ai/models/character_card.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/ambition_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/behavioral_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/emotion_injection.dart';

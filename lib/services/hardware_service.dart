@@ -18,8 +18,10 @@
 
 import 'dart:io';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
-import 'package:front_porch_ai/utils/cpu_features.dart';
+import 'package:flutter/widgets.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:front_porch_ai/app_version.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Parsed output of `nvidia-smi --query-gpu=name,memory.total`.
 /// Used internally by [HardwareService._parseNvidiaSmi] so the multi-line CSV
@@ -57,6 +59,37 @@ class HardwareInfo {
   @override
   String toString() =>
       '$gpuName (VRAM: ${vramMb}MB, RAM: ${ramMb}MB, Shared: $isSharedMemory, Distro: $linuxDistro) [CUDA: $hasCuda, ROCm: $hasRocm, Metal: $hasMetal]';
+
+  Map<String, dynamic> toJson() => {
+    'gpuName': gpuName,
+    'vramMb': vramMb,
+    'ramMb': ramMb,
+    'vendor': vendor,
+    'hasCuda': hasCuda,
+    'hasRocm': hasRocm,
+    'hasMetal': hasMetal,
+    'isSharedMemory': isSharedMemory,
+    'linuxDistro': linuxDistro,
+  };
+
+  /// Rebuilds from [toJson]. Every field is read defensively — a cache written
+  /// by an older build (or a partially-written entry) degrades to defaults
+  /// rather than throwing on startup.
+  static HardwareInfo? fromJson(Map<String, dynamic> json) {
+    final gpuName = json['gpuName'];
+    if (gpuName is! String) return null;
+    return HardwareInfo(
+      gpuName: gpuName,
+      vramMb: (json['vramMb'] as num?)?.toInt() ?? 0,
+      ramMb: (json['ramMb'] as num?)?.toInt() ?? 0,
+      vendor: json['vendor'] as String? ?? 'Unknown',
+      hasCuda: json['hasCuda'] as bool? ?? false,
+      hasRocm: json['hasRocm'] as bool? ?? false,
+      hasMetal: json['hasMetal'] as bool? ?? false,
+      isSharedMemory: json['isSharedMemory'] as bool? ?? false,
+      linuxDistro: json['linuxDistro'] as String? ?? 'unknown',
+    );
+  }
 }
 
 class HardwareService extends ChangeNotifier {
@@ -84,17 +117,66 @@ class HardwareService extends ChangeNotifier {
     return info.vendor != 'Nvidia';
   }
 
+  /// SharedPreferences key for the last successful detection. Beta builds keep
+  /// their own copy (CLAUDE.md's data-isolation rule).
+  static String get _cacheKey =>
+      isPreRelease ? 'beta_hardware_info_cache' : 'hardware_info_cache';
+
   HardwareService() {
-    // Auto-detect hardware at creation so it's available everywhere,
-    // not just when the settings page is opened
-    detectHardware();
+    // Serve the last known answer immediately, then re-detect once the app is
+    // on screen.
+    //
+    // Detection is expensive and it used to run from this constructor — i.e.
+    // while the provider tree was being built, competing with the library load
+    // for the exact window the user is staring at an empty grid. On Windows it
+    // shells out to PowerShell up to four times (plus nvidia-smi), and the
+    // result was never persisted, so every single launch paid full price for an
+    // answer that changes only when someone physically changes their hardware.
+    //
+    // Restoring the cache means VRAM estimates and the CPU-only warning are
+    // correct from the first frame instead of popping in seconds later, and the
+    // re-detect still runs on every launch, so a swapped GPU is picked up the
+    // same session — it just no longer happens during startup.
+    _restoreThenDetect();
+  }
+
+  Future<void> _restoreThenDetect() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_cacheKey);
+      if (raw != null && _hardwareInfo == null) {
+        final cached = HardwareInfo.fromJson(
+          jsonDecode(raw) as Map<String, dynamic>,
+        );
+        if (cached != null) {
+          _hardwareInfo = cached;
+          StartupTrace.mark('HardwareService: restored cached hardware info');
+          notifyListeners();
+        }
+      }
+    } catch (e) {
+      debugPrint('[HardwareService] Could not restore cached info: $e');
+    }
+
+    // Re-detect after the first frame so the process spawns never compete with
+    // painting the app and filling the library grid. Guarded because
+    // WidgetsBinding.instance THROWS when no binding exists — this service must
+    // keep working if it is ever constructed headlessly (a script, a test, the
+    // web server host), where there are no frames to wait for.
+    try {
+      WidgetsBinding.instance.addPostFrameCallback((_) => detectHardware());
+    } catch (_) {
+      detectHardware();
+    }
   }
 
   Future<void> detectHardware() async {
     _isDetecting = true;
     notifyListeners();
+    final traceStart = DateTime.now();
 
     await _checkDrivers();
+    StartupTrace.mark('HardwareService._checkDrivers');
 
     try {
       if (Platform.isWindows) {
@@ -109,6 +191,21 @@ class HardwareService extends ChangeNotifier {
     } finally {
       _isDetecting = false;
       notifyListeners();
+      StartupTrace.mark(
+        'HardwareService.detectHardware DONE in '
+        '${DateTime.now().difference(traceStart).inMilliseconds}ms',
+      );
+      // Persist so the NEXT launch can show correct VRAM/warnings immediately
+      // instead of shelling out before it can answer.
+      final info = _hardwareInfo;
+      if (info != null) {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(_cacheKey, jsonEncode(info.toJson()));
+        } catch (e) {
+          debugPrint('[HardwareService] Could not cache hardware info: $e');
+        }
+      }
     }
   }
 

@@ -18,9 +18,9 @@
 
 import 'dart:io';
 
-import 'package:front_porch_ai/models/story_project.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
-import 'package:front_porch_ai/utils/wav_utils.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// One chunk of read-along text tagged with the voice that should speak it.
 /// Narration carries a null [voiceKey] (the default narrator voice); dialogue

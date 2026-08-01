@@ -20,11 +20,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import 'package:front_porch_ai/models/chat_theme_overrides.dart';
-import 'package:front_porch_ai/services/character_repository.dart';
-import 'package:front_porch_ai/services/chat_service.dart';
-import 'package:front_porch_ai/services/group_chat_repository.dart';
-import 'package:front_porch_ai/services/user_persona_service.dart';
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/web/facade/chat_realism_read.dart';
 import 'package:front_porch_ai/services/web/streaming/stream_hub.dart';
 import 'package:front_porch_ai/services/web/util/lorebook_json.dart';
@@ -147,6 +144,9 @@ class ChatFacade {
       'sessionName': _chat.sessionName,
       'messages': messages,
       'isGenerating': _chat.isGenerating,
+      // Additive (mixed-fleet safe): older web clients ignore it; newer ones
+      // can distinguish "streaming tokens" from "still settling".
+      'isSettlingTurn': _chat.isSettlingTurn,
       // Processing-overlay state (mirrors the desktop Realism + Objective engine
       // overlays). The WS pushes a live `processing` event during eval; these
       // fields let a client that connects mid-eval render the overlay too.
@@ -185,6 +185,8 @@ class ChatFacade {
       'totalGreetings': activeChar?.allGreetings.length ?? 1,
       'userPersonaName': _personas?.persona.name ?? 'User',
       'lorebook': lorebook,
+      // Living Worlds — places attached to this session (ids).
+      'chatWorldIds': _chat.chatWorldIds,
       // Lore token meter (desktop sidebar parity): last generation's lore
       // share of the budget + anything dropped for space. Additive fields.
       'loreTokens': _chat.lastLoreTokens,
@@ -355,6 +357,39 @@ class ChatFacade {
     final group = groups.getById(groupId);
     if (group == null) return false;
     await _chat.setActiveGroup(group, groupRepo: groups);
+    _notify();
+    return true;
+  }
+
+  /// Start a FRESH chat with a character or group under an explicitly chosen
+  /// persona — the web library's "Start new chat" card action. Delegates to
+  /// [ChatService.startFreshChatWith] so the load-bearing ordering (enter,
+  /// then apply persona, then new session) lives in exactly one place, shared
+  /// with the desktop context menu. Returns false when the id doesn't resolve.
+  Future<bool> startFreshChat({
+    String? characterId,
+    String? groupId,
+    required String personaId,
+  }) async {
+    if (characterId != null && characterId.isNotEmpty) {
+      final card = _characters.characters
+          .where((c) => c.dbId == characterId)
+          .firstOrNull;
+      if (card == null) return false;
+      await _chat.startFreshChatWith(character: card, personaId: personaId);
+    } else if (groupId != null && groupId.isNotEmpty) {
+      final groups = _groups;
+      if (groups == null) return false;
+      final group = groups.getById(groupId);
+      if (group == null) return false;
+      await _chat.startFreshChatWith(
+        group: group,
+        groupRepo: groups,
+        personaId: personaId,
+      );
+    } else {
+      return false;
+    }
     _notify();
     return true;
   }

@@ -55,11 +55,23 @@ extension _HomePageHandlers on _HomePageState {
 
   // ─── Group Creation Dialog ──────────────────────────────────────
 
+  /// The ONE warm folder-picker dialog. Callers supply the [title] and what
+  /// actually moves via [onMove] — the multi-select toolbar moves the whole
+  /// selection (characters + groups) while a group card's context menu moves
+  /// just that group. Generalized instead of duplicated per surface.
+  ///
+  /// [onMove] receives `null` when the user picks "Home (no folder)". That
+  /// entry is the only always-reachable way *out* of a folder: the card menu's
+  /// "Remove from Folder" only appears while you are browsing inside the
+  /// folder, so a card found via global search had no exit before. Because
+  /// every folder is listed by its full path, picking an ancestor is also how
+  /// you move a card up one level when nested.
   void _showMoveToFolderDialog(
     BuildContext context,
-    CharacterRepository repo,
-    FolderService folderService,
-  ) {
+    FolderService folderService, {
+    required String title,
+    required Future<void> Function(String? folderId) onMove,
+  }) {
     final folders = folderService.folders.toList()
       ..sort((a, b) {
         final pathA = folderService.getFolderPath(a.id).toLowerCase();
@@ -69,14 +81,38 @@ extension _HomePageHandlers on _HomePageState {
 
     showWarmDialog(
       context,
-      title:
-          'Move ${_selectedCharacterIds.length} character${_selectedCharacterIds.length == 1 ? '' : 's'} to folder',
+      title: title,
       icon: Icons.drive_file_move,
       accent: AppColors.porchHoneyOf(context),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            ListTile(
+              leading: Icon(
+                Icons.home_outlined,
+                color: AppColors.porchHoneyOf(context),
+              ),
+              title: Text(
+                'Home (no folder)',
+                style: TextStyle(color: AppColors.textPrimary(context)),
+              ),
+              subtitle: Text(
+                'Move back out to the library top level',
+                style: TextStyle(
+                  color: AppColors.textTertiary(context),
+                  fontSize: 12,
+                ),
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              onTap: () async {
+                Navigator.pop(context);
+                await onMove(null);
+              },
+            ),
+            Divider(color: AppColors.borderOf(context).withValues(alpha: 0.5)),
             if (folders.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
@@ -88,6 +124,8 @@ extension _HomePageHandlers on _HomePageState {
             ...folders.map((folder) {
               final folderPath = folderService.getFolderPath(folder.id);
               final isSubfolder = folder.parentId != null;
+              final memberCount =
+                  folder.characterPaths.length + folder.groupIds.length;
               return ListTile(
                 leading: Icon(
                   isSubfolder ? Icons.subdirectory_arrow_right : Icons.folder,
@@ -98,7 +136,7 @@ extension _HomePageHandlers on _HomePageState {
                   style: TextStyle(color: AppColors.textPrimary(context)),
                 ),
                 subtitle: Text(
-                  '${folder.characterPaths.length} characters',
+                  '$memberCount item${memberCount == 1 ? '' : 's'}',
                   style: TextStyle(
                     color: AppColors.textTertiary(context),
                     fontSize: 12,
@@ -109,12 +147,7 @@ extension _HomePageHandlers on _HomePageState {
                 ),
                 onTap: () async {
                   Navigator.pop(context);
-                  await _moveSelectedToFolder(
-                    context,
-                    folder.id,
-                    repo,
-                    folderService,
-                  );
+                  await onMove(folder.id);
                 },
               );
             }),
@@ -136,12 +169,7 @@ extension _HomePageHandlers on _HomePageState {
                 final name = await _promptFolderName(context);
                 if (name != null && name.isNotEmpty && context.mounted) {
                   final folder = await folderService.createFolder(name);
-                  await _moveSelectedToFolder(
-                    context,
-                    folder.id,
-                    repo,
-                    folderService,
-                  );
+                  await onMove(folder.id);
                 }
               },
             ),
@@ -177,9 +205,11 @@ extension _HomePageHandlers on _HomePageState {
     );
   }
 
+  /// [folderId] is `null` for "Home (no folder)" — the whole selection moves
+  /// back out to the library top level instead of into a folder.
   Future<void> _moveSelectedToFolder(
     BuildContext context,
-    String folderId,
+    String? folderId,
     CharacterRepository repo,
     FolderService folderService,
   ) async {
@@ -189,14 +219,29 @@ extension _HomePageHandlers on _HomePageState {
           .where((c) => _getCharacterIdFromCard(c) == id)
           .firstOrNull;
       if (card?.imagePath != null) {
-        await folderService.addToFolder(folderId, card!.imagePath!);
+        if (folderId == null) {
+          await folderService.removeFromFolder(null, card!.imagePath!);
+        } else {
+          await folderService.addToFolder(folderId, card!.imagePath!);
+        }
       }
     }
+    // Groups ride the same move — their selection ids ARE their group ids.
+    for (final groupId in _selectedGroupIds) {
+      if (folderId == null) {
+        await folderService.removeGroupFromFolder(null, groupId);
+      } else {
+        await folderService.addGroupToFolder(folderId, groupId);
+      }
+    }
+    final moved = _selectedCharacterIds.length + _selectedGroupIds.length;
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Moved ${_selectedCharacterIds.length} character${_selectedCharacterIds.length == 1 ? '' : 's'} to folder',
+            folderId == null
+                ? 'Moved $moved item${moved == 1 ? '' : 's'} out of the folder'
+                : 'Moved $moved item${moved == 1 ? '' : 's'} to folder',
           ),
         ),
       );
@@ -299,6 +344,7 @@ extension _HomePageHandlers on _HomePageState {
     final charCount = folderService
         .getCharactersInFolderRecursive(folder.id)
         .length;
+    final groupCount = folderService.groupIdsInFolderRecursive(folder.id).length;
     showWarmDialog(
       context,
       title: 'Delete Folder',
@@ -306,9 +352,12 @@ extension _HomePageHandlers on _HomePageState {
       content: WarmDialogText(
         'Delete "${folder.name}"?\n\n'
         '• Delete Folder Only: the $charCount character'
-        '${charCount == 1 ? '' : 's'} inside return to the top level.\n'
+        '${charCount == 1 ? '' : 's'}'
+        '${groupCount > 0 ? ' and $groupCount group${groupCount == 1 ? '' : 's'}' : ''}'
+        ' inside return to the top level.\n'
         '• Delete Folder + Characters: PERMANENTLY deletes the folder AND '
-        'every character inside it (including subfolders).',
+        'every character inside it (including subfolders)'
+        '${groupCount > 0 ? '; groups are kept and return to the top level' : ''}.',
       ),
       actions: [
         warmDialogCancel(context),
@@ -318,7 +367,7 @@ extension _HomePageHandlers on _HomePageState {
           onPressed: () {
             folderService.deleteFolder(folder.id);
             Navigator.pop(context);
-            _leaveDeletedFolder(folder.id);
+            _leaveDeletedFolder(folder);
           },
         ),
         if (charCount > 0)
@@ -335,16 +384,11 @@ extension _HomePageHandlers on _HomePageState {
     );
   }
 
-  /// If the user is standing inside the folder being deleted, step back out.
-  void _leaveDeletedFolder(String folderId) {
-    if (_activeFolderId != folderId) return;
-    applyState(() {
-      if (_folderStack.isNotEmpty) {
-        _activeFolderId = _folderStack.removeLast();
-      } else {
-        _activeFolderId = null;
-      }
-    });
+  /// If the user is standing inside the folder being deleted, step back out
+  /// to its parent (top level when the folder was top-level).
+  void _leaveDeletedFolder(CharacterFolder folder) {
+    if (_activeFolderId != folder.id) return;
+    applyState(() => _activeFolderId = folder.parentId);
   }
 
   /// The nuclear option: PERMANENTLY delete a folder, its subfolders, and
@@ -381,7 +425,7 @@ extension _HomePageHandlers on _HomePageState {
           'There is no undo and no recycle bin.',
       afterDelete: () async {
         await folderService.deleteFolder(folder.id);
-        _leaveDeletedFolder(folder.id);
+        _leaveDeletedFolder(folder);
       },
     );
   }

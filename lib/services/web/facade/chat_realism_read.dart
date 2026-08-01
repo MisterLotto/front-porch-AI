@@ -16,7 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'package:front_porch_ai/services/chat_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 
 /// Realism-READ leaf for [ChatFacade] (web server). Pure reads of existing
 /// [ChatService] getters — no simulation changes — so it never affects

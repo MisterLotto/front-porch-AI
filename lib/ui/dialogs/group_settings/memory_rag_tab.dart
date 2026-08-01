@@ -3,9 +3,8 @@
 
 
 import 'package:flutter/material.dart';
-import 'package:front_porch_ai/services/chat_service.dart';
-import 'package:front_porch_ai/services/group_chat_repository.dart';
-import 'package:front_porch_ai/models/character_card.dart';
+import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/models/models.dart';
 
 class GroupMemoryRAGTab extends StatefulWidget {
   final ChatService chatService;

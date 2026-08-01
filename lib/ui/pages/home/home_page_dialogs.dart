@@ -71,35 +71,49 @@ extension _HomePageDialogs on _HomePageState {
   }
 
   /// Mass delete for the select-mode bar: resolve the selection ids (the
-  /// imagePath-basename scheme _toggleSelect writes) back to cards, then run
-  /// the shared severe-confirm purge.
+  /// imagePath-basename scheme _toggleSelect writes) back to cards, gather any
+  /// selected groups, then run the shared severe-confirm purge on both.
   Future<void> _massDeleteSelected(Set<String> ids) async {
     final repo = Provider.of<CharacterRepository>(context, listen: false);
+    final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
     final cards = repo.characters.where((c) {
       final id = c.imagePath != null
           ? path.basenameWithoutExtension(c.imagePath!)
           : c.name.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_');
       return ids.contains(id);
     }).toList();
-    if (cards.isEmpty) return;
+    final groups = groupRepo.groups
+        .where((g) => _selectedGroupIds.contains(g.id))
+        .toList();
+    if (cards.isEmpty && groups.isEmpty) return;
 
+    final total = cards.length + groups.length;
+    final what = groups.isEmpty
+        ? 'Character${cards.length == 1 ? '' : 's'}'
+        : cards.isEmpty
+        ? 'Group${groups.length == 1 ? '' : 's'}'
+        : 'Items';
     await _runMassDelete(
       cards,
-      title: 'Delete ${cards.length} Characters?',
+      groups: groups,
+      title: 'Delete $total $what?',
       message:
-          'This will PERMANENTLY delete ${cards.length} '
-          'character${cards.length == 1 ? '' : 's'} — their cards, image '
-          'files, chat histories, and any linked worlds. There is no undo '
-          'and no recycle bin.',
+          'This will PERMANENTLY delete the $total selected '
+          'item${total == 1 ? '' : 's'} — character cards, image files, '
+          'chat histories, any linked worlds, and group chats (a deleted '
+          'group does NOT delete its member characters, but its chats are '
+          'gone). There is no undo and no recycle bin.',
       afterDelete: () async => _cancelSelection(),
     );
   }
 
   /// The ONE severe-delete pipeline shared by mass select and
   /// delete-folder-with-characters: typed-DELETE gate → progress dialog →
-  /// CharacterRepository.deleteCharacters → optional follow-up → snackbar.
+  /// CharacterRepository.deleteCharacters (+ GroupChatRepository.delete for
+  /// any selected [groups]) → optional follow-up → snackbar.
   Future<void> _runMassDelete(
     List<CharacterCard> cards, {
+    List<GroupChat> groups = const [],
     required String title,
     required String message,
     Future<void> Function()? afterDelete,
@@ -114,6 +128,8 @@ extension _HomePageDialogs on _HomePageState {
     final repo = Provider.of<CharacterRepository>(context, listen: false);
     final worldRepo = Provider.of<WorldRepository>(context, listen: false);
     final storage = Provider.of<StorageService>(context, listen: false);
+    final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
+    final total = cards.length + groups.length;
 
     final progress = ValueNotifier<int>(0);
     // Non-dismissible counter while a 100+ card purge grinds through file IO.
@@ -134,7 +150,7 @@ extension _HomePageDialogs on _HomePageState {
               const SizedBox(width: 16),
               Expanded(
                 child: Text(
-                  'Deleting… $done of ${cards.length}',
+                  'Deleting… $done of $total',
                   style: TextStyle(color: AppColors.textPrimary(ctx)),
                 ),
               ),
@@ -152,6 +168,13 @@ extension _HomePageDialogs on _HomePageState {
         chatsDir: storage.chatsDir,
         onProgress: (done, _) => progress.value = done,
       );
+      var groupsDone = 0;
+      for (final g in groups) {
+        await groupRepo.delete(g.id);
+        groupsDone++;
+        deleted++;
+        progress.value = cards.length + groupsDone;
+      }
       await afterDelete?.call();
     } finally {
       if (mounted) Navigator.of(context, rootNavigator: true).pop();
@@ -160,9 +183,7 @@ extension _HomePageDialogs on _HomePageState {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Deleted $deleted character${deleted == 1 ? '' : 's'}.',
-          ),
+          content: Text('Deleted $deleted item${deleted == 1 ? '' : 's'}.'),
         ),
       );
     }
@@ -189,10 +210,15 @@ extension _HomePageDialogs on _HomePageState {
     CharacterCard character,
   ) async {
     try {
-      await Provider.of<CharacterRepository>(
+      final folders = Provider.of<FolderService>(context, listen: false);
+      final copy = await Provider.of<CharacterRepository>(
         context,
         listen: false,
       ).duplicateCharacter(character);
+      // The duplicate belongs wherever the original lives — folder
+      // membership is filename-keyed, so without this the copy landed on
+      // the home screen's top level regardless of the source's folder.
+      await folders.inheritFolder(character.imagePath, copy?.imagePath);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Character duplicated successfully.')),

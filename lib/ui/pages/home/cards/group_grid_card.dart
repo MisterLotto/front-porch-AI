@@ -22,52 +22,102 @@ import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/ui/pages/home/cards/home_card_menu.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/group_avatar_montage.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 /// A single group-chat card in the home grid — avatar montage, name, member
 /// count, turn-order badge, and a right-click context menu. Extracted verbatim
 /// from CharacterCardGrid._buildGroupCard (behavior-preserving).
-class GroupGridCard extends StatelessWidget {
+///
+/// Stateful ONLY to hold the member-avatar future: constructing it inline in
+/// build issued a fresh SQLite query per tile on EVERY grid rebuild and
+/// scroll recycle (and flashed an empty montage while each one resolved).
+/// The future is created once per group and refreshed when the group object
+/// changes (repository reloads produce new instances after any edit).
+class GroupGridCard extends StatefulWidget {
   const GroupGridCard({
     super.key,
     required this.group,
     required this.groupRepo,
+    required this.activeFolderId,
     required this.isSelecting,
     required this.isOrganizing,
+    required this.selectedGroupIds,
     required this.onTapGroup,
+    required this.onToggleSelectGroup,
     this.onGroupContextMenuAction,
   });
 
   final GroupChat group;
   final GroupChatRepository groupRepo;
+  final String? activeFolderId;
   final bool isSelecting;
   final bool isOrganizing;
+  final Set<String> selectedGroupIds;
   final Future<void> Function(GroupChat group) onTapGroup;
+  final void Function(GroupChat group) onToggleSelectGroup;
 
   /// Called when the user right-clicks (secondary tap) a group card.
   final void Function(String action, GroupChat group)? onGroupContextMenuAction;
 
   @override
+  State<GroupGridCard> createState() => _GroupGridCardState();
+}
+
+class _GroupGridCardState extends State<GroupGridCard> {
+  late Future<List<File>> _avatarsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _avatarsFuture = widget.groupRepo.getMemberAvatarFiles(widget.group.id);
+  }
+
+  @override
+  void didUpdateWidget(GroupGridCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Repository reloads hand out new GroupChat instances after any edit, so
+    // an identity change is the "membership may have changed" signal.
+    if (!identical(widget.group, oldWidget.group)) {
+      _avatarsFuture = widget.groupRepo.getMemberAvatarFiles(widget.group.id);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final group = widget.group;
+    final isSelecting = widget.isSelecting;
+    final isOrganizing = widget.isOrganizing;
+    final onTapGroup = widget.onTapGroup;
     // Local shadow so Dart can promote the null-check across the closure below
     // (a field can't be promoted, but a local can).
-    final onGroupContextMenuAction = this.onGroupContextMenuAction;
+    final onGroupContextMenuAction = widget.onGroupContextMenuAction;
+    final isSelectedCard = widget.selectedGroupIds.contains(group.id);
     return FutureBuilder<List<File>>(
-      future: groupRepo.getMemberAvatarFiles(group.id),
+      future: _avatarsFuture,
       builder: (context, snapshot) {
         final memberFiles = snapshot.data ?? <File>[];
-        return Card(
+        final card = Card(
           color: AppColors.cardOf(context),
           clipBehavior: Clip.antiAlias,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
             side: BorderSide(
-              color: AppColors.porchTerracottaOf(context).withValues(alpha: 0.3),
+              color: isSelectedCard
+                  ? AppColors.porchTerracottaOf(context)
+                  : AppColors.porchTerracottaOf(
+                      context,
+                    ).withValues(alpha: 0.3),
+              width: isSelectedCard ? 2.5 : 1,
             ),
           ),
           child: InkWell(
             onTap: () async {
+              if (isSelecting || isOrganizing) {
+                widget.onToggleSelectGroup(group);
+                return;
+              }
               await onTapGroup(group);
             },
             child: Stack(
@@ -155,6 +205,48 @@ class GroupGridCard extends StatelessWidget {
                   },
                 ),
 
+                // Selection check circle — parity with character cards.
+                if (isSelecting || isOrganizing)
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: isSelectedCard
+                            ? (isOrganizing
+                                  ? AppColors.porchHoneyOf(context)
+                                  : AppColors.porchTerracottaOf(context))
+                            : AppColors.resolve(
+                                context,
+                                Colors.black54,
+                                Colors.black12,
+                              ),
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isSelectedCard
+                              ? (isOrganizing
+                                    ? AppColors.porchHoneyOf(context)
+                                    : AppColors.porchTerracottaOf(context))
+                              : AppColors.resolve(
+                                  context,
+                                  Colors.white38,
+                                  Colors.black38,
+                                ),
+                          width: 2,
+                        ),
+                      ),
+                      child: isSelectedCard
+                          ? const Icon(
+                              Icons.check,
+                              size: 16,
+                              color: Colors.white,
+                            )
+                          : null,
+                    ),
+                  ),
+
                 // Right-click (secondary tap) context menu for groups — parity with character cards.
                 // Only active when not in bulk select/organize modes (same guard as characters).
                 if (!isSelecting &&
@@ -178,95 +270,63 @@ class GroupGridCard extends StatelessWidget {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           items: [
-                            PopupMenuItem(
+                            // Same ordering rule as character cards: start
+                            // fresh first, with its own persona choice.
+                            homeCardMenuItem(
+                              context,
+                              value: 'new_chat',
+                              icon: Icons.add_comment_outlined,
+                              label: 'Start New Chat',
+                              iconColor: AppColors.porchAmberOf(context),
+                            ),
+                            homeCardMenuItem(
+                              context,
                               value: 'edit',
-                              child: ListTile(
-                                leading: Icon(
-                                  Icons.edit,
-                                  color: AppColors.iconSecondary(context),
-                                  size: 20,
-                                ),
-                                title: Text(
-                                  'Edit Group',
-                                  style: TextStyle(
-                                    color: AppColors.textPrimary(context),
-                                  ),
-                                ),
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                              ),
+                              icon: Icons.edit,
+                              label: 'Edit Group',
                             ),
-                            PopupMenuItem(
+                            homeCardMenuItem(
+                              context,
                               value: 'duplicate',
-                              child: ListTile(
-                                leading: Icon(
-                                  Icons.copy,
-                                  color: AppColors.iconSecondary(context),
-                                  size: 20,
-                                ),
-                                title: Text(
-                                  'Duplicate Group',
-                                  style: TextStyle(
-                                    color: AppColors.textPrimary(context),
-                                  ),
-                                ),
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                              ),
+                              icon: Icons.copy,
+                              label: 'Duplicate Group',
                             ),
-                            PopupMenuItem(
+                            homeCardMenuItem(
+                              context,
                               value: 'export',
-                              child: ListTile(
-                                leading: Icon(
-                                  Icons.upload,
-                                  color: AppColors.iconSecondary(context),
-                                  size: 20,
-                                ),
-                                title: Text(
-                                  'Export PNG',
-                                  style: TextStyle(
-                                    color: AppColors.textPrimary(context),
-                                  ),
-                                ),
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                              ),
+                              icon: Icons.upload,
+                              label: 'Export PNG',
                             ),
-                            PopupMenuItem(
+                            homeCardMenuItem(
+                              context,
                               value: 'extract',
-                              child: ListTile(
-                                leading: Icon(
-                                  Icons.call_split,
-                                  color: AppColors.journalAccentOf(context),
-                                  size: 20,
-                                ),
-                                title: Text(
-                                  'Extract Characters',
-                                  style: TextStyle(
-                                    color: AppColors.textPrimary(context),
-                                  ),
-                                ),
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
-                              ),
+                              icon: Icons.call_split,
+                              label: 'Extract Characters',
+                              iconColor: AppColors.journalAccentOf(context),
                             ),
-                            PopupMenuItem(
-                              value: 'delete',
-                              child: ListTile(
-                                leading: Icon(
-                                  Icons.delete,
-                                  color: AppColors.negativeAccentOf(context),
-                                  size: 20,
-                                ),
-                                title: Text(
-                                  'Delete',
-                                  style: TextStyle(
-                                    color: AppColors.negativeAccentOf(context),
-                                  ),
-                                ),
-                                dense: true,
-                                contentPadding: EdgeInsets.zero,
+                            homeCardMenuItem(
+                              context,
+                              value: 'move_folder',
+                              icon: Icons.drive_file_move,
+                              label: 'Move to Folder',
+                              iconColor: AppColors.porchAmberOf(context),
+                            ),
+                            if (widget.activeFolderId != null)
+                              homeCardMenuItem(
+                                context,
+                                value: 'remove_folder',
+                                icon: Icons.folder_off,
+                                label: 'Remove from Folder',
+                                iconColor: AppColors.porchAmberOf(context),
+                                labelColor: AppColors.porchAmberOf(context),
                               ),
+                            homeCardMenuItem(
+                              context,
+                              value: 'delete',
+                              icon: Icons.delete,
+                              label: 'Delete',
+                              iconColor: AppColors.negativeAccentOf(context),
+                              labelColor: AppColors.negativeAccentOf(context),
                             ),
                           ],
                         ).then((value) {
@@ -280,6 +340,50 @@ class GroupGridCard extends StatelessWidget {
               ],
             ),
           ),
+        );
+
+        // Group casts drag into folders exactly like characters do — the
+        // folder drop targets accept either kind (they were CharacterCard-only,
+        // which is why groups couldn't be dragged at all).
+        return LongPressDraggable<GroupChat>(
+          data: group,
+          delay: kFolderDragHoldDelay,
+          feedback: Material(
+            color: Colors.transparent,
+            child: SizedBox(
+              width: 150,
+              height: 200,
+              child: Card(
+                color: AppColors.cardOf(context),
+                clipBehavior: Clip.antiAlias,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: ColoredBox(
+                  color: AppColors.porchTerracottaOf(
+                    context,
+                  ).withValues(alpha: 0.12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: memberFiles.isEmpty
+                        ? Icon(
+                            Icons.groups,
+                            size: 64,
+                            color: AppColors.porchTerracottaOf(context),
+                          )
+                        : Center(
+                            child: GroupAvatarMontage(
+                              images: memberFiles.take(4).toList(),
+                              side: 120,
+                            ),
+                          ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          childWhenDragging: Opacity(opacity: 0.3, child: card),
+          child: card,
         );
       },
     );

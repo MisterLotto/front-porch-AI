@@ -23,17 +23,12 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
-import 'package:front_porch_ai/models/avatar_image.dart';
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/models/chat_message.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/avatar_gallery.dart';
 import 'package:front_porch_ai/services/chat/pass_support.dart';
 import 'package:front_porch_ai/services/chat/realism_tools.dart';
-import 'package:front_porch_ai/services/expression_classifier.dart';
-import 'package:front_porch_ai/services/llm_service.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
-import 'package:front_porch_ai/utils/emotion_labels.dart';
-import 'package:front_porch_ai/utils/think_tags.dart';
+import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Plain (non-ChangeNotifier) domain service owning the chat-scoped expression
 /// label selection state machine, manual override, avatar resolution (with
@@ -113,7 +108,9 @@ class ExpressionService {
   final Future<void> Function() onHandleRealismEvalCancelledDuringOnnx;
 
   // Owned simulation state (moved verbatim from ChatService).
-  String? _lastExpressionAvatarId;
+  // Remembered avatar pick per "characterKey:label" — keeps the expression
+  // sprite stable across per-token rebuilds (see resolveExpressionAvatar).
+  final Map<String, String> _stableExpressionPicks = {};
   String? _manualExpressionLabel;
   final Random _expressionRandom = Random();
   String? _cachedExpressionLabel;
@@ -305,20 +302,32 @@ class ExpressionService {
       return matches.first;
     }
 
-    // Multiple matches — pick randomly, optionally avoiding the last one shown
-    if (rerollIfSame && _lastExpressionAvatarId != null) {
-      final different = matches
-          .where((a) => a.id != _lastExpressionAvatarId)
-          .toList();
+    // Multiple matches — the pick must be STABLE across rebuilds. This
+    // resolver runs inside build() (chat background + sidebar portrait),
+    // which rebuilds per streamed token batch; re-randomizing on every call
+    // changed the AnimatedSwitcher's child key each rebuild and kept a
+    // full-screen cross-fade thrashing for the whole generation. Re-pick
+    // only on an explicit reroll or when the remembered pick no longer fits
+    // this character's current label. Stability is per character+label so
+    // group chats (which resolve several characters in one build cycle)
+    // can't evict each other's picks.
+    final stableKey = '${character.dbId ?? character.name}:$label';
+    if (rerollIfSame) {
+      final lastId = _stableExpressionPicks[stableKey];
+      final different = matches.where((a) => a.id != lastId).toList();
       if (different.isNotEmpty) {
         final picked = different[_expressionRandom.nextInt(different.length)];
-        _lastExpressionAvatarId = picked.id;
+        _stableExpressionPicks[stableKey] = picked.id;
         return picked;
       }
     }
-
+    final remembered = _stableExpressionPicks[stableKey];
+    if (remembered != null) {
+      final match = matches.where((a) => a.id == remembered).firstOrNull;
+      if (match != null) return match;
+    }
     final picked = matches[_expressionRandom.nextInt(matches.length)];
-    _lastExpressionAvatarId = picked.id;
+    _stableExpressionPicks[stableKey] = picked.id;
     return picked;
   }
 
@@ -326,7 +335,7 @@ class ExpressionService {
   /// Pass null to clear the manual override and resume auto-detection.
   void setManualExpression(String? label) {
     _manualExpressionLabel = label;
-    _lastExpressionAvatarId = null;
+    _stableExpressionPicks.clear();
     onNotify();
   }
 
@@ -352,7 +361,7 @@ class ExpressionService {
 
   void resetForFreshChat() {
     _manualExpressionLabel = null;
-    _lastExpressionAvatarId = null;
+    _stableExpressionPicks.clear();
     _cachedExpressionLabel = null;
     _cachedForEmotion = null;
     _onnxExpressionLabel = null;

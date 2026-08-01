@@ -16,6 +16,7 @@ import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Opt-in two-factor (TOTP) management for a Stoop account. Opens the enrollment
@@ -25,7 +26,7 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 Future<void> showStoopTwoFactor(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: AppColors.cardOf(context),
+    backgroundColor: stoopCard2(context),
     showDragHandle: true,
     isScrollControlled: true,
     shape: const RoundedRectangleBorder(
@@ -200,11 +201,7 @@ class _TwoFactorSheetState extends State<_TwoFactorSheet> {
       FilledButton(
         onPressed: _busy ? null : () => _submit(enabling: false),
         style: FilledButton.styleFrom(
-          backgroundColor: AppColors.resolve(
-            context,
-            Colors.red.shade600,
-            Colors.red.shade700,
-          ),
+          backgroundColor: AppColors.stoopEmber,
           padding: const EdgeInsets.symmetric(vertical: 14),
         ),
         child: _busy ? _spinner() : const Text('Turn off 2FA'),
@@ -235,7 +232,7 @@ class _TwoFactorSheetState extends State<_TwoFactorSheet> {
           child: SelectableText(
             secret,
             style: TextStyle(
-              color: AppColors.textSecondary(context),
+              color: stoopCream2(context),
               fontFamily: 'monospace',
               fontSize: 13,
               letterSpacing: 1,
@@ -247,7 +244,7 @@ class _TwoFactorSheetState extends State<_TwoFactorSheet> {
           icon: Icon(
             Icons.copy_rounded,
             size: 18,
-            color: AppColors.iconSecondary(context),
+            color: stoopMute(context),
           ),
           onPressed: () {
             Clipboard.setData(ClipboardData(text: secret));
@@ -266,20 +263,20 @@ class _TwoFactorSheetState extends State<_TwoFactorSheet> {
       enabled: !_busy,
       keyboardType: TextInputType.number,
       maxLength: 8,
-      style: TextStyle(color: AppColors.textPrimary(context), letterSpacing: 4),
+      style: TextStyle(color: stoopCream(context), letterSpacing: 4),
       decoration: InputDecoration(
         counterText: '',
         hintText: '123456',
-        hintStyle: TextStyle(color: AppColors.textTertiary(context)),
+        hintStyle: TextStyle(color: stoopMute(context)),
         filled: true,
-        fillColor: AppColors.surfaceContainerOf(context),
+        fillColor: stoopBg1(context),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: AppColors.borderOf(context)),
+          borderSide: BorderSide(color: stoopBorder(context)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: AppColors.borderOf(context)),
+          borderSide: BorderSide(color: stoopBorder(context)),
         ),
       ),
     );
@@ -288,7 +285,7 @@ class _TwoFactorSheetState extends State<_TwoFactorSheet> {
   Widget _title(String t) => Text(
     t,
     style: TextStyle(
-      color: AppColors.textPrimary(context),
+      color: stoopCream(context),
       fontWeight: FontWeight.bold,
       fontSize: 18,
     ),
@@ -298,7 +295,7 @@ class _TwoFactorSheetState extends State<_TwoFactorSheet> {
     padding: const EdgeInsets.only(top: 6),
     child: Text(
       t,
-      style: TextStyle(color: AppColors.textSecondary(context), height: 1.4),
+      style: TextStyle(color: stoopCream2(context), height: 1.4),
     ),
   );
 
@@ -307,7 +304,7 @@ class _TwoFactorSheetState extends State<_TwoFactorSheet> {
     child: Text(
       _error!,
       style: TextStyle(
-        color: AppColors.resolve(context, Colors.redAccent, Colors.red.shade700),
+        color: stoopEmberText(context),
         fontSize: 13,
       ),
     ),

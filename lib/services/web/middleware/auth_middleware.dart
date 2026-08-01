@@ -20,8 +20,7 @@ import 'dart:io' show HttpConnectionInfo;
 
 import 'package:shelf/shelf.dart' as shelf;
 
-import 'package:front_porch_ai/services/web/util/cookies.dart';
-import 'package:front_porch_ai/services/web/util/json_response.dart';
+import 'package:front_porch_ai/services/web/util/util.dart';
 import 'package:front_porch_ai/services/web/web_server_deps.dart';
 
 /// Context key under which the authenticated account id is attached.

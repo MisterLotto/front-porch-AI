@@ -18,10 +18,10 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/models/lorebook.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/models/lorebook_analysis.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/warm_card.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 /// Review step: what was detected, what the book uses, and any warnings —
 /// shown BEFORE anything lands in the library, so trust comes first.

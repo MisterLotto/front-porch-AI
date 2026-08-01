@@ -355,4 +355,70 @@ class AppColors {
   static const Color deepWellLight = Color(0xFFF0EBE3);
   static Color deepWellOf(BuildContext context) =>
       resolve(context, deepWell, deepWellLight);
+
+  // ── The Stoop "porch at dusk" palette ─────────────────────────────────
+  // Dark values mirror hub.frontporchai.app's site.css tokens EXACTLY so the
+  // in-app Stoop matches the web hub pixel-for-pixel; light values are the
+  // warm-daylight derivation (maintainer decision 2026-07-30: adapt, don't
+  // force dark). Semantics: amber = primary accent, teal = secondary
+  // (links/tags/GROUP), ember = danger/NSFW, dusk = neutral info. The hub's
+  // rule "no purple, ever" applies to all Stoop chrome.
+  // Context helpers for these live in ui/pages/repository/stoop_glass.dart.
+
+  /// Page backdrop (hub --bg-0) / warm paper.
+  static const Color stoopBg0 = Color(0xFF0E0C09);
+  static const Color stoopBg0Light = Color(0xFFFAF5EA);
+
+  /// Inputs + inset wells (hub --bg-1).
+  static const Color stoopBg1 = Color(0xFF14110D);
+  static const Color stoopBg1Light = Color(0xFFF3ECDC);
+
+  /// Card fill (hub --card) — gradient bottom stop.
+  static const Color stoopCard = Color(0xFF191510);
+  static const Color stoopCardLight = Color(0xFFFFFDF6);
+
+  /// Card gradient top stop (hub --card-2).
+  static const Color stoopCard2 = Color(0xFF201A13);
+  static const Color stoopCard2Light = Color(0xFFF6EFDF);
+
+  /// Hairline borders (hub --border / --border-hi).
+  static const Color stoopBorder = Color(0xFF2C251B);
+  static const Color stoopBorderLight = Color(0xFFE3D9C1);
+  static const Color stoopBorderHi = Color(0xFF3F3522);
+  static const Color stoopBorderHiLight = Color(0xFFCFC2A2);
+
+  /// Text ramp (hub --cream / --cream-2 / --mute / --faint).
+  static const Color stoopCream = Color(0xFFF3ECDD);
+  static const Color stoopCreamLight = Color(0xFF2E2718);
+  static const Color stoopCream2 = Color(0xFFCFC5B0);
+  static const Color stoopCream2Light = Color(0xFF5C5340);
+  static const Color stoopMute = Color(0xFF9A8F76);
+  static const Color stoopMuteLight = Color(0xFF86795C);
+  static const Color stoopFaint = Color(0xFF6E654F);
+  static const Color stoopFaintLight = Color(0xFFA89C7F);
+
+  /// Amber lamplight (hub --amber / --amber-hi / --amber-deep). Fills use the
+  /// const hi→base gradient with [stoopAmberInk] text in BOTH modes; amber as
+  /// TEXT uses the Of pair below for contrast on light paper.
+  static const Color stoopAmber = Color(0xFFF5A623);
+  static const Color stoopAmberHi = Color(0xFFFFC44D);
+  static const Color stoopAmberDeep = Color(0xFFC97F16);
+  static const Color stoopAmberTextLight = Color(0xFFA9690C);
+
+  /// Near-black ink on amber/ember gradient fills (hub #241502).
+  static const Color stoopAmberInk = Color(0xFF241502);
+
+  /// Ember — danger + NSFW (hub --ember; text variant #ffb08a).
+  static const Color stoopEmber = Color(0xFFE8833A);
+  static const Color stoopEmberText = Color(0xFFFFB08A);
+  static const Color stoopEmberTextLight = Color(0xFFB54E10);
+
+  /// Teal — secondary accent (hub --teal / --teal-hi).
+  static const Color stoopTeal = Color(0xFF4CB8A4);
+  static const Color stoopTealText = Color(0xFF74D6C2);
+  static const Color stoopTealTextLight = Color(0xFF1F7A67);
+
+  /// Dusk blue — neutral info accent (hub --dusk).
+  static const Color stoopDusk = Color(0xFF5F9EC7);
+  static const Color stoopDuskLight = Color(0xFF3E749B);
 }

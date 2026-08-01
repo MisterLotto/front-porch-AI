@@ -78,12 +78,14 @@ class AfkFlavor {
     }
 
     if (weather != null) {
+      // Rank comparison so the Living Worlds extremes count as rough too —
+      // identical to the old ==hot/==cold checks for every classic band.
       final rough =
           weather.condition == WeatherCondition.storm ||
           weather.condition == WeatherCondition.rain ||
           weather.condition == WeatherCondition.snow ||
-          weather.temp == TempBand.hot ||
-          weather.temp == TempBand.cold;
+          weather.temp.rank >= TempBand.hot.rank ||
+          weather.temp.rank <= TempBand.cold.rank;
       if (rough) {
         ladder.add(
           'The weather is keeping them in — let it shape the scene\'s '

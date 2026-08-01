@@ -23,6 +23,11 @@ class BackporchUser {
   /// Whether the 18+ age gate has been completed for this account.
   final bool ageVerified;
 
+  /// Whether the account's email address is confirmed. Sharing requires it;
+  /// browsing and downloading never do. Defaults true so an older server that
+  /// doesn't report the field can't make the app nag about a gate it lacks.
+  final bool emailVerified;
+
   /// Whether the user has opted into seeing NSFW content (policy default: off).
   final bool nsfwEnabled;
 
@@ -34,15 +39,42 @@ class BackporchUser {
   /// Optional for everyone — users can turn it on/off from the account sheet.
   final bool twoFactorEnabled;
 
+  /// Public creator-profile fields (shown on the profile tab + creator page).
+  /// All optional/additive — an older server simply never sends them.
+  final String bio;
+  final List<String> profileLinks;
+
+  /// The current profile picture's asset id (`/assets/{id}/raw`), or null for
+  /// the amber monogram. A new upload always arrives under a NEW id.
+  final String? avatarAssetId;
+
+  /// True when a moderator revoked this account's avatar privilege.
+  final bool avatarLocked;
+
+  /// When the account was created ("On the porch since …"). Null on servers
+  /// that predate the field.
+  final DateTime? createdAt;
+
+  /// An email change awaiting its confirmation click at the NEW address, or
+  /// null. The account keeps [email] until that link is opened.
+  final String? pendingEmail;
+
   const BackporchUser({
     required this.id,
     required this.email,
     required this.displayName,
     required this.role,
     required this.ageVerified,
+    this.emailVerified = true,
     required this.nsfwEnabled,
     required this.acceptedPolicyVersion,
     required this.twoFactorEnabled,
+    this.bio = '',
+    this.profileLinks = const [],
+    this.avatarAssetId,
+    this.avatarLocked = false,
+    this.createdAt,
+    this.pendingEmail,
   });
 
   bool get isModerator => role == 'MOD' || role == 'OWNER';
@@ -53,8 +85,21 @@ class BackporchUser {
     displayName: json['displayName'] as String? ?? '',
     role: json['role'] as String? ?? 'USER',
     ageVerified: json['ageVerified'] as bool? ?? false,
+    emailVerified: json['emailVerified'] as bool? ?? true,
     nsfwEnabled: json['nsfwEnabled'] as bool? ?? false,
     acceptedPolicyVersion: json['acceptedPolicyVersion'] as String?,
     twoFactorEnabled: json['twoFactorEnabled'] as bool? ?? false,
+    bio: json['bio'] as String? ?? '',
+    profileLinks: ((json['profileLinks'] as List?) ?? const [])
+        .whereType<String>()
+        .toList(),
+    avatarAssetId: json['avatarAssetId'] as String?,
+    avatarLocked: json['avatarLocked'] as bool? ?? false,
+    // `is String` (not a cast): a malformed field must cost one line on the
+    // profile, never the whole /auth/me parse.
+    createdAt: json['createdAt'] is String
+        ? DateTime.tryParse(json['createdAt'] as String)
+        : null,
+    pendingEmail: json['pendingEmail'] as String?,
   );
 }

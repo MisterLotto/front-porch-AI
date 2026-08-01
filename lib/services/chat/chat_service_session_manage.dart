@@ -20,6 +20,44 @@ part of '../chat_service.dart';
 
 /// Session management + new-chat — renameSession, updateSessionDescription, forkFromMessage, startNewChat. Extracted verbatim (zero behaviour change) to shrink the god file.
 extension ChatServiceSessionManage on ChatService {
+  /// Seed a NEW session's attached worlds (Living Worlds). Forks pass
+  /// [carryRefs] to keep the parent chat's attachments; otherwise groups copy
+  /// the group template and 1:1 chats copy the character's attached worlds —
+  /// so a card paired with a world starts in that world's climate/setting
+  /// instead of silently defaulting to temperate. Always reloads the ids +
+  /// biome schedule so a fresh session can't inherit the previous chat's
+  /// list. Called at every session-creation site: fresh 1:1/group entry,
+  /// forkSession, both startNewChat branches, and SillyTavern import.
+  Future<void> _seedChatWorldsForNewSession({List<String>? carryRefs}) async {
+    final sid = _currentSessionId;
+    if (sid == null) return;
+    final refs =
+        carryRefs ??
+        (_activeGroup != null
+            ? _activeGroup!.worldIds
+            : (_activeCharacter?.worldNames ?? const <String>[]));
+    try {
+      if (refs.isNotEmpty) {
+        await _worldRepository.applyTemplateWorldsToChat(sid, refs);
+      }
+      // Even when a fresh chat legitimately gets NO worlds, that is a decision
+      // — record it so a later back-fill can't override it.
+      await _worldRepository.markChatWorldsDecided(sid);
+    } catch (e) {
+      debugPrint('[ChatService] chat world seed failed: $e');
+    }
+    await _reloadChatWorldIds();
+  }
+
+  /// Re-read this chat's attached worlds from the database. Needed when
+  /// something OUTSIDE the chat changes them — adding a world to a character
+  /// back-fills that character's chats that had none, and an already-open
+  /// conversation should pick up the new climate without being reopened.
+  Future<void> refreshChatWorlds() async {
+    await _reloadChatWorldIds();
+    notifyListeners();
+  }
+
   /// Rename a session.
   Future<void> renameSession(String sessionId, String name) async {
     final session = await _db.getSessionById(sessionId);
@@ -103,6 +141,10 @@ extension ChatServiceSessionManage on ChatService {
     _messages.addAll(forkedMessages);
     _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
     _computeAbsenceGap(const []); // fresh session — no real-world gap (Living Time §2)
+    // Forks stay in the parent chat's place: carry the world attachments so
+    // the climate/setting follow (mid-chat climate spans reset to the world
+    // default, like every other new session).
+    await _seedChatWorldsForNewSession(carryRefs: _chatWorldIds);
     _parentSessionId = oldSessionId;
     _forkIndex = messageIndex;
     _sessionGenSettings = _sessionGenSettings
@@ -134,6 +176,36 @@ extension ChatServiceSessionManage on ChatService {
     );
     await _refreshGrowthCache();
     notifyListeners();
+  }
+
+  /// Open a FRESH chat with [character] or [group] under an explicitly chosen
+  /// user persona — the home grid's "Start New Chat" (desktop context menu and
+  /// the web library card menu both land here, so the ordering below exists
+  /// once).
+  ///
+  /// **The order is load-bearing.** `setActiveCharacter`/`setActiveGroup` load
+  /// that cast's most recent session, and loading a session restores THAT
+  /// session's persona (see `_loadSessionInto`) — so applying the chosen
+  /// persona first would be silently overwritten by the previous chat's. It is
+  /// applied after entry and before [startNewChat], whose session write stamps
+  /// whatever persona is active.
+  Future<void> startFreshChatWith({
+    CharacterCard? character,
+    GroupChat? group,
+    GroupChatRepository? groupRepo,
+    required String personaId,
+  }) async {
+    if (character != null) {
+      await setActiveCharacter(character);
+    } else if (group != null && groupRepo != null) {
+      await setActiveGroup(group, groupRepo: groupRepo);
+    } else {
+      return;
+    }
+    if (personaId.isNotEmpty) {
+      await _userPersonaService.setActivePersona(personaId);
+    }
+    await startNewChat();
   }
 
   Future<void> startNewChat() async {
@@ -554,6 +626,9 @@ extension ChatServiceSessionManage on ChatService {
 
     _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
     _computeAbsenceGap(const []); // fresh session — no real-world gap (Living Time §2)
+    // Seed chat worlds for the fresh session (group template or the
+    // character's attached worlds — Living Worlds).
+    await _seedChatWorldsForNewSession();
 
     // Inherit theme from the most recent prior session with this character/group.
     _sessionThemeOverrides = ChatThemeOverrides();

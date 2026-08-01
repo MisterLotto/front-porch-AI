@@ -18,7 +18,7 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/models/chat_message.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Scroll the chat's reverse `ListView.builder` to [target] (Journal

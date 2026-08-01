@@ -97,43 +97,122 @@ class ChatDriver {
   );
 
   /// All of _sendCurrentMessage's silent early-return guards down at once.
+  ///
+  /// `isSettlingTurn` is included deliberately, and it earns its place in every
+  /// suite: the awaited post-gen critical section (needs impact, the group
+  /// scalar persist, the chip attach) runs AFTER `isGenerating` clears, and its
+  /// guard flag is cleared in a `finally`. If that `finally` is ever bypassed —
+  /// a new early-return, a swallowed throw — the flag latches true and the app
+  /// silently refuses deletes, regenerates and group edits for the rest of the
+  /// session. That failure is worse than the race it prevents and is invisible
+  /// in review, so every single wait in the suite now insists it clears.
   Future<void> waitSendable() => waitFor(
     () =>
         !chatService.isGenerating &&
+        !chatService.isSettlingTurn &&
         !chatService.isGuestBusy &&
         !chatService.isPhotoTurnInFlight &&
         !chatService.entrancesInFlight,
     () =>
         'chat sendable (gen=${chatService.isGenerating} '
+        'settling=${chatService.isSettlingTurn} '
         'guest=${chatService.isGuestBusy} '
         'photo=${chatService.isPhotoTurnInFlight} '
         'entrances=${chatService.entrancesInFlight})',
   );
 
+  /// True when a tap at [finder]'s centre actually reaches [finder] rather
+  /// than something painted over it.
+  ///
+  /// Existing in the tree is not the same as being tappable. Chance Time is a
+  /// `showDialog` MODAL: while its overlay is up the send button is still
+  /// found by `find.byTooltip` (finders search the whole tree) but every tap
+  /// lands on the route's barrier instead, silently. That is how a fixed
+  /// attempt budget gets burned tapping through a modal — the exact CI failure
+  /// this driver hit, whose diagnostics read `sendButtons=1` with every guard
+  /// clear and the controller holding the text.
+  bool _hitReaches(Finder finder) {
+    if (finder.evaluate().isEmpty) return false;
+    final target = tester.renderObject(finder);
+    final result = tester.hitTestOnBinding(tester.getCenter(finder));
+    return result.path.any((entry) => identical(entry.target, target));
+  }
+
   /// Delivery-confirmed send. One tap is not enough: guards can flip in the
   /// gap between the sendable check and the tap, and the app deliberately
-  /// swallows such sends (text preserved for retry). The live binding's
-  /// fake keyboard connection also goes stale after the app's post-send IME
-  /// churn — enterText works for turn 1 and silently no-ops later — so the
-  /// controller is set directly when the IME path drops the text.
+  /// swallows such sends (text preserved for retry). The live binding's fake
+  /// keyboard connection also goes stale after the app's post-send IME churn —
+  /// enterText works for turn 1 and silently no-ops later — so the controller
+  /// is set directly when the IME path drops the text.
   Future<void> sendMessage(String text) async {
     bool delivered() => chatService.messages.any((m) => m.text.contains(text));
-    for (var attempt = 0; attempt < 8; attempt++) {
+    // Deadline, not a fixed attempt count: attempts spent while a modal covers
+    // the button are not evidence of anything, and a count-based budget turns
+    // "the wheel happened to fire here" into a red CI leg.
+    final deadline = DateTime.now().add(
+      const Duration(seconds: 90) * kCiTimeoutScale,
+    );
+    while (!delivered() && DateTime.now().isBefore(deadline)) {
       await waitSendable();
+      // Clear any Chance Time modal BEFORE aiming at the send button.
+      await spinChanceTimeIfAsked();
       await tester.enterText(input, text);
       final controller = tester.widget<TextField>(input).controller;
       if (controller != null && controller.text != text) {
         controller.text = text;
       }
       await tester.pump();
-      await tester.tap(find.byTooltip('Send message'));
+      // The composer is a TERNARY: `isGenerating ? StopButton : SendButton`,
+      // so while a generation is live there is no 'Send message' tooltip in
+      // the tree at all. waitSendable() above cleared isGenerating, but a
+      // background turn (an objective-completion check, an auto-advance) can
+      // flip it back in the gap before this tap — and then find.byTooltip
+      // matches nothing and tester.tap throws inside _getElementPoint rather
+      // than failing this loop's own retry. Re-check and give the attempt back
+      // to the loop instead of exploding on a race the app is allowed to have.
+      final sendBtn = find.byTooltip('Send message');
+      // Two distinct not-yet states, neither of which is a failure:
+      //   * absent  — the composer is `isGenerating ? Stop : Send`, so a
+      //               background turn swapped the button out;
+      //   * covered — a Chance Time modal (or any dialog) is over it.
+      if (!_hitReaches(sendBtn)) {
+        await tester.pump(const Duration(milliseconds: 250));
+        continue;
+      }
+      await tester.tap(sendBtn);
       for (var i = 0; i < 8 && !delivered(); i++) {
         await spinChanceTimeIfAsked();
         await tester.pump(const Duration(milliseconds: 250));
       }
-      if (delivered()) return;
     }
-    fail('"$text" was never accepted by sendMessage after 8 attempts');
+    if (delivered()) return;
+    // Self-diagnosing on purpose. This failure has now cost three CI cycles of
+    // guessing from a message that said only "was never accepted": every
+    // early-return in _sendCurrentMessage is silent, so from the outside a
+    // refused send is indistinguishable from a missed tap, a stale controller
+    // or a lost finder. Report the whole guard set plus the tap surface so the
+    // next red run names the cause instead of inviting another theory.
+    final input0 = input.evaluate();
+    final controllerText = input0.isEmpty
+        ? '(input widget not found)'
+        : (tester.widget<TextField>(input).controller?.text ?? '(no controller)');
+    final sendBtn = find.byTooltip('Send message').evaluate().length;
+    fail(
+      '"$text" was never accepted by sendMessage after 8 attempts.\n'
+      '  guards : gen=${chatService.isGenerating} '
+      'settling=${chatService.isSettlingTurn} '
+      'guest=${chatService.isGuestBusy} '
+      'photo=${chatService.isPhotoTurnInFlight} '
+      'entrances=${chatService.entrancesInFlight}\n'
+      '  chat   : char=${chatService.activeCharacter?.name} '
+      'group=${chatService.activeGroup?.id} '
+      'session=${chatService.currentSessionId}\n'
+      '  tree   : inputWidgets=${input0.length} sendButtons=$sendBtn '
+      'controllerText="$controllerText"\n'
+      '  msgs   : ${chatService.messages.length} '
+      'last=${chatService.messages.isEmpty ? "(none)" : chatService.messages.last.sender}\n'
+      '  wheels : $wheelsSpun',
+    );
   }
 
   /// Scroll the sidebar to the Journal & Memory accordion and expand it.
@@ -212,6 +291,29 @@ class ChatDriver {
           '"Our Story" resolving past its spinner '
           '(wheels spun so far: $wheelsSpun)',
       timeout: const Duration(seconds: 30),
+    );
+
+    // CLOSE IT. This is not tidiness — leaving it open puts a showDialog
+    // barrier over the whole app for every phase that follows. The send button
+    // stays findable behind it (finders search the entire tree), so a tap
+    // "succeeds", lands on the barrier, and the message is silently never
+    // sent. Because showDialog defaults to barrierDismissible: true, the first
+    // stray tap outside merely DISMISSES the dialog instead of pressing the
+    // button, so the suite usually limped through on the following attempt —
+    // which is exactly why this presented as an intermittent, platform-flavoured
+    // failure rather than an obvious one. Four CI cycles were spent on it.
+    final closeBtn = find.descendant(
+      of: find.byType(JournalDialog),
+      matching: find.byIcon(Icons.close),
+    );
+    if (closeBtn.evaluate().isNotEmpty) {
+      await tester.tap(closeBtn.first);
+    }
+    await waitFor(
+      () => find.byType(JournalDialog).evaluate().isEmpty,
+      () => 'the Journal dialog to close so later phases are not tapping '
+          'through its modal barrier',
+      timeout: const Duration(seconds: 15),
     );
   }
 }

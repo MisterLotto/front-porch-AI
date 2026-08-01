@@ -21,7 +21,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import 'package:front_porch_ai/services/model_fetch.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/tts/piper_voice_import.dart';
 import 'package:front_porch_ai/services/tts/sherpa_piper_engine.dart';
 

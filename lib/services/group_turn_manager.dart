@@ -4,8 +4,7 @@
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/models/group_chat.dart';
+import 'package:front_porch_ai/models/models.dart';
 
 /// Manages turn order, forced speaker selection, Director Mode state,
 /// and related group chat orchestration.

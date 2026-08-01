@@ -22,7 +22,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/services/services.dart';
-import 'package:front_porch_ai/services/model_manager.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'package:front_porch_ai/ui/settings/widgets/section_header.dart';
@@ -164,54 +163,53 @@ class ManagedBackendSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.cardOf(context),
+        // tileColor + shape, not a decorated wrapper — ListTile ink paints on
+        // the ancestor Material and a colored DecoratedBox above it trips
+        // Flutter's ink-visibility assertion.
+        SwitchListTile(
+          tileColor: AppColors.cardOf(context),
+          shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
           ),
-          child: SwitchListTile(
-            title: const Text(
-              'Auto-start model on launch',
-              style: TextStyle(fontSize: 14),
-            ),
-            subtitle: Text(
-              'Automatically load the last used model when the app starts',
-              style: TextStyle(
-                color: AppColors.textTertiary(context),
-                fontSize: 11,
-              ),
-            ),
-            value: storageService.autostartBackend,
-            activeTrackColor: AppColors.porchAmberOf(context),
-            onChanged: (val) {
-              storageService.setAutostartBackend(val);
-            },
+          title: const Text(
+            'Auto-start model on launch',
+            style: TextStyle(fontSize: 14),
           ),
+          subtitle: Text(
+            'Automatically load the last used model when the app starts',
+            style: TextStyle(
+              color: AppColors.textTertiary(context),
+              fontSize: 11,
+            ),
+          ),
+          value: storageService.autostartBackend,
+          activeTrackColor: AppColors.porchAmberOf(context),
+          onChanged: (val) {
+            storageService.setAutostartBackend(val);
+          },
         ),
         const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.cardOf(context),
+        SwitchListTile(
+          tileColor: AppColors.cardOf(context),
+          shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
           ),
-          child: SwitchListTile(
-            title: const Text(
-              'Auto-start on chat open',
-              style: TextStyle(fontSize: 14),
-            ),
-            subtitle: Text(
-              'Automatically start the backend when entering a chat',
-              style: TextStyle(
-                color: AppColors.textTertiary(context),
-                fontSize: 11,
-              ),
-            ),
-            value: storageService.autostartOnChatOpen,
-            activeTrackColor: AppColors.porchAmberOf(context),
-            onChanged: (val) {
-              storageService.setAutostartOnChatOpen(val);
-            },
+          title: const Text(
+            'Auto-start on chat open',
+            style: TextStyle(fontSize: 14),
           ),
+          subtitle: Text(
+            'Automatically start the backend when entering a chat',
+            style: TextStyle(
+              color: AppColors.textTertiary(context),
+              fontSize: 11,
+            ),
+          ),
+          value: storageService.autostartOnChatOpen,
+          activeTrackColor: AppColors.porchAmberOf(context),
+          onChanged: (val) {
+            storageService.setAutostartOnChatOpen(val);
+          },
         ),
         const SizedBox(height: 24),
         const SectionHeader('Model Selection'),

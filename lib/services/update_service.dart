@@ -182,9 +182,20 @@ class UpdateService extends ChangeNotifier {
     try {
       // Use the general /releases endpoint to find both stable and pre-releases.
       // GitHub's /releases/latest endpoint ignores everything marked as pre-release.
+      //
+      // per_page=100 (GitHub's maximum) is load-bearing, not a tidy-up. The
+      // endpoint defaults to 30 and orders by the tag's created_at, and a
+      // nightly is published every day — so 30 entries is barely a month of
+      // history. A stable release would fall off the first page about a month
+      // after it shipped, and from then on [selectTargetRelease] would see no
+      // stable entry at all and offer the user nothing. Silently: a stable
+      // build that skipped one month of updates would simply stop being told
+      // that updates exist. 100 turns "one month" into "a few months"; a
+      // release cadence that ever outruns THAT needs real pagination here.
       final response = await http.get(
         Uri.parse(
-          'https://api.github.com/repos/$_repoOwner/$_repoName/releases',
+          'https://api.github.com/repos/$_repoOwner/$_repoName/releases'
+          '?per_page=100',
         ),
         headers: {'Accept': 'application/vnd.github.v3+json'},
       );

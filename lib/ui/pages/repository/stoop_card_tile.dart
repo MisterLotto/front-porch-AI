@@ -15,13 +15,21 @@ import 'package:front_porch_ai/ui/pages/repository/stoop_avatar.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
-/// A cinematic, glassmorphic card: full-bleed art with a bottom scrim carrying
-/// the name + @creator + downloads, a glowing net-score badge, and neon NSFW /
-/// GROUP pills. Lifts and glows on hover.
+/// The hub card tile (hub.frontporchai.app .hub-tile): square art on top
+/// with badge pills, then a body — name, @creator, two-line summary, and a
+/// stats foot (▲ score, ⬇ downloads, token count). Lifts with an amber
+/// border + warm glow on hover. [compact] is the Mod's-Picks-row variant
+/// (.hub-picktile): art + name only.
 class StoopCardTile extends StatefulWidget {
   final StoopCard card;
   final VoidCallback onTap;
-  const StoopCardTile({super.key, required this.card, required this.onTap});
+  final bool compact;
+  const StoopCardTile({
+    super.key,
+    required this.card,
+    required this.onTap,
+    this.compact = false,
+  });
 
   @override
   State<StoopCardTile> createState() => _StoopCardTileState();
@@ -39,189 +47,163 @@ class _StoopCardTileState extends State<StoopCardTile> {
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: widget.onTap,
-        child: AnimatedScale(
-          scale: _hover ? 1.035 : 1.0,
-          duration: const Duration(milliseconds: 160),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 170),
           curve: Curves.easeOut,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: _hover
-                    ? stoopAccent(context).withValues(alpha: 0.85)
-                    : AppColors.borderOf(context),
-                width: _hover ? 1.5 : 1,
-              ),
-              boxShadow: _hover
-                  ? [
-                      BoxShadow(
-                        color: stoopAccent(context).withValues(alpha: 0.35),
-                        blurRadius: 24,
-                        spreadRadius: -4,
-                      ),
-                    ]
-                  : null,
+          transform: Matrix4.translationValues(0, _hover ? -3 : 0, 0),
+          decoration: BoxDecoration(
+            gradient: stoopCardGradient(context),
+            borderRadius: BorderRadius.circular(widget.compact ? 9 : 14),
+            border: Border.all(
+              color: _hover ? AppColors.stoopAmberDeep : stoopBorder(context),
             ),
-            clipBehavior: Clip.antiAlias,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                StoopAvatar(assetId: card.primaryAssetId),
-                // Bottom scrim for legible title text over arbitrary art.
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    padding: const EdgeInsets.fromLTRB(10, 24, 10, 8),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.transparent,
-                          Colors.black.withValues(alpha: 0.82),
-                        ],
-                      ),
+            boxShadow: _hover
+                ? [
+                    const BoxShadow(
+                      color: Color(0x59000000),
+                      blurRadius: 34,
+                      offset: Offset(0, 12),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          card.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                // Uploader, plus the credited original author
-                                // when the card is an attributed repost.
-                                [
-                                  if (card.creator != null)
-                                    '@${card.creator!.displayName}',
-                                  if (card.originalCreator != null)
-                                    '✎ ${card.originalCreator}',
-                                ].join(' · '),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.7),
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ),
-                            Icon(
-                              Icons.download_rounded,
-                              size: 12,
-                              color: Colors.white.withValues(alpha: 0.7),
-                            ),
-                            const SizedBox(width: 2),
-                            Text(
-                              '${card.downloadCount}',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.7),
-                                fontSize: 11,
-                              ),
-                            ),
-                            if (stoopTokenLabel(card.tokenCount) case final tl?) ...[
-                              const SizedBox(width: 6),
-                              Icon(
-                                Icons.data_usage_rounded,
-                                size: 11,
-                                color: Colors.white.withValues(alpha: 0.7),
-                              ),
-                              const SizedBox(width: 2),
-                              Text(
-                                tl,
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.7),
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ],
+                    BoxShadow(
+                      color: AppColors.stoopAmber.withValues(alpha: 0.07),
+                      blurRadius: 26,
                     ),
-                  ),
-                ),
-                Positioned(top: 6, left: 6, child: _scoreBadge(context)),
-                Positioned(
-                  top: 6,
-                  right: 6,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      if (card.nsfw)
-                        StoopPill(
-                          tint: AppColors.resolve(
-                            context,
-                            Colors.pinkAccent,
-                            Colors.pink,
-                          ),
-                          child: const Text(
-                            '18+',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      if (card.isGroup) ...[
-                        const SizedBox(height: 4),
-                        StoopPill(
-                          tint: stoopAccent2(context),
-                          child: const Text(
-                            'GROUP',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
+                  ]
+                : null,
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _art(card),
+              if (widget.compact) _compactName(card) else _body(card),
+            ],
           ),
         ),
       ),
     );
   }
 
-  // Net score on a gradient-tinted glass pill with a glow.
-  Widget _scoreBadge(BuildContext context) {
-    return StoopPill(
-      tint: stoopAccent(context),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+  // Square art with the badge pills floated top-left (lantern placeholder
+  // shows through when a card has no avatar asset).
+  Widget _art(StoopCard card) {
+    return AspectRatio(
+      aspectRatio: 1,
+      child: Stack(
+        fit: StackFit.expand,
         children: [
-          const Icon(Icons.arrow_upward_rounded, size: 12, color: Colors.white),
-          const SizedBox(width: 2),
-          Text(
-            '${widget.card.score}',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
+          ColoredBox(
+            color: stoopBg1(context),
+            child: StoopAvatar(assetId: card.primaryAssetId),
+          ),
+          Positioned(
+            top: 8,
+            left: 8,
+            right: 8,
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: [
+                if (card.modPick) const StoopBadge(StoopBadgeKind.pick),
+                if (card.isGroup) const StoopBadge(StoopBadgeKind.group),
+                if (card.isWorld) const StoopBadge(StoopBadgeKind.world),
+                if (card.nsfw) const StoopBadge(StoopBadgeKind.nsfw),
+              ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _compactName(StoopCard card) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      child: Text(
+        card.name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: stoopCream(context),
+          fontWeight: FontWeight.w600,
+          fontSize: 13,
+        ),
+      ),
+    );
+  }
+
+  Widget _body(StoopCard card) {
+    final creatorLine = [
+      if (card.creator != null) '@${card.creator!.displayName}',
+      if (card.originalCreator != null) '✎ ${card.originalCreator}',
+    ].join(' · ');
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(13, 11, 13, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              card.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: stoopDisplay(context, size: 15.5),
+            ),
+            if (creatorLine.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                creatorLine,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: stoopFaint(context), fontSize: 11.5),
+              ),
+            ],
+            if (card.summary.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Expanded(
+                child: Text(
+                  stoopResolveMacros(card.summary, card.name),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: stoopMute(context),
+                    fontSize: 12.5,
+                    height: 1.45,
+                  ),
+                ),
+              ),
+            ] else
+              const Spacer(),
+            const SizedBox(height: 8),
+            _statsFoot(card),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // "▲ 12  ⬇ 340" with amber numbers; token count sits faint on the right.
+  Widget _statsFoot(StoopCard card) {
+    final numberStyle = TextStyle(
+      color: stoopAmberText(context),
+      fontSize: 12.5,
+      fontWeight: FontWeight.w700,
+    );
+    final labelStyle = TextStyle(color: stoopCream2(context), fontSize: 12.5);
+    return Row(
+      children: [
+        Text('▲ ', style: labelStyle),
+        Text('${card.score}', style: numberStyle),
+        const SizedBox(width: 12),
+        Text('⬇ ', style: labelStyle),
+        Text('${card.downloadCount}', style: numberStyle),
+        const Spacer(),
+        if (stoopTokenLabel(card.tokenCount) case final tl?)
+          Text(
+            '$tl tok',
+            style: TextStyle(color: stoopFaint(context), fontSize: 11),
+          ),
+      ],
     );
   }
 }

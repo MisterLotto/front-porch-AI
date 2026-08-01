@@ -20,8 +20,7 @@ import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/fixation_chip.dart';
-import 'package:front_porch_ai/ui/widgets/needs_bar.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import '../porch_accordion.dart';
 import 'ambitions_row.dart';
 import 'bond_bars.dart';

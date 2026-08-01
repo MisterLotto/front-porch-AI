@@ -16,7 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'package:front_porch_ai/models/hf_model.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/utils/gguf_model_info.dart';
 
 /// Return type for [VramEstimator.estimateFromArchitecture].

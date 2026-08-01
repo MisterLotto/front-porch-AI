@@ -1,15 +1,133 @@
 # Living Worlds — real worlds, weather biomes, and authored climates
 
-**Status: DRAFT rev.2 (2026-07-28) — PARKED, design only, no code written.**
-Rev.2 folds in a hostile self-audit of rev.1 (two false assertions, eight
-gaps) and the maintainer rulings of the same day.
+**Status: PHASE 0 COMPLETE · PHASE 1 COMPLETE (minus optional polish) · PHASE 2/3 NOT STARTED**
 
-Parked 2026-07-28 to diagnose a v1.1.0 bug. Nothing here has been built, so
-there is no half-finished state to resume from — pick up at §6's three open
-decisions, then phase 0.
+| | |
+|---|---|
+| **Branch** | `Rawhide` |
+| **Tip commit (local)** | `b3f775ce` — *mid-chat climate, place covers, Places web parity, purge safety* |
+| **Prior land** | `229b6e9b` — *places + climates foundation; fullscreen message edit* |
+| **Last status audit** | 2026-07-28 (post medium batch + Claude review fixes) |
+
+Rev.2 design narrative is retained below. **§ Implementation status** is the
+source of truth for what shipped — do not re-derive from the prose alone.
+
+**Open decisions locked for this land:**
+1. Phase 2 editor parity — defer (desktop authoring, use everywhere).
+2. Migrated worlds: `inject_description = 0` by default. ✅ shipped in v40.
+3. Multi-lorebook: `.fpworld` carries `lorebooks[]` (merged on import for now);
+   single DB blob remains until a later cut. ✅ envelope ready; DB still one blob.
 
 A three-phase arc that turns `worlds` from a lorebook folder into a portable
 *place*, then gives places a climate, then lets users author their own.
+
+---
+
+## Implementation status (review snapshot)
+
+Legend: **DONE** · **PARTIAL** · **NOT STARTED** · **OUT OF SCOPE (this land)**
+
+Reviewers: read this table first, then sample the cited paths. Do not treat
+design prose under §1–§3 as “implemented” unless it is marked DONE here.
+
+### Shipped commits (Rawhide)
+
+| Commit | What landed |
+|---|---|
+| `229b6e9b` | Phase 0 foundation + phase 1 engine tables: schema v40, UUID worlds, `chat_worlds`, `chat_biome_spans`, built-in biomes, weather engine biome param, world description injection, desktop climate picker, clone purge, `.fpworld`, fullscreen Edit Message |
+| `b3f775ce` | Medium batch + review fixes: span wiring, mid-chat climate UI, covers, WorldPlaceCard, WeatherChip↔story parity, foreshadow suppress, diurnal amplitude, purge recovery exports, web bundle rebuild, migration honesty, cleanup `group_world_refs` |
+
+### Phase 0 — Worlds become real places → **COMPLETE**
+
+| Item | Status | Where / notes |
+|---|---|---|
+| Schema v40 additive columns on `worlds` | **DONE** | `cover_image`, `format_version`, `source_id`, `linked_character_id`, `biome_id`, `biome_json`, `inject_description` |
+| `chat_worlds` join table + index | **DONE** | v40 |
+| Forced pre-migration backup attempt | **DONE** | non-fatal if backup path fails; originals of name-list `world_ids` live only here after rewrite |
+| Name→UUID backfill for `groups.world_ids` + seed `chat_worlds` | **DONE** | live column rewritten in place (not re-runnable); unresolved refs logged/dropped |
+| `linkedCharacterName` → `linked_character_id` backfill | **DONE** | v40 |
+| Migrated worlds `inject_description = 0` | **DONE** | single one-shot UPDATE with 39→40 |
+| UUID identity; rename does not cascade | **DONE** | `WorldRepository.renameWorld` |
+| Chat-level attach (1:1 + group session); group list = template | **DONE** | `setChatWorldIds` / `chatWorldIds`; `applyTemplateWorldsToChat` (also seeds 1:1 chats from `character.worldNames`) |
+| Resolution by id (name fallback for legacy) | **DONE** | `resolveWorld`, `world_ref_resolver.dart` |
+| World description injection (budget-capped, gated) | **DONE** | `prompt_injection/world_injection.dart` |
+| `.fpworld` encode/decode + ST bare-lorebook import | **DONE** | Keep-both rename on collision |
+| Purge character-linked auto-import clones | **DONE** | Hard delete **after** `.fpworld` export to `worlds/recovered_character_lore_clones/` (review fix) |
+| “From character” lore import | **DONE** | edit character / group lore / web |
+| Place-only pickers | **DONE** | `placeWorlds` |
+| Desktop Worlds authoring (climate + feel + cover) | **DONE** | `world_management_page.dart` + `WorldPlaceCard` |
+| Story Tools → **Places** (no new sidebar leaf) | **DONE** | `chat_places_panel.dart` |
+| Web Worlds + chat Places + facade/routes | **DONE** | sources + **rebuilt** `assets/web_app` in `b3f775ce` |
+| Cover image column / model / `.fpworld` / picker / thumbs | **DONE** | `world_cover.dart`, desktop + web |
+| Group card dual `worldIds` + `worldNames` | **DONE** | exporter + `GroupCard` |
+| Cleanup `group_world_refs` (name→UUID fix) | **DONE** | `database_cleanup.dart` + dialog key |
+| Migration fixture-DB integration test | **PARTIAL** | resolver/package unit tests; no full fixture-DB migration suite |
+| `.fpworld` round-trip + collision rename tests | **DONE** | package / repo tests |
+
+### Phase 1 — Built-in weather biomes → **COMPLETE** (optional items open)
+
+Built-in climates, mid-chat switch, and prompt/UI parity are shipped. Remaining
+phase-1 items are polish / test depth, not product blockers.
+
+| Item | Status | Where / notes |
+|---|---|---|
+| `chat_biome_spans` table + insert/list | **DONE** | schema + DB helpers |
+| Built-in biomes (~7) + JSON + `validate()` + feel copy | **DONE** | `weather_biomes.dart` |
+| `WeatherEngine.weatherFor(..., biome: / biomeAtDay:)` | **DONE** | null / fixed biome ≡ temperate historical tables |
+| World default climate drives chat weather | **DONE** | schedule `worldDefault` from first attached place |
+| `BiomeSchedule` leaf + ChatService hydrate | **DONE** | `biome_schedule.dart`; reload on session / attach / climate set |
+| Wire spans into live weather walk | **DONE** | all ChatService weather getters use `biomeAtDay` |
+| Mid-chat climate picker (Places, not a new leaf) | **DONE** | desktop + web `POST /api/chat/climate` |
+| Foreshadow suppress on first day of a new span | **DONE** | `WeatherInjection.suppressForeshadow` |
+| Biome-scaled `diurnalAmplitude` | **DONE** | temperate 1.0 keeps prior °C |
+| WeatherChip matches prompt climate | **DONE** | reads ChatService (not temperate-only providers) |
+| Changeover property + foreshadow suppress tests | **DONE** | `test/services/chat/biome_schedule_test.dart` |
+| Cover encode tests | **DONE** | `test/utils/world_cover_test.dart` |
+| Run-length prose (“third straight day of rain”) | **NOT STARTED** | optional; deferred |
+| Per-built-in golden sequences (all biomes) | **PARTIAL** | temperate/null goldens held; full per-biome pin optional |
+| Distribution envelopes across many seeds | **PARTIAL** | light / identity coverage; full envelopes optional |
+| Widget goldens regen after UI polish | **OPS** | regen `world_management` / `time_strip` if CI fails |
+
+### Phase 2 — Authored climates (skins + stance) → **NOT STARTED**
+
+| Item | Status | Notes |
+|---|---|---|
+| Stance-aware `dressCue` / conditionSkin behaviour | **NOT STARTED** | model fields exist for forward schema only |
+| Custom biome editor + preview harness | **NOT STARTED** | |
+| `biomes` table + snapshot-on-attach | **NOT STARTED** | chat spans already store full JSON when used |
+
+### Phase 3 — Stoop / sharing → **CLIENT READY (2026-07-30), backend pending**
+
+App-side wiring shipped behind `kStoopWorldsLive` (see §4). Backend work
+(accepting the `WORLD` type) remains out of scope for this doc.
+
+### Product decisions already applied (not re-open without maintainer)
+
+- Places stay under **Story Tools** (no sidebar leaf creep).
+- Objectives are their own accordion leaf, **collapsed by default**.
+- Character-linked worlds purged with **recovery exports**; lore copy is **From character**.
+- Multi-lorebook DB split deferred; envelope has `lorebooks[]`.
+- Web PWA bundle (`assets/web_app`) must ship with source changes (rebuilt in `b3f775ce`).
+
+### Still open (not blocking phase 0/1)
+
+1. Optional: run-length weather prose.
+2. Optional: per-biome golden sequences + distribution envelopes.
+3. Optional: full fixture-DB migration integration test.
+4. Hygiene: further split `world_management_page.dart` (still large after card extract).
+5. Phase 2 / 3 entirely.
+6. Ops: run weather + widget goldens before remote push if not already green.
+
+### Claude review of `229b6e9b` — disposition (addressed in `b3f775ce`)
+
+| Finding | Disposition |
+|---|---|
+| #1 Purge can destroy user-edited world-only lore | **Fixed** — `.fpworld` export before hard delete |
+| #2 Stale `assets/web_app` | **Fixed** — `npm run build` committed |
+| #3 Weather chip vs story climate | **Fixed** — chip uses ChatService |
+| #4 Migration “preserved / re-runnable” claim | **Fixed** — comments + design risk text match rewrite-in-place + backup-only originals; chat_worlds skip existing pairs; single inject UPDATE |
+
+---
 
 **Phase 0 is the prelude, by maintainer ruling.** It could technically be
 decoupled — biomes attached to chats need worlds not at all — but worlds
@@ -57,6 +175,9 @@ information that actually changes decisions.
 ---
 
 ## 1. Phase 0 — Worlds become real places
+
+**Implementation: COMPLETE** (as of `b3f775ce`). Remaining gap is test depth
+only (full fixture-DB migration suite — optional).
 
 **Risk: HIGH.** Contains the only schema migration and the only step in the
 arc that can lose user data.
@@ -155,9 +276,11 @@ import, export, description editor. No deferral requested.
 ### Risks
 
 - **The backfill is the dangerous step.** Mitigation: forced pre-migration
-  backup; pure-function resolver with unit tests over a fixture DB; dry-run
-  counts logged before write; `groups.world_ids` preserved, so a bad
-  backfill is inspectable and re-runnable.
+  backup (the only place original name-list `world_ids` survive — the live
+  column is rewritten in place to UUIDs and is **not** a re-runnable
+  snapshot); pure-function resolver with unit tests; unresolved refs logged
+  and dropped. Data mutations are single-run with schema 39→40 (not a
+  repair tool).
 - **Legacy group cards keep the collision bug permanently.** Cards already
   in circulation carry names, and no migration reaches them. Importing an
   old card can still bind to the wrong local world. Phase 0 fixes cards
@@ -172,6 +295,10 @@ import, export, description editor. No deferral requested.
 ---
 
 ## 2. Phase 1 — Weather biomes, built-in
+
+**Implementation: COMPLETE** for product surface (as of `b3f775ce`) — engine,
+spans on the live path, mid-chat UI desktop+web, diurnal amplitude, foreshadow
+suppress, WeatherChip parity. Optional: run-length prose + deeper goldens.
 
 **Risk: MEDIUM.** No migration of existing data; two new tables; the danger
 is silently perturbing already-written weather history.
@@ -291,9 +418,92 @@ configuration surface, non-negotiable.
 
 ## 3. Phase 2 — Authored climates: skins and stance
 
+**Implementation: STARTING (maintainer-approved 2026-07-29).** The §5 demand
+gate was consciously overridden by the maintainer ("I want to build stage 2 —
+custom biomes so the Mars world can come alive"); phases 0/1 landed green.
+Model fields for `conditionSkin` / stance existed for forward compatibility.
+
 **Risk: MEDIUM-LOW technically, HIGH on scope.** No migration; the danger is
 that this is the fun part and gets built regardless of whether phase 1
 landed. See §5.
+
+### Rev.3 addendum — extreme temperature bands (ruled 2026-07-29)
+
+The Rev.2 model could not express a Mars (−60 °C) or a volcanic world
+(600 °C): `TempBand` is Earth-ranged on both ends, and both the display
+number and the dress cue derive from it. Maintainer ruled for the **real**
+extension over display-only fakery:
+
+- **`TempBand` grows on both ends** (working names: `cryogenic` below
+  `freezing`; `furnace`, `inferno` above `hot`). Extreme bands are
+  first-class engine values: conditions, dress cues, and prose know them.
+- **Determinism guard (non-negotiable):** classic biomes must keep their
+  classic band RANGE. The daily jitter clamp is per-biome (each biome
+  declares its reachable band span), never the global enum bounds — extending
+  the enum must not let an existing chat's hot day wobble into `furnace`.
+  Fenced by the per-biome pinned sequences
+  (`weather_biome_pins_test.dart`, added 2026-07-29 for exactly this) plus
+  the original temperate pin; a clamp mistake fails CI, not user chats.
+- **Authored display anchors:** an extreme band has no honest single °C, so
+  a custom biome carries an authored per-season anchor °C used ONLY for the
+  UI number (chip shows −63 °C on Mars, 600 °C on the volcano). Prompts stay
+  words-only per the injection contract; behaviour comes from the band's
+  code-owned survival prose + stance. Built-ins carry no anchors (their
+  bands map to °C exactly as today — bit-identical).
+- **Extreme bands imply stance floors.** `furnace`/`cryogenic`+ carry a
+  minimum `dangerous` stance; validation refuses a *pleasant* inferno. The
+  dress cue at extreme bands is survival text, not clothing.
+- **Water-condition sanity:** the preview harness flags un-skinned water
+  conditions at extreme bands ("rain at 600 °C — rename it or drop it"),
+  warning-level, not hard-rejected (authors may intend steam-rain on purpose
+  once skinned).
+- **Mixed-fleet import tolerance:** an older app importing a `.fpworld`
+  whose biome uses band values it doesn't know must degrade politely —
+  parse defensively, clamp unknown bands to the nearest classic band, and
+  surface a "made with a newer version" note. Same discipline as the Stoop
+  API contract.
+
+**Build order (locked): ALL FOUR STEPS DONE 2026-07-29.**
+③ shipped as per-world custom climates (worlds.biomeJson; the separate
+`biomes` library table deferred — sharing rides `.fpworld`): editor dialog
+rebuilt 1:1 to the approved mockup after a maintainer fidelity rejection
+(see changelog "climate editor rebuilt"), preview-as-validation harness
+(`biome_preview.dart`), 'world:<id>'-branded selection on every surface.
+④ shipped as the shared `weather_skins.dart` helpers (chip + prompt + web
+facade): renames + stance behavior + dangerous+ dressCue replacement +
+deadline foreshadow. Emoji/flavour authoring included (curated emoji
+picker + free typing, 2026-07-29). Place traits
+(atmosphere/gravity) shipped on worlds v41.
+① per-biome pins (**done**) → ② engine bands
+behind the pins (**done 2026-07-29**: TempBand appended cryogenic/furnace/
+inferno with `kTempBandRankByIndex` thermal ranks; per-biome `bandRange`
+clamp defaulting to the classic (0,4) span; `displayAnchorsC` authored °C
+with ±3 wobble, single-draw parity; cryogenic keeps snow — thaw demotes only
+when warmer-than-cold; survival dressCue prose; afk/needs "extreme" checks
+rank-based; `weather_extreme_bands_test.dart`, pins green) → ③ `biomes`
+table + editor + preview-as-validation → ④ skins + stance-aware dressCue.
+Editor is desktop-only (ruling §6.1); consuming custom biomes works
+everywhere, web parity for *use* surfaces mandatory.
+
+### Rev.3 addendum — place traits + units (ruled 2026-07-29, mockup-approved)
+
+- **Atmosphere and gravity live on the WORLD, not the climate** (a
+  terraformed Mars reuses the Mars climate with breathable air). Stored in
+  ONE additive `place_traits` JSON column on `worlds` (no per-trait column
+  churn, ever; unknown trait keys ignored by older apps — mixed-fleet rule);
+  rides the `.fpworld` envelope.
+- **Stance-recipe enums, no numbers:** Atmosphere = breathable (default,
+  silent) · thin · unbreathable · hostile. Gravity = earth (default,
+  silent) · low · high · micro. Each non-default value injects ONE
+  code-owned line with the place-description block; author prose remains the
+  flavour channel. No pressure/O₂/g numeric fields — numbers would promise a
+  simulation the app deliberately does not run.
+- **Units:** °C is canonical everywhere on disk and in `.fpworld` (share-
+  safe); the existing Settings → General °C/°F toggle (default °C) drives
+  every display AND the editor's anchor input fields (°F users type °F,
+  stored converted; ≤1° rounding wobble on non-exact conversions).
+- **Editor UX approved via mockup 2026-07-29** (climate dialog + world
+  place-traits card, mandatory-stance error state, preview-as-validation).
 
 ### Why skins need stance — the failure this prevents
 
@@ -407,13 +617,161 @@ than lorebook prose.
 
 ---
 
-## 4. Phase 3 — Sharing (sketch only, not scoped)
+## 4. Phase 3 — Sharing (client shipped 2026-07-30; backend pending)
+
+**Implementation: Dart client fully wired, gated "coming soon".**
 
 Worlds are portable after phase 0, so Stoop distribution is a backend
 project rather than an extension of this work: a third content type, its own
 moderation surface for names and descriptions, and the never-break-old-
-clients API discipline. Explicitly **out of scope**; noted so the `.fpworld`
-envelope is designed Stoop-ready rather than retrofitted.
+clients API discipline. The `.fpworld` envelope was designed Stoop-ready
+rather than retrofitted, and the app side now exists:
+
+- **Contract (additive-only):** worlds ride the existing card endpoints as
+  `type: 'WORLD'`; the `card` payload is the .fpworld envelope; the place's
+  **cover image is required** and uploads as the card avatar (multipart), so
+  every Stoop surface (tiles, hero, detail) displays it via the normal
+  `primaryAssetId` asset pipeline, and moderators review the image like any
+  character avatar. No new endpoints. (Validated against the backend
+  2026-07-30: "one new enum value" is concretely a Postgres
+  `ALTER TYPE "CharacterType" ADD VALUE 'WORLD'` migration + prisma
+  generate — the zod schema derives from the Prisma enum, so the migration
+  alone unlocks the upload path, but it is a real deploy step, not a
+  validation-list tweak. The avatar-required gate on `POST /characters`
+  already matches the cover-required contract.)
+- **Moderation:** because uploads go through `POST /characters`, world posts
+  land in the SAME `PENDING → mod review → APPROVED` queue as characters and
+  are never visible to users before approval. Mine-tab statuses, rejection
+  notes, and mod messaging all work unchanged.
+- **Endpoint decision — `/characters`, not `/worlds` (maintainer-confirmed
+  2026-07-30):** the requirement is the same moderation *process*, and the
+  shared endpoint gives it by construction — along with everything else
+  keyed to the one card store: votes, scores, download counts, mod picks,
+  reports, creator profiles, Mine-tab statuses, mod↔user messaging (which
+  references a `characterId`), and live stat pushes. A separate `/worlds`
+  surface would either duplicate that social layer or alias back to the
+  same tables anyway, and every future feature would be built twice. Do not
+  re-open without maintainer.
+- **Mixed-fleet visibility rule (backend REQUIREMENT before the flags
+  flip):** WORLD items must be **opt-in per request**. Shipped app versions
+  render an unknown-type card as a solo character and fail at download
+  ("parse failed" on the envelope), so no list endpoint may include WORLD
+  items unless the request explicitly asks for them: `type=world` returns
+  worlds only, and mixed views get a new opt-in the updated clients send
+  (e.g. `types=solo,group,world` or `worlds=1` — exact param is the
+  backend's call, but it MUST be one no already-shipped client has ever
+  sent; today's clients send only `type=solo|group|all`). The rule covers
+  every card list: browse, picks, following, creator profile card lists,
+  and `/me/downloads`. Socket stat pushes for world ids are safe as-is (old
+  clients no-op on unknown card ids). Direct detail/download fetches by id
+  need no guard — old clients can only reach ids they were shown. Rollout
+  order: backend accepts `WORLD` + implements opt-in visibility → THEN flip
+  `kStoopWorldsLive` / `STOOP_WORLDS_LIVE` (the client's world-inclusive
+  list calls are part of the same flip).
+- **Client surfaces:** upload wizard Places section + `publishStoopWorld`
+  (`stoop_world_share.dart`), browse "Worlds" filter (desktop segment + web
+  select), WORLD tile pills/badges, detail-page world sections
+  (`stoopWorldSections`), and download auto-import via
+  `WorldRepository.importWorldJson` on BOTH the desktop detail page and the
+  web facade (`StoopFacade.downloadAndImport`).
+- **Gate:** `kStoopWorldsLive` (Dart, `stoop_card.dart`) and
+  `STOOP_WORLDS_LIVE` (web, `stoopTypes.ts`) are `false` → every surface
+  shows "coming soon" and never queries the backend with the new type. Flip
+  both together when the backend accepts `WORLD`.
+- **Not yet supported (deliberate):** in-place "Update" of a world post
+  (worlds are new-upload-only for v1; the Mine-tab Update button is hidden
+  for WORLD posts).
+
+### Backend work checklist — **IMPLEMENTED + DEPLOYED 2026-07-30.** Items
+1–8 are LIVE on the droplet (migration applied, live API smoke-tested, hub's
+🏞️ Worlds tab verified in-browser as guest). Only item 9 — the app-side flag
+flip + tiny client patch — remains, deliberately deferred to the maintainer.
+
+Work items for the private backend/hub repo, in rollout order. The envelope
+shape to render is `encodeFpWorld` in `lib/models/fp_world_package.dart`:
+top-level `name`, `description`, `cover` (data URL), `lorebook{entries[]}`,
+`biome{displayName, description, feel, …}`, `place_traits{atmosphere?,
+gravity?}`, `meta{author?, createdAt, appVersion?, sourceId?}`.
+
+1. **Accept `WORLD`** as a card type on `POST /characters`: Prisma enum
+   migration (`ALTER TYPE`) + regenerate; zod (`z.nativeEnum(CharacterType)`)
+   follows automatically. **AND raise the per-type card-size cap**: `parseCard`
+   grants the 24 MB cap only when `type === "GROUP"`, so a WORLD payload gets
+   the 256 KB solo cap — and the envelope embeds the cover as a data URL (so
+   a download restores the world exactly), which alone blows past 256 KB for
+   any real cover art. Give WORLD its own cap (the group branch is the
+   pattern; a few MB is plenty). The versions endpoint needs no gate —
+   validated: it has no `type` field at all (type is immutable after create)
+   and no client calls it for worlds v1.
+2. **Opt-in visibility** on EVERY card-list endpoint: never include WORLD
+   items unless the request opts in (`type=world`, plus a new mixed-view
+   param no shipped client has ever sent — see the visibility rule above).
+   This is the hard safety requirement; ship it in the same deploy as #1.
+   Validated specifics (2026-07-30): browse/picks/following are ONE route
+   with the ONLY type-aware `where` in the codebase — but `type=all`
+   currently means **no type predicate at all**, so its default must invert
+   to "solo+group" or worlds leak into every shipped client the moment one
+   is approved. There is no shared query builder: the predicate must also
+   land in the creator-profile card list, `/me/downloads`, and
+   `/me/characters` (Mine tab — was missing from this rule's list), plus
+   the share/OG card page; decide `/mod/queue` deliberately (mods DO want
+   worlds — pairs with #4). Bonus hardening: an unknown `type` value
+   currently throws an unhandled ZodError → HTTP 500 (no error handler
+   registered); return a 400 while in there.
+3. **`tokenCount`** — the server computes it from the card payload; make
+   that computation handle the .fpworld envelope. Validated: the counter
+   never crashes (returns 0 on unknown shapes) but reads the lorebook from
+   `character_book.entries[]` — the envelope keys it `lorebook.entries[]`,
+   so today a lorebook-heavy world would display a near-zero count as fact.
+   Map the envelope keys (description + lore entry contents/keys; exclude
+   the base64 `cover` from the count).
+4. **Mod review UI** — render the envelope for reviewers instead of V2
+   fields: cover image (already the avatar asset), name, description,
+   climate `displayName`/`feel`, traits, and each lore entry's keys +
+   content. Reject/approve/messaging flows are unchanged.
+5. **Hub website** — WORLD badge on tiles, a Worlds browse filter (sending
+   `type=world`), detail view rendering the envelope sections (about /
+   climate / traits / lore), and a download that hands the card JSON as a
+   `<name>.fpworld` file (the hub has no importer; the app imports it via
+   Worlds → Import Place). SUPERSEDED 2026-07-30 (maintainer request): the
+   hub ALSO has its own upload path — a distinct "🏞️ Share a world" button
+   on My cards → `#/submit-world` (drop a .fpworld; cover decoded from the
+   envelope for the required avatar; same moderation queue). Worlds-tab,
+   detail, and download-toast all carry a "Rawhide (nightly) builds only for
+   now" warning until stable ships worlds support.
+6. **Reports/NSFW/votes/search** — no changes; they key off the shared card
+   row and post name/tags. (Validated: WS `cardStats` pushes are id-only and
+   type-blind; shipped clients no-op on ids they never loaded, so world stat
+   frames are safe — as assumed.)
+7. **Re-upload idempotency (new, validated gap)** — the server dedupes
+   re-submissions via `extensions.front_porch.realism_engine.stable_id`
+   inside the card payload; the envelope has no such path, so its origin id
+   is null and **every re-share of the same world creates a brand-new
+   PENDING row** (nulls never collide). Teach the stable-id extractor an
+   envelope fallback (e.g. `meta.sourceId`, which the envelope already
+   carries) — a stable-id hit auto-converts the POST into a new version,
+   which is also the cheapest path to world updates later.
+8. **Dupe-check bot (moderation tooling, before worlds go live)** — the
+   advisory dupe scorer reads only V2 text fields (a world contributes just
+   `description`) and weights shared art at 30%, and nothing partitions
+   candidates by type: worlds get scored against characters, and generic
+   landscape covers + short same-genre setting prose can cross the
+   "duplicate suspected" threshold. Partition comparisons by card type and
+   add the envelope's text fields.
+9. **Flip the flags** (maintainer, after the backend deploy) — set
+   `kStoopWorldsLive` (`lib/services/backporch/stoop_card.dart`) and
+   `STOOP_WORLDS_LIVE` (`web_ui/src/stoop/stoopTypes.ts`) to `true` in the
+   same app commit, plus the small client patch the flip includes:
+   - The opt-in param is **`types=` (CSV: `solo,group,world`)** — implemented
+     2026-07-30 on browse, `/me/downloads`, `/me/characters`, and
+     `/creators/:id`; unknown tokens are ignored, absent → solo+group. The
+     app's mixed-view calls (browse `all`, Mine tab, downloads history,
+     creator profiles) should send it once world-aware.
+   - **Re-share idempotency:** the server dedupes worlds by the envelope's
+     `meta.sourceId`, but `encodeFpWorld` only emits `sourceId` for imported
+     worlds today — the upload path should send a stable id for authored
+     worlds too (e.g. `world.sourceId ?? world.id` in `publishStoopWorld`'s
+     payload), or every re-share creates a new PENDING post.
 
 ## 5. How we would know this worked
 
@@ -428,6 +786,9 @@ built regardless of whether phase 1 landed. Gates:
   default? If the overwhelming majority of chats stay temperate, the demand
   signal for *authoring* climates is absent, and phase 2 should not be built
   on the strength of it being interesting to build.
+  → **Overridden by maintainer 2026-07-29** (phase 2 greenlit ahead of the
+  signal — the Mars/volcanic authoring itch is the maintainer's own; noted
+  here so the gate's absence is a decision, not an oversight).
 - **Phase 2 → 3 gate:** are users making biomes that others would want? If
   local custom biomes see little use, sharing infrastructure has nothing to
   carry.
@@ -436,32 +797,47 @@ built regardless of whether phase 1 landed. Gates:
 
 1. **Phase 2 editor parity** — desktop-only authoring with use/download
    everywhere (Piper precedent), or a full web editor?
+   → **Ruled: defer** (desktop authoring, consume everywhere).
 2. **World description injection default** — on or off for worlds migrated
    from existing rows? (Recommendation: off; those descriptions were written
    as library labels, not prose.)
+   → **Ruled: off** — shipped in v40 (`inject_description = 0` for migrated rows).
 3. **Multiple lorebooks per world** — today it is one JSON blob. Real worlds
    may want several. It changes the `.fpworld` envelope, so it is cheaper to
    decide before v1 ships than after.
+   → **Ruled for v1:** envelope has `lorebooks[]` (merge on import); single DB
+   blob until a later cut.
 
 **Ruled (2026-07-28):** phase 0 stays the prelude; effort estimates removed
 in favour of risk markers; world attachment uses the chat-level +
 group-template model (§1).
 
+**Also applied in product (2026-07):** Places stay under Story Tools; no new
+sidebar leaf for Places; Objectives leaf separate and collapsed by default.
+
 ## 7. Test strategy
 
+Status of each gate (audit 2026-07-28, tip `b3f775ce`):
+
 - The pinned expected sequence constant is **untouched** — phase 1's
-  acceptance gate.
-- New pinned goldens per built-in biome (fixture seed, fixture dates).
+  acceptance gate. → **HOLDING** for temperate/null path. Ops: re-run engine +
+  widget goldens before remote push if not already green.
+- New pinned goldens per built-in biome (fixture seed, fixture dates). → **PARTIAL**
+  (temperate/null identity; full per-biome pin optional)
 - Changeover property test: for any span boundary *k*, days `1..k-1`
-  recompute byte-identically to the pre-switch run.
+  recompute byte-identically to the pre-switch run. → **DONE**
+  (`biome_schedule_test.dart`)
 - Migration test over a fixture DB with realistic broken data: name refs →
   uuid refs, group templates → `chat_worlds`, broken refs dropped and
-  counted, `linkedCharacterName` → id.
+  counted, `linkedCharacterName` → id. → **PARTIAL** (resolver unit tests only)
 - Round-trip test: world → `.fpworld` → import → structurally identical,
-  including a name collision auto-renaming to "Glorb (2)".
+  including a name collision auto-renaming to "Glorb (2)". → **DONE** (package/repo tests)
 - Validation tests: zero-sum weights rejected; rename-without-stance
-  rejected; `dressCue` at `dangerous` overrides temperature phrasing.
+  rejected; `dressCue` at `dangerous` overrides temperature phrasing. → **PARTIAL**
+  (weight validation exists; stance/dressCue is phase 2)
 - Distribution envelopes per biome across many seeds (desert never snows;
   tropical never reaches the cold band; rainforest storm share under its
-  ceiling).
-- Foreshadow suppression on the first day of a new span.
+  ceiling). → **PARTIAL** / light coverage
+- Foreshadow suppression on the first day of a new span. → **DONE**
+  (injection + `biome_schedule_test.dart`)
+- Cover encode/decode size-cap. → **DONE** (`world_cover_test.dart`)

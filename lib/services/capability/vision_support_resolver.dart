@@ -23,8 +23,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:front_porch_ai/services/capability/model_capabilities.dart';
-import 'package:front_porch_ai/services/llm_provider.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/utils/gguf_vision.dart';
 
 /// Resolves ONE cached vision verdict per backend+model identity, mirroring the

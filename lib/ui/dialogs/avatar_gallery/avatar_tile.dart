@@ -129,6 +129,9 @@ class AvatarTile extends StatelessWidget {
               fit: BoxFit.cover,
               alignment: Alignment.topCenter,
               gaplessPlayback: false,
+              // Gallery tiles are small — decode at tile size, not source
+              // size, so a big gallery doesn't thrash the image cache.
+              cacheWidth: 384,
               errorBuilder: (_, _, _) => Container(
                 color: AppColors.surfaceContainerOf(context),
                 child: Icon(

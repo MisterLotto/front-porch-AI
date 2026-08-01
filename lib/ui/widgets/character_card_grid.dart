@@ -20,6 +20,13 @@ enum SearchScope { currentFolder, folderRecursive, allCharacters }
 
 enum FolderDialogAction { create, rename, delete }
 
+/// How long a press must be held before a home-grid card starts dragging to a
+/// folder. HALF Flutter's `kLongPressTimeout` (500 ms) — the stock delay made
+/// organising a library feel unresponsive, as if the drag hadn't registered.
+/// Shared by every draggable card (characters AND group casts) so the two
+/// can't drift apart.
+const Duration kFolderDragHoldDelay = Duration(milliseconds: 250);
+
 class CharacterCardGrid extends StatelessWidget {
   const CharacterCardGrid({
     super.key,
@@ -33,6 +40,7 @@ class CharacterCardGrid extends StatelessWidget {
     required this.isSelecting,
     required this.isOrganizing,
     required this.selectedCharacterIds,
+    required this.selectedGroupIds,
     required this.searchController,
     required this.gridScrollController,
     required this.repo,
@@ -42,6 +50,7 @@ class CharacterCardGrid extends StatelessWidget {
     required this.onTapCharacter,
     required this.onTapGroup,
     required this.onToggleSelect,
+    required this.onToggleSelectGroup,
     this.onToggleSelectMode,
     this.onToggleOrganizeMode,
     required this.onContextMenuAction,
@@ -50,6 +59,7 @@ class CharacterCardGrid extends StatelessWidget {
     required this.onFolderDialogAction,
     required this.onFolderTap,
     required this.onFolderNavigateBack,
+    required this.onFolderJump,
     required this.onCancelSelection,
     required this.onDeleteSelected,
     required this.onMoveToFolder,
@@ -74,6 +84,7 @@ class CharacterCardGrid extends StatelessWidget {
   final bool isSelecting;
   final bool isOrganizing;
   final Set<String> selectedCharacterIds;
+  final Set<String> selectedGroupIds;
   final TextEditingController searchController;
   final ScrollController gridScrollController;
   final CharacterRepository repo;
@@ -84,13 +95,15 @@ class CharacterCardGrid extends StatelessWidget {
   final Future<void> Function(CharacterCard character) onTapCharacter;
   final Future<void> Function(GroupChat group) onTapGroup;
   final void Function(CharacterCard character) onToggleSelect;
+  final void Function(GroupChat group) onToggleSelectGroup;
   final VoidCallback? onToggleSelectMode;
   final VoidCallback? onToggleOrganizeMode;
   final void Function(String action, CharacterCard character)
   onContextMenuAction;
   final void Function(String source) onImport;
-  final void Function(CharacterCard character, CharacterFolder folder)
-  onAcceptFolderDrop;
+  /// A card was dropped on a folder — [item] is a [CharacterCard] or a
+  /// [GroupChat] (both drag into folders).
+  final void Function(Object item, CharacterFolder folder) onAcceptFolderDrop;
   final void Function(
     FolderDialogAction action, {
     CharacterFolder? folder,
@@ -99,6 +112,9 @@ class CharacterCardGrid extends StatelessWidget {
   onFolderDialogAction;
   final void Function(CharacterFolder folder) onFolderTap;
   final VoidCallback onFolderNavigateBack;
+
+  /// Breadcrumb jump to an ancestor folder (null = the library top level).
+  final void Function(String? folderId) onFolderJump;
   final VoidCallback onCancelSelection;
   // onCreateGroup removed — group creation is now exclusively via the sidebar "Create Group Chat" button.
   /// Mass delete of the selected characters (severe typed-DELETE confirm
@@ -172,9 +188,41 @@ class CharacterCardGrid extends StatelessWidget {
     );
   }
 
+  /// Folder + search filtering for group chats — the exact mirror of
+  /// [_getFilteredCharacters], keyed by group id instead of image filename
+  /// (groups have no image key). Groups used to bypass foldering entirely
+  /// and always render on the top level.
+  List<GroupChat> _getFilteredGroups() {
+    List<GroupChat> groups;
+
+    final skipFolderFilter =
+        searchScope == SearchScope.allCharacters && searchQuery.isNotEmpty;
+    if (activeFolderId != null && !skipFolderFilter) {
+      // Same browse-vs-search split as characters: direct members while
+      // browsing (subfolder cards handle navigation), recursive while
+      // searching (subfolder cards are hidden).
+      final ids = searchQuery.isEmpty
+          ? folderService.groupIdsInFolder(activeFolderId!)
+          : folderService.groupIdsInFolderRecursive(activeFolderId!);
+      groups = groupRepo.groups.where((g) => ids.contains(g.id)).toList();
+    } else {
+      groups = groupRepo.groups.toList();
+    }
+
+    if (searchQuery.isNotEmpty) {
+      final query = searchQuery.toLowerCase();
+      groups = groups
+          .where((g) => g.name.toLowerCase().contains(query))
+          .toList();
+    }
+
+    return groups;
+  }
+
   @override
   Widget build(BuildContext context) {
     final filteredCharacters = _getFilteredCharacters();
+    final selectedCount = selectedCharacterIds.length + selectedGroupIds.length;
 
     return Stack(
       children: [
@@ -184,7 +232,7 @@ class CharacterCardGrid extends StatelessWidget {
               isSelecting: isSelecting,
               isOrganizing: isOrganizing,
               activeFolderId: activeFolderId,
-              selectedCharacterIds: selectedCharacterIds,
+              selectedCount: selectedCount,
               sortMode: sortMode,
               gridScale: gridScale,
               modeToggle: modeToggle,
@@ -192,6 +240,7 @@ class CharacterCardGrid extends StatelessWidget {
               folderService: folderService,
               onCancelSelection: onCancelSelection,
               onFolderNavigateBack: onFolderNavigateBack,
+              onFolderJump: onFolderJump,
               onSortChanged: onSortChanged,
               onGridScaleChanged: onGridScaleChanged,
               onGridScaleChangeEnd: onGridScaleChangeEnd,
@@ -212,7 +261,7 @@ class CharacterCardGrid extends StatelessWidget {
             Expanded(child: _buildGrid(context, filteredCharacters)),
           ],
         ),
-        if (isSelecting && selectedCharacterIds.isNotEmpty)
+        if (isSelecting && selectedCount > 0)
           Positioned(
             left: 0,
             right: 0,
@@ -246,7 +295,7 @@ class CharacterCardGrid extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    '${selectedCharacterIds.length} selected',
+                    '$selectedCount selected',
                     style: TextStyle(
                       color: AppColors.textSecondary(context),
                       fontSize: 14,
@@ -261,12 +310,24 @@ class CharacterCardGrid extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  // Multi-select is one gesture — moving lives beside
+                  // deleting (users kept finding only the delete toolbar and
+                  // never the separate organize mode, which remains for the
+                  // folder-first workflow).
+                  ElevatedButton.icon(
+                    onPressed: () => onMoveToFolder(selectedCharacterIds),
+                    icon: const Icon(Icons.drive_file_move, size: 18),
+                    label: const Text('Move to Folder'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.porchAmberOf(context),
+                      foregroundColor: AppColors.onChaosAccent,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   ElevatedButton.icon(
                     onPressed: () => onDeleteSelected(selectedCharacterIds),
                     icon: const Icon(Icons.delete_forever, size: 18),
-                    label: Text(
-                      'Delete ${selectedCharacterIds.length} Selected',
-                    ),
+                    label: Text('Delete $selectedCount Selected'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.negativeAccentOf(context),
                       foregroundColor: AppColors.userText,
@@ -276,7 +337,7 @@ class CharacterCardGrid extends StatelessWidget {
               ),
             ),
           ),
-        if (isOrganizing && selectedCharacterIds.isNotEmpty)
+        if (isOrganizing && selectedCount > 0)
           Positioned(
             left: 0,
             right: 0,
@@ -308,7 +369,7 @@ class CharacterCardGrid extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    '${selectedCharacterIds.length} selected',
+                    '$selectedCount selected',
                     style: TextStyle(
                       color: AppColors.textSecondary(context),
                       fontSize: 14,
@@ -324,7 +385,7 @@ class CharacterCardGrid extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton.icon(
-                    onPressed: selectedCharacterIds.isNotEmpty
+                    onPressed: selectedCount > 0
                         ? () => onMoveToFolder(selectedCharacterIds)
                         : null,
                     icon: const Icon(Icons.drive_file_move, size: 18),
@@ -356,13 +417,10 @@ class CharacterCardGrid extends StatelessWidget {
         ? folderService.getSubfolders(activeFolderId)
         : <CharacterFolder>[];
 
-    final groups =
-        (activeFolderId == null &&
-            searchQuery.isEmpty &&
-            !isSelecting &&
-            !isOrganizing)
-        ? groupRepo.groups
-        : <GroupChat>[];
+    // Groups follow the folder hierarchy exactly like characters now (the old
+    // bucket pinned every group to the top level and hid them during
+    // select/organize — they're selectable there too since they can be moved).
+    List<GroupChat> groups = _getFilteredGroups();
 
     List<CharacterCard> displayCharacters;
     if (showFolders && activeFolderId == null) {
@@ -373,6 +431,11 @@ class CharacterCardGrid extends StatelessWidget {
                 c.imagePath == null ||
                 !folderedFilenames.contains(path.basename(c.imagePath!)),
           )
+          .toList();
+      // Same top-level rule for groups: foldered ones only show inside their
+      // folder (this was the group-shaped hole in the unfoldered filter).
+      groups = groups
+          .where((g) => folderService.getFolderForGroup(g.id) == null)
           .toList();
     } else {
       displayCharacters = filteredCharacters;
@@ -427,9 +490,12 @@ class CharacterCardGrid extends StatelessWidget {
             return GroupGridCard(
               group: groups[groupOffset],
               groupRepo: groupRepo,
+              activeFolderId: activeFolderId,
               isSelecting: isSelecting,
               isOrganizing: isOrganizing,
+              selectedGroupIds: selectedGroupIds,
               onTapGroup: onTapGroup,
+              onToggleSelectGroup: onToggleSelectGroup,
               onGroupContextMenuAction: onGroupContextMenuAction,
             );
           }

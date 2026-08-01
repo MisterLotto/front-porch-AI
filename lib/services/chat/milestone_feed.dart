@@ -19,7 +19,7 @@
 import 'dart:convert';
 
 import 'package:front_porch_ai/database/database.dart';
-import 'package:front_porch_ai/models/chat_message.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/chat/journal_store.dart';
 
 /// One "Our Story" timeline entry (living-time-features.md §7 v1).

@@ -21,9 +21,12 @@ import 'package:shelf_router/shelf_router.dart';
 import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/services/backporch/backporch_api.dart';
 import 'package:front_porch_ai/services/backporch/stoop_aup.dart';
+import 'package:front_porch_ai/services/character_repository.dart';
+import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/web/facade/stoop_facade.dart';
 import 'package:front_porch_ai/services/web/routes/stoop_routes.dart';
+import 'package:front_porch_ai/services/world_repository.dart';
 
 /// One recorded upstream hit.
 class UpstreamHit {
@@ -225,5 +228,60 @@ void main() {
     expect(res.statusCode, 503);
     expect(jsonDecode(await res.readAsString()), {'error': 'library_unavailable'});
     expect(hits, isEmpty);
+  });
+
+  test('a WORLD download imports the .fpworld payload as a local place',
+      () async {
+    // A fully-wired facade (the setUp one has no library repositories).
+    final storage = StorageService();
+    await storage.initialized;
+    final worlds = WorldRepository(storage, db);
+    final wired = StoopFacade(
+      storage,
+      db,
+      characters: CharacterRepository(db, storage),
+      groups: GroupChatRepository(storage, db),
+      worlds: worlds,
+      api: BackporchApi(baseUrl: 'http://127.0.0.1:${upstream.port}'),
+    );
+    final wiredRouter = Router();
+    WebStoopRoutes(wired, wiredRouter);
+
+    upstreamBody = jsonEncode({
+      'type': 'WORLD',
+      'downloadCount': 1,
+      'card': {
+        'formatVersion': 1,
+        'id': 'pkg-mars',
+        'name': 'Mars Colony',
+        'description': 'Thin air, heavy dust.',
+        'lorebook': {
+          'entries': [
+            {'keys': ['dome'], 'content': 'The dome hums at night.'},
+          ],
+        },
+        'biome': null,
+      },
+    });
+    final res = await wiredRouter.call(
+      shelf.Request(
+        'POST',
+        Uri.parse('http://localhost/api/stoop/cards/w1/download'),
+        headers: {'x-stoop-token': 'tok-1'},
+        body: jsonEncode({'type': 'WORLD'}),
+      ),
+    );
+    expect(res.statusCode, 200);
+    final body = jsonDecode(await res.readAsString()) as Map<String, dynamic>;
+    expect(body['ok'], isTrue);
+    expect(body['type'], 'WORLD');
+    expect(body['name'], 'Mars Colony');
+    // The download endpoint was hit upstream, and the place actually landed
+    // in the local library (fresh local id, provenance preserved).
+    expect(hits.single.path, '/characters/w1/download');
+    final imported = worlds.worlds.where((w) => w.name == 'Mars Colony');
+    expect(imported, hasLength(1));
+    expect(imported.first.sourceId, 'pkg-mars');
+    expect(imported.first.lorebook.entries, hasLength(1));
   });
 }

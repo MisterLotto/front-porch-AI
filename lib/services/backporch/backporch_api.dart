@@ -152,6 +152,85 @@ class BackporchApi {
     return _meResult(json);
   }
 
+  /// Edit the public creator profile (bio ≤ 300 chars, up to 4 http(s) links).
+  /// Returns the refreshed account.
+  Future<({BackporchUser user, String policyVersion})> updateProfile(
+    String accessToken, {
+    required String bio,
+    required List<String> links,
+  }) async {
+    final json = await _post('/me/profile', {
+      'bio': bio,
+      'links': links,
+    }, token: accessToken);
+    return _meResult(json);
+  }
+
+  /// Upload a profile picture. Live instantly (post-moderated); requires a
+  /// verified email. Throws `email_not_verified` / `avatar_locked` /
+  /// `unsupported_image_type` for the UI to explain.
+  Future<({BackporchUser user, String policyVersion})> uploadAvatar({
+    required String accessToken,
+    required Uint8List bytes,
+    required String filename,
+  }) async {
+    final req = http.MultipartRequest('POST', Uri.parse('$baseUrl/me/avatar'))
+      ..headers['Authorization'] = 'Bearer $accessToken'
+      ..files.add(
+        http.MultipartFile.fromBytes('avatar', bytes, filename: filename),
+      );
+    final res = await http.Response.fromStream(
+      await req.send().timeout(const Duration(seconds: 60)),
+    );
+    return _meResult(_parse(res));
+  }
+
+  /// Remove the profile picture (always allowed, instant).
+  Future<({BackporchUser user, String policyVersion})> deleteAvatar(
+    String accessToken,
+  ) async {
+    return _meResult(await _delete('/me/avatar', accessToken));
+  }
+
+  /// Ask to change the account's sign-in email. The change only lands when
+  /// the NEW address clicks its confirmation link; until then it shows as
+  /// `user.pendingEmail`. Requires the current password (when one exists) and
+  /// the TOTP code when 2FA is on. Throws `email_taken`, `same_email`,
+  /// `wrong_password`, `two_factor_required`, or `resend_too_soon`.
+  Future<({BackporchUser user, String policyVersion})> changeEmail(
+    String accessToken, {
+    required String newEmail,
+    String? password,
+    String? totp,
+  }) async {
+    final json = await _post('/auth/change-email', {
+      'newEmail': newEmail,
+      'password': ?password,
+      'totp': ?totp,
+    }, token: accessToken);
+    return _meResult(json);
+  }
+
+  /// Abandon a pending email change (nothing was ever committed).
+  Future<({BackporchUser user, String policyVersion})> cancelEmailChange(
+    String accessToken,
+  ) async {
+    return _meResult(await _delete('/auth/change-email', accessToken));
+  }
+
+  /// Ask for a password-reset email. The server always answers ok (it never
+  /// reveals whether the address has an account); the emailed link opens the
+  /// hub's reset page.
+  Future<void> forgotPassword(String email) async {
+    await _post('/auth/forgot', {'email': email});
+  }
+
+  /// Delete one of the signed-in user's own uploads from The Stoop (owner-only
+  /// server-side). Existing downloaders keep their copies.
+  Future<void> deleteCharacter(String accessToken, String id) async {
+    await _delete('/characters/$id', accessToken);
+  }
+
   /// Permanently delete the signed-in account (GDPR erasure). Throws on failure.
   Future<void> deleteAccount(String accessToken) async {
     await _delete('/auth/me', accessToken);
@@ -231,17 +310,23 @@ class BackporchApi {
 
   /// The signed-in user's own uploads and their moderation status.
   Future<List<StoopCharacter>> myCharacters(String accessToken) async {
-    final json = await _get('/me/characters', accessToken);
+    final json = await _get('/me/characters?types=$kStoopWorldTypes', accessToken);
     final items = (json['items'] as List?) ?? const [];
     return items
         .map((e) => StoopCharacter.fromJson(e as Map<String, dynamic>))
         .toList();
   }
 
+  /// Ask for another email-confirmation link. Throws `resend_too_soon` when
+  /// one was sent within the last couple of minutes.
+  Future<void> resendVerification(String accessToken) async {
+    await _post('/auth/resend-verification', const {}, token: accessToken);
+  }
+
   /// Cards the user has downloaded before (newest first), so they can grab them
   /// again on a new device. Returns the same shape as browse items.
   Future<List<StoopCard>> myDownloads(String accessToken) async {
-    final json = await _get('/me/downloads', accessToken);
+    final json = await _get('/me/downloads?types=$kStoopWorldTypes', accessToken);
     final items = (json['items'] as List?) ?? const [];
     return items
         .map((e) => StoopCard.fromJson(e as Map<String, dynamic>))
@@ -269,6 +354,11 @@ class BackporchApi {
     final params = <String, String>{
       'sort': sort,
       'type': type,
+      // Mixed views ask for worlds explicitly. The server keeps `type=all`
+      // meaning solo+group forever, because every already-shipped app sends
+      // it and would render a world as a broken character; `types=` is the
+      // opt-in no old client has ever sent. Older servers ignore the param.
+      if (type == 'all') 'types': kStoopWorldTypes,
       'page': '$page',
       'take': '$take',
       if (q != null && q.isNotEmpty) 'q': q,
@@ -340,7 +430,9 @@ class BackporchApi {
 
   /// A creator's profile + their approved cards.
   Future<StoopCreator> creatorProfile(String accessToken, String id) async {
-    return StoopCreator.fromJson(await _get('/creators/$id', accessToken));
+    return StoopCreator.fromJson(
+      await _get('/creators/$id?types=$kStoopWorldTypes', accessToken),
+    );
   }
 
   /// Follow / unfollow a creator. Returns the new follow state + follower count.

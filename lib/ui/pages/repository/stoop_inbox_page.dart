@@ -199,18 +199,20 @@ class _StoopInboxPageState extends State<StoopInboxPage>
 
   @override
   Widget build(BuildContext context) {
-    final accent = stoopAccent(context);
     return Scaffold(
-      backgroundColor: AppColors.backgroundOf(context),
+      backgroundColor: stoopBg0(context),
       appBar: AppBar(
-        backgroundColor: AppColors.surfaceOf(context),
-        foregroundColor: AppColors.textPrimary(context),
-        title: const Text('Inbox'),
+        backgroundColor: stoopBg0(context),
+        foregroundColor: stoopCream(context),
+        elevation: 0,
+        shape: Border(bottom: BorderSide(color: stoopBorder(context))),
+        title: Text('Inbox', style: stoopDisplay(context, size: 19)),
         bottom: TabBar(
           controller: _tabs,
-          labelColor: accent,
-          unselectedLabelColor: AppColors.textTertiary(context),
-          indicatorColor: accent,
+          labelColor: stoopAmberText(context),
+          unselectedLabelColor: stoopMute(context),
+          indicatorColor: AppColors.stoopAmber,
+          dividerColor: Colors.transparent,
           tabs: const [
             Tab(text: 'Notifications'),
             Tab(text: 'Moderator chat'),
@@ -218,14 +220,9 @@ class _StoopInboxPageState extends State<StoopInboxPage>
         ),
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const StoopLamp()
           : _error != null
-          ? Center(
-              child: Text(
-                _error!,
-                style: TextStyle(color: AppColors.textTertiary(context)),
-              ),
-            )
+          ? stoopEmpty(context, glyph: '🌙', title: _error!)
           : TabBarView(
               controller: _tabs,
               children: [
@@ -245,36 +242,13 @@ class _StoopInboxPageState extends State<StoopInboxPage>
   Widget _chatBody() {
     final chat = _chat;
     if (chat.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.forum_outlined,
-                size: 48,
-                color: AppColors.iconSecondary(context),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'No messages yet',
-                style: TextStyle(
-                  color: AppColors.textPrimary(context),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Questions about a review or the rules? The moderation team '
-                'reads this thread — you can write to them right here.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textTertiary(context)),
-              ),
-            ],
-          ),
-        ),
+      return stoopEmpty(
+        context,
+        glyph: '💬',
+        title: 'No messages yet',
+        body:
+            'Questions about a review or the rules? The moderation team '
+            'reads this thread — you can write to them right here.',
       );
     }
     return ListView.builder(
@@ -285,22 +259,25 @@ class _StoopInboxPageState extends State<StoopInboxPage>
     );
   }
 
+  // Hub .hub-msg: your messages sit right on an amber-soft ground with an
+  // amber hairline; moderator replies sit left on the card ground.
   Widget _bubble(StoopMessage m) {
-    final mine = !m.fromMod; // the user's own messages sit on the right
-    final accent = stoopAccent(context);
-    final bg = mine
-        ? accent.withValues(alpha: 0.9)
-        : AppColors.surfaceContainerOf(context);
-    final fg = mine ? AppColors.background : AppColors.textPrimary(context);
+    final mine = !m.fromMod;
+    final bg = mine ? stoopAmberSoft(context) : stoopCard2(context);
+    final hairline = mine
+        ? AppColors.stoopAmber.withValues(alpha: 0.3)
+        : stoopBorder(context);
+    final fg = mine ? stoopCream(context) : stoopCream2(context);
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         constraints: const BoxConstraints(maxWidth: 360),
         decoration: BoxDecoration(
           color: bg,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: hairline),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -309,11 +286,12 @@ class _StoopInboxPageState extends State<StoopInboxPage>
               Padding(
                 padding: const EdgeInsets.only(bottom: 2),
                 child: Text(
-                  'Moderator',
+                  'MODERATOR',
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 10,
                     fontWeight: FontWeight.w700,
-                    color: accent,
+                    letterSpacing: 0.6,
+                    color: stoopFaint(context),
                   ),
                 ),
               ),
@@ -324,11 +302,11 @@ class _StoopInboxPageState extends State<StoopInboxPage>
                   're: ${m.character!.name}',
                   style: TextStyle(
                     fontSize: 11,
-                    color: fg.withValues(alpha: 0.75),
+                    color: stoopTealText(context),
                   ),
                 ),
               ),
-            Text(m.body, style: TextStyle(color: fg, height: 1.3)),
+            Text(m.body, style: TextStyle(color: fg, height: 1.35)),
           ],
         ),
       ),
@@ -343,10 +321,11 @@ class _StoopInboxPageState extends State<StoopInboxPage>
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
         decoration: BoxDecoration(
-          color: AppColors.surfaceContainerOf(context),
-          borderRadius: BorderRadius.circular(14),
+          color: stoopCard2(context),
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: stoopBorder(context)),
         ),
-        child: _TypingDots(color: AppColors.textTertiary(context)),
+        child: _TypingDots(color: stoopMute(context)),
       ),
     );
   }
@@ -355,8 +334,8 @@ class _StoopInboxPageState extends State<StoopInboxPage>
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
       decoration: BoxDecoration(
-        color: AppColors.surfaceOf(context),
-        border: Border(top: BorderSide(color: AppColors.borderOf(context))),
+        color: stoopBg0(context),
+        border: Border(top: BorderSide(color: stoopBorder(context))),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -369,21 +348,8 @@ class _StoopInboxPageState extends State<StoopInboxPage>
                 minLines: 1,
                 maxLines: 4,
                 onChanged: _onComposerChanged,
-                style: TextStyle(color: AppColors.textPrimary(context)),
-                decoration: InputDecoration(
-                  hintText: 'Write a message…',
-                  hintStyle: TextStyle(color: AppColors.textTertiary(context)),
-                  filled: true,
-                  fillColor: AppColors.surfaceContainerOf(context),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: AppColors.borderOf(context)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: AppColors.borderOf(context)),
-                  ),
-                ),
+                style: TextStyle(color: stoopCream(context)),
+                decoration: stoopInput(context, 'Write a message…'),
               ),
             ),
           ),
@@ -391,14 +357,17 @@ class _StoopInboxPageState extends State<StoopInboxPage>
           IconButton.filled(
             onPressed: _sending ? null : _send,
             style: IconButton.styleFrom(
-              backgroundColor: stoopAccent(context),
-              foregroundColor: AppColors.background,
+              backgroundColor: AppColors.stoopAmber,
+              foregroundColor: AppColors.stoopAmberInk,
             ),
             icon: _sending
                 ? const SizedBox(
                     width: 18,
                     height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppColors.stoopAmberInk,
+                    ),
                   )
                 : const Icon(Icons.send_rounded),
           ),

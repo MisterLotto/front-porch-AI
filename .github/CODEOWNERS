@@ -1,0 +1,34 @@
+# Code owners — review gate for the files that exist to catch regressions.
+#
+# Companion to .github/workflows/test-integrity.yml. That workflow makes a
+# protected-path change FAIL; this makes it require the maintainer's review
+# before it can merge at all. Two independent mechanisms, because PR #172
+# showed that a single guard whose evidence lives in the repo is not enough:
+# the dependency-floor test was working correctly and was simply out-voted by
+# an edit to the baseline JSON it reads.
+#
+# CODEOWNERS only has teeth when branch protection has
+# "Require review from Code Owners" enabled on main / Rawhide / dev / *-Beta.
+
+# Default: everything else can be reviewed normally.
+*                                   @linux4life1
+
+# ── The regression net itself ────────────────────────────────────────────
+# Editing any of these is editing the evidence, not the code.
+/test/                              @linux4life1
+/integration_test/                  @linux4life1
+/test/deps/dependency_floors.json   @linux4life1
+
+# ── CI, and the config that decides what CI even checks ──────────────────
+# A PR that can rewrite the workflows can grant itself a pass.
+/.github/                           @linux4life1
+/analysis_options.yaml              @linux4life1
+
+# ── Release + packaging: a bad edit here ships to every user at once ─────
+/scripts/                           @linux4life1
+/pubspec.yaml                       @linux4life1
+/pubspec.lock                       @linux4life1
+
+# ── Schema: an external tool (Character Card Forge) writes these tables
+#    with raw SQL, so a migration change can break software we do not ship.
+/lib/database/                      @linux4life1

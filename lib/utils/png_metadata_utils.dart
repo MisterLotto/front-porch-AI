@@ -17,6 +17,7 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:image/image.dart' as img;
 
@@ -59,40 +60,13 @@ class PngMetadataUtils {
 
       if (dataEnd + 4 > bytes.length) break;
 
-      if (type == 'tEXt') {
-        final data = bytes.sublist(dataStart, dataEnd);
-        final nullIndex = data.indexOf(0);
-        if (nullIndex != -1) {
-          final chunkKeyword = String.fromCharCodes(data.sublist(0, nullIndex));
-          if (chunkKeyword == keyword) {
-            return String.fromCharCodes(data.sublist(nullIndex + 1));
-          }
-        }
-      } else if (type == 'iTXt') {
-        final data = bytes.sublist(dataStart, dataEnd);
-        final nullIndex = data.indexOf(0);
-        if (nullIndex != -1) {
-          final chunkKeyword = String.fromCharCodes(data.sublist(0, nullIndex));
-          if (chunkKeyword == keyword) {
-            // iTXt layout after keyword\0:
-            // compressionFlag(1), compressionMethod(1), languageTag\0, translatedKeyword\0, text
-            int pos = nullIndex + 1;
-            if (pos + 2 <= data.length) {
-              pos += 2; // skip flags
-              while (pos < data.length && data[pos] != 0) {
-                pos++;
-              }
-              pos++; // skip language null
-              while (pos < data.length && data[pos] != 0) {
-                pos++;
-              }
-              pos++; // skip translated keyword null
-              if (pos < data.length) {
-                return utf8.decode(data.sublist(pos));
-              }
-            }
-          }
-        }
+      if (type == 'tEXt' || type == 'iTXt') {
+        final text = _parseTextChunk(
+          bytes.sublist(dataStart, dataEnd),
+          type,
+          keyword,
+        );
+        if (text != null) return text;
       }
 
       offset = dataEnd + 4;
@@ -101,6 +75,106 @@ class PngMetadataUtils {
     }
 
     return null;
+  }
+
+  /// Decodes ONE tEXt/iTXt chunk's payload, returning its text when the chunk
+  /// carries [keyword]. Shared by the in-memory walker above and the seeking
+  /// file walker below so the two can never disagree about how a chunk decodes.
+  static String? _parseTextChunk(
+    List<int> data,
+    String type,
+    String keyword,
+  ) {
+    final nullIndex = data.indexOf(0);
+    if (nullIndex == -1) return null;
+    final chunkKeyword = String.fromCharCodes(data.sublist(0, nullIndex));
+    if (chunkKeyword != keyword) return null;
+
+    if (type == 'tEXt') {
+      return String.fromCharCodes(data.sublist(nullIndex + 1));
+    }
+
+    // iTXt layout after keyword\0:
+    // compressionFlag(1), compressionMethod(1), languageTag\0,
+    // translatedKeyword\0, text
+    int pos = nullIndex + 1;
+    if (pos + 2 > data.length) return null;
+    pos += 2; // skip flags
+    while (pos < data.length && data[pos] != 0) {
+      pos++;
+    }
+    pos++; // skip language null
+    while (pos < data.length && data[pos] != 0) {
+      pos++;
+    }
+    pos++; // skip translated keyword null
+    if (pos >= data.length) return null;
+    return utf8.decode(data.sublist(pos));
+  }
+
+  /// Extracts [keyword]'s text payload by SEEKING through the PNG's chunk table
+  /// instead of loading the file.
+  ///
+  /// A character card's `chara` chunk is a few KB of JSON sitting in a header
+  /// chunk, but the file around it is a multi-megabyte image. Reading the whole
+  /// thing to reach it made opening the library pull ~142 MB off disk for 120
+  /// cards — measured at 501-743 ms, and worse on Windows where the antivirus
+  /// inspects every one of those megabyte reads. Walking the chunk table reads
+  /// only 8-byte headers and the matching chunk, skipping IDAT entirely, which
+  /// measured ~9x faster and does not grow with the artwork's size.
+  ///
+  /// Returns null on a non-PNG, a truncated file, or a missing keyword — the
+  /// same contract as [extractTextChunk], so callers can fall back to the
+  /// whole-file path unchanged.
+  static Future<String?> extractTextChunkFromFile(
+    String path,
+    String keyword,
+  ) async {
+    RandomAccessFile? handle;
+    try {
+      handle = await File(path).open();
+      final signature = await handle.read(8);
+      if (signature.length < 8) return null;
+      const expected = [137, 80, 78, 71, 13, 10, 26, 10];
+      for (var i = 0; i < 8; i++) {
+        if (signature[i] != expected[i]) return null;
+      }
+
+      final length = await handle.length();
+      var offset = 8;
+      while (offset + 12 <= length) {
+        final header = await handle.read(8);
+        if (header.length < 8) return null;
+        final dataLength =
+            (header[0] << 24) |
+            (header[1] << 16) |
+            (header[2] << 8) |
+            header[3];
+        final type = String.fromCharCodes(header.sublist(4, 8));
+        final dataStart = offset + 8;
+        if (dataStart + dataLength + 4 > length) return null;
+
+        if (type == 'tEXt' || type == 'iTXt') {
+          final data = await handle.read(dataLength);
+          if (data.length < dataLength) return null;
+          final text = _parseTextChunk(data, type, keyword);
+          if (text != null) return text;
+        } else if (type == 'IEND') {
+          return null;
+        }
+
+        // Seek past this chunk's payload + CRC. Non-text payloads are never
+        // read at all — that is the whole point: IDAT stays on disk.
+        offset = dataStart + dataLength + 4;
+        await handle.setPosition(offset);
+      }
+      return null;
+    } catch (_) {
+      // Unreadable/malformed: let the caller fall back to the byte path.
+      return null;
+    } finally {
+      await handle?.close();
+    }
   }
 
   /// Encodes an [image] as PNG with an additional uncompressed tEXt chunk.

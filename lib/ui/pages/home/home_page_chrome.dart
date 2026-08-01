@@ -220,8 +220,39 @@ extension _HomePageChrome on _HomePageState {
     }
   }
 
+  /// "Start New Chat" from either card's context menu: ask which persona
+  /// (step 2 — never assumed), then open a fresh session and enter it.
+  /// Cancelling the picker starts nothing. One handler for characters and
+  /// group casts; [ChatService.startFreshChatWith] owns the ordering.
+  Future<void> _startNewChatWith({
+    CharacterCard? character,
+    GroupChat? group,
+  }) async {
+    final subject = character?.name ?? group?.name ?? '';
+    final personaId = await showPersonaPickerDialog(context, subject: subject);
+    if (personaId == null || !mounted) return;
+
+    final chatService = Provider.of<ChatService>(context, listen: false);
+    await chatService.startFreshChatWith(
+      character: character,
+      group: group,
+      groupRepo: group == null
+          ? null
+          : Provider.of<GroupChatRepository>(context, listen: false),
+      personaId: personaId,
+    );
+    if (!mounted) return;
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ChatPage()));
+    _refreshLastActivityCache();
+  }
+
   void _handleContextMenuAction(String action, CharacterCard character) {
     switch (action) {
+      case 'new_chat':
+        _startNewChatWith(character: character);
+        break;
       case 'edit':
         _editCharacter(context, character);
         break;
@@ -245,6 +276,22 @@ extension _HomePageChrome on _HomePageState {
       case 'export_json':
         _exportCharacterJson(context, character);
         break;
+      case 'move_folder':
+        final moveService = Provider.of<FolderService>(context, listen: false);
+        _showMoveToFolderDialog(
+          context,
+          moveService,
+          title: 'Move "${character.name}" to folder',
+          onMove: (folderId) async {
+            if (character.imagePath == null) return;
+            if (folderId == null) {
+              await moveService.removeFromFolder(null, character.imagePath!);
+            } else {
+              await moveService.addToFolder(folderId, character.imagePath!);
+            }
+          },
+        );
+        break;
       case 'remove_folder':
         final folderService = Provider.of<FolderService>(
           context,
@@ -265,6 +312,9 @@ extension _HomePageChrome on _HomePageState {
 
   void _handleGroupContextMenuAction(String action, GroupChat group) {
     switch (action) {
+      case 'new_chat':
+        _startNewChatWith(group: group);
+        break;
       case 'edit':
         _editGroup(group);
         break;
@@ -276,6 +326,28 @@ extension _HomePageChrome on _HomePageState {
         break;
       case 'extract':
         _extractCharactersFromGroup(group);
+        break;
+      case 'move_folder':
+        final folderService = Provider.of<FolderService>(
+          context,
+          listen: false,
+        );
+        _showMoveToFolderDialog(
+          context,
+          folderService,
+          title: 'Move "${group.name}" to folder',
+          onMove: (folderId) => folderId == null
+              ? folderService.removeGroupFromFolder(null, group.id)
+              : folderService.addGroupToFolder(folderId, group.id),
+        );
+        break;
+      case 'remove_folder':
+        if (_activeFolderId != null) {
+          Provider.of<FolderService>(
+            context,
+            listen: false,
+          ).removeGroupFromFolder(_activeFolderId!, group.id);
+        }
         break;
       case 'delete':
         _confirmDeleteGroup(context, group);
@@ -318,13 +390,19 @@ extension _HomePageChrome on _HomePageState {
   }
 
 
+  /// One drop handler for both draggable kinds: characters are keyed by image
+  /// filename, group casts by their group id (see FolderService).
   Future<void> _handleAcceptFolderDrop(
-    CharacterCard character,
+    Object item,
     CharacterFolder folder,
   ) async {
     final folderService = Provider.of<FolderService>(context, listen: false);
-    if (character.imagePath != null) {
-      await folderService.addToFolder(folder.id, character.imagePath!);
+    if (item is CharacterCard) {
+      if (item.imagePath != null) {
+        await folderService.addToFolder(folder.id, item.imagePath!);
+      }
+    } else if (item is GroupChat) {
+      await folderService.addGroupToFolder(folder.id, item.id);
     }
   }
 
@@ -348,28 +426,39 @@ extension _HomePageChrome on _HomePageState {
   }
 
   void _handleFolderTap(CharacterFolder folder) {
-    applyState(() {
-      if (_activeFolderId != null) {
-        _folderStack.add(_activeFolderId!);
-      }
-      _activeFolderId = folder.id;
-    });
+    applyState(() => _activeFolderId = folder.id);
   }
 
+  /// Up one level. Subfolder cards only render inside their parent, so the
+  /// parent chain IS the navigation history — no stack needed (and the
+  /// breadcrumb trail can jump to any ancestor directly).
   void _handleFolderNavigateBack() {
-    applyState(() {
-      if (_folderStack.isNotEmpty) {
-        _activeFolderId = _folderStack.removeLast();
-      } else {
-        _activeFolderId = null;
-      }
-    });
+    final folderService = Provider.of<FolderService>(context, listen: false);
+    final current = folderService.folders
+        .where((f) => f.id == _activeFolderId)
+        .firstOrNull;
+    applyState(() => _activeFolderId = current?.parentId);
   }
 
   void _handleMoveToFolder(Set<String> selectedIds) {
     final repo = Provider.of<CharacterRepository>(context, listen: false);
     final folderService = Provider.of<FolderService>(context, listen: false);
-    _showMoveToFolderDialog(context, repo, folderService);
+    final chars = _selectedCharacterIds.length;
+    final groups = _selectedGroupIds.length;
+    // "N characters" / "N groups" when the selection is homogeneous,
+    // "N items" for a mixed grab.
+    final title = groups == 0
+        ? 'Move $chars character${chars == 1 ? '' : 's'} to folder'
+        : chars == 0
+        ? 'Move $groups group${groups == 1 ? '' : 's'} to folder'
+        : 'Move ${chars + groups} items to folder';
+    _showMoveToFolderDialog(
+      context,
+      folderService,
+      title: title,
+      onMove: (folderId) =>
+          _moveSelectedToFolder(context, folderId, repo, folderService),
+    );
   }
 
   void _handleSortChanged(String mode) {

@@ -5,15 +5,13 @@ import 'package:provider/provider.dart';
 import 'package:path/path.dart' as path;
 
 import 'package:front_porch_ai/services/services.dart';
-import 'package:front_porch_ai/services/model_manager.dart';
 import 'package:front_porch_ai/services/kcpps_generator_service.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/context_management_selector.dart';
 import 'package:front_porch_ai/ui/widgets/gpu_info_tile.dart';
 import 'package:front_porch_ai/ui/widgets/vram_usage_section.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
-import 'package:front_porch_ai/utils/gguf_parser.dart';
-import 'package:front_porch_ai/utils/vram_estimator.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 class GenerateKcppsDialog extends StatefulWidget {
   const GenerateKcppsDialog({super.key});

@@ -21,7 +21,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/services/expression_pack_service.dart';
-import 'package:front_porch_ai/utils/emotion_labels.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Fires one multimodal eval and returns the raw reply text, or null on
 /// failure. Production wires this to vision_eval.dart's fireVisionEval with

@@ -69,7 +69,12 @@ class GenerationHistory extends StatelessWidget {
                   child: Stack(
                     children: [
                       Positioned.fill(
-                        child: Image.memory(e.bytes, fit: BoxFit.cover),
+                        // Strip thumbnails — decode small, not at gen size.
+                        child: Image.memory(
+                          e.bytes,
+                          fit: BoxFit.cover,
+                          cacheWidth: 192,
+                        ),
                       ),
                       Positioned(
                         bottom: 0,

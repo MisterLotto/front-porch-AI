@@ -18,8 +18,8 @@
 
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:front_porch_ai/utils/json_sanitizer.dart';
-import 'package:front_porch_ai/models/character_card.dart';
+import 'package:front_porch_ai/utils/utils.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/kobold_service.dart';
 import 'package:front_porch_ai/services/chargen/char_macro.dart';

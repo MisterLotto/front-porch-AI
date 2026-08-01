@@ -32,7 +32,7 @@ import 'package:front_porch_ai/services/vision_eval.dart';
 import 'package:front_porch_ai/services/llm_provider.dart';
 import 'package:front_porch_ai/services/user_persona_service.dart';
 
-import 'package:front_porch_ai/utils/character_id.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/image_gen_service.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
@@ -40,84 +40,28 @@ import 'package:front_porch_ai/services/v2_card_service.dart';
 import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/avatar_gallery.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/models/chat_generation_settings.dart';
-import 'package:front_porch_ai/models/chat_theme_overrides.dart';
-import 'package:front_porch_ai/models/chat_message.dart';
-import 'package:front_porch_ai/models/chat_participant.dart';
-import 'package:front_porch_ai/models/group_chat.dart';
-import 'package:front_porch_ai/models/avatar_image.dart';
-import 'package:front_porch_ai/models/group_member.dart';
-import 'package:front_porch_ai/services/chat/member_origin_resolver.dart';
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/chat/chat.dart';
 import 'package:front_porch_ai/services/group_turn_manager.dart';
-import 'package:front_porch_ai/models/lorebook.dart';
-import 'package:front_porch_ai/models/needs_impact.dart';
 import 'package:front_porch_ai/services/world_repository.dart';
 import 'package:front_porch_ai/services/memory_service.dart';
-import 'package:front_porch_ai/database/database.dart' hide AvatarImage;
-import 'package:front_porch_ai/utils/emotion_labels.dart';
-import 'package:front_porch_ai/utils/output_sanitizer_regex.dart';
-import 'package:front_porch_ai/utils/group_realism_blobs.dart'; // parseGroupRealismSeeds — fresh-chat group realism reset (fixation-bleed fix)
+import 'package:front_porch_ai/database/database.dart' hide AvatarImage, World;
 import 'package:front_porch_ai/services/expression_classifier.dart'; // top-level for ExpressionClassifierService type in @Dep shim (pre-existing)
-import 'package:front_porch_ai/services/chat/chat_command_handler.dart';
-import 'package:front_porch_ai/services/chat/image_command_service.dart';
-import 'package:front_porch_ai/services/chat/cast_detector.dart';
-import 'package:front_porch_ai/services/chat/scene_guest_director.dart';
-import 'package:front_porch_ai/services/chat/scene_guest_factory.dart';
-import 'package:front_porch_ai/services/chat/needs_simulation.dart';
-import 'package:front_porch_ai/services/chat/prompt_plan.dart';
-import 'package:front_porch_ai/services/chat/stop_sequences.dart';
 import 'package:front_porch_ai/services/live_gen_progress.dart';
-import 'package:front_porch_ai/services/chat/needs_impact_evaluator.dart';
-import 'package:front_porch_ai/services/chat/chaos_mode_service.dart';
-import 'package:front_porch_ai/services/chat/relationship_service.dart';
-import 'package:front_porch_ai/services/chat/relationship_milestones.dart';
-import 'package:front_porch_ai/services/chat/expression_classifier.dart'; // leaf for ExpressionService (post-extraction)
-import 'package:front_porch_ai/services/chat/time_service.dart';
-import 'package:front_porch_ai/services/chat/nsfw_service.dart';
-import 'package:front_porch_ai/services/chat/lorebook_collection.dart';
-import 'package:front_porch_ai/services/chat/lorebook_injector.dart';
-import 'package:front_porch_ai/services/chat/lorebook_scanner.dart';
-import 'package:front_porch_ai/services/chat/lorebook_timed_effects.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/author_note_builder.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/relationship_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/emotion_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/behavioral_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/time_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/weather_injection.dart';
-import 'package:front_porch_ai/services/chat/absence_tracker.dart';
-import 'package:front_porch_ai/services/chat/afk_flavor.dart';
-import 'package:front_porch_ai/services/chat/ambition_service.dart';
-import 'package:front_porch_ai/services/chat/dream_service.dart';
-import 'package:front_porch_ai/services/chat/promise_debt_service.dart';
+import 'package:front_porch_ai/services/chat/prompt_injection/world_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/ambition_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/promise_debt_injection.dart';
-import 'package:front_porch_ai/services/chat/milestone_feed.dart';
-import 'package:front_porch_ai/services/chat/weather_engine.dart';
-import 'package:front_porch_ai/services/chat/weather_segments.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/nsfw_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/chaos_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/needs_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/realism_state_injection.dart';
-import 'package:front_porch_ai/services/chat/llm_eval_engine.dart';
-import 'package:front_porch_ai/services/chat/realism_evals.dart';
-import 'package:front_porch_ai/services/chat/realism_prompt_builder.dart';
-import 'package:front_porch_ai/services/chat/realism_verification.dart';
-import 'package:front_porch_ai/services/chat/objective_proposal.dart';
-import 'package:front_porch_ai/services/chat/journal_store.dart';
-import 'package:front_porch_ai/services/chat/journal_maintenance.dart';
-import 'package:front_porch_ai/services/chat/journal_physics.dart';
-import 'package:front_porch_ai/services/chat/journal_review.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/journal_injection.dart';
-import 'package:front_porch_ai/services/chat/porch_memory_import.dart';
-import 'package:front_porch_ai/services/chat/porch_memory_models.dart';
-import 'package:front_porch_ai/services/chat/growth_ops.dart';
-import 'package:front_porch_ai/services/chat/growth_physics.dart';
-import 'package:front_porch_ai/services/chat/growth_review.dart';
-import 'package:front_porch_ai/services/chat/growth_service.dart';
-import 'package:front_porch_ai/services/chat/growth_store.dart';
-import 'package:front_porch_ai/services/chat/pass_support.dart';
-import 'package:front_porch_ai/services/chat/tool_support_tester.dart';
 import 'package:front_porch_ai/services/macro_resolver.dart';
 import 'package:drift/drift.dart' as drift;
 
@@ -494,7 +438,7 @@ class ChatService extends ChangeNotifier {
       );
       return;
     }
-    if (_isGenerating) {
+    if (_isTurnBusy) {
       _setGuestStatus(
         '⚠ Wait for the current reply to finish first.',
         isError: true,
@@ -559,7 +503,7 @@ class ChatService extends ChangeNotifier {
       );
       return;
     }
-    if (_isGenerating) {
+    if (_isTurnBusy) {
       _setGuestStatus(
         '⚠ Wait for the current reply to finish first.',
         isError: true,
@@ -735,7 +679,7 @@ class ChatService extends ChangeNotifier {
         // /speak <name> in a full group: force that member to take their turn now
         // (jump the rotation), mirroring the Lite-NPC /speak. Same setNextSpeaker
         // + generate path the goodbye narration uses, minus the removal/directive.
-        if (_activeGroup == null || _isGenerating) return;
+        if (_activeGroup == null || _isTurnBusy) return;
         _groupManager?.setNextSpeaker(member);
         await _generateResponse(GenerationMode.normal);
       },
@@ -1029,6 +973,35 @@ class ChatService extends ChangeNotifier {
   Map<String, dynamic>?
   _pendingRealismMetadata; // stores deltas for the next generation
   bool _isGenerating = false;
+
+  /// True while the awaited POST-generation work is still running.
+  ///
+  /// `_isGenerating` is cleared the moment the last token lands, but the turn
+  /// is not finished there: the needs-impact eval, the realism-state re-stamp,
+  /// the `_saveScalarsIntoGroupRealism` persist and the chip attach all run
+  /// afterwards, and in a group they run under an impersonation dance that
+  /// reassigns `_activeCharacter` and loads that member's scalars. For those
+  /// seconds the app used to report "not generating" while the engine was
+  /// still mutating state, so every re-entrancy guard stood open: a delete
+  /// could shift the timeline under a running eval, and a new turn could
+  /// interleave with the previous one's persist.
+  ///
+  /// Deliberately NOT held across the fire-and-forget passes (journal, growth,
+  /// promise-debt, embed, periodic evals). Those are unawaited by design and
+  /// can run indefinitely; blocking input until they finish would trade a race
+  /// for a wedged UI, which is the worse bug.
+  bool _isPostGenerating = false;
+
+  /// The honest "this turn is still in motion" predicate — what the mutation
+  /// guards should ask, rather than `_isGenerating` alone.
+  ///
+  /// NOT for the escape hatches: `stopGeneration` and
+  /// `_cancelAndWaitForGeneration` must keep testing `_isGenerating` on its
+  /// own. The first aborts an in-flight HTTP stream (there is none during
+  /// post-gen), and the second SPINS until the flag clears — broadening it
+  /// would hang the caller if post-gen ever failed to settle.
+  bool get _isTurnBusy => _isGenerating || _isPostGenerating;
+
   // True while a forked-in character's custom entrance sequence is running
   // (fire-and-forget after forkToGroupChat). Blocks user-triggered turns so the
   // one-shot _entranceDirective can't be consumed/overwritten by a racing user
@@ -1062,6 +1035,39 @@ class ChatService extends ChangeNotifier {
   int _displayedTokenCount = 0;
   final List<DateTime> _tokenTimestamps =
       []; // Rolling window for TPS measurement
+
+  // ── Streaming rebuild throttle ──
+  // The token loop used to fire notifyListeners() up to twice PER TOKEN
+  // (~55-80 full chat-page rebuilds/sec at local speeds), which was the
+  // single largest source of "the app feels sluggy while generating".
+  // _notifyStreamListeners coalesces those into at most one notify per
+  // ~33 ms (≈30 fps — above the eye's text-reading rate) with a guaranteed
+  // trailing notify so the final token batch always paints. End-of-turn
+  // paths still call plain notifyListeners() directly, so terminal state
+  // (isGenerating=false, chips, perf) is never throttled away.
+  DateTime _lastStreamNotify = DateTime.fromMillisecondsSinceEpoch(0);
+  Timer? _streamNotifyTimer;
+  static const Duration _kStreamNotifyInterval = Duration(milliseconds: 33);
+
+  void _notifyStreamListeners() {
+    if (_streamNotifyTimer != null) return; // trailing notify already queued
+    final elapsed = DateTime.now().difference(_lastStreamNotify);
+    if (elapsed >= _kStreamNotifyInterval) {
+      _lastStreamNotify = DateTime.now();
+      notifyListeners();
+    } else {
+      _streamNotifyTimer = Timer(_kStreamNotifyInterval - elapsed, () {
+        _streamNotifyTimer = null;
+        _lastStreamNotify = DateTime.now();
+        notifyListeners();
+      });
+    }
+  }
+
+  void _cancelStreamNotifyThrottle() {
+    _streamNotifyTimer?.cancel();
+    _streamNotifyTimer = null;
+  }
 
   // ── Web token broadcast ──
   // External consumers (the web server's StreamHub) listen to this for real-time token streaming.
@@ -1476,6 +1482,90 @@ class ChatService extends ChangeNotifier {
   /// loops in generation/impersonate/sidebar/pre-AI-snapshot/scanner).
   /// [inheritOverride] forces member books in for scanning/reset; injection
   /// and sidebar pass null to honor the group's inherit flag.
+  /// Living Worlds: UUIDs of worlds attached to the current session.
+  /// Loaded on session open; group template seeds new chats.
+  List<String> _chatWorldIds = const [];
+
+  /// Hydrated mid-chat climate spans + world default (Living Worlds phase 1).
+  BiomeSchedule _biomeSchedule = const BiomeSchedule();
+
+  Future<void> _reloadChatWorldIds() async {
+    final sid = _currentSessionId;
+    if (sid == null) {
+      _chatWorldIds = const [];
+      _biomeSchedule = const BiomeSchedule();
+      return;
+    }
+    try {
+      // A chat opened BEFORE its character had a world predates any decision
+      // about attachments, so its empty list means "undecided" — give it the
+      // character's worlds now. Chats where the user actually chose (including
+      // choosing none) are flagged and skipped, so a deliberate detach sticks.
+      final refs = _activeGroup == null
+          ? (_activeCharacter?.worldNames ?? const <String>[])
+          : const <String>[];
+      if (refs.isNotEmpty) {
+        await _worldRepository.backfillChatWorldsFromCharacter(
+          chatId: sid,
+          characterWorldRefs: refs,
+        );
+      }
+      _chatWorldIds = await _worldRepository.getChatWorldIds(sid);
+    } catch (e) {
+      debugPrint('[ChatService] chat world load failed: $e');
+      _chatWorldIds = const [];
+    }
+    await _reloadBiomeSchedule();
+  }
+
+  Future<void> _reloadBiomeSchedule() async {
+    final sid = _currentSessionId;
+    if (sid == null) {
+      _biomeSchedule = const BiomeSchedule();
+      return;
+    }
+    try {
+      final rows = await _worldRepository.getChatBiomeSpanRows(sid);
+      _biomeSchedule = BiomeSchedule.fromJsonSpans(
+        rows: rows,
+        worldDefault: _worldDefaultBiome,
+      );
+    } catch (e) {
+      debugPrint('[ChatService] biome schedule load failed: $e');
+      _biomeSchedule = BiomeSchedule(worldDefault: _worldDefaultBiome);
+    }
+  }
+
+  /// Public attach surface for chat tools / UI.
+  List<String> get chatWorldIds => List.unmodifiable(_chatWorldIds);
+
+  Future<void> setChatWorldIds(List<String> worldIds) async {
+    final sid = _currentSessionId;
+    if (sid == null) return;
+    await _worldRepository.setChatWorlds(sid, worldIds);
+    _chatWorldIds = List.unmodifiable(worldIds);
+    await _reloadBiomeSchedule();
+    notifyListeners();
+  }
+
+  /// Climate active on the current story day (span override or world default).
+  Biome get activeChatBiome =>
+      _biomeSchedule.biomeAt(_timeService.dayCount);
+
+  /// Insert a mid-chat climate changeover from [dayCount] onward.
+  Future<void> setChatClimate(Biome biome) async {
+    final sid = _currentSessionId;
+    if (sid == null) return;
+    final day = _timeService.dayCount < 1 ? 1 : _timeService.dayCount;
+    await _worldRepository.setChatBiome(
+      chatId: sid,
+      dayCount: day,
+      biome: biome,
+    );
+    await _reloadBiomeSchedule();
+    notifyListeners();
+  }
+
   List<LoreEntryRef> _collectLoreRefs({bool? inheritOverride}) {
     return collectLoreEntryRefs(
       characters: _activeGroup != null
@@ -1485,9 +1575,9 @@ class ChatService extends ChangeNotifier {
                 : const <CharacterCard>[]),
       chatLorebook: _loreTimedEffects.chatLorebook,
       groupLorebook: _activeGroupLorebook,
+      chatWorldIds: _chatWorldIds,
       groupWorldNames: _activeGroup?.worldIds ?? const [],
-      resolveWorld: (name) =>
-          _worldRepository.worlds.where((w) => w.name == name).firstOrNull,
+      resolveWorld: _worldRepository.resolveWorld,
       inherit:
           inheritOverride ?? (_activeGroup?.inheritCharacterLorebooks ?? true),
     );
@@ -1803,6 +1893,40 @@ class ChatService extends ChangeNotifier {
   String? get absenceBannerPhrase =>
       _storageService.absenceBannerEnabled ? absencePhrase : null;
 
+  /// Climate from the first attached world that carries one (Living Worlds).
+  /// Used as the schedule default when no mid-chat span covers a day.
+  /// Temperate when nothing is attached — byte-identical to pre-biome weather.
+  Biome get _worldDefaultBiome {
+    World? pick(String ref) => _worldRepository.resolveWorld(ref);
+    // A custom climate is branded 'world:<id>' so every climate picker can
+    // match the active climate to its option by id alone.
+    Biome resolveFor(World w) {
+      final b = Biome.resolve(biomeId: w.biomeId, biomeJson: w.biomeJson);
+      return w.biomeJson != null ? b.withId('world:${w.id}') : b;
+    }
+
+    for (final id in _chatWorldIds) {
+      final w = pick(id);
+      if (w == null) continue;
+      if (w.biomeId != null || w.biomeJson != null) {
+        return resolveFor(w);
+      }
+    }
+    final group = _activeGroup;
+    if (group != null) {
+      for (final ref in group.worldIds) {
+        final w = pick(ref);
+        if (w == null) continue;
+        if (w.biomeId != null || w.biomeJson != null) {
+          return resolveFor(w);
+        }
+      }
+    }
+    return Biome.temperate;
+  }
+
+  Biome _biomeAtDay(int day) => _biomeSchedule.biomeAt(day);
+
   /// Today's story weather, or null when off (living-time-features.md §3).
   /// Pure recompute from existing state — nothing stored, so save/load and
   /// group re-entry agree for free. Gate: realism + passage-of-time + the
@@ -1820,6 +1944,7 @@ class ChatService extends ChangeNotifier {
       sessionSeed: seed,
       dayCount: _timeService.dayCount,
       date: _timeService.clock,
+      biomeAtDay: _biomeAtDay,
     );
   }
 
@@ -1827,14 +1952,17 @@ class ChatService extends ChangeNotifier {
   /// Because the engine is a prefix-stable deterministic walk, this forecast
   /// is exactly what day dayCount+1 will be when the story clock reaches it
   /// (dayCount is derived from the calendar date, so +1 day ⇔ +1 dayCount) —
-  /// foreshadowed fronts always arrive. Recompute is O(dayCount) integer
-  /// math, called once per turn by the injection and once per facade read.
+  /// foreshadowed fronts always arrive (except the first day of a mid-chat
+  /// climate switch — see [WeatherInjection.suppressForeshadow]).
+  /// Recompute is O(dayCount) integer math, called once per turn by the
+  /// injection and once per facade read.
   DailyWeather? get upcomingWeather {
     if (currentWeather == null) return null;
     return WeatherEngine.weatherFor(
       sessionSeed: _currentSessionId!,
       dayCount: _timeService.dayCount + 1,
       date: _timeService.clock.add(const Duration(days: 1)),
+      biomeAtDay: _biomeAtDay,
     );
   }
 
@@ -1850,6 +1978,7 @@ class ChatService extends ChangeNotifier {
       dayCount: _timeService.dayCount,
       date: _timeService.clock,
       hour: _timeService.clock.hour,
+      biomeAtDay: _biomeAtDay,
     );
   }
 
@@ -1870,6 +1999,7 @@ class ChatService extends ChangeNotifier {
                 dayCount: day - 1,
                 date: _timeService.clock.subtract(const Duration(days: 1)),
                 hour: 23,
+                biomeAtDay: _biomeAtDay,
               ),
       DaySegment.afternoon => _segmentAt(7),
       DaySegment.evening => _segmentAt(14),
@@ -1882,12 +2012,18 @@ class ChatService extends ChangeNotifier {
     dayCount: _timeService.dayCount,
     date: _timeService.clock,
     hour: hour,
+    biomeAtDay: _biomeAtDay,
   );
 
   late final _weatherInjection = WeatherInjection(
     getWeather: () => currentSegmentWeather,
     getPreviousSegment: () => previousSegmentWeather,
     getUpcoming: () => upcomingWeather,
+    suppressForeshadow: () =>
+        _biomeSchedule.isSpanStart(_timeService.dayCount),
+    // Condition skins (phase 2 step ④): renamed weather speaks by its new
+    // name with stance-driven behavior on every prompt surface.
+    getBiome: () => activeChatBiome,
   );
 
   // ── Ambitions (Living Time §6) ──
@@ -2769,7 +2905,28 @@ class ChatService extends ChangeNotifier {
 
   CharacterCard? get activeCharacter => _activeCharacter;
   List<ChatMessage> get messages => List.unmodifiable(_messages);
+  /// Token streaming — deliberately the NARROW sense.
+  ///
+  /// This drives the send button's enabled state, and widening it to include
+  /// post-generation was tried and reverted: background work (post-gen evals,
+  /// objective completion checks) then held the composer disabled for most of
+  /// a turn on a slow machine. CI caught it — the E2E driver could not find a
+  /// tappable send button across eight retries on the macOS and Windows
+  /// runners, which is exactly what a user on a slow local backend would have
+  /// experienced.
+  ///
+  /// The data-loss hazard that widening was meant to solve is real but belongs
+  /// at the composer, not here: what matters is that a composer's own guard
+  /// uses the SAME predicate as [sendMessage]. If the composer's check is
+  /// narrower than the service's, the composer clears the field for a send the
+  /// service then refuses. See [isSettlingTurn] and the mirror in
+  /// `_sendCurrentMessage`.
   bool get isGenerating => _isGenerating;
+
+  /// True while the turn's awaited post-generation work is still settling.
+  /// Exposed so tests can assert the window opens and — more importantly —
+  /// always closes. See [_isPostGenerating].
+  bool get isSettlingTurn => _isPostGenerating;
   bool get isLoadingSession => _isLoadingSession;
   String? get currentSessionId => _currentSessionId;
 
@@ -3287,6 +3444,16 @@ class ChatService extends ChangeNotifier {
     // inserts (dream block) with the active turn's writes on one shared
     // list — the 2026-07-28 dream-corruption report. Stop first: the Stop
     // button now halts a turn promptly (see the drain cancel fix).
+    //
+    // Deliberately _isGenerating, NOT _isTurnBusy. Extending this to the
+    // post-generation window was tried twice and CI rejected it both times:
+    // post-gen evals plus background objective checks meant the composer was
+    // unavailable for most of a turn, and on a slow local backend a user
+    // would meet a dead send button far more often than a live one.
+    // Sending APPENDS a message; it does not shift indices or rewrite state
+    // under a running eval the way delete/regenerate/swipe/cast do — those
+    // keep the wider _isTurnBusy guard, because that is where the race
+    // actually corrupts something.
     if (_isGenerating) return;
     // One-shot absence acknowledgment: pending survives exactly the first
     // user turn after load (all of that turn's prompt builds see it); the
@@ -3493,9 +3660,21 @@ class ChatService extends ChangeNotifier {
       _timeService.detectOocTimeSkip(text);
     }
 
+    // ── Direct-address turn routing (both cast surfaces) ─────────────────
+    // 1:1: "@Evelyn …" anywhere (or a vocative — "Evelyn - can you clarify…")
+    // routes this turn to the GUEST via the parity-safe guest path; the host
+    // turn and its prep below (chaos tick/wheel, decay, pre-gen eval) are
+    // skipped — guests carry ZERO Realism/Needs, the host simply didn't take
+    // a turn. Fixes the "responds twice per message" Discord report
+    // (2026-07-28). Group: "@Member" forces that member as this turn's
+    // speaker (inside the call; returns null — the turn proceeds normally).
+    // Decision logic lives in the scene-guest leaf.
+    final addressedGuest = _directAddressRoutedGuest(userMsg.promptText);
+
     // ── Chaos Mode: check + pause for wheel if triggered ─────────────────
     // Guard + tick delegated (pendingInjection check via service getter).
-    if (_chaosModeService.chaosModeEnabled &&
+    if (addressedGuest == null &&
+        _chaosModeService.chaosModeEnabled &&
         _chaosModeService.pendingChaosInjection == null) {
       if (checkAndTickChaosPressure()) {
         // Create a completer so sendMessage pauses here until the wheel resolves
@@ -3528,7 +3707,7 @@ class ChatService extends ChangeNotifier {
     // can use the same delta-revert mechanism the classic realism fields
     // (bond/trust/arousal) use.
     Map<String, int>? preTurnVector;
-    if (_realismActiveThisMode) {
+    if (_realismActiveThisMode && addressedGuest == null) {
       if (_needsSimEnabled && _needsSimulation.vector.isNotEmpty) {
         preTurnVector = Map<String, int>.from(_needsSimulation.vector);
         _pendingRealismMetadata ??= {};
@@ -3590,7 +3769,11 @@ class ChatService extends ChangeNotifier {
       return;
     }
 
-    await _generateResponse(GenerationMode.normal);
+    if (addressedGuest != null) {
+      await generateGuestTurn(addressedGuest);
+    } else {
+      await _generateResponse(GenerationMode.normal);
+    }
     // Backend-down abort: no response was generated, so none of the
     // post-turn work below may run — no idle-timer arming, no chip attach,
     // no guest chime-ins against the notice text (pre-move parity: the old
@@ -3622,8 +3805,12 @@ class ChatService extends ChangeNotifier {
     // above). Let the director decide which guest(s) speak next. Shared with
     // regenerateMainCharacter() so the re-chime gate is identical after a regen.
     // promptText (not raw text) so a photo-only turn feeds the director a
-    // "[shared a photo]" marker instead of an empty user message.
-    await _maybeRunSceneGuestChimeIns(userText: userMsg.promptText);
+    // "[shared a photo]" marker instead of an empty user message. A routed
+    // direct-address speaker is excluded — they already answered this turn.
+    await _maybeRunSceneGuestChimeIns(
+      userText: userMsg.promptText,
+      exclude: addressedGuest,
+    );
 
     // ── Auto-caption the attached photo for future-turn history ─────────────
     // Vision path only (blind models were captioned pre-gen). Runs LAST so the
@@ -3644,10 +3831,13 @@ class ChatService extends ChangeNotifier {
   /// present. Each gate eval + guest turn is a slow LLM call, so it bails if the
   /// user switches chats / the scene changes (so guests never speak into the
   /// wrong conversation).
-  Future<void> _maybeRunSceneGuestChimeIns({required String userText}) async {
+  Future<void> _maybeRunSceneGuestChimeIns({
+    required String userText,
+    CharacterCard? exclude,
+  }) async {
     if (_activeGroup != null ||
         _sceneGuestCards.isEmpty ||
-        _isGenerating ||
+        _isTurnBusy ||
         _entrancesInFlight) {
       return;
     }
@@ -3659,6 +3849,7 @@ class ChatService extends ChangeNotifier {
       userText: userText,
       primaryResponse: primaryResponse,
       isContextValid: () => !_sceneChanged(token) && _activeGroup == null,
+      exclude: exclude,
     );
   }
 
@@ -3729,7 +3920,10 @@ class ChatService extends ChangeNotifier {
   /// Internal: trigger the next auto-play response.
   Future<void> _autoPlayNext() async {
     if (!_autoPlayActive || !_observerMode || _activeGroup == null) return;
-    if (_isGenerating) return; // wait for current generation to finish
+    // Both auto-play schedulers (generation.dart and _waitForTtsThenContinue)
+    // arm their delay AFTER the awaited post-gen section has already finished,
+    // so this is clear by the time they fire; no re-arm machinery is needed.
+    if (_isTurnBusy) return; // wait for the current turn to finish settling
 
     await _generateResponse(GenerationMode.normal);
   }
@@ -3773,7 +3967,7 @@ class ChatService extends ChangeNotifier {
       _invalidateJournalFrom(messageIndex);
       await _saveChat();
       notifyListeners();
-    } else if (messageIndex == _messages.length - 1 && !_isGenerating) {
+    } else if (messageIndex == _messages.length - 1 && !_isTurnBusy) {
       // Past last swipe on last message — regenerate
       await regenerateLastMessage();
     }
@@ -3788,7 +3982,7 @@ class ChatService extends ChangeNotifier {
   }
 
   Future<void> continueGeneration() async {
-    if (_messages.isEmpty || _isGenerating || _guestBusy) return;
+    if (_messages.isEmpty || _isTurnBusy || _guestBusy) return;
 
     // Only continue if the last message is from a bot (non-user, non-system).
     // Narration banners (dreams, Chance Time) are excluded: continue_ streams
@@ -3804,7 +3998,7 @@ class ChatService extends ChangeNotifier {
 
   /// Trigger the next character to speak in group mode.
   Future<void> triggerNextCharacter() async {
-    if (_activeGroup == null || _groupCharacters.isEmpty || _isGenerating) {
+    if (_activeGroup == null || _groupCharacters.isEmpty || _isTurnBusy) {
       return;
     }
     await _generateResponse(GenerationMode.normal);
@@ -3886,9 +4080,36 @@ class ChatService extends ChangeNotifier {
     // position the active turn still relies on (chip attach, lorebook scan,
     // journal invalidation) — and made a dream banner the last message,
     // where the aborted turn's writes landed (2026-07-28). Stop first.
-    if (_isGenerating) return;
+    if (_isTurnBusy) return;
     if (index >= 0 && index < _messages.length) {
       final deleted = _messages[index];
+
+      // Needs are refunded by ARITHMETIC (subtract this message's own chips),
+      // not by the realism time-travel below — that only ever rewinds the
+      // tail, so deleting anything older left its needs cost applied forever.
+      // Capture the deleted speaker's needs BEFORE the restore runs; the
+      // refund is settled from this baseline afterwards.
+      final String? deletedSid =
+          (_activeGroup != null &&
+              !deleted.isUser &&
+              deleted.sender != 'System' &&
+              _groupCharacters.where((c) => c.name == deleted.sender).length ==
+                  1)
+          ? _getCharacterIdFromCard(
+              _groupCharacters.firstWhere((c) => c.name == deleted.sender),
+            )
+          : null;
+      // In a group, refund ONLY when the speaker resolved unambiguously —
+      // falling back to the live scalars there would credit whichever member
+      // happens to be loaded, i.e. refund the wrong character. An empty
+      // baseline makes the revert a no-op.
+      final Map<String, int> needsBeforeDelete =
+          (!_needsSimEnabled || (_activeGroup != null && deletedSid == null))
+          ? const <String, int>{}
+          : (deletedSid != null
+                ? Map<String, int>.from(_getGroupNeeds(deletedSid))
+                : Map<String, int>.from(_needsSimulation.vector));
+
       _messages.removeAt(index);
 
       // Timeline integrity: the delete rewrites history from [index] on
@@ -3936,6 +4157,14 @@ class ChatService extends ChangeNotifier {
           }
         }
       }
+
+      // Settle needs LAST so it wins over whatever the snapshot restores did
+      // to the vector (see _revertNeedsForDeletedMessage).
+      _revertNeedsForDeletedMessage(
+        deleted,
+        needsBeforeDelete,
+        groupSid: deletedSid,
+      );
 
       await _saveChat();
       notifyListeners();
@@ -4373,6 +4602,7 @@ class ChatService extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _cancelIdleTimer();
+    _cancelStreamNotifyThrottle();
     _guestStatusClearTimer?.cancel();
     _characterRepository?.removeListener(_onCharacterLibraryChanged);
     _storageService.removeListener(_onBackendIdentityMaybeChanged);

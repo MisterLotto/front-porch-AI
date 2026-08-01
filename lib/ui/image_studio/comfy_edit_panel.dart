@@ -24,9 +24,9 @@ import 'package:provider/provider.dart';
 import 'package:front_porch_ai/services/comfy_ui_service.dart';
 import 'package:front_porch_ai/services/image/comfy_edit_presets.dart';
 import 'package:front_porch_ai/services/image/comfy_edit_workflow.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/utils/picker_prefs.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// The **ComfyUI** edit-setup panel on the Edit tab (the approved mockup made
 /// real): pick a bundled workflow (Qwen-Image-Edit / Flux Kontext) or upload your

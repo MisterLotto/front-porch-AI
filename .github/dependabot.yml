@@ -1,0 +1,61 @@
+# Dependabot was running against this repo with no config file checked in, which
+# meant it was still maintaining a `cargo` group for the Rust embedding server —
+# a sidecar deleted in the 2026-07 retirement. This file states explicitly what
+# is actually shipped today.
+#
+# Everything targets Rawhide, not the default branch: `main` is tagged stable
+# releases only, and dependency bumps are ordinary changes that belong on the
+# rolling development branch like anything else.
+#
+# NOTE: a pub update that moves a package BACKWARDS will fail
+# test/deps/dependency_floor_test.dart. That is intended — read the guard's
+# header before touching test/deps/dependency_floors.json.
+
+version: 2
+updates:
+  # Flutter / Dart packages
+  - package-ecosystem: "pub"
+    directory: "/"
+    target-branch: "Rawhide"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # One PR for the routine churn; majors still come through individually so
+      # they get read properly.
+      pub-minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Web / mobile UI
+  - package-ecosystem: "npm"
+    directory: "/web_ui"
+    target-branch: "Rawhide"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps-web)"
+    groups:
+      npm-minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # CI actions — these drift silently and break builds at the worst moment
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "Rawhide"
+    schedule:
+      interval: "monthly"
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions:
+        patterns:
+          - "*"

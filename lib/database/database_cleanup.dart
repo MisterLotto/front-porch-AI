@@ -21,6 +21,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:drift/drift.dart';
 import 'package:front_porch_ai/database/database.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Report from [DatabaseCleanup.checkOrphans] — all counts are zero if the
 /// database is clean.
@@ -65,24 +66,29 @@ class DatabaseCleanup {
   static Future<OrphanReport> checkOrphans(AppDatabase db) async {
     final orphanCounts = <String, int>{};
     final brokenRefCounts = <String, int>{};
+    final liveIds = await _liveCharacterIdentities(db);
 
     orphanCounts['avatar_images'] = await _countOrphanRows(
       db,
       'avatar_images',
       'character_id',
+      liveIds,
     );
     orphanCounts['objectives'] = await _countOrphanRows(
       db,
       'objectives',
       'character_id',
+      liveIds,
     );
     orphanCounts['data_bank_entries'] = await _countOrphanRows(
       db,
       'data_bank_entries',
       'character_id',
+      liveIds,
     );
     orphanCounts['message_embeddings'] = await _countOrphanMessageEmbeddings(
       db,
+      liveIds,
     );
     orphanCounts['sessions'] = await _countOrphanSessions(db);
     orphanCounts['group_orphan_sessions'] = await _countOrphanGroupSessions(db);
@@ -91,7 +97,8 @@ class DatabaseCleanup {
 
     brokenRefCounts['memory_sources'] = await _countBrokenMemorySources(db);
     brokenRefCounts['group_character_ids'] = await _countBrokenGroupCharIds(db);
-    brokenRefCounts['group_world_ids'] = await _countBrokenGroupWorldIds(db);
+    // Living Worlds: world_ids hold UUIDs (names still accepted as resolvable).
+    brokenRefCounts['group_world_refs'] = await _countBrokenGroupWorldIds(db);
 
     return OrphanReport(
       orphanCounts: orphanCounts,
@@ -103,24 +110,29 @@ class DatabaseCleanup {
   static Future<CleanupResult> cleanOrphans(AppDatabase db) async {
     final removedCounts = <String, int>{};
     final fixedRefCounts = <String, int>{};
+    final liveIds = await _liveCharacterIdentities(db);
 
     removedCounts['avatar_images'] = await _deleteOrphanRows(
       db,
       'avatar_images',
       'character_id',
+      liveIds,
     );
     removedCounts['data_bank_entries'] = await _deleteOrphanRows(
       db,
       'data_bank_entries',
       'character_id',
+      liveIds,
     );
     removedCounts['objectives'] = await _deleteOrphanRows(
       db,
       'objectives',
       'character_id',
+      liveIds,
     );
     removedCounts['message_embeddings'] = await _deleteOrphanMessageEmbeddings(
       db,
+      liveIds,
     );
     removedCounts['sessions'] = await _deleteOrphanSessionsCascade(db);
     removedCounts['group_orphan_sessions'] =
@@ -134,7 +146,7 @@ class DatabaseCleanup {
 
     fixedRefCounts['memory_sources'] = await _fixBrokenMemorySources(db);
     fixedRefCounts['group_character_ids'] = await _fixBrokenGroupCharIds(db);
-    fixedRefCounts['group_world_ids'] = await _fixBrokenGroupWorldIds(db);
+    fixedRefCounts['group_world_refs'] = await _fixBrokenGroupWorldIds(db);
 
     await db.bumpSyncVersion();
 
@@ -146,27 +158,86 @@ class DatabaseCleanup {
 
   // ── Counting helpers ────────────────────────────────────────────────
 
+  /// Every identity a live character can legitimately be referenced by.
+  ///
+  /// `objectives`, `message_embeddings` and `data_bank_entries` key their
+  /// `character_id` by the character's **stableGroupId** — the portable
+  /// image-filename id from [StableGroupId] — not by the `characters.id`
+  /// UUID. These queries used to join those columns straight against
+  /// `characters.id`, so a UUID was compared to a filename, nothing ever
+  /// matched, and every single row looked orphaned. Measured on a real
+  /// library: 107 of 107 objectives and 68 of 68 RAG embeddings would have
+  /// been deleted by the Database Cleanup dialog. Group members carry their
+  /// own `group_members.id` UUID, so those are valid identities too.
+  static Future<Set<String>> _liveCharacterIdentities(AppDatabase db) async {
+    final ids = <String>{};
+    final characters = await db
+        .customSelect(
+          'SELECT id, image_path, name FROM characters '
+          'WHERE deleted_at IS NULL',
+        )
+        .get();
+    for (final row in characters) {
+      final id = row.data['id'] as String?;
+      if (id != null && id.isNotEmpty) ids.add(id);
+      ids.add(
+        stableGroupIdFrom(
+          row.data['image_path'] as String?,
+          (row.data['name'] as String?) ?? '',
+        ),
+      );
+    }
+    final members = await db.customSelect('SELECT id FROM group_members').get();
+    for (final row in members) {
+      final id = row.data['id'] as String?;
+      if (id != null && id.isNotEmpty) ids.add(id);
+    }
+    ids.remove('');
+    return ids;
+  }
+
+  /// `AND <column> NOT IN (?, ?, …)`, or an empty string when there are no
+  /// live characters at all (in which case every referencing row really is
+  /// orphaned and the bare NULL check is correct).
+  static String _notInClause(String column, Set<String> liveIds) => liveIds
+          .isEmpty
+      ? ''
+      : ' AND $column NOT IN (${List.filled(liveIds.length, '?').join(',')})';
+
+  static List<Variable<Object>> _idVars(Set<String> liveIds) => [
+    for (final id in liveIds) Variable<String>(id),
+  ];
+
   static Future<int> _countOrphanRows(
     AppDatabase db,
     String table,
     String column,
+    Set<String> liveIds,
   ) async {
-    final result = await db.customSelect('''
-      SELECT COUNT(*) AS c FROM $table t
-      LEFT JOIN characters c ON c.id = t.$column
-      WHERE c.id IS NULL OR c.deleted_at IS NOT NULL
-    ''').get();
+    final result = await db
+        .customSelect(
+          'SELECT COUNT(*) AS c FROM $table '
+          'WHERE $column IS NOT NULL${_notInClause(column, liveIds)}',
+          variables: _idVars(liveIds),
+        )
+        .get();
     return (result.first.data['c'] as int?) ?? 0;
   }
 
-  static Future<int> _countOrphanMessageEmbeddings(AppDatabase db) async {
-    final result = await db.customSelect('''
-      SELECT COUNT(*) AS c FROM message_embeddings me
-      WHERE (me.character_id IS NOT NULL AND (
-        NOT EXISTS (SELECT 1 FROM characters c WHERE c.id = me.character_id AND c.deleted_at IS NULL)
-      ))
-      OR NOT EXISTS (SELECT 1 FROM sessions s WHERE s.id = me.session_id)
-    ''').get();
+  static Future<int> _countOrphanMessageEmbeddings(
+    AppDatabase db,
+    Set<String> liveIds,
+  ) async {
+    final result = await db
+        .customSelect(
+          'SELECT COUNT(*) AS c FROM message_embeddings '
+          'WHERE (character_id IS NOT NULL'
+          '${_notInClause('character_id', liveIds)}) '
+          'OR NOT EXISTS '
+          '(SELECT 1 FROM sessions s WHERE s.id = message_embeddings.session_id)',
+          variables: _idVars(liveIds),
+        )
+        .get();
     return (result.first.data['c'] as int?) ?? 0;
   }
 
@@ -234,8 +305,8 @@ class DatabaseCleanup {
   }
 
   static Future<int> _countBrokenGroupWorldIds(AppDatabase db) async {
-    final validIds = await _getValidWorldIds(db);
-    return _countBrokenJsonRefs(db, 'groups', 'world_ids', validIds);
+    final valid = await _getValidWorldRefs(db);
+    return _countBrokenWorldRefs(db, valid);
   }
 
   static Future<int> _countBrokenJsonRefs(
@@ -271,26 +342,29 @@ class DatabaseCleanup {
     AppDatabase db,
     String table,
     String column,
+    Set<String> liveIds,
   ) async {
-    return db.customUpdate('''
-      DELETE FROM $table WHERE rowid IN (
-        SELECT t.rowid FROM $table t
-        LEFT JOIN characters c ON c.id = t.$column
-        WHERE c.id IS NULL OR c.deleted_at IS NOT NULL
-      )
-    ''', updates: {});
+    return db.customUpdate(
+      'DELETE FROM $table '
+      'WHERE $column IS NOT NULL${_notInClause(column, liveIds)}',
+      variables: _idVars(liveIds),
+      updates: {},
+    );
   }
 
-  static Future<int> _deleteOrphanMessageEmbeddings(AppDatabase db) async {
-    return db.customUpdate('''
-      DELETE FROM message_embeddings WHERE rowid IN (
-        SELECT me.rowid FROM message_embeddings me
-        WHERE (me.character_id IS NOT NULL AND (
-          NOT EXISTS (SELECT 1 FROM characters c WHERE c.id = me.character_id AND c.deleted_at IS NULL)
-        ))
-        OR NOT EXISTS (SELECT 1 FROM sessions s WHERE s.id = me.session_id)
-      )
-    ''', updates: {});
+  static Future<int> _deleteOrphanMessageEmbeddings(
+    AppDatabase db,
+    Set<String> liveIds,
+  ) async {
+    return db.customUpdate(
+      'DELETE FROM message_embeddings '
+      'WHERE (character_id IS NOT NULL'
+      '${_notInClause('character_id', liveIds)}) '
+      'OR NOT EXISTS '
+      '(SELECT 1 FROM sessions s WHERE s.id = message_embeddings.session_id)',
+      variables: _idVars(liveIds),
+      updates: {},
+    );
   }
 
   /// Deletes orphan sessions and cascades to their messages + embeddings.
@@ -399,8 +473,82 @@ class DatabaseCleanup {
   }
 
   static Future<int> _fixBrokenGroupWorldIds(AppDatabase db) async {
-    final validIds = await _getValidWorldIds(db);
-    return _fixJsonRefs(db, 'groups', 'world_ids', validIds);
+    final valid = await _getValidWorldRefs(db);
+    return _fixGroupWorldRefs(db, valid);
+  }
+
+  /// Count group world_ids entries that resolve to neither a live world id
+  /// nor a live world name (post–Living Worlds UUID column + legacy names).
+  static Future<int> _countBrokenWorldRefs(
+    AppDatabase db,
+    ({Set<String> ids, Map<String, String> nameToId}) valid,
+  ) async {
+    final rows = await db.customSelect('''
+      SELECT id, world_ids FROM groups
+      WHERE deleted_at IS NULL AND world_ids IS NOT NULL AND world_ids != '[]'
+    ''').get();
+    var broken = 0;
+    for (final row in rows) {
+      final raw = row.data['world_ids'] as String?;
+      if (raw == null || raw.isEmpty) continue;
+      try {
+        final refs = List<String>.from(jsonDecode(raw));
+        if (refs.any(
+          (r) => !valid.ids.contains(r) && !valid.nameToId.containsKey(r),
+        )) {
+          broken++;
+        }
+      } catch (e) {
+        debugPrint(
+          '[DB Cleanup] Failed to parse world_ids in group '
+          '${row.data['id']}: $e',
+        );
+      }
+    }
+    return broken;
+  }
+
+  /// Drop unresolvable refs; rewrite surviving names → UUID.
+  static Future<int> _fixGroupWorldRefs(
+    AppDatabase db,
+    ({Set<String> ids, Map<String, String> nameToId}) valid,
+  ) async {
+    final rows = await db.customSelect('''
+      SELECT id, world_ids FROM groups
+      WHERE deleted_at IS NULL AND world_ids IS NOT NULL AND world_ids != '[]'
+    ''').get();
+    var fixed = 0;
+    for (final row in rows) {
+      final groupId = row.data['id'] as String;
+      final raw = row.data['world_ids'] as String?;
+      if (raw == null || raw.isEmpty) continue;
+      try {
+        final refs = List<String>.from(jsonDecode(raw));
+        final cleaned = <String>[];
+        final seen = <String>{};
+        for (final ref in refs) {
+          final id = valid.ids.contains(ref)
+              ? ref
+              : valid.nameToId[ref];
+          if (id == null) continue;
+          if (seen.add(id)) cleaned.add(id);
+        }
+        final encoded = jsonEncode(cleaned);
+        if (encoded != raw) {
+          await db.customUpdate(
+            'UPDATE groups SET world_ids = ? WHERE id = ?',
+            variables: [Variable(encoded), Variable(groupId)],
+            updates: {db.groups},
+          );
+          fixed++;
+        }
+      } catch (e) {
+        debugPrint(
+          '[DB Cleanup] Failed to parse world_ids in group $groupId: $e',
+        );
+      }
+    }
+    return fixed;
   }
 
   static Future<int> _fixJsonRefs(
@@ -447,10 +595,20 @@ class DatabaseCleanup {
     return rows.map((r) => r.data['id'] as String).toSet();
   }
 
-  static Future<Set<String>> _getValidWorldIds(AppDatabase db) async {
+  static Future<({Set<String> ids, Map<String, String> nameToId})>
+      _getValidWorldRefs(AppDatabase db) async {
     final rows = await db.customSelect('''
-      SELECT id FROM worlds WHERE deleted_at IS NULL
+      SELECT id, name FROM worlds WHERE deleted_at IS NULL
     ''').get();
-    return rows.map((r) => r.data['id'] as String).toSet();
+    final ids = <String>{};
+    final nameToId = <String, String>{};
+    for (final r in rows) {
+      final id = r.data['id'] as String?;
+      final name = r.data['name'] as String?;
+      if (id == null) continue;
+      ids.add(id);
+      if (name != null && name.isNotEmpty) nameToId[name] = id;
+    }
+    return (ids: ids, nameToId: nameToId);
   }
 }

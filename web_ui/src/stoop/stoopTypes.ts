@@ -11,9 +11,19 @@ export interface StoopUser {
   displayName: string;
   role: 'USER' | 'MOD' | 'OWNER';
   ageVerified: boolean;
+  /** Absent on older servers — treat missing as verified (nothing to nag). */
+  emailVerified?: boolean;
   nsfwEnabled: boolean;
   acceptedPolicyVersion: string | null;
   twoFactorEnabled: boolean;
+  /** Public creator-profile extras (absent on older servers). */
+  bio?: string | null;
+  profileLinks?: string[];
+  avatarAssetId?: string | null;
+  avatarLocked?: boolean;
+  createdAt?: string;
+  /** An email change awaiting confirmation at the NEW address, or null. */
+  pendingEmail?: string | null;
 }
 
 export interface StoopCreatorRef {
@@ -21,11 +31,21 @@ export interface StoopCreatorRef {
   displayName: string;
 }
 
+/**
+ * Worlds on The Stoop — client readiness flag (mirrors the desktop's
+ * kStoopWorldsLive). Portable places (.fpworld) ride the same card endpoints
+ * as a third `type: 'WORLD'` (payload = the .fpworld envelope, cover image as
+ * the card avatar) and go through the same moderation pipeline as characters.
+ * The backend doesn't accept WORLD yet; while false the UI shows Worlds as
+ * "coming soon". Flip together with the desktop flag when the backend ships.
+ */
+export const STOOP_WORLDS_LIVE = true;
+
 export interface StoopCard {
   id: string;
   name: string;
   summary: string;
-  type: 'SOLO' | 'GROUP';
+  type: 'SOLO' | 'GROUP' | 'WORLD';
   nsfw: boolean;
   score: number;
   downloadCount: number;
@@ -61,19 +81,26 @@ export interface StoopCreator {
   following: boolean;
   isMe: boolean;
   cards: StoopCard[];
+  /** Profile extras + lifetime totals (absent on older servers). */
+  bio?: string | null;
+  links?: string[];
+  avatarAssetId?: string | null;
+  createdAt?: string;
+  stats?: { cards: number; downloads: number; score: number };
 }
 
 export interface StoopFollowedCreator {
   id: string;
   displayName: string;
   followers: number;
+  avatarAssetId?: string | null;
 }
 
 /** One of the signed-in user's own uploads, with moderation status. */
 export interface StoopMine {
   id: string;
   name: string;
-  type: 'SOLO' | 'GROUP';
+  type: 'SOLO' | 'GROUP' | 'WORLD';
   nsfw: boolean;
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'TAKEN_DOWN';
   rejectionNote: string | null;
@@ -101,7 +128,7 @@ export interface StoopAup {
 /** Browse query — mirrors the desktop client's parameters exactly. */
 export interface StoopBrowseQuery {
   sort?: 'newest' | 'top' | 'downloads';
-  type?: 'solo' | 'group' | 'all';
+  type?: 'solo' | 'group' | 'world' | 'all';
   q?: string;
   pick?: boolean;
   following?: boolean;

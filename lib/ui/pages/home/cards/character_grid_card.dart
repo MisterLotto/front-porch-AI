@@ -21,7 +21,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/ui/pages/home/cards/home_card_menu.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/ui/widgets/character_card_grid.dart'
+    show kFolderDragHoldDelay;
 import 'package:front_porch_ai/utils/utils.dart';
 
 /// A single character card in the home grid: draggable (for folder organizing),
@@ -72,6 +75,11 @@ class CharacterGridCard extends StatelessWidget {
       fit: BoxFit.cover,
       alignment: Alignment.topCenter,
       gaplessPlayback: false,
+      // Decode at grid-tile size, not source size: ~1024² portraits are
+      // ~4 MB decoded EACH, which thrashed the 100 MB image cache on any
+      // decent-sized library and forced re-decodes on every scroll. 512px
+      // covers the largest tile at 2x DPR at a quarter of the memory.
+      cacheWidth: 512,
       errorBuilder: (_, _, _) => Container(
         color: AppColors.surfaceContainerOf(context),
         child: Icon(
@@ -87,6 +95,7 @@ class CharacterGridCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return LongPressDraggable<CharacterCard>(
       data: character,
+      delay: kFolderDragHoldDelay,
       feedback: Material(
         color: Colors.transparent,
         child: SizedBox(
@@ -171,203 +180,212 @@ class CharacterGridCard extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          InkWell(
-            onTap: () async {
-              if (isSelecting || isOrganizing) {
-                onToggleSelect(character);
-                return;
-              }
-              await onTapCharacter(character);
-            },
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final isCompact = constraints.maxWidth < 200;
-                final isTiny = constraints.maxWidth < 160;
+          // Positioned.fill for the same reason folder_grid_card needs it: a
+          // bare Stack child gets LOOSE constraints and top-left alignment, so
+          // the InkWell shrink-wraps its content instead of covering the card.
+          // This one hides the bug today because its content is an image that
+          // fills anyway — but it leaves LayoutBuilder measuring the wrong
+          // width, and the tap target would collapse the moment this card ever
+          // renders text-sized content. Same defect, caught before it shipped.
+          Positioned.fill(
+            child: InkWell(
+              onTap: () async {
+                if (isSelecting || isOrganizing) {
+                  onToggleSelect(character);
+                  return;
+                }
+                await onTapCharacter(character);
+              },
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final isCompact = constraints.maxWidth < 200;
+                  final isTiny = constraints.maxWidth < 160;
 
-                if (isTiny) {
-                  return Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      character.imagePath != null
-                          ? _coverImage(
-                              context,
-                              onResolveCharImage(character),
-                              size: 32,
-                            )
-                          : Container(
-                              color: AppColors.surfaceContainerOf(context),
-                              child: Icon(
-                                Icons.person,
+                  if (isTiny) {
+                    return Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        character.imagePath != null
+                            ? _coverImage(
+                                context,
+                                onResolveCharImage(character),
                                 size: 32,
-                                color: AppColors.iconSecondary(context),
+                              )
+                            : Container(
+                                color: AppColors.surfaceContainerOf(context),
+                                child: Icon(
+                                  Icons.person,
+                                  size: 32,
+                                  color: AppColors.iconSecondary(context),
+                                ),
+                              ),
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.bottomCenter,
+                                end: Alignment.topCenter,
+                                colors: [
+                                  AppColors.resolve(
+                                    context,
+                                    Colors.black87,
+                                    Colors.black54,
+                                  ),
+                                  Colors.transparent,
+                                ],
                               ),
                             ),
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 4,
+                            child: Text(
+                              character.name,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.bottomCenter,
-                              end: Alignment.topCenter,
-                              colors: [
-                                AppColors.resolve(
-                                  context,
-                                  Colors.black87,
-                                  Colors.black54,
+                        ),
+                      ],
+                    );
+                  }
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        flex: isCompact ? 4 : 3,
+                        child: character.imagePath != null
+                            ? _coverImage(
+                                context,
+                                onResolveCharImage(character),
+                                size: isCompact ? 32 : 64,
+                              )
+                            : Container(
+                                color: AppColors.surfaceContainerOf(context),
+                                child: Icon(
+                                  Icons.person,
+                                  size: isCompact ? 32 : 64,
+                                  color: AppColors.iconSecondary(context),
                                 ),
-                                Colors.transparent,
+                              ),
+                      ),
+                      Expanded(
+                        flex: 1,
+                        child: Padding(
+                          padding: EdgeInsets.all(isCompact ? 6.0 : 12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      character.name,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .titleMedium
+                                          ?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: isCompact ? 12 : null,
+                                          ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (msgCount > 0)
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.chat_bubble_outline,
+                                          size: 11,
+                                          color: AppColors.iconSecondary(context),
+                                        ),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          '$msgCount',
+                                          style: TextStyle(
+                                            color: AppColors.textTertiary(
+                                              context,
+                                            ),
+                                            fontSize: isCompact ? 10 : 11,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                ],
+                              ),
+                              if (!isCompact) ...[
+                                const SizedBox(height: 4),
+                                if (character.tags.isNotEmpty)
+                                  Flexible(
+                                    child: Wrap(
+                                      spacing: 4,
+                                      runSpacing: 2,
+                                      children: character.tags
+                                          .take(3)
+                                          .map(
+                                            (tag) => Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 6,
+                                                vertical: 2,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.porchAmberOf(
+                                                  context,
+                                                ).withValues(alpha: 0.18),
+                                                border: Border.all(
+                                                  color: AppColors.porchAmberOf(
+                                                    context,
+                                                  ).withValues(alpha: 0.4),
+                                                ),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                tag,
+                                                style: TextStyle(
+                                                  color: AppColors.porchAmberOf(
+                                                    context,
+                                                  ),
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ),
+                                          )
+                                          .toList(),
+                                    ),
+                                  )
+                                else
+                                  Flexible(
+                                    child: Text(
+                                      character.formattedDescription,
+                                      style: Theme.of(
+                                        context,
+                                      ).textTheme.bodySmall,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
                               ],
-                            ),
-                          ),
-                          child: Text(
-                            character.name,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            ],
                           ),
                         ),
                       ),
                     ],
                   );
-                }
-
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      flex: isCompact ? 4 : 3,
-                      child: character.imagePath != null
-                          ? _coverImage(
-                              context,
-                              onResolveCharImage(character),
-                              size: isCompact ? 32 : 64,
-                            )
-                          : Container(
-                              color: AppColors.surfaceContainerOf(context),
-                              child: Icon(
-                                Icons.person,
-                                size: isCompact ? 32 : 64,
-                                color: AppColors.iconSecondary(context),
-                              ),
-                            ),
-                    ),
-                    Expanded(
-                      flex: 1,
-                      child: Padding(
-                        padding: EdgeInsets.all(isCompact ? 6.0 : 12.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    character.name,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .titleMedium
-                                        ?.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: isCompact ? 12 : null,
-                                        ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                if (msgCount > 0)
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.chat_bubble_outline,
-                                        size: 11,
-                                        color: AppColors.iconSecondary(context),
-                                      ),
-                                      const SizedBox(width: 3),
-                                      Text(
-                                        '$msgCount',
-                                        style: TextStyle(
-                                          color: AppColors.textTertiary(
-                                            context,
-                                          ),
-                                          fontSize: isCompact ? 10 : 11,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                              ],
-                            ),
-                            if (!isCompact) ...[
-                              const SizedBox(height: 4),
-                              if (character.tags.isNotEmpty)
-                                Flexible(
-                                  child: Wrap(
-                                    spacing: 4,
-                                    runSpacing: 2,
-                                    children: character.tags
-                                        .take(3)
-                                        .map(
-                                          (tag) => Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 6,
-                                              vertical: 2,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: AppColors.porchAmberOf(
-                                                context,
-                                              ).withValues(alpha: 0.18),
-                                              border: Border.all(
-                                                color: AppColors.porchAmberOf(
-                                                  context,
-                                                ).withValues(alpha: 0.4),
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                            ),
-                                            child: Text(
-                                              tag,
-                                              style: TextStyle(
-                                                color: AppColors.porchAmberOf(
-                                                  context,
-                                                ),
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                          ),
-                                        )
-                                        .toList(),
-                                  ),
-                                )
-                              else
-                                Flexible(
-                                  child: Text(
-                                    character.formattedDescription,
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.bodySmall,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
+                },
+            ),
             ),
           ),
           if (isSelecting || isOrganizing)
@@ -425,132 +443,74 @@ class CharacterGridCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                     ),
                     items: [
-                      PopupMenuItem(
+                      // Start-fresh sits first: it's the most common intent
+                      // after "open", and it picks its own persona (never
+                      // inheriting whatever the last chat used).
+                      homeCardMenuItem(
+                        context,
+                        value: 'new_chat',
+                        icon: Icons.add_comment_outlined,
+                        label: 'Start New Chat',
+                        iconColor: AppColors.porchAmberOf(context),
+                      ),
+                      homeCardMenuItem(
+                        context,
                         value: 'edit',
-                        child: ListTile(
-                          leading: Icon(
-                            Icons.edit,
-                            color: AppColors.iconSecondary(context),
-                            size: 20,
-                          ),
-                          title: Text(
-                            'Edit Character',
-                            style: TextStyle(
-                              color: AppColors.textPrimary(context),
-                            ),
-                          ),
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
+                        icon: Icons.edit,
+                        label: 'Edit Character',
                       ),
-                      PopupMenuItem(
+                      homeCardMenuItem(
+                        context,
                         value: 'avatar_gallery',
-                        child: ListTile(
-                          leading: Icon(
-                            Icons.photo_library_outlined,
-                            color: AppColors.iconSecondary(context),
-                            size: 20,
-                          ),
-                          title: Text(
-                            'Avatar Gallery',
-                            style: TextStyle(
-                              color: AppColors.textPrimary(context),
-                            ),
-                          ),
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
+                        icon: Icons.photo_library_outlined,
+                        label: 'Avatar Gallery',
                       ),
-                      PopupMenuItem(
+                      homeCardMenuItem(
+                        context,
                         value: 'duplicate',
-                        child: ListTile(
-                          leading: Icon(
-                            Icons.copy,
-                            color: AppColors.iconSecondary(context),
-                            size: 20,
-                          ),
-                          title: Text(
-                            'Duplicate Character',
-                            style: TextStyle(
-                              color: AppColors.textPrimary(context),
-                            ),
-                          ),
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
+                        icon: Icons.copy,
+                        label: 'Duplicate Character',
                       ),
-                      PopupMenuItem(
+                      homeCardMenuItem(
+                        context,
                         value: 'export',
-                        child: ListTile(
-                          leading: Icon(
-                            Icons.upload,
-                            color: AppColors.iconSecondary(context),
-                            size: 20,
-                          ),
-                          title: Text(
-                            'Export PNG',
-                            style: TextStyle(
-                              color: AppColors.textPrimary(context),
-                            ),
-                          ),
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
+                        icon: Icons.upload,
+                        label: 'Export PNG',
                       ),
-                      PopupMenuItem(
+                      homeCardMenuItem(
+                        context,
                         value: 'export_json',
-                        child: ListTile(
-                          leading: Icon(
-                            Icons.data_object,
-                            color: AppColors.iconSecondary(context),
-                            size: 20,
-                          ),
-                          title: Text(
-                            'Export JSON',
-                            style: TextStyle(
-                              color: AppColors.textPrimary(context),
-                            ),
-                          ),
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
+                        icon: Icons.data_object,
+                        label: 'Export JSON',
+                      ),
+                      // Filing a single character was drag-only before this —
+                      // the menu could take one OUT of a folder but never put
+                      // one in, or move it between folders (the picker lists
+                      // every folder by full path, so it doubles as "move up
+                      // one level" when nested). Group cards already had this.
+                      homeCardMenuItem(
+                        context,
+                        value: 'move_folder',
+                        icon: Icons.drive_file_move,
+                        label: 'Move to Folder…',
+                        iconColor: AppColors.porchAmberOf(context),
                       ),
                       if (activeFolderId != null)
-                        PopupMenuItem(
+                        homeCardMenuItem(
+                          context,
                           value: 'remove_folder',
-                          child: ListTile(
-                            leading: Icon(
-                              Icons.folder_off,
-                              color: AppColors.porchAmberOf(context),
-                              size: 20,
-                            ),
-                            title: Text(
-                              'Remove from Folder',
-                              style: TextStyle(
-                                color: AppColors.porchAmberOf(context),
-                              ),
-                            ),
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                          ),
+                          icon: Icons.folder_off,
+                          label: 'Remove from Folder',
+                          iconColor: AppColors.porchAmberOf(context),
+                          labelColor: AppColors.porchAmberOf(context),
                         ),
-                      PopupMenuItem(
+                      homeCardMenuItem(
+                        context,
                         value: 'delete',
-                        child: ListTile(
-                          leading: Icon(
-                            Icons.delete,
-                            color: AppColors.negativeAccentOf(context),
-                            size: 20,
-                          ),
-                          title: Text(
-                            'Delete',
-                            style: TextStyle(
-                              color: AppColors.negativeAccentOf(context),
-                            ),
-                          ),
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                        ),
+                        icon: Icons.delete,
+                        label: 'Delete',
+                        iconColor: AppColors.negativeAccentOf(context),
+                        labelColor: AppColors.negativeAccentOf(context),
                       ),
                     ],
                   ).then((value) {

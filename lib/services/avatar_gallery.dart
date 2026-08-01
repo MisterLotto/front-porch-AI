@@ -18,7 +18,7 @@
 
 import 'dart:convert';
 
-import 'package:front_porch_ai/models/avatar_image.dart';
+import 'package:front_porch_ai/models/models.dart';
 
 /// Pure resolution for the per-character avatar GALLERY. Kept deliberately free
 /// of I/O and of where the per-chat selection is STORED — it takes the selected

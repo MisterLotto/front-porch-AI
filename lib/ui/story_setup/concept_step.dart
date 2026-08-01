@@ -18,11 +18,11 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/services/story_pipeline_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/story_setup/setup_widgets.dart';
 import 'package:front_porch_ai/ui/story_setup/story_setup_draft.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 /// Wizard step: story title + the concept the whole pipeline grows from, with
 /// one-tap archetype seeds for the blank-page moment.

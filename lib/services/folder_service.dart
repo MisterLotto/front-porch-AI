@@ -26,19 +26,23 @@ class CharacterFolder {
   final String? parentId; // null = top-level folder
   final List<String>
   characterPaths; // filename-only references (e.g. "Miku_123.png")
+  final List<String> groupIds; // group-chat ids (groups have no image key)
 
   CharacterFolder({
     required this.id,
     required this.name,
     this.parentId,
     List<String>? characterPaths,
-  }) : characterPaths = characterPaths ?? [];
+    List<String>? groupIds,
+  }) : characterPaths = characterPaths ?? [],
+       groupIds = groupIds ?? [];
 
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,
     if (parentId != null) 'parentId': parentId,
     'characterPaths': characterPaths,
+    'groupIds': groupIds,
   };
 }
 
@@ -90,6 +94,17 @@ class FolderService extends ChangeNotifier {
         }
       }
 
+      // Groups live in the same folder tree, keyed by group id (groups have
+      // no image-filename key). Membership is groups.folder_id (v42).
+      final dbGroups = await _db.getAllGroups();
+      final groupsByFolder = <String, List<String>>{};
+      for (final g in dbGroups) {
+        final fid = g.folderId;
+        if (fid != null) {
+          (groupsByFolder[fid] ??= <String>[]).add(g.id);
+        }
+      }
+
       for (final f in dbFolders) {
         _folders.add(
           CharacterFolder(
@@ -97,6 +112,7 @@ class FolderService extends ChangeNotifier {
             name: f.name,
             parentId: f.parentId,
             characterPaths: pathsByFolder[f.id] ?? const <String>[],
+            groupIds: groupsByFolder[f.id] ?? const <String>[],
           ),
         );
       }
@@ -159,6 +175,15 @@ class FolderService extends ChangeNotifier {
       }
     }
 
+    // Unassign groups from this folder (same contract as characters:
+    // "Delete Folder Only" returns contents to the top level).
+    final groups = await _db.getAllGroups();
+    for (final g in groups) {
+      if (g.folderId == folderId) {
+        await _db.updateGroupFolderId(g.id, null);
+      }
+    }
+
     await _db.deleteFolderById(folderId);
     _folders.removeWhere((f) => f.id == folderId);
     notifyListeners();
@@ -187,7 +212,14 @@ class FolderService extends ChangeNotifier {
     await _load();
   }
 
-  Future<void> removeFromFolder(String folderId, String characterPath) async {
+  /// Clear a character's folder so it lands back on the home top level.
+  ///
+  /// [folderId] is the folder the caller *believes* the character is in — the
+  /// guard stops a stale card from yanking a character out of a folder it was
+  /// since moved to. Pass `null` for "whatever folder it is in", which is what
+  /// the folder picker's "Home (no folder)" entry needs: from a global search
+  /// or a breadcrumb view the caller has no idea which folder holds the card.
+  Future<void> removeFromFolder(String? folderId, String characterPath) async {
     final filename = _normalize(characterPath);
 
     // Find the character and clear its folderId
@@ -195,7 +227,7 @@ class FolderService extends ChangeNotifier {
     for (final c in chars) {
       if (c.imagePath != null &&
           _normalize(c.imagePath!) == filename &&
-          c.folderId == folderId) {
+          (folderId == null || c.folderId == folderId)) {
         await _db.updateCharacter(
           CharactersCompanion(
             id: Value(c.id),
@@ -211,6 +243,19 @@ class FolderService extends ChangeNotifier {
     await _load();
   }
 
+  /// Put a freshly-made copy in the same folder its source lives in.
+  /// Membership is keyed by image filename, so a duplicate starts life
+  /// unfoldered and (before this) dropped onto the home screen's top level
+  /// no matter where its source was. No-op when the source is unfoldered or
+  /// either side has no image. Shared by the desktop context menu AND the
+  /// web facade's duplicate endpoint — the one folder-inheritance rule.
+  Future<void> inheritFolder(String? sourcePath, String? copyPath) async {
+    if (sourcePath == null || copyPath == null) return;
+    final folder = getFolderForCharacter(sourcePath);
+    if (folder == null) return;
+    await addToFolder(folder.id, copyPath);
+  }
+
   /// Get the folder a character belongs to (if any)
   CharacterFolder? getFolderForCharacter(String characterPath) {
     final filename = _normalize(characterPath);
@@ -220,6 +265,52 @@ class FolderService extends ChangeNotifier {
       }
     }
     return null;
+  }
+
+  /// Move a group chat into a folder (writes groups.folder_id).
+  Future<void> addGroupToFolder(String folderId, String groupId) async {
+    await _db.updateGroupFolderId(groupId, folderId);
+    await _load();
+  }
+
+  /// Remove a group chat from a folder (back to the home top level).
+  ///
+  /// Same contract as [removeFromFolder]: a non-null [folderId] guards against
+  /// a stale card, `null` means "whatever folder it is in".
+  Future<void> removeGroupFromFolder(String? folderId, String groupId) async {
+    final folder = getFolderForGroup(groupId);
+    if (folder == null) return;
+    if (folderId != null && folder.id != folderId) return;
+    await _db.updateGroupFolderId(groupId, null);
+    await _load();
+  }
+
+  /// Get the folder a group chat belongs to (if any)
+  CharacterFolder? getFolderForGroup(String groupId) {
+    for (final folder in _folders) {
+      if (folder.groupIds.contains(groupId)) {
+        return folder;
+      }
+    }
+    return null;
+  }
+
+  /// Get group ids directly in a specific folder
+  List<String> groupIdsInFolder(String folderId) {
+    final folder = _folders.firstWhere(
+      (f) => f.id == folderId,
+      orElse: () => CharacterFolder(id: '', name: ''),
+    );
+    return folder.groupIds;
+  }
+
+  /// Get group ids in a folder AND all its subfolders recursively
+  List<String> groupIdsInFolderRecursive(String folderId) {
+    final ids = <String>[...groupIdsInFolder(folderId)];
+    for (final child in _folders.where((f) => f.parentId == folderId)) {
+      ids.addAll(groupIdsInFolderRecursive(child.id));
+    }
+    return ids;
   }
 
   /// Get character filenames in a specific folder

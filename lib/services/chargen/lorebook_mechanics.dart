@@ -16,7 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'package:front_porch_ai/models/lorebook.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/chargen/char_macro.dart';
 
 /// One lorebook entry as the AI creator's LLM emits it: prose + a category.

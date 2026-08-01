@@ -12,8 +12,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/providers/auth_state.dart';
-import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/services/backporch/stoop_aup.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
+import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// The Acceptable Use Policy gate. Shown once a user is signed in but has not
 /// yet agreed to the live AUP version. The Stoop's content stays behind this
@@ -69,17 +70,14 @@ class _StoopPolicyGateState extends State<StoopPolicyGate> {
                 children: [
                   Text(
                     'Welcome to The Stoop',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary(context),
-                    ),
+                    style: stoopDisplay(context, size: 24),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     'Acceptable Use Policy'
                     '${version.isNotEmpty ? '  ·  v$version' : ''}',
                     style: TextStyle(
-                      color: AppColors.textTertiary(context),
+                      color: stoopFaint(context),
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
                     ),
@@ -88,7 +86,8 @@ class _StoopPolicyGateState extends State<StoopPolicyGate> {
                   Text(
                     kStoopAupIntro,
                     style: TextStyle(
-                      color: AppColors.textSecondary(context),
+                      color: stoopCream2(context),
+                      fontStyle: FontStyle.italic,
                       height: 1.5,
                     ),
                   ),
@@ -111,20 +110,15 @@ class _StoopPolicyGateState extends State<StoopPolicyGate> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            section.title,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary(context),
-            ),
-          ),
+          Text(section.title, style: TextStyle(
+            color: stoopAmberText(context),
+            fontWeight: FontWeight.w700,
+            fontSize: 15,
+          )),
           const SizedBox(height: 8),
           Text(
             section.body,
-            style: TextStyle(
-              color: AppColors.textSecondary(context),
-              height: 1.55,
-            ),
+            style: TextStyle(color: stoopCream2(context), height: 1.55),
           ),
         ],
       ),
@@ -134,8 +128,8 @@ class _StoopPolicyGateState extends State<StoopPolicyGate> {
   Widget _actionBar(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surfaceOf(context),
-        border: Border(top: BorderSide(color: AppColors.borderOf(context))),
+        color: stoopBg0(context),
+        border: Border(top: BorderSide(color: stoopBorder(context))),
       ),
       padding: const EdgeInsets.fromLTRB(24, 14, 24, 18),
       child: Center(
@@ -149,11 +143,7 @@ class _StoopPolicyGateState extends State<StoopPolicyGate> {
                 Text(
                   _error!,
                   style: TextStyle(
-                    color: AppColors.resolve(
-                      context,
-                      Colors.redAccent,
-                      Colors.red.shade700,
-                    ),
+                    color: stoopEmberText(context),
                     fontSize: 13,
                   ),
                 ),
@@ -171,7 +161,7 @@ class _StoopPolicyGateState extends State<StoopPolicyGate> {
                         Text(
                           'Share anonymous analytics',
                           style: TextStyle(
-                            color: AppColors.textSecondary(context),
+                            color: stoopCream2(context),
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -182,7 +172,7 @@ class _StoopPolicyGateState extends State<StoopPolicyGate> {
                           'characters. Optional, and changeable anytime in your '
                           'account.',
                           style: TextStyle(
-                            color: AppColors.textTertiary(context),
+                            color: stoopMute(context),
                             fontSize: 12.5,
                             height: 1.4,
                           ),
@@ -192,6 +182,7 @@ class _StoopPolicyGateState extends State<StoopPolicyGate> {
                   ),
                   const SizedBox(width: 12),
                   Switch(
+                    activeThumbColor: AppColors.stoopAmber,
                     value: context.select<AuthState, bool>(
                       (a) => a.analyticsEnabled,
                     ),
@@ -202,7 +193,7 @@ class _StoopPolicyGateState extends State<StoopPolicyGate> {
                   ),
                 ],
               ),
-              Divider(height: 24, color: AppColors.borderOf(context)),
+              Divider(height: 24, color: stoopBorder(context)),
               InkWell(
                 onTap: _busy ? null : () => setState(() => _agreed = !_agreed),
                 borderRadius: BorderRadius.circular(8),
@@ -212,6 +203,8 @@ class _StoopPolicyGateState extends State<StoopPolicyGate> {
                     children: [
                       Checkbox(
                         value: _agreed,
+                        activeColor: AppColors.stoopAmber,
+                        checkColor: AppColors.stoopAmberInk,
                         onChanged: _busy
                             ? null
                             : (v) => setState(() => _agreed = v ?? false),
@@ -220,9 +213,7 @@ class _StoopPolicyGateState extends State<StoopPolicyGate> {
                         child: Text(
                           'I am 18 or older and I have read and agree to The '
                           'Stoop’s Acceptable Use Policy.',
-                          style: TextStyle(
-                            color: AppColors.textSecondary(context),
-                          ),
+                          style: TextStyle(color: stoopCream2(context)),
                         ),
                       ),
                     ],
@@ -234,24 +225,20 @@ class _StoopPolicyGateState extends State<StoopPolicyGate> {
                 children: [
                   TextButton(
                     onPressed: _busy ? null : _decline,
+                    style: TextButton.styleFrom(
+                      foregroundColor: stoopMute(context),
+                    ),
                     child: const Text('Decline & sign out'),
                   ),
                   const Spacer(),
-                  FilledButton(
+                  StoopAmberButton(
+                    label: 'Agree & continue',
+                    busy: _busy,
                     onPressed: (_agreed && !_busy) ? _accept : null,
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 28,
-                        vertical: 14,
-                      ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 28,
+                      vertical: 13,
                     ),
-                    child: _busy
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Agree & continue'),
                   ),
                 ],
               ),

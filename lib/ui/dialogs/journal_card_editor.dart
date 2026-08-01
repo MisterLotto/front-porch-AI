@@ -19,13 +19,10 @@
 import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/database/database.dart';
-import 'package:front_porch_ai/services/chat/journal_ops.dart';
-import 'package:front_porch_ai/services/chat/journal_physics.dart';
-import 'package:front_porch_ai/services/chat/journal_store.dart';
-import 'package:front_porch_ai/services/chat/story_clock.dart';
+import 'package:front_porch_ai/services/chat/chat.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
-import 'package:front_porch_ai/utils/emotion_labels.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Shared presentation vocabulary + the write-a-memory dialog for The Journal
 /// UI (docs/design/journal-memory.md §8 phase 3). Used by both the sidebar
