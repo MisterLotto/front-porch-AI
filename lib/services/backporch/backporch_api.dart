@@ -152,6 +152,59 @@ class BackporchApi {
     return _meResult(json);
   }
 
+  /// Edit the public creator profile (bio ≤ 300 chars, up to 4 http(s) links).
+  /// Returns the refreshed account.
+  Future<({BackporchUser user, String policyVersion})> updateProfile(
+    String accessToken, {
+    required String bio,
+    required List<String> links,
+  }) async {
+    final json = await _post('/me/profile', {
+      'bio': bio,
+      'links': links,
+    }, token: accessToken);
+    return _meResult(json);
+  }
+
+  /// Upload a profile picture. Live instantly (post-moderated); requires a
+  /// verified email. Throws `email_not_verified` / `avatar_locked` /
+  /// `unsupported_image_type` for the UI to explain.
+  Future<({BackporchUser user, String policyVersion})> uploadAvatar({
+    required String accessToken,
+    required Uint8List bytes,
+    required String filename,
+  }) async {
+    final req = http.MultipartRequest('POST', Uri.parse('$baseUrl/me/avatar'))
+      ..headers['Authorization'] = 'Bearer $accessToken'
+      ..files.add(
+        http.MultipartFile.fromBytes('avatar', bytes, filename: filename),
+      );
+    final res = await http.Response.fromStream(
+      await req.send().timeout(const Duration(seconds: 60)),
+    );
+    return _meResult(_parse(res));
+  }
+
+  /// Remove the profile picture (always allowed, instant).
+  Future<({BackporchUser user, String policyVersion})> deleteAvatar(
+    String accessToken,
+  ) async {
+    return _meResult(await _delete('/me/avatar', accessToken));
+  }
+
+  /// Ask for a password-reset email. The server always answers ok (it never
+  /// reveals whether the address has an account); the emailed link opens the
+  /// hub's reset page.
+  Future<void> forgotPassword(String email) async {
+    await _post('/auth/forgot', {'email': email});
+  }
+
+  /// Delete one of the signed-in user's own uploads from The Stoop (owner-only
+  /// server-side). Existing downloaders keep their copies.
+  Future<void> deleteCharacter(String accessToken, String id) async {
+    await _delete('/characters/$id', accessToken);
+  }
+
   /// Permanently delete the signed-in account (GDPR erasure). Throws on failure.
   Future<void> deleteAccount(String accessToken) async {
     await _delete('/auth/me', accessToken);

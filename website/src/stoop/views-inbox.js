@@ -152,8 +152,69 @@
   }
 
   /* ================================ account ================================ */
+  // Center-crop an image file to a square (max 512px) so avatars land round-
+  // crop-safe and small. Resolves to a JPEG blob.
+  function squareCropAvatar(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        try {
+          var side = Math.min(img.naturalWidth, img.naturalHeight);
+          var out = Math.min(side, 512);
+          var canvas = document.createElement('canvas');
+          canvas.width = out;
+          canvas.height = out;
+          canvas.getContext('2d').drawImage(
+            img,
+            (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side,
+            0, 0, out, out
+          );
+          canvas.toBlob(function (b) {
+            URL.revokeObjectURL(url);
+            if (b) resolve(b); else reject(new Error('Couldn’t read that image.'));
+          }, 'image/jpeg', 0.9);
+        } catch (e) { URL.revokeObjectURL(url); reject(e); }
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('Couldn’t read that image.')); };
+      img.src = url;
+    });
+  }
+
   function renderAccount(mount) {
     var u = Api.state.user || {};
+
+    /* profile avatar — live instantly; post-moderated (a strip = a warning) */
+    var avaPrev = u.avatarAssetId
+      ? el('div', { class: 'hub-acct-ava' }, [ui.avatarImg(u.avatarAssetId, u.displayName, 'hub-creator-ava-img')])
+      : el('div', { class: 'hub-acct-ava hub-creator-mono' }, (u.displayName || '?').charAt(0).toUpperCase());
+    var fileIn = el('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', class: 'hub-hidden' });
+    var canAvatar = !!u.emailVerified && !u.avatarLocked;
+    var pickBtn = el('button', { class: 'btn btn-ghost', type: 'button', disabled: !canAvatar,
+      onclick: function () { fileIn.click(); } }, u.avatarAssetId ? 'Change photo…' : 'Choose photo…');
+    var rmAvaBtn = u.avatarAssetId
+      ? el('button', { class: 'btn btn-ghost', type: 'button', onclick: function () {
+          Api.deleteAvatar()
+            .then(function () { ui.toast('Profile photo removed.'); renderAccount(mount); })
+            .catch(function (e) { ui.toast(e.message, 'err'); });
+        } }, 'Remove')
+      : null;
+    fileIn.addEventListener('change', function () {
+      var f = fileIn.files && fileIn.files[0];
+      fileIn.value = '';
+      if (!f) return;
+      pickBtn.disabled = true;
+      squareCropAvatar(f)
+        .then(function (blob) { return Api.uploadAvatar(blob, 'avatar.jpg'); })
+        .then(function () { ui.toast('Profile photo updated — it’s live.'); renderAccount(mount); })
+        .catch(function (e) { ui.toast(e.message, 'err'); pickBtn.disabled = !canAvatar; });
+    });
+    var avaNote = el('p', { class: 'hub-small hub-dim' },
+      u.avatarLocked
+        ? 'A moderator has disabled profile pictures for this account. You can appeal from your inbox.'
+        : !u.emailVerified
+          ? 'Confirm your email to add a profile photo (check your inbox, or resend from My cards).'
+          : 'Shows beside your name everywhere on The Stoop, immediately. Keep it porch-front friendly — visitors see it without an 18+ check, and a moderator removing an avatar counts as a formal warning.');
 
     /* display name */
     var nameIn = el('input', { type: 'text', maxlength: '40', value: u.displayName || '' });
@@ -278,6 +339,8 @@
       el('h2', null, 'Account'),
       el('p', { class: 'hub-dim' }, ['Signed in as ', el('b', null, u.email || ''), ' — one account for the hub and the app.']),
       section('Profile', [
+        el('div', { class: 'hub-acct-row hub-acct-ava-row' }, [avaPrev, pickBtn, rmAvaBtn, fileIn]),
+        avaNote,
         el('div', { class: 'hub-acct-row' }, [nameIn, nameBtn]),
         bioIn,
         el('div', { class: 'hub-acct-links' }, linkIns),

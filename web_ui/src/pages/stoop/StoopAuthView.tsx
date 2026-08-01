@@ -21,7 +21,8 @@ function ageInYears(dob: Date, now: Date): number {
 
 export function StoopAuthView() {
   const { applyAuthResult } = useStoop();
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>('login');
+  const [forgotSent, setForgotSent] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -35,6 +36,18 @@ export function StoopAuthView() {
     e.preventDefault();
     setError('');
     if (!email.includes('@')) return setError('Enter a valid email address.');
+    if (mode === 'forgot') {
+      setBusy(true);
+      try {
+        await stoop.forgot(email.trim());
+        setForgotSent(true);
+      } catch (err) {
+        setError(stoopErrorText(err));
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     if (password.length < 8) return setError('Password must be at least 8 characters.');
     if (mode === 'signup') {
       if (!displayName.trim()) return setError('Pick a display name.');
@@ -79,7 +92,31 @@ export function StoopAuthView() {
           follow creators. Strictly 18+; a free account is required. Your sign-in is
           saved on this device.
         </p>
+        {mode === 'forgot' && forgotSent ? (
+          <div className="stoop-forgot-sent">
+            <p>
+              📮 If that address has a Stoop account, a reset link is on its way. It works
+              once, for 45 minutes — the link opens in your browser. No email? Check spam,
+              then try again in a couple of minutes.
+            </p>
+            <button
+              className="link-btn"
+              onClick={() => {
+                setMode('login');
+                setForgotSent(false);
+                setError('');
+              }}
+            >
+              ← Back to sign in
+            </button>
+          </div>
+        ) : (
         <form onSubmit={submit}>
+          {mode === 'forgot' && (
+            <p className="muted">
+              Enter your account email and we’ll send a link to choose a new password.
+            </p>
+          )}
           <label>
             Email
             <input
@@ -89,6 +126,7 @@ export function StoopAuthView() {
               onChange={(e) => setEmail(e.target.value)}
             />
           </label>
+          {mode !== 'forgot' && (
           <label>
             Password
             <input
@@ -98,6 +136,7 @@ export function StoopAuthView() {
               onChange={(e) => setPassword(e.target.value)}
             />
           </label>
+          )}
           {mode === 'signup' && (
             <>
               <label>
@@ -123,19 +162,43 @@ export function StoopAuthView() {
           )}
           {error && <p className="error">{error}</p>}
           <button className="primary" type="submit" disabled={busy}>
-            {busy ? 'Working…' : mode === 'login' ? 'Sign in' : 'Create account'}
+            {busy
+              ? 'Working…'
+              : mode === 'login'
+                ? 'Sign in'
+                : mode === 'signup'
+                  ? 'Create account'
+                  : 'Email me a reset link'}
           </button>
         </form>
-        <button
-          className="link-btn"
-          onClick={() => {
-            setMode(mode === 'login' ? 'signup' : 'login');
-            setError('');
-            setTotpNeeded(false);
-          }}
-        >
-          {mode === 'login' ? 'New here? Create an account' : 'Have an account? Sign in'}
-        </button>
+        )}
+        {!(mode === 'forgot' && forgotSent) && (
+          <>
+            <button
+              className="link-btn"
+              onClick={() => {
+                setMode(mode === 'login' ? 'signup' : 'login');
+                setError('');
+                setForgotSent(false);
+                setTotpNeeded(false);
+              }}
+            >
+              {mode === 'login' ? 'New here? Create an account' : 'Have an account? Sign in'}
+            </button>
+            {mode === 'login' && (
+              <button
+                className="link-btn"
+                onClick={() => {
+                  setMode('forgot');
+                  setError('');
+                  setTotpNeeded(false);
+                }}
+              >
+                Forgot password?
+              </button>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

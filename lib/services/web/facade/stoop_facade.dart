@@ -118,6 +118,33 @@ class StoopFacade {
     }
   }
 
+  /// Re-wrap browser-supplied image bytes as the backend's multipart avatar
+  /// upload (`POST /me/avatar`), passing the upstream status + body through
+  /// verbatim like [forward].
+  Future<StoopProxyResult> forwardAvatarUpload({
+    required String token,
+    required Uint8List bytes,
+    required String contentType,
+  }) async {
+    _assetToken = token;
+    // Default to jpg, not png: the web client's canvas crop always emits
+    // JPEG, so a stripped/unknown Content-Type is still almost surely jpeg.
+    final ext = contentType.contains('png')
+        ? 'png'
+        : contentType.contains('webp')
+        ? 'webp'
+        : 'jpg';
+    final req = http.MultipartRequest('POST', Uri.parse('$baseUrl/me/avatar'))
+      ..headers['Authorization'] = 'Bearer $token'
+      ..files.add(
+        http.MultipartFile.fromBytes('avatar', bytes, filename: 'avatar.$ext'),
+      );
+    final res = await http.Response.fromStream(
+      await req.send().timeout(const Duration(seconds: 60)),
+    );
+    return StoopProxyResult(res.statusCode, res.body);
+  }
+
   /// Fetch a card asset (avatar) for serving to the browser. [token] comes
   /// from the request header when the client fetches via JS; `<img>` tags
   /// fall back to the remembered token. Returns null when no token is known

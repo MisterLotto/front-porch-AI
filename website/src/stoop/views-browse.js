@@ -64,6 +64,7 @@
     var moreWrap = el('div', { class: 'hub-more-wrap hub-hidden' }, moreBtn);
     var status = el('div');
     var showcase = el('div', { class: 'hub-showcase' });     // Mod's Picks hero + carousel
+    var followRow = el('div', { class: 'hub-followrow' });     // "From your porch" (followed creators)
     var groupWarn = el('div');                                 // strong FPAI-only warning
 
     function activeFilter() {
@@ -91,8 +92,46 @@
     function refreshChrome() {
       var f = browseState.filter;
       showcase.replaceChildren();
-      if (!browseState.q && f === 'solo') S.viewsPicks.renderPicksShowcase(showcase, 'solo');
+      followRow.replaceChildren();
+      if (!browseState.q && f === 'solo') {
+        S.viewsPicks.renderPicksShowcase(showcase, 'solo');
+        renderFollowRow(followRow);
+      }
       ui.mountChildren(groupWarn, f === 'group' ? groupWarning() : f === 'world' ? worldNote() : null);
+    }
+
+    // "From your porch": the newest cards from creators you follow, tucked
+    // right under Mod's Picks — following someone actually changes your porch.
+    // Signed-in only, and the row vanishes entirely when there's nothing in it
+    // (guests and non-followers see the browse they've always seen).
+    function renderFollowRow(container) {
+      if (!Api.state.user) return;
+      Api.browse({ following: 'true', types: 'solo,group,world', sort: 'newest', take: 8, page: 0 })
+        .then(function (res) {
+          var items = res.items || [];
+          if (!items.length) { container.replaceChildren(); return; }
+          ui.mountChildren(container, [
+            el('div', { class: 'hub-pick-head' }, [
+              el('span', { class: 'hub-pick-eyebrow hub-follow-eyebrow' }, '🪑 From your porch'),
+              el('span', { class: 'hub-dim hub-small' }, 'New cards from creators you follow'),
+            ]),
+            el('div', { class: 'hub-pickrow' }, items.map(followTile)),
+          ]);
+        })
+        .catch(function () { container.replaceChildren(); });
+    }
+
+    function followTile(card) {
+      return el('a', { class: 'hub-picktile', href: '#/card/' + card.id }, [
+        el('div', { class: 'hub-picktile-art' }, [ui.avatarImg(card.primaryAssetId, card.name, 'hub-picktile-img')]),
+        el('div', { class: 'hub-picktile-badges' }, [
+          card.type === 'GROUP' ? el('span', { class: 'hub-badge hub-badge-group' }, '👥') : null,
+          card.type === 'WORLD' ? el('span', { class: 'hub-badge hub-badge-world' }, '🏞️') : null,
+          card.nsfw ? el('span', { class: 'hub-badge hub-badge-nsfw' }, '18+') : null,
+        ]),
+        el('div', { class: 'hub-picktile-name' }, card.name),
+        card.creator ? el('div', { class: 'hub-followrow-by' }, '@' + card.creator.displayName) : null,
+      ]);
     }
 
     function load(p) {
@@ -182,6 +221,7 @@
       el('div', { class: 'hub-controls' }, [search, sortSel, nsfwBtn]),
       chipRow,
       showcase,
+      followRow,
       groupWarn,
       status,
       grid,
@@ -496,9 +536,15 @@
           }))
         : null;
 
+      // Profile avatar when the creator set one; their amber monogram otherwise.
+      var ava = cr.avatarAssetId
+        ? el('div', { class: 'hub-creator-ava' }, [ui.avatarImg(cr.avatarAssetId, cr.displayName, 'hub-creator-ava-img')])
+        : el('div', { class: 'hub-creator-ava hub-creator-mono' }, (cr.displayName || '?').charAt(0).toUpperCase());
+
       mount.replaceChildren(el('div', null, [
         el('a', { class: 'hub-back', href: '#/' }, '← Back to browsing'),
         el('div', { class: 'hub-creator-head' }, [
+          ava,
           el('h2', null, cr.displayName),
           followers,
           statLine,

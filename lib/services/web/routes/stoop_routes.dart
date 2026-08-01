@@ -18,6 +18,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf_router/shelf_router.dart';
@@ -52,6 +53,9 @@ class WebStoopRoutes {
     router.post('/api/stoop/auth/login', _authCall('/auth/login'));
     router.post('/api/stoop/auth/refresh', _authCall('/auth/refresh'));
     router.post('/api/stoop/auth/logout', _authCall('/auth/logout'));
+    // Password recovery: request the reset email (the emailed link opens the
+    // hub's reset page — the browser can't receive email links itself).
+    router.post('/api/stoop/auth/forgot', _authCall('/auth/forgot'));
 
     // Account. Static '/me/…' suffixes are registered before the parameterized
     // card/creator captures elsewhere can never swallow them (different roots),
@@ -67,6 +71,15 @@ class WebStoopRoutes {
       _tokenCall('POST', '/auth/display-name'),
     );
     router.post('/api/stoop/me/nsfw', _tokenCall('POST', '/auth/nsfw'));
+    router.post('/api/stoop/me/profile', _tokenCall('POST', '/me/profile'));
+    router.post(
+      '/api/stoop/me/resend-verification',
+      _tokenCall('POST', '/auth/resend-verification'),
+    );
+    // Profile avatar: the browser POSTs the image bytes raw (an <input type=
+    // file> blob); the facade re-wraps them as the backend's multipart shape.
+    router.post('/api/stoop/me/avatar', _avatarUpload);
+    router.delete('/api/stoop/me/avatar', _tokenCall('DELETE', '/me/avatar'));
     router.post('/api/stoop/2fa/setup', _tokenCall('POST', '/2fa/setup'));
     router.post('/api/stoop/2fa/enable', _tokenCall('POST', '/2fa/enable'));
     router.post('/api/stoop/2fa/disable', _tokenCall('POST', '/2fa/disable'));
@@ -74,6 +87,8 @@ class WebStoopRoutes {
     // Browse / cards / creators.
     router.get('/api/stoop/browse', _browse);
     router.get('/api/stoop/cards/<id>', _cardCall('GET', ''));
+    // Delete one of your OWN uploads (the backend enforces ownership).
+    router.delete('/api/stoop/cards/<id>', _cardCall('DELETE', ''));
     router.post('/api/stoop/cards/<id>/vote', _cardCall('POST', '/vote'));
     router.post('/api/stoop/cards/<id>/download', _download);
     router.post('/api/stoop/cards/<id>/report', _report);
@@ -228,6 +243,42 @@ class WebStoopRoutes {
         'reason': '${body['reason'] ?? ''}',
       },
     );
+  }
+
+  /// Profile avatar upload. The browser sends the (already square-cropped)
+  /// image bytes as the raw request body; the facade re-wraps them as the
+  /// backend's multipart field and passes the upstream response through, so
+  /// the web client sees the same `email_not_verified` / `avatar_locked`
+  /// codes the desktop does.
+  Future<shelf.Response> _avatarUpload(shelf.Request request) async {
+    final token = _token(request);
+    if (token == null || token.isEmpty) {
+      return JsonResponse.error(401, 'stoop_not_signed_in');
+    }
+    final builder = BytesBuilder(copy: false);
+    await for (final chunk in request.read()) {
+      builder.add(chunk);
+      // Backstop far above any real avatar (the client crops to ≤512px).
+      if (builder.length > 12 * 1024 * 1024) {
+        return JsonResponse.error(413, 'payload_too_large');
+      }
+    }
+    if (builder.isEmpty) return JsonResponse.badRequest('Empty body');
+    try {
+      final res = await _facade.forwardAvatarUpload(
+        token: token,
+        bytes: builder.takeBytes(),
+        contentType:
+            request.headers['content-type'] ?? 'application/octet-stream',
+      );
+      return shelf.Response(
+        res.status,
+        body: res.body,
+        headers: {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    } catch (_) {
+      return JsonResponse.error(502, 'stoop_unreachable');
+    }
   }
 
   /// Follow/unfollow — one web endpoint, `{follow: bool}` picks the upstream

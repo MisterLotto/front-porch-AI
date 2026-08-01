@@ -7890,3 +7890,39 @@ resolve.
 Left alone deliberately: docs/design/ stays published — architecture notes
 are legitimate public documentation for an open-source project, and several
 are referenced from CLAUDE.md.
+
+## 2026-08-01 — Stoop profile overhaul + avatars + password recovery + theme hit-test fix
+
+**Files (app):** lib/services/backporch/{backporch_api,backporch_user,stoop_creator}.dart,
+lib/providers/auth_state.dart, lib/ui/pages/repository/{stoop_home_view,stoop_creator_page,
+repository_auth_view,repository_account_sheet}.dart, NEW lib/ui/pages/repository/
+{stoop_profile_header,stoop_edit_profile_dialog,stoop_my_upload_tile,repository}.dart (barrel),
+lib/ui/pages/repository_page.dart (barrel import), lib/services/web/routes/stoop_routes.dart,
+lib/services/web/facade/stoop_facade.dart, web_ui/src/stoop/{stoopApi,stoopTypes}.ts,
+web_ui/src/pages/stoop/{StoopAccountPage,StoopCreatorPage,StoopAuthView}.tsx,
+NEW web_ui/src/components/stoop/StoopCreatorAvatar.tsx, web_ui/src/styles.css,
+website/src/stoop/{api,app,views-auth,views-browse,views-inbox}.js, website/src/stoop/stoop.css,
+lib/ui/chat_components/bubbles/{message_bubble,border_painters}.dart,
+NEW test/ui/border_painters_hit_test_test.dart.
+
+**Why:** (1) The @you Stoop tab was a bare uploads list; per the approved mockup it is now a real
+profile (avatar/monogram, join date, followers + lifetime stats via /creators/:id, bio, links,
+Edit Profile dialog, hub Share link, Following chips via the previously-unused /me/following,
+Delete-own-upload, verify banner). Creator pages share the same header (StoopProfileHeader).
+Display-name editing moved from the account sheet into Edit Profile (sheet keeps security items).
+(2) User avatars: post-moderated (live instantly; mod strip = formal warning; verified email
+required server-side; avatarLocked revocation). Client crops square ≤512 in an isolate (compute).
+(3) Password recovery: "Forgot password?" on the sign-in card → POST /auth/forgot; the emailed
+link opens the hub's #/reset page. Same flows shipped to web_ui (new facade routes /me/profile,
+/me/avatar raw-bytes upload, /auth/forgot, DELETE /cards/:id, resend-verification) and the hub
+site (renderForgot/renderReset, account avatar editor, creator avatars, "From your porch" row —
+desktop already had that row). (4) BUGFIX: all 10 community theme presets made every message-bubble
+button dead — the Positioned.fill border CustomPaint is hit-test opaque by default. Fixed with
+IgnorePointer + hitTest=false on ThemeBorderPainter + regression tests.
+
+Backend (separate private repo): additive migration (avatar fields + reset-token fields on User),
+POST/DELETE /me/avatar, avatar fallback on /assets/:id/raw, POST /auth/forgot + /auth/reset
+(2FA still required when enabled; all sessions revoked), owner-only /mod/users/:id/force-reset,
+/mod/avatars feed + avatar-strip/lock, dashboard Avatars view + Message/Reset-PW user actions.
+Deploy pending maintainer approval. flutter analyze clean; debug macOS build OK; web_ui tsc clean
++ bundle rebuilt; hub bundle rebuilt; new tests pass.

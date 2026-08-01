@@ -13,21 +13,22 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
-import 'package:front_porch_ai/services/services.dart';
-import 'package:front_porch_ai/ui/pages/edit_character_page.dart';
-import 'package:front_porch_ai/ui/pages/edit_group_page.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_card_detail_page.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_card_tile.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_creator_page.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_edit_profile_dialog.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_my_upload_tile.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_profile_header.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_upload_page.dart';
-import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_verify_banner.dart';
 
-/// The signed-in landing for The Stoop: share a character and track your own
-/// uploads through moderation. The community browse grid is a later phase; this
-/// is the creator-facing surface.
+/// The signed-in @you tab, per the approved profile mockup: a real identity
+/// header (avatar, join date, followers + lifetime stats, bio, links) with
+/// Edit profile + Share, then your uploads with moderation status, the
+/// creators you follow, and your download history.
 class StoopHomeView extends StatefulWidget {
   const StoopHomeView({super.key});
 
@@ -39,8 +40,10 @@ class _StoopHomeViewState extends State<StoopHomeView> {
   final _api = BackporchApi();
   bool _loading = true;
   String? _error;
+  StoopCreator? _profile;
   List<StoopCharacter> _mine = const [];
   List<StoopCard> _downloads = const [];
+  List<StoopFollowedCreator> _followed = const [];
   StreamSubscription<StoopCardStats>? _statsSub;
 
   @override
@@ -60,31 +63,43 @@ class _StoopHomeViewState extends State<StoopHomeView> {
   }
 
   Future<void> _load() async {
-    final token = context.read<AuthState>().accessToken;
-    if (token == null) return;
+    final auth = context.read<AuthState>();
+    final token = auth.accessToken;
+    final userId = auth.user?.id;
+    if (token == null || userId == null) return;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final items = await _api.myCharacters(token);
+      // Identity/stats, downloads, and following are non-critical extras: the
+      // uploads list still renders when any of them fails.
+      StoopCreator? profile;
       List<StoopCard> downloads = const [];
+      List<StoopFollowedCreator> followed = const [];
+      try {
+        profile = await _api.creatorProfile(token, userId);
+      } catch (_) {}
       try {
         downloads = await _api.myDownloads(token);
-      } catch (_) {
-        // download history is non-critical; uploads still render
-      }
+      } catch (_) {}
+      try {
+        followed = await _api.myFollowing(token);
+      } catch (_) {}
       if (mounted) {
         setState(() {
           _mine = items;
+          _profile = profile;
           _downloads = downloads;
+          _followed = followed;
           _loading = false;
         });
       }
     } catch (_) {
       if (mounted) {
         setState(() {
-          _error = 'Couldn’t load your uploads. Pull to retry.';
+          _error = 'Couldn’t load your profile. Pull to retry.';
           _loading = false;
         });
       }
@@ -103,148 +118,9 @@ class _StoopHomeViewState extends State<StoopHomeView> {
     }
   }
 
-  // Publish a new version of an already-shared character IN PLACE. Finds the
-  // local library card this post came from (by the card's stable id, else by
-  // name) and opens the wizard locked to it in update mode.
-  Future<void> _startUpdate(StoopCharacter c) async {
-    final repo = context.read<CharacterRepository>();
-    CharacterCard? match;
-    final sid = c.originStableId;
-    if (sid != null && sid.isNotEmpty) {
-      for (final card in repo.characters) {
-        if (card.frontPorchExtensions?.stableId == sid) {
-          match = card;
-          break;
-        }
-      }
-    }
-    if (match == null) {
-      final wanted = c.name.trim().toLowerCase();
-      for (final card in repo.characters) {
-        if (card.imagePath != null &&
-            card.name.trim().toLowerCase() == wanted) {
-          match = card;
-          break;
-        }
-      }
-    }
-    if (match == null || match.imagePath == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Couldn’t find “${c.name}” in your library to update — '
-              'it may have been renamed or removed.',
-            ),
-          ),
-        );
-      }
-      return;
-    }
-    final libCard = match;
-    // 1) Full character editor (Save → "Next"). Saves to the library first, so
-    //    there's one canonical character, then returns the freshly-saved card.
-    final saved = await Navigator.of(context).push<CharacterCard>(
-      MaterialPageRoute(
-        builder: (_) => EditCharacterPage(
-          character: libCard,
-          saveLabel: 'Next',
-          popWithCardOnSave: true,
-        ),
-      ),
-    );
-    if (saved == null || !mounted) return; // backed out without saving
-    // 2) Stoop publish step (summary/tags/NSFW/standards → new version in place).
-    final updated = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => StoopUploadPage(
-          updateCharacter: saved,
-          updateStoopId: c.id,
-          initialNsfw: c.nsfw,
-          initialName: c.name,
-          initialSummary: c.summary,
-          initialOriginalCreator: c.originalCreator,
-        ),
-      ),
-    );
-    if (updated == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Update submitted for review.')),
-      );
-      _load();
-    }
-  }
-
-  // Publish a new version of an already-shared GROUP in place. Finds the local
-  // group this post came from (by the portable group stable id, else by name),
-  // opens the full group editor (Save → "Next", which saves locally + returns
-  // the group), then the Stoop publish step re-publishes the same post.
-  Future<void> _startGroupUpdate(StoopCharacter c) async {
-    final repo = context.read<GroupChatRepository>();
-    GroupChat? match;
-    final sid = c.originStableId;
-    if (sid != null && sid.isNotEmpty) {
-      for (final g in repo.groups) {
-        if (g.stableId == sid) {
-          match = g;
-          break;
-        }
-      }
-    }
-    if (match == null) {
-      final wanted = c.name.trim().toLowerCase();
-      for (final g in repo.groups) {
-        if (g.name.trim().toLowerCase() == wanted) {
-          match = g;
-          break;
-        }
-      }
-    }
-    if (match == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Couldn’t find “${c.name}” in your groups to update — '
-              'it may have been renamed or removed.',
-            ),
-          ),
-        );
-      }
-      return;
-    }
-    // 1) Full group editor (Save → "Next"). Saves the local group first (so the
-    //    edits — including the new Realism & Dynamics tab — are the source of
-    //    truth), then returns the freshly-saved group.
-    final saved = await Navigator.of(context).push<GroupChat>(
-      MaterialPageRoute(
-        builder: (_) => EditGroupPage(
-          group: match!,
-          saveLabel: 'Next',
-          popWithGroupOnSave: true,
-        ),
-      ),
-    );
-    if (saved == null || !mounted) return; // backed out without saving
-    // 2) Stoop publish step (summary/tags/NSFW/standards → new version in place).
-    final updated = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => StoopUploadPage(
-          updateGroup: saved,
-          updateStoopId: c.id,
-          initialNsfw: c.nsfw,
-          initialName: c.name,
-          initialSummary: c.summary,
-          initialOriginalCreator: c.originalCreator,
-        ),
-      ),
-    );
-    if (updated == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Update submitted for review.')),
-      );
-      _load();
-    }
+  Future<void> _editProfile() async {
+    final changed = await showStoopEditProfile(context);
+    if (changed == true && mounted) _load();
   }
 
   @override
@@ -254,30 +130,7 @@ class _StoopHomeViewState extends State<StoopHomeView> {
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 720),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
-                child: Row(
-                  children: [
-                    Text('Your cards', style: stoopDisplay(context, size: 21)),
-                    const Spacer(),
-                    StoopAmberButton(
-                      label: 'Share to The Stoop',
-                      icon: Icons.upload_outlined,
-                      onPressed: _startUpload,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(child: _body()),
-            ],
-          ),
+          child: _body(),
         ),
       ),
     );
@@ -285,26 +138,36 @@ class _StoopHomeViewState extends State<StoopHomeView> {
 
   Widget _body() {
     if (_loading) return const StoopLamp();
-    if (_error != null) {
-      return _hint('🌙', _error!, retry: true);
-    }
-    if (_mine.isEmpty && _downloads.isEmpty) {
-      return _hint(
-        '🏮',
-        'Nothing shared yet.\nTap “Share to The Stoop” to submit a card for '
-        'review.',
-      );
-    }
+    if (_error != null) return _hint('🌙', _error!, retry: true);
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
         children: [
+          // Self-hides once the email is confirmed. Surfaced here (not just on
+          // the upload page) because sharing AND profile photos both need it.
+          const StoopVerifyBanner(),
+          _profileHeader(),
+          const SizedBox(height: 18),
+          _sectionRow(
+            'Your cards',
+            hint: _mine.isEmpty ? null : '${_mine.length} shared',
+            trailing: StoopAmberButton(
+              label: 'Share to The Stoop',
+              icon: Icons.upload_outlined,
+              onPressed: _startUpload,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 10,
+              ),
+            ),
+          ),
           if (_mine.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: Text(
-                'You haven’t shared anything yet.',
+                'Nothing shared yet — tap “Share to The Stoop” to submit a '
+                'card for review.',
                 style: TextStyle(color: stoopMute(context)),
               ),
             )
@@ -312,20 +175,133 @@ class _StoopHomeViewState extends State<StoopHomeView> {
             for (final c in _mine)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: _uploadTile(c),
+                child: StoopMyUploadTile(character: c, onChanged: _load),
               ),
+          if (_followed.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _sectionRow(
+              'Following',
+              hint: 'tap a creator to visit their porch',
+            ),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [for (final f in _followed) _followedChip(f)],
+            ),
+          ],
           if (_downloads.isNotEmpty) ...[
             const SizedBox(height: 22),
-            Text('Downloads', style: stoopDisplay(context, size: 17)),
-            const SizedBox(height: 2),
-            Text(
-              'Cards you’ve saved — grab them again on any device.',
-              style: TextStyle(color: stoopMute(context), fontSize: 12),
-            ),
-            const SizedBox(height: 12),
+            _sectionRow('Downloads', hint: 'cards you’ve brought home'),
             _downloadsGrid(),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _profileHeader() {
+    final user = context.watch<AuthState>().user;
+    if (user == null) return const SizedBox.shrink();
+    // The server profile carries the stats; the AuthState user is the fresher
+    // identity (an Edit Profile save updates it instantly, no reload needed).
+    final p = _profile;
+    final creator = StoopCreator(
+      id: user.id,
+      displayName: user.displayName,
+      followers: p?.followers ?? 0,
+      following: false,
+      isMe: true,
+      cards: const [],
+      bio: user.bio,
+      links: user.profileLinks,
+      avatarAssetId: user.avatarAssetId,
+      createdAt: user.createdAt ?? p?.createdAt,
+      stats: p?.stats ?? const StoopCreatorStats(),
+    );
+    return StoopProfileHeader(
+      creator: creator,
+      actions: [
+        StoopAmberButton(
+          label: 'Edit profile',
+          icon: Icons.edit_outlined,
+          onPressed: _editProfile,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        ),
+        OutlinedButton.icon(
+          onPressed: () => stoopCopyCreatorLink(
+            context,
+            id: user.id,
+            displayName: user.displayName,
+          ),
+          icon: const Icon(Icons.link_rounded, size: 16),
+          label: const Text('Share'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: stoopCream2(context),
+            side: BorderSide(color: stoopBorderHi(context)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _sectionRow(String title, {String? hint, Widget? trailing}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          Text(title, style: stoopDisplay(context, size: 17)),
+          if (hint != null) ...[
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                hint,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(color: stoopFaint(context), fontSize: 12),
+              ),
+            ),
+          ] else
+            const Spacer(),
+          ?trailing,
+        ],
+      ),
+    );
+  }
+
+  Widget _followedChip(StoopFollowedCreator f) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => StoopCreatorPage(creatorId: f.id)),
+      ),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(6, 5, 13, 5),
+        decoration: BoxDecoration(
+          color: stoopBg1(context),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: stoopBorderHi(context)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            StoopCreatorAvatar(
+              assetId: f.avatarAssetId,
+              name: f.displayName,
+              size: 26,
+            ),
+            const SizedBox(width: 9),
+            Text(
+              f.displayName,
+              style: TextStyle(color: stoopCream(context), fontSize: 13),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '${f.followers} ${f.followers == 1 ? 'follower' : 'followers'}',
+              style: TextStyle(color: stoopFaint(context), fontSize: 11.5),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -344,132 +320,6 @@ class _StoopHomeViewState extends State<StoopHomeView> {
       itemBuilder: (_, i) => StoopCardTile(
         card: _downloads[i],
         onTap: () => showStoopDetail(context, _downloads[i].id),
-      ),
-    );
-  }
-
-  Widget _uploadTile(StoopCharacter c) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        gradient: stoopCardGradient(context),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: stoopBorder(context)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(c.name, style: stoopDisplay(context, size: 16)),
-              ),
-              _statusChip(c),
-            ],
-          ),
-          if (c.summary.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              c.summary,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: stoopCream2(context)),
-            ),
-          ],
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'v${c.version} · ${c.downloadCount} downloads'
-                  '${c.nsfw ? ' · NSFW' : ''}',
-                  style: TextStyle(color: stoopMute(context), fontSize: 12),
-                ),
-              ),
-              // Update publishes a new version of THIS post in place — for solo
-              // characters and (now that groups carry a portable stable id) group
-              // cards alike, each through its own editor + publish flow. World
-              // posts are new-upload-only for now (re-share from the wizard);
-              // routing them to the character path would just dead-end.
-              if (c.type != 'WORLD')
-                OutlinedButton.icon(
-                  onPressed: () => c.type == 'GROUP'
-                      ? _startGroupUpdate(c)
-                      : _startUpdate(c),
-                  icon: const Icon(Icons.autorenew_rounded, size: 15),
-                  label: const Text('Update'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: stoopCream2(context),
-                    side: BorderSide(color: stoopBorderHi(context)),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
-                    minimumSize: const Size(0, 32),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    textStyle: const TextStyle(fontSize: 12),
-                  ),
-                ),
-            ],
-          ),
-          if (c.isRejected && (c.rejectionNote?.isNotEmpty ?? false)) ...[
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppColors.stoopEmber.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: AppColors.stoopEmber.withValues(alpha: 0.4),
-                ),
-              ),
-              child: Text(
-                'Moderator: ${c.rejectionNote}',
-                style: TextStyle(
-                  color: stoopEmberText(context),
-                  fontSize: 12,
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  // Hub .hub-status pills: PENDING amber, APPROVED teal, REJECTED ember.
-  Widget _statusChip(StoopCharacter c) {
-    late Color color;
-    late Color hairline;
-    late String label;
-    if (c.isApproved) {
-      color = stoopTealText(context);
-      hairline = AppColors.stoopTeal.withValues(alpha: 0.35);
-      label = 'APPROVED';
-    } else if (c.isRejected) {
-      color = stoopEmberText(context);
-      hairline = AppColors.stoopEmber.withValues(alpha: 0.4);
-      label = c.status == 'TAKEN_DOWN' ? 'TAKEN DOWN' : 'REJECTED';
-    } else {
-      color = stoopAmberText(context);
-      hairline = AppColors.stoopAmber.withValues(alpha: 0.35);
-      label = 'PENDING';
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: hairline),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 10.5,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.6,
-        ),
       ),
     );
   }

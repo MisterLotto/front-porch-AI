@@ -13,6 +13,7 @@ import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_profile_header.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_twofa_sheet.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
@@ -52,57 +53,6 @@ class _StoopAccountSheetState extends State<_StoopAccountSheet> {
       );
     } finally {
       if (mounted) setState(() => _nsfwBusy = false);
-    }
-  }
-
-  Future<void> _editDisplayName(String current) async {
-    final controller = TextEditingController(text: current);
-    final messenger = ScaffoldMessenger.of(context);
-    final newName = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: stoopCard2(ctx),
-        title: Text(
-          'Display name',
-          style: TextStyle(color: stoopCream(ctx)),
-        ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          maxLength: 40,
-          style: TextStyle(color: stoopCream(ctx)),
-          decoration: InputDecoration(
-            hintText: 'How others see you on The Stoop',
-            hintStyle: TextStyle(color: stoopMute(ctx)),
-            helperText: 'This is your public name on cards and profiles.',
-            helperStyle: TextStyle(color: stoopMute(ctx)),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    if (newName == null || newName == current || !mounted) return;
-    if (newName.length < 2) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Name must be at least 2 characters.')),
-      );
-      return;
-    }
-    try {
-      await context.read<AuthState>().setDisplayName(newName);
-    } catch (_) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Couldn’t update your name. Try again.')),
-      );
     }
   }
 
@@ -169,18 +119,13 @@ class _StoopAccountSheetState extends State<_StoopAccountSheet> {
           children: [
             Row(
               children: [
-                CircleAvatar(
-                  radius: 22,
-                  backgroundColor: stoopBg1(context),
-                  child: Text(
-                    user.displayName.isNotEmpty
-                        ? user.displayName.characters.first.toUpperCase()
-                        : '?',
-                    style: TextStyle(
-                      color: stoopCream(context),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                // Real profile picture when set; monogram otherwise. Name/bio/
+                // photo editing lives in Edit Profile on the @you tab — this
+                // sheet keeps the account/security switches.
+                StoopCreatorAvatar(
+                  assetId: user.avatarAssetId,
+                  name: user.displayName,
+                  size: 44,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -204,15 +149,6 @@ class _StoopAccountSheetState extends State<_StoopAccountSheet> {
                       ),
                     ],
                   ),
-                ),
-                IconButton(
-                  tooltip: 'Change display name',
-                  icon: Icon(
-                    Icons.edit_outlined,
-                    size: 20,
-                    color: stoopMute(context),
-                  ),
-                  onPressed: () => _editDisplayName(user.displayName),
                 ),
               ],
             ),

@@ -11,9 +11,17 @@ export interface StoopUser {
   displayName: string;
   role: 'USER' | 'MOD' | 'OWNER';
   ageVerified: boolean;
+  /** Absent on older servers — treat missing as verified (nothing to nag). */
+  emailVerified?: boolean;
   nsfwEnabled: boolean;
   acceptedPolicyVersion: string | null;
   twoFactorEnabled: boolean;
+  /** Public creator-profile extras (absent on older servers). */
+  bio?: string | null;
+  profileLinks?: string[];
+  avatarAssetId?: string | null;
+  avatarLocked?: boolean;
+  createdAt?: string;
 }
 
 export interface StoopCreatorRef {
@@ -71,12 +79,19 @@ export interface StoopCreator {
   following: boolean;
   isMe: boolean;
   cards: StoopCard[];
+  /** Profile extras + lifetime totals (absent on older servers). */
+  bio?: string | null;
+  links?: string[];
+  avatarAssetId?: string | null;
+  createdAt?: string;
+  stats?: { cards: number; downloads: number; score: number };
 }
 
 export interface StoopFollowedCreator {
   id: string;
   displayName: string;
   followers: number;
+  avatarAssetId?: string | null;
 }
 
 /** One of the signed-in user's own uploads, with moderation status. */

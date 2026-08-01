@@ -13,12 +13,7 @@ import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
-import 'package:front_porch_ai/ui/pages/repository/repository_auth_view.dart';
-import 'package:front_porch_ai/ui/pages/repository/repository_account_sheet.dart';
-import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
-import 'package:front_porch_ai/ui/pages/repository/stoop_inbox_bell.dart';
-import 'package:front_porch_ai/ui/pages/repository/stoop_signed_in.dart';
-import 'package:front_porch_ai/ui/pages/repository/stoop_policy_gate.dart';
+import 'package:front_porch_ai/ui/pages/repository/repository.dart';
 
 /// The Front Porch repository — a full page (opened from the sidebar, like the
 /// AI Character Creator). An account is required only here; the rest of the app

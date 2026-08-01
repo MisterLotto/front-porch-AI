@@ -6,12 +6,61 @@
 // moderation status, your past downloads, creators you follow, sign out and
 // account deletion. Mirrors the desktop account sheet feature-for-feature.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { StoopCardTile } from '../../components/stoop/StoopCardTile';
+import { StoopCreatorAvatar } from '../../components/stoop/StoopCreatorAvatar';
 import { stoop, stoopErrorText } from '../../stoop/stoopApi';
 import { useStoop } from '../../stoop/StoopContext';
 import type { StoopCard, StoopFollowedCreator, StoopMine } from '../../stoop/stoopTypes';
+
+/** Center-crop to a square (max 512px), encoded as JPEG — same treatment the
+ *  hub site applies, so avatars land round-crop-safe and small. */
+function squareCropAvatar(file: File): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const side = Math.min(img.naturalWidth, img.naturalHeight);
+        const out = Math.min(side, 512);
+        const canvas = document.createElement('canvas');
+        canvas.width = out;
+        canvas.height = out;
+        canvas
+          .getContext('2d')!
+          .drawImage(
+            img,
+            (img.naturalWidth - side) / 2,
+            (img.naturalHeight - side) / 2,
+            side,
+            side,
+            0,
+            0,
+            out,
+            out,
+          );
+        canvas.toBlob(
+          (b) => {
+            URL.revokeObjectURL(url);
+            if (b) resolve(b);
+            else reject(new Error('Couldn’t read that image.'));
+          },
+          'image/jpeg',
+          0.9,
+        );
+      } catch (e) {
+        URL.revokeObjectURL(url);
+        reject(e instanceof Error ? e : new Error('Couldn’t read that image.'));
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Couldn’t read that image.'));
+    };
+    img.src = url;
+  });
+}
 
 const STATUS_LABEL: Record<StoopMine['status'], string> = {
   PENDING: 'In review',
@@ -23,6 +72,12 @@ const STATUS_LABEL: Record<StoopMine['status'], string> = {
 export function StoopAccountPage() {
   const { user, updateUser, signOut } = useStoop();
   const [name, setName] = useState(user?.displayName ?? '');
+  const [bio, setBio] = useState(user?.bio ?? '');
+  const [links, setLinks] = useState<string[]>(() => {
+    const l = user?.profileLinks ?? [];
+    return [l[0] ?? '', l[1] ?? '', l[2] ?? '', l[3] ?? ''];
+  });
+  const fileRef = useRef<HTMLInputElement>(null);
   const [mine, setMine] = useState<StoopMine[]>([]);
   const [downloads, setDownloads] = useState<StoopCard[]>([]);
   const [followed, setFollowed] = useState<StoopFollowedCreator[]>([]);
@@ -60,6 +115,54 @@ export function StoopAccountPage() {
       updateUser(r.user);
       setNote('Display name updated.');
     });
+
+  const saveProfile = () =>
+    run(async () => {
+      const cleaned = links.map((l) => l.trim()).filter(Boolean);
+      if (cleaned.some((l) => !/^https?:\/\/.+/.test(l))) {
+        setError('Links must start with http:// or https://');
+        return;
+      }
+      const r = await stoop.updateProfile(bio.trim(), cleaned);
+      updateUser(r.user);
+      setNote('Profile updated.');
+    });
+
+  const canAvatar = user?.emailVerified !== false && !user?.avatarLocked;
+
+  const pickAvatar = (file: File | null) => {
+    if (!file) return;
+    void run(async () => {
+      const blob = await squareCropAvatar(file);
+      const r = await stoop.uploadAvatar(blob);
+      updateUser(r.user);
+      setNote('Profile photo updated — it’s live.');
+    });
+  };
+
+  const removeAvatar = () =>
+    run(async () => {
+      const r = await stoop.deleteAvatar();
+      updateUser(r.user);
+      setNote('Profile photo removed.');
+    });
+
+  const resendVerify = () =>
+    run(async () => {
+      await stoop.resendVerification();
+      setNote('Confirmation email sent — check your inbox (and spam).');
+    });
+
+  const deleteUpload = (m: StoopMine) => {
+    if (!window.confirm(`Take “${m.name}” off The Stoop permanently? Copies people already downloaded stay theirs.`)) {
+      return;
+    }
+    void run(async () => {
+      await stoop.deleteCharacter(m.id);
+      setMine((prev) => prev.filter((x) => x.id !== m.id));
+      setNote(`“${m.name}” was removed from The Stoop.`);
+    });
+  };
 
   const toggleNsfw = () =>
     run(async () => {
@@ -107,12 +210,74 @@ export function StoopAccountPage() {
         <p className="muted">
           {user.email} · {user.role !== 'USER' ? `${user.role} · ` : ''}age verified
         </p>
+        {user.emailVerified === false && (
+          <p className="stoop-verify-note">
+            📮 Confirm your email to share cards and set a profile photo.{' '}
+            <button className="link-btn" disabled={busy} onClick={resendVerify}>
+              Send the link again
+            </button>
+          </p>
+        )}
+        <div className="stoop-ava-row">
+          <StoopCreatorAvatar assetId={user.avatarAssetId} name={user.displayName} size={52} />
+          <button disabled={busy || !canAvatar} onClick={() => fileRef.current?.click()}>
+            {user.avatarAssetId ? 'Change photo…' : 'Choose photo…'}
+          </button>
+          {user.avatarAssetId && (
+            <button className="danger" disabled={busy} onClick={removeAvatar}>
+              Remove
+            </button>
+          )}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            hidden
+            onChange={(e) => {
+              pickAvatar(e.target.files?.[0] ?? null);
+              e.target.value = '';
+            }}
+          />
+        </div>
+        <p className="muted stoop-small">
+          {user.avatarLocked
+            ? 'A moderator has disabled profile pictures for this account. You can appeal from your inbox.'
+            : 'Shows beside your name across The Stoop, immediately. Keep it porch-front friendly — visitors see it without an 18+ check, and a moderator removing an avatar counts as a formal warning.'}
+        </p>
         <label>
           Display name
           <input value={name} onChange={(e) => setName(e.target.value)} />
         </label>
         <button disabled={busy || !name.trim() || name.trim() === user.displayName} onClick={saveName}>
           Save name
+        </button>
+        <label>
+          Bio
+          <textarea
+            rows={3}
+            maxLength={300}
+            placeholder="A short bio for your public porch page (300 characters max)."
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+          />
+        </label>
+        <label>
+          Links (up to 4, shown on your public page)
+          {links.map((l, i) => (
+            <input
+              key={i}
+              type="url"
+              maxLength={200}
+              placeholder={i === 0 ? 'https:// — your chub / Backyard / socials' : 'https://…'}
+              value={l}
+              onChange={(e) =>
+                setLinks((prev) => prev.map((x, j) => (j === i ? e.target.value : x)))
+              }
+            />
+          ))}
+        </label>
+        <button disabled={busy} onClick={saveProfile}>
+          Save profile
         </button>
       </section>
 
@@ -190,6 +355,9 @@ export function StoopAccountPage() {
                 <span className={`stoop-status ${m.status.toLowerCase()}`}>
                   {STATUS_LABEL[m.status]}
                 </span>
+                <button className="link-btn stoop-delete-link" disabled={busy} onClick={() => deleteUpload(m)}>
+                  Delete
+                </button>
                 {m.status === 'REJECTED' && m.rejectionNote && (
                   <p className="muted stoop-reject-note">{m.rejectionNote}</p>
                 )}
@@ -220,7 +388,10 @@ export function StoopAccountPage() {
           <ul className="stoop-following">
             {followed.map((c) => (
               <li key={c.id}>
-                <Link to={`/stoop/creator/${encodeURIComponent(c.id)}`}>{c.displayName}</Link>
+                <Link to={`/stoop/creator/${encodeURIComponent(c.id)}`}>
+                  <StoopCreatorAvatar assetId={c.avatarAssetId} name={c.displayName} size={24} />{' '}
+                  {c.displayName}
+                </Link>
                 <span className="muted">
                   {c.followers} follower{c.followers === 1 ? '' : 's'}
                 </span>

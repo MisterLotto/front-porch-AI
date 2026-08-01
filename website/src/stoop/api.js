@@ -81,6 +81,13 @@
     use_dashboard: 'Moderator accounts are managed from the dashboard.',
     payload_too_large: 'That file is too big.',
     unsupported_media: 'That image type isn’t supported — use PNG, JPEG, or WebP.',
+    unsupported_image_type: 'That image type isn’t supported — use PNG, JPEG, or WebP.',
+    invalid_or_expired_token: 'That reset link isn’t valid anymore — request a new one.',
+    email_not_verified: 'Confirm your email first — profile pictures need a verified address.',
+    avatar_locked: 'A moderator has disabled profile pictures for this account.',
+    missing_avatar: 'Pick an image first.',
+    upload_failed: 'The upload didn’t make it — try again.',
+    resend_too_soon: 'Hang on a minute before requesting another email.',
   };
 
   function ApiError(status, code, detail) {
@@ -268,6 +275,26 @@
     following: function () { return api('GET', '/me/following'); },
 
     resendVerification: function () { return api('POST', '/auth/resend-verification', {}); },
+
+    /* password recovery (no auth — these ARE how you get back in) */
+    forgot: function (email) {
+      return api('POST', '/auth/forgot', { email: email }, { noAuth: true });
+    },
+    resetPassword: function (token, newPassword, totp) {
+      var body = { token: token, newPassword: newPassword };
+      if (totp) body.totp = totp;
+      return api('POST', '/auth/reset', body, { noAuth: true });
+    },
+
+    /* profile avatar (live instantly; post-moderated) */
+    uploadAvatar: function (blob, name) {
+      var fd = new FormData();
+      fd.append('avatar', blob, name || 'avatar.png');
+      return api('POST', '/me/avatar', fd).then(applyAuthPayload);
+    },
+    deleteAvatar: function () {
+      return api('DELETE', '/me/avatar').then(applyAuthPayload);
+    },
 
     /* own cards */
     myCharacters: function () { return api('GET', '/me/characters?types=solo,group,world'); },

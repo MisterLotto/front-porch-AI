@@ -191,6 +191,10 @@
   font-size: 0.78rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
   color: var(--amber);
 }
+/* "From your porch" — followed creators' newest cards, under Mod's Picks. */
+.hub-followrow:not(:empty) { margin-bottom: 26px; }
+.hub-follow-eyebrow { color: var(--teal); }
+.hub-followrow-by { font-size: 0.74rem; color: var(--teal-hi); padding: 0 2px 2px; }
 .hub-pickhero {
   position: relative; display: block; overflow: hidden; color: inherit;
   border-radius: var(--radius); border: 1px solid rgba(245, 166, 35, 0.3);
@@ -415,6 +419,20 @@
 /* ---- creator ---- */
 .hub-creator-head { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-bottom: 26px; }
 .hub-creator-head h2 { color: var(--cream); }
+/* Creator profile avatar: real photo when set, amber monogram otherwise. */
+.hub-creator-ava {
+  width: 64px; height: 64px; border-radius: 50%; overflow: hidden; flex: none;
+  border: 2px solid var(--amber-deep); background: var(--bg-1);
+}
+.hub-creator-ava .hub-avatar-frame, .hub-creator-ava-img { width: 100%; height: 100%; }
+.hub-creator-ava-img { object-fit: cover; display: block; }
+.hub-creator-mono {
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-size: 1.6rem; color: var(--amber-hi);
+}
+.hub-acct-ava { width: 52px; height: 52px; }
+.hub-acct-ava.hub-creator-mono { font-size: 1.3rem; }
+.hub-acct-ava-row { align-items: center; }
 
 /* ---- my cards ---- */
 .hub-head-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 22px; }

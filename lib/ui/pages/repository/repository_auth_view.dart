@@ -145,6 +145,71 @@ class _RepositoryAuthViewState extends State<RepositoryAuthView> {
     }
   }
 
+  // Ask the server for a reset email. The emailed link opens the hub's reset
+  // page in a browser (email links can't land inside the app); once the new
+  // password is set, signing in here works again. The server never reveals
+  // whether an address has an account.
+  Future<void> _forgotPassword() async {
+    final controller = TextEditingController(text: _email.text.trim());
+    final sent = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: stoopCard2(ctx),
+        title: Text('Locked out?', style: TextStyle(color: stoopCream(ctx))),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Enter your account email and we’ll send a link to choose a new '
+              'password. The link opens in your browser and works for '
+              '45 minutes.',
+              style: TextStyle(color: stoopCream2(ctx), fontSize: 13.5),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.emailAddress,
+              style: TextStyle(color: stoopCream(ctx)),
+              decoration: stoopInput(ctx, 'you@example.com'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final email = controller.text.trim();
+              if (!email.contains('@')) return;
+              try {
+                await BackporchApi().forgotPassword(email);
+              } catch (_) {
+                // Deliberately quiet — the answer is the same either way.
+              }
+              if (ctx.mounted) Navigator.pop(ctx, true);
+            },
+            child: const Text('Email me a link'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (sent == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'If that address has a Stoop account, a reset link is on its way. '
+            'Check your email (and spam).',
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _pickDob() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -243,6 +308,28 @@ class _RepositoryAuthViewState extends State<RepositoryAuthView> {
                   onPressed: _busy ? null : _submit,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
+                if (!_isSignup) ...[
+                  const SizedBox(height: 12),
+                  Center(
+                    child: InkWell(
+                      onTap: _busy ? null : _forgotPassword,
+                      borderRadius: BorderRadius.circular(6),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        child: Text(
+                          'Forgot password?',
+                          style: TextStyle(
+                            color: stoopTealText(context),
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Text(
                   '18+ only · one account works everywhere in Front Porch',

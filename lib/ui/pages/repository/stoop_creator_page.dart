@@ -18,10 +18,12 @@ import 'package:front_porch_ai/services/backporch/backporch.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_card_detail_page.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_card_tile.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_profile_header.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
-/// A creator's public profile: follower count, a Follow button, and a grid of
-/// their approved cards.
+/// A creator's public profile: the shared identity header (avatar, join date,
+/// bio, links, lifetime stats) with Follow + Share, and a grid of their
+/// approved cards.
 class StoopCreatorPage extends StatefulWidget {
   final String creatorId;
   const StoopCreatorPage({super.key, required this.creatorId});
@@ -178,45 +180,12 @@ class _StoopCreatorPageState extends State<StoopCreatorPage> {
 
   Widget _header(StoopCreator p) {
     return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Row(
-        children: [
-          // Amber-ringed monogram (the hub renders creators without avatars).
-          Container(
-            width: 60,
-            height: 60,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: stoopBg1(context),
-              border: Border.all(
-                color: AppColors.stoopAmber.withValues(alpha: 0.45),
-              ),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              p.displayName.isNotEmpty
-                  ? p.displayName.characters.first.toUpperCase()
-                  : '?',
-              style: stoopDisplay(context, size: 24),
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(p.displayName, style: stoopDisplay(context, size: 21)),
-                const SizedBox(height: 2),
-                Text(
-                  '$_followers ${_followers == 1 ? 'follower' : 'followers'} · '
-                  '${p.cards.length} ${p.cards.length == 1 ? 'card' : 'cards'}',
-                  style: TextStyle(color: stoopMute(context)),
-                ),
-              ],
-            ),
-          ),
-          if (!p.isMe) ...[
-            const SizedBox(width: 12),
+      padding: const EdgeInsets.all(16),
+      child: StoopProfileHeader(
+        creator: p,
+        followers: _followers,
+        actions: [
+          if (!p.isMe)
             _following
                 ? OutlinedButton(
                     onPressed: _followBusy ? null : _toggleFollow,
@@ -236,7 +205,19 @@ class _StoopCreatorPageState extends State<StoopCreatorPage> {
                       vertical: 10,
                     ),
                   ),
-          ],
+          OutlinedButton.icon(
+            onPressed: () => stoopCopyCreatorLink(
+              context,
+              id: p.id,
+              displayName: p.displayName,
+            ),
+            icon: const Icon(Icons.link_rounded, size: 16),
+            label: const Text('Share'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: stoopCream2(context),
+              side: BorderSide(color: stoopBorderHi(context)),
+            ),
+          ),
         ],
       ),
     );

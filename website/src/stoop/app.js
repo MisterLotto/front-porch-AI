@@ -81,6 +81,11 @@
     var h = location.hash || '#/';
     var authed = !!Api.state.user;
 
+    // Password recovery works signed-in or out (the reset link lands here from
+    // an email, usually in a fresh browser with no session at all).
+    if (h.indexOf('#/forgot') === 0) { headerBar.classList.add('hub-hidden'); S.viewsAuth.renderForgot(viewMount); return; }
+    if (h.indexOf('#/reset') === 0) { headerBar.classList.add('hub-hidden'); S.viewsAuth.renderReset(viewMount, h); return; }
+
     if (!authed) {
       // "#/signin" / "#/signup" always leave guest mode for the real auth wall.
       if (h === '#/signin' || h === '#/login') { exitGuest(); headerBar.classList.add('hub-hidden'); S.viewsAuth.renderAuth(viewMount, 'login'); return; }

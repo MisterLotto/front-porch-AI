@@ -7,8 +7,16 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { StoopCardTile } from '../../components/stoop/StoopCardTile';
+import { StoopCreatorAvatar } from '../../components/stoop/StoopCreatorAvatar';
 import { stoop, stoopErrorText } from '../../stoop/stoopApi';
 import type { StoopCreator } from '../../stoop/stoopTypes';
+
+function monthYear(iso?: string): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+}
 
 export function StoopCreatorPage() {
   const { id = '' } = useParams();
@@ -49,14 +57,21 @@ export function StoopCreatorPage() {
   if (error && !creator) return <p className="error">{error}</p>;
   if (!creator) return <div className="spinner" aria-label="Loading" />;
 
+  const since = monthYear(creator.createdAt);
+  const stats = creator.stats;
+  const creatorLinks = (creator.links ?? []).filter(Boolean);
   return (
     <div className="stoop-creator">
       <div className="stoop-creator-head">
+        <StoopCreatorAvatar assetId={creator.avatarAssetId} name={creator.displayName} size={56} />
         <div>
           <h3>{creator.displayName}</h3>
+          {since && <p className="muted stoop-small">On the porch since {since}</p>}
           <p className="muted">
-            {creator.followers} follower{creator.followers === 1 ? '' : 's'} ·{' '}
-            {creator.cards.length} card{creator.cards.length === 1 ? '' : 's'}
+            {creator.followers} follower{creator.followers === 1 ? '' : 's'}
+            {stats
+              ? ` · ${stats.cards} card${stats.cards === 1 ? '' : 's'} · ${stats.downloads} downloads · ▲ ${stats.score} net votes`
+              : ` · ${creator.cards.length} card${creator.cards.length === 1 ? '' : 's'}`}
           </p>
         </div>
         {!creator.isMe && (
@@ -69,6 +84,16 @@ export function StoopCreatorPage() {
           </button>
         )}
       </div>
+      {creator.bio?.trim() && <p className="stoop-creator-bio">{creator.bio.trim()}</p>}
+      {creatorLinks.length > 0 && (
+        <p className="stoop-creator-links">
+          {creatorLinks.map((u) => (
+            <a key={u} href={u} target="_blank" rel="noopener nofollow">
+              🔗 {u.replace(/^https?:\/\//, '').replace(/\/$/, '')}
+            </a>
+          ))}
+        </p>
+      )}
       {error && <p className="error">{error}</p>}
       <div className="lib-grid stoop-grid">
         {creator.cards.map((c) => (

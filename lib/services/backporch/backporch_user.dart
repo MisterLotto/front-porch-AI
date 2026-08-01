@@ -39,6 +39,22 @@ class BackporchUser {
   /// Optional for everyone — users can turn it on/off from the account sheet.
   final bool twoFactorEnabled;
 
+  /// Public creator-profile fields (shown on the profile tab + creator page).
+  /// All optional/additive — an older server simply never sends them.
+  final String bio;
+  final List<String> profileLinks;
+
+  /// The current profile picture's asset id (`/assets/{id}/raw`), or null for
+  /// the amber monogram. A new upload always arrives under a NEW id.
+  final String? avatarAssetId;
+
+  /// True when a moderator revoked this account's avatar privilege.
+  final bool avatarLocked;
+
+  /// When the account was created ("On the porch since …"). Null on servers
+  /// that predate the field.
+  final DateTime? createdAt;
+
   const BackporchUser({
     required this.id,
     required this.email,
@@ -49,6 +65,11 @@ class BackporchUser {
     required this.nsfwEnabled,
     required this.acceptedPolicyVersion,
     required this.twoFactorEnabled,
+    this.bio = '',
+    this.profileLinks = const [],
+    this.avatarAssetId,
+    this.avatarLocked = false,
+    this.createdAt,
   });
 
   bool get isModerator => role == 'MOD' || role == 'OWNER';
@@ -63,5 +84,16 @@ class BackporchUser {
     nsfwEnabled: json['nsfwEnabled'] as bool? ?? false,
     acceptedPolicyVersion: json['acceptedPolicyVersion'] as String?,
     twoFactorEnabled: json['twoFactorEnabled'] as bool? ?? false,
+    bio: json['bio'] as String? ?? '',
+    profileLinks: ((json['profileLinks'] as List?) ?? const [])
+        .whereType<String>()
+        .toList(),
+    avatarAssetId: json['avatarAssetId'] as String?,
+    avatarLocked: json['avatarLocked'] as bool? ?? false,
+    // `is String` (not a cast): a malformed field must cost one line on the
+    // profile, never the whole /auth/me parse.
+    createdAt: json['createdAt'] is String
+        ? DateTime.tryParse(json['createdAt'] as String)
+        : null,
   );
 }
