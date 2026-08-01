@@ -21,9 +21,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:front_porch_ai/services/user_persona_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/warm_dialog.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 /// Step 2 of "Start New Chat": *which of you* is walking into this scene.
 ///

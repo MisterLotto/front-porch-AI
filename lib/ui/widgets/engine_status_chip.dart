@@ -19,8 +19,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:front_porch_ai/services/backend_manager.dart';
-import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// The corner status chip for the managed KoboldCpp engine — the visible half

@@ -21,9 +21,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 
-import 'package:front_porch_ai/models/character_card.dart';
-import 'package:front_porch_ai/models/group_chat.dart';
-import 'package:front_porch_ai/services/folder_service.dart';
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// What a folder-aware pick surface shows at one (folder, query) position.
