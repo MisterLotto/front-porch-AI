@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 Discord — questions, help and general chat
+    url: https://discord.gg/e4tET6rpdv
+    about: Setup help, "is this a bug?", model recommendations, and everything conversational. Faster than an issue for most things.
+  - name: 🔒 Report a security vulnerability
+    url: https://github.com/linux4life1/front-porch-AI/security
+    about: Please report security problems privately here, NOT as a public issue.
+  - name: 📖 Documentation
+    url: https://github.com/linux4life1/front-porch-AI/tree/main/docs
+    about: Getting started, install guides, the Realism Engine, keyboard shortcuts and the FAQ.

@@ -7734,3 +7734,63 @@ instead of being abandoned.
 
 The branch-guidance link is an absolute URL — relative links do not resolve
 reliably inside a PR description.
+
+## 2026-08-01 — Repo hygiene: security policy, issue templates, dependabot, CI badge
+
+Files:
+- SECURITY.md (new)
+- .github/ISSUE_TEMPLATE/bug_report.yml (new)
+- .github/ISSUE_TEMPLATE/feature_request.yml (new)
+- .github/ISSUE_TEMPLATE/config.yml (new)
+- .github/dependabot.yml (new)
+- README.md
+- test_mod.dart (deleted)
+- FEATURE_PLAN_IMAGE_GEN_CONTROLS.md (deleted)
+
+Reason: audit of what separates this repo from a well-run open-source
+project. The engineering was already strong (2,783 tests, 94 goldens, 8 CI
+jobs, the dependency-floor guard); the gaps were all project-hygiene.
+
+1. SECURITY.md — there was NO private way to report a vulnerability. For an
+   app that stores third-party API keys, runs a LAN/tailnet-exposed web
+   server, and holds auth tokens for an account-gated backend, the only
+   option was a public issue. Routes reports through GitHub private
+   vulnerability reporting (needs enabling in repo settings), and states
+   scope explicitly — the web server, stored credentials, the Stoop client,
+   character-card parsing as untrusted input — plus out-of-scope, which
+   notably rules out "the model said something bad" and local-filesystem
+   attacks (the app stores data unencrypted by design).
+
+2. Deleted test_mod.dart — a 4-line scratch file at the REPO ROOT printing
+   the result of `-1 % 6`. Also FEATURE_PLAN_IMAGE_GEN_CONTROLS.md, an
+   11KB planning doc for a shipped feature, referenced by nothing. Verified
+   neither had any inbound reference.
+
+3. Issue templates as YAML forms rather than markdown, so the fields are
+   actually required. The bug form asks for app version, OS + version,
+   install source (installer / AUR / nightly / source), backend, and
+   desktop-vs-web — the axes on which a bug here is reproducible or not,
+   given three platforms and seven backends. config.yml routes questions to
+   Discord and security reports away from public issues.
+
+4. dependabot.yml — dependabot had been running with NO config file (7
+   commits, most recently 2026-07-20) and in June was still bumping a
+   `cargo` group for the Rust embedding server deleted in the sidecar
+   retirement. Now explicitly covers pub, npm (web_ui) and github-actions,
+   all with target-branch: Rawhide, because the default branch is `main`
+   and main is tagged releases only — without that, every dependabot PR
+   would have violated the project's own branch workflow. Minor/patch
+   grouped to cut noise; majors stay individual. Header warns that a pub
+   downgrade will trip the floor guard and must not be "fixed" by
+   regenerating the baseline.
+
+5. README gained a live CI status badge. The four existing badges (license,
+   Flutter, platform, branch) are all static decoration; none showed whether
+   the build passes.
+
+Caught during validation: the bug-report backend dropdown had `default: 8`
+on an 8-option list (valid indices 0-7), which GitHub rejects outright — the
+template would have silently failed to load. Fixed to 7. All four YAML files
+parse and every dropdown default is now in range.
+
+flutter analyze clean after removing test_mod.dart from the package.

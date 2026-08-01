@@ -1,0 +1,123 @@
+name: Bug report
+description: Something is broken or behaving wrongly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. The fields below exist because
+        Front Porch AI ships on Windows, macOS and Linux with several different
+        backends — a bug that is obvious on one setup is often invisible on
+        another, so the details genuinely decide whether this is fixable.
+
+        **Security problems do not belong here.** Report those privately via the
+        [Security tab](https://github.com/linux4life1/front-porch-AI/security).
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What went wrong, and what you expected instead.
+      placeholder: |
+        When I ... the app ...
+        I expected it to ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The exact sequence. "It happens sometimes" is fine to say — note what you were doing when it did.
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. See ...
+    validations:
+      required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: App version
+      description: Shown in Settings. Include "beta" or "nightly" if that's what you're on.
+      placeholder: "1.0.0 / 0.9.9-Beta / nightly 20260801"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+    validations:
+      required: true
+
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version
+      placeholder: "Windows 11 24H2 / macOS 15.2 / Arch, kernel 6.12"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-source
+    attributes:
+      label: How did you install it?
+      options:
+        - Installer / .pkg from Releases
+        - AUR package
+        - Nightly build
+        - Built from source
+        - Other (say so below)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: backend
+    attributes:
+      label: Which backend were you using?
+      description: Skip if the bug has nothing to do with generating text.
+      options:
+        - KoboldCpp (managed by Front Porch)
+        - KoboldCpp (my own install)
+        - LM Studio
+        - oMLX
+        - OpenRouter
+        - Nano-GPT
+        - OpenAI / other OpenAI-compatible API
+        - Not relevant to this bug
+      default: 7
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where did it happen?
+      options:
+        - Desktop app
+        - Web / mobile UI
+        - Both
+      default: 0
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, errors or screenshots
+      description: |
+        Paste any error text, and attach screenshots for visual bugs. For UI
+        colour or contrast problems, please say whether you're in light or dark mode.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and this isn't a duplicate
+          required: true
+        - label: I'm on the latest version, or I've said above why I can't be
+          required: true

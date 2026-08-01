@@ -1,0 +1,58 @@
+name: Feature request
+description: Suggest something new, or a change to how something works
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas are welcome. The most useful requests describe the *problem* rather
+        than a specific solution — that leaves room for a better answer than
+        either of us thought of first.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What's the problem?
+      description: What are you trying to do that's awkward, slow or impossible today?
+      placeholder: "When I have a lot of characters, I can't ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to happen?
+      description: Your idea for solving it, if you have one.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Anything you've tried, or other approaches you considered?
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where would this live?
+      options:
+        - Desktop app
+        - Web / mobile UI
+        - Both
+        - Not sure
+      default: 3
+
+  - type: markdown
+    attributes:
+      value: |
+        **Note on scope:** anything user-visible has to ship on desktop *and* in
+        the web/mobile UI, so features are usually larger than they look. That's
+        not a "no" — it just means bigger ideas take longer.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and discussions for this idea
+          required: true
