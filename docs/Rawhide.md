@@ -4,6 +4,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🍽️ **Deleting a message now gives back what it cost** — If a reply dropped a character's hunger by 20, deleting that message left them 20 hungrier forever — the chip on the timeline said the cost happened, but nothing could undo it. Deleting a message now subtracts its needs changes from the current scores, whether it's the newest message or one buried twenty turns back.
+
 - 💬 **"Start New Chat" right from the card — and it asks who you are** — Right-click any character or group cast on the Home Screen and pick **Start New Chat** for a clean slate, without opening the old conversation first. Because the same character can be met by a different you, it then asks **which persona** you're walking in as (your current one is marked, but nothing is assumed) — and that's the persona the new chat is saved under. On desktop and in the web library.
 
 - 🖱️ **Drag group casts into folders — and dragging starts twice as fast** — Group cards couldn't be dragged onto a folder at all (only characters could); now they drag exactly like characters do. The press-and-hold before a drag begins is also half what it was, so organising your library stops feeling like the app missed your click.

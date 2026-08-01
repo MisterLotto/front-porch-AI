@@ -4080,6 +4080,33 @@ class ChatService extends ChangeNotifier {
     if (_isGenerating) return;
     if (index >= 0 && index < _messages.length) {
       final deleted = _messages[index];
+
+      // Needs are refunded by ARITHMETIC (subtract this message's own chips),
+      // not by the realism time-travel below — that only ever rewinds the
+      // tail, so deleting anything older left its needs cost applied forever.
+      // Capture the deleted speaker's needs BEFORE the restore runs; the
+      // refund is settled from this baseline afterwards.
+      final String? deletedSid =
+          (_activeGroup != null &&
+              !deleted.isUser &&
+              deleted.sender != 'System' &&
+              _groupCharacters.where((c) => c.name == deleted.sender).length ==
+                  1)
+          ? _getCharacterIdFromCard(
+              _groupCharacters.firstWhere((c) => c.name == deleted.sender),
+            )
+          : null;
+      // In a group, refund ONLY when the speaker resolved unambiguously —
+      // falling back to the live scalars there would credit whichever member
+      // happens to be loaded, i.e. refund the wrong character. An empty
+      // baseline makes the revert a no-op.
+      final Map<String, int> needsBeforeDelete =
+          (!_needsSimEnabled || (_activeGroup != null && deletedSid == null))
+          ? const <String, int>{}
+          : (deletedSid != null
+                ? Map<String, int>.from(_getGroupNeeds(deletedSid))
+                : Map<String, int>.from(_needsSimulation.vector));
+
       _messages.removeAt(index);
 
       // Timeline integrity: the delete rewrites history from [index] on
@@ -4127,6 +4154,14 @@ class ChatService extends ChangeNotifier {
           }
         }
       }
+
+      // Settle needs LAST so it wins over whatever the snapshot restores did
+      // to the vector (see _revertNeedsForDeletedMessage).
+      _revertNeedsForDeletedMessage(
+        deleted,
+        needsBeforeDelete,
+        groupSid: deletedSid,
+      );
 
       await _saveChat();
       notifyListeners();

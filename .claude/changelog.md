@@ -7347,3 +7347,48 @@ wrong ordering), that the stored session row carries B, that an empty id
 is a no-op, and that no-target is a no-op. Note for future readers: the
 stored-row test gives its card a greeting on purpose — ChatService
 deliberately skips persisting an empty session.
+
+## 2026-08-01 (UTC) — Deleting a message refunds its needs deltas
+
+Files: lib/services/chat_service.dart,
+lib/services/chat/chat_service_group_realism_helpers.dart,
+test/services/chat/delete_message_needs_rollback_test.dart (new),
+docs/Rawhide.md
+
+Maintainer report: deleting a message did not roll back its needs
+deltas — a reply that cost 20 hunger left the character 20 hunger poorer
+forever, even though the chip on the message still recorded the spend.
+Stated rule: the deltas are kept on the message, so ANY deletion,
+however far back, adds/subtracts them from the CURRENT score.
+
+Root cause: needs rollback on delete was only ever attempted by the
+realism "time travel" (restore the snapshot stamped on the NEW LAST
+message). That mechanism can only rewind the tail — deleting anything
+older left the spend applied — and in the reproduction it did not
+restore needs at all.
+
+Fix: needs are now settled by ARITHMETIC, in a new leaf helper
+_revertNeedsForDeletedMessage (chat_service_group_realism_helpers.dart,
+beside the chip-attach logic that WRITES those same deltas). deleteMessage
+captures the deleted speaker's needs BEFORE the time-travel restores run,
+then subtracts the deleted message's own needs_deltas from that baseline
+and writes the result LAST, so the snapshot's needs half can't fight the
+arithmetic. Position-independent by construction: a message buried twenty
+turns back rolls off exactly like the newest one. Reuses the chips'
+existing {delta, reason} shape (tolerating a bare number from older rows)
+and clamps to 0..100.
+
+1:1/group parity: the refund lands in the DELETED SPEAKER'S own
+_groupRealism entry (not the live scalars of whoever is currently
+loaded), and the live scalars are re-synced only when that speaker is the
+one loaded. A group speaker whose name is ambiguous in the roster is
+SKIPPED rather than refunding the wrong member — same guard the existing
+group rewind uses.
+
+Tests: delete_message_needs_rollback_test.dart drives the real
+ChatService + in-memory DB and reproduced the report before the fix
+(hunger stuck at 40 instead of 60). Covers last-message refund,
+buried-message refund, positive deltas taken back rather than given
+again, and no-op when a message carries no deltas. Group branch is
+covered by review, not a test — no group-chat harness (repository +
+members + session) exists in this suite; noted in the test file.
