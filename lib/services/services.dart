@@ -42,6 +42,9 @@ export 'group_card_service.dart';
 export 'group_card_exporter.dart';
 export 'world_repository.dart';
 export 'story_repository.dart';
+// The one rebind used by every flow that swaps the database file, plus the
+// liveDatabase() reader that keeps callers off the stale startup snapshot.
+export 'database_rebind.dart';
 
 // LLM & chat
 export 'llm_provider.dart';

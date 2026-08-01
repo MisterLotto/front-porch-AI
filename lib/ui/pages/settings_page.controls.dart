@@ -142,61 +142,28 @@ extension _SettingsLaunchControls on _SettingsPageState {
     );
     if (selectedDirectory != null) {
       if (mounted) {
-        // Close the current database so the file can be moved
+        // Close the current database so the file can be moved.
         await AppDatabase.closeAndReset();
+        if (!mounted) return;
         await Provider.of<StorageService>(
           context,
           listen: false,
         ).setRootPath(selectedDirectory);
-        // Reopen the database from the new location
-        final newDb = await AppDatabase.instance();
-        // Update ALL downstream services that hold a DB reference
-        if (mounted) {
-          Provider.of<CharacterRepository>(
-            context,
-            listen: false,
-          ).updateDatabase(newDb);
-          Provider.of<FolderService>(
-            context,
-            listen: false,
-          ).updateDatabase(newDb);
-          Provider.of<UserPersonaService>(
-            context,
-            listen: false,
-          ).updateDatabase(newDb);
-          Provider.of<GroupChatRepository>(
-            context,
-            listen: false,
-          ).updateDatabase(newDb);
-          Provider.of<WorldRepository>(
-            context,
-            listen: false,
-          ).updateDatabase(newDb);
-          Provider.of<ChatService>(
-            context,
-            listen: false,
-          ).updateDatabase(newDb);
-          // Rebind the web server + Porch Stories too — they held the closed
-          // pre-move DB, so after a storage move remote users were dropped and
-          // couldn't log back in, and story queries threw, until an app restart.
-          Provider.of<StoryRepository>(
-            context,
-            listen: false,
-          ).updateDatabase(newDb);
-          Provider.of<WebServerHost>(context, listen: false).setDatabase(newDb);
-          // Reload data from the new DB location
-          await Provider.of<CharacterRepository>(
-            context,
-            listen: false,
-          ).loadCharacters();
-          await Provider.of<FolderService>(context, listen: false).reload();
-          // Refresh backend/models after path change
-          Provider.of<BackendManager>(
-            context,
-            listen: false,
-          ).checkBackendAvailability();
-          Provider.of<ModelManager>(context, listen: false).refreshModels();
-        }
+        if (!mounted) return;
+        // Reopen from the new location and re-point every service that holds a
+        // DB reference. Shared with the stable-DB import and backup restore —
+        // this used to be a hand-maintained second copy that silently missed
+        // whatever the other one gained. No image cleanup: the move carries the
+        // same characters, so nothing here is orphaned.
+        await reopenAndRebindDatabase(context);
+        if (!mounted) return;
+        // Backend/model discovery is path-dependent, so it is specific to a
+        // storage move rather than part of the shared rebind.
+        Provider.of<BackendManager>(
+          context,
+          listen: false,
+        ).checkBackendAvailability();
+        Provider.of<ModelManager>(context, listen: false).refreshModels();
       }
     }
   }

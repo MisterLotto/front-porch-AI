@@ -746,6 +746,16 @@ class AppDatabase extends _$AppDatabase {
   static String? _dbPath;
   static String? _dbDir;
 
+  /// The database that is open *right now*, or null before startup finished.
+  ///
+  /// Three flows swap the file out from under a running app — importing a
+  /// stable DB, moving the storage root, and restoring a backup — and each one
+  /// replaces [_instance] with a brand-new object. Anything that captured the
+  /// old one (notably `Provider<AppDatabase>.value`, which is a startup
+  /// snapshot) is holding a closed database whose next query throws. Read
+  /// through [liveDatabase] rather than a captured reference.
+  static AppDatabase? get current => _instance;
+
   /// Singleton access. Call [AppDatabase.instance()] to get the shared database.
   ///
   /// Pre-release builds (alpha/beta/rc/dev) automatically use a separate

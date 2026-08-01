@@ -15,7 +15,6 @@ import 'package:provider/provider.dart';
 
 // The Drift schema also declares a `World` row class — hide it so `World`
 // below always means the model (the same shape .fpworld export uses).
-import 'package:front_porch_ai/database/database.dart' hide World;
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
@@ -306,7 +305,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       final exporter = GroupCardExporter(
         context.read<GroupChatRepository>(),
         context.read<StorageService>(),
-        context.read<AppDatabase>(),
+        liveDatabase(context),
       );
       final groupCard = await exporter.buildGroupCard(group);
       if (groupCard == null) {

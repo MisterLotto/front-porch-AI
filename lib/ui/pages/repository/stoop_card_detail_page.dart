@@ -17,7 +17,6 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
-import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
@@ -183,7 +182,7 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
         ? GroupCardImporter(
             context.read<GroupChatRepository>(),
             context.read<StorageService>(),
-            context.read<AppDatabase>(),
+            liveDatabase(context),
           )
         : null;
     // World cards import as places; provider read before the await, like above.

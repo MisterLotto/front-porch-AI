@@ -892,62 +892,37 @@ class _MyAppState extends State<MyApp> with WindowListener {
     await stableDb.copy(betaDb.path);
     debugPrint('[DB] Pre-release build — imported stable DB to beta DB');
 
-    // Reinitialize the database and reload all repositories
-    await _reinitializeAfterImport();
+    // Reinitialize the database and reload all repositories. The imported DB
+    // is the new source of truth, so unreferenced portraits really are junk.
+    await _rebindAfterDatabaseSwap(cleanOrphanedImages: true);
   }
 
-  /// Rebinds every DB-holding service to a fresh AppDatabase instance and
-  /// reloads them. Returns false when the rebind could not run/complete —
-  /// callers that just closed the old instance (import, restore) must treat
-  /// false as "the app needs a restart", not as success.
-  Future<bool> _reinitializeAfterImport() async {
+  /// Rebinds every DB-holding service to a fresh AppDatabase instance, reloads
+  /// them, and re-checks the file's health. Returns false when the rebind could
+  /// not run/complete — callers that just closed the old instance (import,
+  /// restore) must treat false as "the app needs a restart", not as success.
+  ///
+  /// [cleanOrphanedImages] must stay false for restores: an older snapshot
+  /// legitimately lacks characters created since it was taken, and the cleanup
+  /// would delete their portraits for good. See [reopenAndRebindDatabase].
+  Future<bool> _rebindAfterDatabaseSwap({
+    bool cleanOrphanedImages = false,
+  }) async {
     if (!mounted) return false;
 
+    final newDb = await reopenAndRebindDatabase(
+      context,
+      cleanOrphanedImages: cleanOrphanedImages,
+    );
+    if (newDb == null) return false;
+
     try {
-      final oldDb = Provider.of<AppDatabase>(context, listen: false);
-      await oldDb.close();
-
-      final newDb = await AppDatabase.instance();
       _MyAppState._dbHealthy = await newDb.integrityCheck();
-
-      final charRepo = Provider.of<CharacterRepository>(context, listen: false);
-      final folderService = Provider.of<FolderService>(context, listen: false);
-      final personaService = Provider.of<UserPersonaService>(
-        context,
-        listen: false,
-      );
-      final groupRepo = Provider.of<GroupChatRepository>(
-        context,
-        listen: false,
-      );
-      final worldRepo = Provider.of<WorldRepository>(context, listen: false);
-
-      charRepo.updateDatabase(newDb);
-      folderService.updateDatabase(newDb);
-      personaService.updateDatabase(newDb);
-      groupRepo.updateDatabase(newDb);
-      worldRepo.updateDatabase(newDb);
-      Provider.of<ChatService>(context, listen: false).updateDatabase(newDb);
-      // Rebind the web server + Porch Stories too (same gap the storage-path
-      // move had) — otherwise after an import/restore they keep the closed DB
-      // and web logins / story queries fail until an app restart.
-      Provider.of<StoryRepository>(
-        context,
-        listen: false,
-      ).updateDatabase(newDb);
-      Provider.of<WebServerHost>(context, listen: false).setDatabase(newDb);
-
-      await charRepo.loadCharacters();
-      await charRepo.cleanOrphanedPngs();
-      await folderService.reload();
-      await personaService.reload();
-      await groupRepo.reload();
-      await worldRepo.loadWorlds();
-      return true;
     } catch (e) {
-      debugPrint('[DB] Reinitialize after import failed: $e');
+      debugPrint('[DB] Integrity check after database swap failed: $e');
       return false;
     }
+    return true;
   }
 
   @override
@@ -1564,7 +1539,9 @@ class _MyAppState extends State<MyApp> with WindowListener {
       // repository/service captured that instance at startup. Without the same
       // rebind+reload the import flow uses, the app dismisses this overlay and
       // then throws "database was closed" on every action until a restart.
-      final rebound = await _reinitializeAfterImport();
+      // No image cleanup here — this snapshot predates any character added
+      // since it was taken, and their portraits are not junk.
+      final rebound = await _rebindAfterDatabaseSwap();
 
       if (mounted) {
         if (rebound) {
@@ -1603,7 +1580,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
 
     setState(() => _isMigrating = true);
 
-    final db = Provider.of<AppDatabase>(context, listen: false);
+    final db = liveDatabase(context);
     final migration = DataMigrationService(db);
     try {
       await migration.migrate(
@@ -1763,7 +1740,7 @@ class _MyAppState extends State<MyApp> with WindowListener {
           _reunifyCurrent = 2;
         });
       }
-      final db = Provider.of<AppDatabase>(context, listen: false);
+      final db = liveDatabase(context);
       await Future.wait([
         BackupService.purgeAllBackups(), // purge old v1/v2 schema backups
         db.purgeDeletedRows(), // hard-delete soft-deleted bloat + VACUUM

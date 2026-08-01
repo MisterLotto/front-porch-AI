@@ -17,9 +17,8 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/database/database_cleanup.dart';
+import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 class DatabaseCleanupDialog extends StatefulWidget {
@@ -46,7 +45,7 @@ class _DatabaseCleanupDialogState extends State<DatabaseCleanupDialog> {
       _report = null;
     });
     try {
-      final db = Provider.of<AppDatabase>(context, listen: false);
+      final db = liveDatabase(context);
       final report = await DatabaseCleanup.checkOrphans(db);
       if (!mounted) return;
       setState(() {
@@ -93,7 +92,7 @@ class _DatabaseCleanupDialogState extends State<DatabaseCleanupDialog> {
 
     setState(() => _cleaning = true);
     try {
-      final db = Provider.of<AppDatabase>(context, listen: false);
+      final db = liveDatabase(context);
       await DatabaseCleanup.cleanOrphans(db);
       if (!mounted) return;
       setState(() => _cleaning = false);

@@ -195,9 +195,16 @@ class ChatService extends ChangeNotifier {
     }
   }
 
-  /// Update the database reference (e.g. after cloud sync replaces the DB file).
+  /// Point this service — and the MemoryService it owns — at [db].
+  ///
+  /// Used both to wire the database in at startup and to re-point it after a
+  /// swap (stable-DB import, storage-root move, backup restore). The
+  /// MemoryService caches its own handle, so leaving it out meant RAG memory
+  /// kept querying the closed database until the app was restarted; it is null
+  /// during startup wiring, which the null-aware call covers.
   void updateDatabase(AppDatabase db) {
     _db = db;
+    _memoryService?.updateDatabase(db);
   }
 
   CharacterCard? _activeCharacter;
@@ -3073,10 +3080,9 @@ class ChatService extends ChangeNotifier {
     _toolSupportTester.onBackendMaybeChanged();
   }
 
-  /// Set the database instance after construction.
-  void setDatabase(AppDatabase db) {
-    _db = db;
-  }
+  /// Set the database instance after construction. Alias of [updateDatabase]
+  /// so startup wiring and post-swap rebinding can never drift apart.
+  void setDatabase(AppDatabase db) => updateDatabase(db);
 
   String get authorNote => _authorNote;
   int get authorNoteStrength => _authorNoteStrength;
