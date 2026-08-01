@@ -19,6 +19,21 @@
 import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/models/models.dart';
 
+/// The stable-id derivation on its own, for callers that have the raw fields
+/// but no [CharacterCard] — the database cleanup resolves it straight from
+/// `characters.image_path` / `characters.name` rows. Keeping ONE
+/// implementation matters: a second copy that drifted would make the cleanup
+/// disagree with the app about which rows belong to a live character, and
+/// "doesn't belong to anyone" is a DELETE.
+String stableGroupIdFrom(String? imagePath, String name) {
+  if (imagePath != null && imagePath.isNotEmpty) {
+    return p.basenameWithoutExtension(imagePath);
+  }
+
+  // Rare fallback for characters that have never had an image file.
+  return name.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_');
+}
+
 extension StableGroupId on CharacterCard {
   /// The canonical stable identifier for *singular/library* CharacterCards only.
   ///
@@ -35,12 +50,5 @@ extension StableGroupId on CharacterCard {
   ///
   /// Do **not** use `dbId` for any of the above — it is an internal
   /// database surrogate key and is not stable across devices or imports.
-  String get stableGroupId {
-    if (imagePath != null && imagePath!.isNotEmpty) {
-      return p.basenameWithoutExtension(imagePath!);
-    }
-
-    // Rare fallback for characters that have never had an image file.
-    return name.replaceAll(RegExp(r'[^\w\s]'), '').replaceAll(' ', '_');
-  }
+  String get stableGroupId => stableGroupIdFrom(imagePath, name);
 }
