@@ -107,7 +107,8 @@ dart run build_runner build   # regenerates lib/database/database.g.dart
 3. Run the [required checks](#required-checks) locally
 4. Write a commit message that explains **why**, not just what — see the
    "Commit Messages" section of [AGENTS.md](AGENTS.md) for the standard
-5. Open the PR against the same branch you started from
+5. Open the PR against the same branch you started from — GitHub will fill in the
+   PR template automatically; delete any section that doesn't apply to your change
 6. Say what you tested, and on which platforms
 
 **Draft PRs are welcome.** If a feature is half-built and you want direction on

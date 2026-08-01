@@ -7695,3 +7695,42 @@ barrels, Character Card Forge's raw-SQL dependency).
 Every path and command in the new file was verified to exist.
 
 Docs-only change: no Dart touched, so the code gates do not apply.
+
+## 2026-08-01 — Real PR template file
+
+Files: .github/pull_request_template.md (new), CONTRIBUTING.md
+
+Reason: CONTRIBUTING.md used to embed a PR template as a markdown code
+block for contributors to hand-copy, but no .github/pull_request_template.md
+existed, so GitHub never applied it. The previous commit removed the dead
+block; this adds the real file.
+
+Deliberately scoped to what CI CANNOT catch, rather than duplicating it:
+
+  - Target branch. The old text told contributors to sync with "main";
+    getting the branch wrong is the single most common correction.
+  - What was actually tested, and on WHICH PLATFORM. Cross-platform
+    verification is mandatory here and is the thing most often skipped.
+  - WebUI + Realism/Needs parity, with an explicit "deferral agreed with the
+    maintainer" option so the answer is recorded in the PR rather than
+    assumed.
+  - Dependency floor + licensing of any downloaded model/asset, with a free
+    text field for source and license. Directly prompted by the three open
+    PRs: one silently downgraded five packages and edited the floor baseline
+    to match, another adds a TTS engine whose model weights have no stated
+    license.
+  - AGPL header, AppColors, no whole-file dart format, no pubspec version
+    edit, no silently swallowed errors — the recurring review findings.
+  - An explicit affirmation that the contribution is AGPL-3.0-or-later and
+    the submitter has the right to submit it, mirroring the new CONTRIBUTING
+    licensing section. Not a CLA; just an on-the-record acknowledgement.
+
+Drafts are invited in the leading comment, since two of the three open PRs
+would have been better served that way.
+
+Every checkbox is one a reviewer would otherwise have to ask about by hand.
+Sections are marked deletable so the template shrinks to fit small PRs
+instead of being abandoned.
+
+The branch-guidance link is an absolute URL — relative links do not resolve
+reliably inside a PR description.
