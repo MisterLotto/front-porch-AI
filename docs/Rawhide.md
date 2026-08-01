@@ -10,6 +10,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 - 🔑 **Forgot your password? You can finally get back in** — A "Forgot password?" link now lives on the Stoop sign-in screen (app, web app, and the hub site). Enter your email, click the link that arrives, choose a new password — done. The link works once, expires in 45 minutes, signs out every old session, and still asks for your authenticator code if you have 2FA on.
 
+- 📮 **Moving mailboxes? Change your sign-in email** — Account sheet (and the web app and hub site) now has **Change email**: enter the new address and your password, click the link that lands in the NEW inbox, done. Nothing switches until that link is opened, your old address gets a heads-up so nobody can quietly re-point your account, and confirming also proves the address for sharing and profile photos.
+
 - 🗑️ **Take your own cards off the porch** — Your profile's upload grid now has a Delete button on every tile, so removing something you shared no longer means messaging the mods.
 
 - 🎨 **Fixed: fancy chat themes were eating your buttons** — With any of the 10 community theme presets active (Fantasy, Sakura, Cyberpunk…), the edit, fork, and delete buttons on messages — plus the speak button and thought toggles — silently stopped responding. The decorative border was invisibly sitting on top of them and swallowing every click. All buttons work under every theme now.

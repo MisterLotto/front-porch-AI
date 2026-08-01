@@ -276,6 +276,39 @@
         .finally(function () { pwBtn.disabled = false; });
     } }, 'Change password');
 
+    /* email change — the confirmation link goes to the NEW address; nothing
+       changes until it's opened. Doubles as "actually prove my address" for
+       accounts the verification rollout grandfathered. */
+    var emailIn = el('input', { type: 'email', placeholder: 'new@example.com' });
+    var emailPw = el('input', { type: 'password', autocomplete: 'current-password', placeholder: 'Current password' });
+    var emailTotp = el('input', { type: 'text', inputmode: 'numeric', maxlength: '6', placeholder: '2FA code', class: 'hub-hidden' });
+    var emailBtn = el('button', { class: 'btn btn-ghost', type: 'button', onclick: function () {
+      var addr = emailIn.value.trim();
+      if (addr.indexOf('@') < 0) return ui.toast('Enter a valid email address.', 'err');
+      emailBtn.disabled = true;
+      var totpVal = emailTotp.classList.contains('hub-hidden') ? undefined : emailTotp.value.trim();
+      Api.changeEmail(addr, emailPw.value, totpVal)
+        .then(function () {
+          ui.toast('Confirmation sent to ' + addr + ' — the change lands when that inbox opens the link.');
+          renderAccount(mount);
+        })
+        .catch(function (e) {
+          if (e.code === 'two_factor_required') { emailTotp.classList.remove('hub-hidden'); emailTotp.focus(); }
+          ui.toast(e.message, 'err');
+        })
+        .finally(function () { emailBtn.disabled = false; });
+    } }, 'Change email');
+    var emailPending = u.pendingEmail
+      ? el('p', { class: 'hub-small' }, [
+          '→ ' + u.pendingEmail + ' (awaiting confirmation) ',
+          el('button', { class: 'hub-linklike', type: 'button', onclick: function () {
+            Api.cancelEmailChange()
+              .then(function () { ui.toast('Pending email change cancelled.'); renderAccount(mount); })
+              .catch(function (e) { ui.toast(e.message, 'err'); });
+          } }, 'Cancel'),
+        ])
+      : null;
+
     /* 2FA */
     var twoFaLine = el('span', { class: 'hub-dim' }, u.twoFactorEnabled ? 'Two-factor is on.' : 'Two-factor is off.');
     var twoFaBtn = el('button', { class: 'btn btn-ghost', type: 'button' }, u.twoFactorEnabled ? 'Turn off 2FA' : 'Set up 2FA');
@@ -355,6 +388,10 @@
       ]),
       section('Security', [
         el('div', { class: 'hub-acct-row' }, [curPw, newPw, pwBtn]),
+        el('p', { class: 'hub-small hub-dim' },
+          'Change your sign-in email — we confirm the new address before anything switches.'),
+        emailPending,
+        el('div', { class: 'hub-acct-row' }, [emailIn, emailPw, emailTotp, emailBtn]),
         el('div', { class: 'hub-acct-row' }, [twoFaLine, twoFaBtn]),
       ]),
       section('Get the app', [

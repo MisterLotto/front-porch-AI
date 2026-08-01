@@ -7941,3 +7941,21 @@ Update/Delete are compact icons, and a rejection's moderator note moved into
 a tappable ember pill → dialog (it can't fit on a grid tile). The hub site's
 My-cards rows already show art; unchanged. analyze clean, tsc clean, bundle +
 debug build OK.
+
+## 2026-08-01 (later still) — Change-email flow + deploys
+
+**Files (app):** lib/services/backporch/{backporch_api,backporch_user}.dart,
+lib/providers/auth_state.dart, lib/ui/pages/repository/repository_account_sheet.dart,
+NEW lib/ui/pages/repository/stoop_change_email_dialog.dart (+barrel entry),
+lib/services/web/routes/stoop_routes.dart, web_ui (stoopApi/types/StoopAccountPage/styles),
+website/src/stoop/{api,views-inbox}.js; bundles rebuilt.
+
+**Why:** Maintainer wanted grandfathered accounts to be able to genuinely prove an
+address (their emailVerified flag was rubber-stamped by the rollout migration) and a
+way to fix wrong/dead emails so recovery mail actually arrives. New change-email flow:
+confirmation link goes to the NEW address (ownership proven → also sets emailVerified),
+heads-up mail to the old address, re-auth with current password + TOTP when enabled,
+pending state visible + cancellable on all three surfaces. Backend deployed to droplet
+(avatars/recovery/mod tools + email-change, sessionEpoch); hub dist-hub deployed
+(reset pages, avatars, From-your-porch row, signup-toast fix). Dashboard now flags
+unverified emails on the Users list.

@@ -88,6 +88,8 @@
     missing_avatar: 'Pick an image first.',
     upload_failed: 'The upload didn’t make it — try again.',
     resend_too_soon: 'Hang on a minute before requesting another email.',
+    same_email: 'That’s already your sign-in email.',
+    wrong_password: 'That password didn’t match.',
   };
 
   function ApiError(status, code, detail) {
@@ -223,6 +225,17 @@
     },
     updateProfile: function (bio, links) {
       return api('POST', '/me/profile', { bio: bio, links: links }).then(applyAuthPayload);
+    },
+    // Change the sign-in email: the confirmation link goes to the NEW address;
+    // the account keeps its current one until that link is opened.
+    changeEmail: function (newEmail, password, totp) {
+      var body = { newEmail: newEmail };
+      if (password) body.password = password;
+      if (totp) body.totp = totp;
+      return api('POST', '/auth/change-email', body).then(applyAuthPayload);
+    },
+    cancelEmailChange: function () {
+      return api('DELETE', '/auth/change-email').then(applyAuthPayload);
     },
     changePassword: function (currentPassword, newPassword) {
       return api('POST', '/auth/change-password', { currentPassword: currentPassword, newPassword: newPassword });

@@ -192,6 +192,32 @@ class BackporchApi {
     return _meResult(await _delete('/me/avatar', accessToken));
   }
 
+  /// Ask to change the account's sign-in email. The change only lands when
+  /// the NEW address clicks its confirmation link; until then it shows as
+  /// `user.pendingEmail`. Requires the current password (when one exists) and
+  /// the TOTP code when 2FA is on. Throws `email_taken`, `same_email`,
+  /// `wrong_password`, `two_factor_required`, or `resend_too_soon`.
+  Future<({BackporchUser user, String policyVersion})> changeEmail(
+    String accessToken, {
+    required String newEmail,
+    String? password,
+    String? totp,
+  }) async {
+    final json = await _post('/auth/change-email', {
+      'newEmail': newEmail,
+      'password': ?password,
+      'totp': ?totp,
+    }, token: accessToken);
+    return _meResult(json);
+  }
+
+  /// Abandon a pending email change (nothing was ever committed).
+  Future<({BackporchUser user, String policyVersion})> cancelEmailChange(
+    String accessToken,
+  ) async {
+    return _meResult(await _delete('/auth/change-email', accessToken));
+  }
+
   /// Ask for a password-reset email. The server always answers ok (it never
   /// reveals whether the address has an account); the emailed link opens the
   /// hub's reset page.

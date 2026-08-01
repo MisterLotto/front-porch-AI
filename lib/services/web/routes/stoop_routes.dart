@@ -72,6 +72,10 @@ class WebStoopRoutes {
     );
     router.post('/api/stoop/me/nsfw', _tokenCall('POST', '/auth/nsfw'));
     router.post('/api/stoop/me/profile', _tokenCall('POST', '/me/profile'));
+    // Change the sign-in email (confirmation link goes to the NEW address);
+    // DELETE abandons a pending change.
+    router.post('/api/stoop/me/email', _tokenCall('POST', '/auth/change-email'));
+    router.delete('/api/stoop/me/email', _tokenCall('DELETE', '/auth/change-email'));
     router.post(
       '/api/stoop/me/resend-verification',
       _tokenCall('POST', '/auth/resend-verification'),

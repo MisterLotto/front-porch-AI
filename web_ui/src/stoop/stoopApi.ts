@@ -235,6 +235,15 @@ export const stoop = {
   /** Edit the public creator profile (bio ≤ 300 chars, up to 4 http(s) links). */
   updateProfile: (bio: string, links: string[]) =>
     call<MeResult>('POST', '/api/stoop/me/profile', { bio, links }),
+  /** Change the sign-in email. Confirmation goes to the NEW address; nothing
+   *  changes until it's clicked (shows as user.pendingEmail meanwhile). */
+  changeEmail: (newEmail: string, password: string, totp?: string) =>
+    call<MeResult>('POST', '/api/stoop/me/email', {
+      newEmail,
+      ...(password ? { password } : {}),
+      ...(totp ? { totp } : {}),
+    }),
+  cancelEmailChange: () => call<MeResult>('DELETE', '/api/stoop/me/email'),
   /** Ask for a password-reset email (always answers ok — never reveals whether
    *  the address has an account). The emailed link opens the hub's reset page. */
   forgot: (email: string) =>
@@ -388,6 +397,10 @@ export function stoopErrorText(e: unknown): string {
       return 'Use a PNG, JPEG, or WebP image.';
     case 'resend_too_soon':
       return 'Hang on a minute before requesting another email.';
+    case 'same_email':
+      return 'That’s already your sign-in email.';
+    case 'wrong_password':
+      return 'That password didn’t match.';
     default:
       return `Something went wrong (${e.code}).`;
   }

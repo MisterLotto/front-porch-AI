@@ -55,6 +55,10 @@ class BackporchUser {
   /// that predate the field.
   final DateTime? createdAt;
 
+  /// An email change awaiting its confirmation click at the NEW address, or
+  /// null. The account keeps [email] until that link is opened.
+  final String? pendingEmail;
+
   const BackporchUser({
     required this.id,
     required this.email,
@@ -70,6 +74,7 @@ class BackporchUser {
     this.avatarAssetId,
     this.avatarLocked = false,
     this.createdAt,
+    this.pendingEmail,
   });
 
   bool get isModerator => role == 'MOD' || role == 'OWNER';
@@ -95,5 +100,6 @@ class BackporchUser {
     createdAt: json['createdAt'] is String
         ? DateTime.tryParse(json['createdAt'] as String)
         : null,
+    pendingEmail: json['pendingEmail'] as String?,
   );
 }

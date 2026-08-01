@@ -22,6 +22,8 @@ export interface StoopUser {
   avatarAssetId?: string | null;
   avatarLocked?: boolean;
   createdAt?: string;
+  /** An email change awaiting confirmation at the NEW address, or null. */
+  pendingEmail?: string | null;
 }
 
 export interface StoopCreatorRef {

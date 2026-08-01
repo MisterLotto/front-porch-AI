@@ -1754,6 +1754,7 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
   padding: 8px 12px; border-radius: var(--radius); margin: 0;
 }
 .stoop-forgot-sent p { max-width: 460px; }
+.stoop-email-change { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; width: 100%; }
 
 .stoop-inbox { display: flex; flex-direction: column; gap: 10px; }
 .stoop-thread {

@@ -234,6 +234,34 @@ class AuthState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Ask to change the sign-in email (confirmation link goes to the NEW
+  /// address; the account keeps the old one until it's clicked).
+  Future<void> changeEmail({
+    required String newEmail,
+    String? password,
+    String? totp,
+  }) async {
+    if (_accessToken == null) throw _noSession;
+    final me = await _api.changeEmail(
+      _accessToken!,
+      newEmail: newEmail.trim(),
+      password: password,
+      totp: totp,
+    );
+    _user = me.user;
+    _policyVersion = me.policyVersion;
+    notifyListeners();
+  }
+
+  /// Abandon a pending email change.
+  Future<void> cancelEmailChange() async {
+    if (_accessToken == null) throw _noSession;
+    final me = await _api.cancelEmailChange(_accessToken!);
+    _user = me.user;
+    _policyVersion = me.policyVersion;
+    notifyListeners();
+  }
+
   /// Toggle the NSFW content preference (persisted server-side).
   Future<void> setNsfwEnabled(bool enabled) async {
     if (_accessToken == null) return;

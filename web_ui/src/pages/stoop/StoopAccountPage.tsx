@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { StoopCardArt, StoopCardTile } from '../../components/stoop/StoopCardTile';
 import { StoopCreatorAvatar } from '../../components/stoop/StoopCreatorAvatar';
-import { stoop, stoopErrorText } from '../../stoop/stoopApi';
+import { stoop, StoopError, stoopErrorText } from '../../stoop/stoopApi';
 import { useStoop } from '../../stoop/StoopContext';
 import type { StoopCard, StoopFollowedCreator, StoopMine } from '../../stoop/stoopTypes';
 
@@ -78,6 +78,11 @@ export function StoopAccountPage() {
     return [l[0] ?? '', l[1] ?? '', l[2] ?? '', l[3] ?? ''];
   });
   const fileRef = useRef<HTMLInputElement>(null);
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [emailPw, setEmailPw] = useState('');
+  const [emailTotp, setEmailTotp] = useState('');
+  const [emailTotpNeeded, setEmailTotpNeeded] = useState(false);
   const [mine, setMine] = useState<StoopMine[]>([]);
   const [downloads, setDownloads] = useState<StoopCard[]>([]);
   const [followed, setFollowed] = useState<StoopFollowedCreator[]>([]);
@@ -153,6 +158,42 @@ export function StoopAccountPage() {
       setNote('Confirmation email sent — check your inbox (and spam).');
     });
 
+  const submitEmailChange = async () => {
+    setBusy(true);
+    setNote('');
+    setError('');
+    try {
+      const r = await stoop.changeEmail(
+        newEmail.trim(),
+        emailPw,
+        emailTotpNeeded ? emailTotp.trim() : undefined,
+      );
+      updateUser(r.user);
+      setEmailOpen(false);
+      setNewEmail('');
+      setEmailPw('');
+      setEmailTotp('');
+      setEmailTotpNeeded(false);
+      setNote(`Confirmation sent to ${newEmail.trim()} — the change lands when that inbox opens the link.`);
+    } catch (e) {
+      if (e instanceof StoopError && e.code === 'two_factor_required') {
+        setEmailTotpNeeded(true);
+        setError(emailTotp ? stoopErrorText(e) : 'Enter your two-factor code to confirm the change.');
+      } else {
+        setError(stoopErrorText(e));
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const cancelEmailChange = () =>
+    run(async () => {
+      const r = await stoop.cancelEmailChange();
+      updateUser(r.user);
+      setNote('Pending email change cancelled.');
+    });
+
   const deleteUpload = (m: StoopMine) => {
     if (!window.confirm(`Take “${m.name}” off The Stoop permanently? Copies people already downloaded stay theirs.`)) {
       return;
@@ -208,8 +249,63 @@ export function StoopAccountPage() {
       <section className="card">
         <h3>Profile</h3>
         <p className="muted">
-          {user.email} · {user.role !== 'USER' ? `${user.role} · ` : ''}age verified
+          {user.email} · {user.role !== 'USER' ? `${user.role} · ` : ''}age verified{' '}
+          <button className="link-btn" onClick={() => setEmailOpen(!emailOpen)}>
+            Change email…
+          </button>
         </p>
+        {user.pendingEmail && (
+          <p className="muted stoop-small">
+            → {user.pendingEmail} (awaiting confirmation){' '}
+            <button className="link-btn" disabled={busy} onClick={cancelEmailChange}>
+              Cancel
+            </button>
+          </p>
+        )}
+        {emailOpen && (
+          <div className="stoop-email-change">
+            <p className="muted stoop-small">
+              We’ll send a confirmation link to the new address; your account keeps{' '}
+              {user.email} until that link is opened. This also proves the new address
+              for sharing and profile photos.
+            </p>
+            <label>
+              New email
+              <input
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+              />
+            </label>
+            <label>
+              Current password
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={emailPw}
+                onChange={(e) => setEmailPw(e.target.value)}
+              />
+            </label>
+            {emailTotpNeeded && (
+              <label>
+                Two-factor code
+                <input
+                  inputMode="numeric"
+                  placeholder="123456"
+                  value={emailTotp}
+                  onChange={(e) => setEmailTotp(e.target.value)}
+                />
+              </label>
+            )}
+            <button
+              className="primary"
+              disabled={busy || !newEmail.includes('@')}
+              onClick={() => void submitEmailChange()}
+            >
+              Send confirmation
+            </button>
+          </div>
+        )}
         {user.emailVerified === false && (
           <p className="stoop-verify-note">
             📮 Confirm your email to share cards and set a profile photo.{' '}

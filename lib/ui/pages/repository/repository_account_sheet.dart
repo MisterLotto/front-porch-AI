@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/providers/auth_state.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_change_email_dialog.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_profile_header.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_twofa_sheet.dart';
@@ -147,6 +148,14 @@ class _StoopAccountSheetState extends State<_StoopAccountSheet> {
                           fontSize: 13,
                         ),
                       ),
+                      if (user.pendingEmail != null)
+                        Text(
+                          '→ ${user.pendingEmail} (awaiting confirmation)',
+                          style: TextStyle(
+                            color: stoopAmberText(context),
+                            fontSize: 12,
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -243,6 +252,27 @@ class _StoopAccountSheetState extends State<_StoopAccountSheet> {
                 ),
               ),
               onTap: () => showStoopTwoFactor(context),
+            ),
+            const SizedBox(height: 10),
+            ListTile(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              leading: Icon(
+                Icons.alternate_email_rounded,
+                color: stoopMute(context),
+              ),
+              title: Text(
+                'Change email',
+                style: TextStyle(color: stoopCream(context)),
+              ),
+              subtitle: Text(
+                user.pendingEmail != null
+                    ? 'Waiting on ${user.pendingEmail} to confirm'
+                    : 'A confirmation link goes to the new address first.',
+                style: TextStyle(color: stoopMute(context), fontSize: 12),
+              ),
+              onTap: () => showStoopChangeEmail(context),
             ),
             const SizedBox(height: 10),
             ListTile(
