@@ -168,9 +168,25 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      # Glob, not a hardcoded filename: naming app_smoke_test.dart meant a new
+      # integration test was invisible to CI until someone remembered to add it
+      # here, and a test nobody runs is not a safety net.
+      #
+      # One `flutter test` PER FILE, not `flutter test integration_test`.
+      # Passing the directory runs them in a single invocation, which launches
+      # a second copy of the app while the first still holds the desktop
+      # device — the second file then dies at "loading" with no stack. Measured
+      # 2026-08-01: app_smoke passed, group_smoke failed exactly that way.
       - name: Run E2E smoke suite
         if: matrix.device != 'linux'
-        run: flutter test integration_test/app_smoke_test.dart -d ${{ matrix.device }}
+        shell: bash
+        run: |
+          set -e
+          for f in integration_test/*_test.dart; do
+            echo "::group::$f"
+            flutter test "$f" -d ${{ matrix.device }}
+            echo "::endgroup::"
+          done
 
       # Linux under xvfb has been observed to drop the device mid-boot and
       # report "No tests were found" (exit 79) with no Dart stack — a true
@@ -180,23 +196,30 @@ jobs:
         if: matrix.device == 'linux'
         run: |
           set +e
-          for attempt in 1 2; do
-            echo "::group::E2E smoke attempt $attempt"
-            xvfb-run -a -s "-screen 0 1600x1000x24" \
-              flutter test integration_test/app_smoke_test.dart -d linux
-            status=$?
-            echo "::endgroup::"
-            if [ "$status" -eq 0 ]; then
-              exit 0
-            fi
-            echo "E2E smoke attempt $attempt failed (exit $status)"
-            if [ "$attempt" -eq 1 ]; then
-              echo "Retrying once..."
-              # Clear any half-built bundle state from a crashed device process.
-              rm -rf build/linux
+          overall=0
+          for f in integration_test/*_test.dart; do
+            status=0
+            for attempt in 1 2; do
+              echo "::group::$f (attempt $attempt)"
+              xvfb-run -a -s "-screen 0 1600x1000x24" \
+                flutter test "$f" -d linux
+              status=$?
+              echo "::endgroup::"
+              if [ "$status" -eq 0 ]; then
+                break
+              fi
+              echo "$f attempt $attempt failed (exit $status)"
+              if [ "$attempt" -eq 1 ]; then
+                echo "Retrying once..."
+                # Clear any half-built bundle state from a crashed device process.
+                rm -rf build/linux
+              fi
+            done
+            if [ "$status" -ne 0 ]; then
+              overall="$status"
             fi
           done
-          exit "$status"
+          exit "$overall"
 
   web-tests:
     name: WebUI tests (vitest)
