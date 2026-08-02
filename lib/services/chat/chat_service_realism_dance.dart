@@ -302,15 +302,12 @@ extension ChatServiceRealismDance on ChatService {
       defaultValue: 'moderate',
     );
 
-    // Needs vector (if any persisted for this char)
-    final needs = _getGroupNeeds(charId);
-    if (needs.isNotEmpty) {
-      _needsSimulation.restoreFromSnapshot({'vector': needs});
-    } else if (_needsSimEnabled) {
-      // Fresh start for a group member who has never had needs for this group chat.
-      // Use full 100 to match 1:1 "new chat" behavior (prevents bleed perception).
-      _needsSimulation.initializeFresh();
-    }
+    // Needs vector. _getGroupNeeds fills every key in NeedsSimulation.needKeys,
+    // falling back to needDefaults, so it can never come back empty — the
+    // "member has never had needs" branch that used to sit here was
+    // unreachable, and its comment claimed a starting value (full 100) that
+    // initializeFresh does not use either.
+    _needsSimulation.restoreFromSnapshot({'vector': _getGroupNeeds(charId)});
   }
 
   /// Writes the current scalar realism fields back into the target group

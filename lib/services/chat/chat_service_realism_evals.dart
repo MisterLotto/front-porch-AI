@@ -85,11 +85,6 @@ extension ChatServiceRealismEvals on ChatService {
     void Function(String)? onChunk,
   }) async {
     if (!_realismEnabled || _activeCharacter == null) return;
-
-    if (_activeCharacter == null) {
-      // Group chat or other mode — relationship evals not supported in this path yet
-      return;
-    }
     final charName = _activeCharacter!.name;
     final persona = _activeCharacter!.personality;
     final recentCount = _messages.length < 10 ? _messages.length : 10;

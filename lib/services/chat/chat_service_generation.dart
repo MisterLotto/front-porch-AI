@@ -83,7 +83,6 @@ extension ChatServiceGeneration on ChatService {
     _tokensGenerated = 0;
     _maxTokens = _sessionGenSettings.resolveMaxLength(_storageService);
     _generationStartTime = DateTime.now();
-    _isBuffering = true;
     _generationPhase = GenerationPhase.preparing;
     _prefillStartTime = null;
     _lastPerfData = null;
@@ -144,7 +143,6 @@ extension ChatServiceGeneration on ChatService {
         if (_realismEvalCancelled) {
           _realismEvalCancelled = false;
           _isGenerating = false;
-          _isBuffering = false;
           _generationPhase = GenerationPhase.idle;
           _generationStartTime = null;
           await _saveChat();
@@ -1470,7 +1468,6 @@ extension ChatServiceGeneration on ChatService {
             }
 
             if (_tokenBuffer.length >= bufferTarget) {
-              _isBuffering = false;
               _generationPhase = GenerationPhase.generating;
               _startDrainTimer();
             }
@@ -1481,13 +1478,11 @@ extension ChatServiceGeneration on ChatService {
               // Buffer critically low — pause drain to rebuild
               _drainTimer?.cancel();
               _drainTimer = null;
-              _isBuffering = true;
               _generationPhase = GenerationPhase.buffering;
             }
           }
         } else {
           // No buffer: display tokens immediately
-          _isBuffering = false;
           _generationPhase = GenerationPhase.generating;
           _displayedTokenCount = _tokenBuffer.length;
           _flushBufferToDisplay();
@@ -1505,7 +1500,6 @@ extension ChatServiceGeneration on ChatService {
       // drop any pending throttled notify — the finalize paths below (cancel
       // AND normal) both end in an unthrottled notifyListeners().
       streamDone = true;
-      _isBuffering = false;
       _cancelStreamNotifyThrottle();
 
       if (_cancelRequested) {
@@ -1549,7 +1543,6 @@ extension ChatServiceGeneration on ChatService {
         _isGenerating = false;
         _cancelRequested = false;
         _generationProgress = 0.0;
-        _isBuffering = false;
         _generationPhase = GenerationPhase.idle;
         _prefillStartTime = null;
         _prefillPromptTokens = 0;
@@ -1575,7 +1568,6 @@ extension ChatServiceGeneration on ChatService {
       _isGenerating = false;
       _cancelRequested = false;
       _generationProgress = 0.0;
-      _isBuffering = false;
       _generationPhase = GenerationPhase.idle;
       _prefillStartTime = null;
       _prefillPromptTokens = 0;
@@ -1866,7 +1858,6 @@ extension ChatServiceGeneration on ChatService {
       _isGenerating = false;
       _cancelRequested = false;
       _generationProgress = 0.0;
-      _isBuffering = false;
       _generationPhase = GenerationPhase.idle;
       _prefillStartTime = null;
       _prefillPromptTokens = 0;

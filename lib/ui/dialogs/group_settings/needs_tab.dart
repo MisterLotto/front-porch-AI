@@ -1,7 +1,6 @@
 // Copyright (C) 2026 Front Porch AI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -135,7 +134,9 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
         char.frontPorchExtensions?.ensureStableId();
       }
     });
-    _persistMemberNeedsPref(id, field, value);
+    // The card's needsBaseline* fields above are the real storage. A second
+    // copy used to be written into the group blob under a 'needsBaselines'
+    // key that nothing in lib/ or web_ui/ ever read back.
   }
 
   // Local display update while a decay slider is dragged. The persist (member
@@ -160,36 +161,6 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
     persistGroupMemberPref(widget.chatService, id, 'enjoysLowHygiene', value);
   }
 
-
-  void _persistMemberNeedsPref(String id, String field, int value) {
-    try {
-      final group = widget.chatService.activeGroup;
-      if (group != null) {
-        final map =
-            group.defaultMemberRealismState.isNotEmpty &&
-                group.defaultMemberRealismState != '{}'
-            ? (jsonDecode(group.defaultMemberRealismState)
-                      as Map<String, dynamic>? ??
-                  {})
-            : <String, dynamic>{};
-        final perChar = (map['perChar'] as Map<String, dynamic>? ?? {})
-            .cast<String, dynamic>();
-        final current = (perChar[id] as Map<String, dynamic>? ?? {})
-            .cast<String, dynamic>();
-        // Store needs baselines under a nested 'needsBaselines' key.
-        final needsBaselines =
-            (current['needsBaselines'] as Map<String, dynamic>? ?? {})
-                .cast<String, dynamic>();
-        needsBaselines[field] = value;
-        current['needsBaselines'] = needsBaselines;
-        perChar[id] = current;
-        map['perChar'] = perChar;
-        group.defaultMemberRealismState = jsonEncode(map);
-      }
-    } catch (_) {
-      // Non-fatal
-    }
-  }
 
   void _resetAllNeedsStates() {
     for (final c in _chars) {

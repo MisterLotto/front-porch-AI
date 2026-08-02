@@ -475,10 +475,8 @@ extension ChatServiceSessionManage on ChatService {
         '[startNewChat] After reset: arousal=${_nsfwService.arousalLevel}, fixation=${_relationshipService.activeFixation}/${_relationshipService.fixationLifespan}',
       );
 
-      // Recalculate tiers from seeded scores (only needed for realism-enabled chars)
-      if (_realismEnabled) {
-        // Tiers are maintained inside service after seed; no direct _calculate here.
-      }
+      // Tiers are maintained inside RelationshipService after the seed, so
+      // there is nothing to recalculate here.
 
       // Seed initial quest/task as a primary objective
       if (extSeed.currentTask.isNotEmpty) {

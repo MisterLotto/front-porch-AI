@@ -1031,7 +1031,6 @@ class ChatService extends ChangeNotifier {
   int _tokensGenerated = 0;
   int _maxTokens = 0;
   DateTime? _generationStartTime;
-  bool _isBuffering = false;
   GenerationPhase _generationPhase = GenerationPhase.idle;
   DateTime? _prefillStartTime; // When we entered prefill (for elapsed timer)
   int _prefillPromptTokens =
@@ -1271,8 +1270,6 @@ class ChatService extends ChangeNotifier {
   // _chaosModeEnabled / _chaosNsfwEnabled / _chaosPressure / _pendingChaosInjection / _chaosEventDelivered
   // now owned by _chaosModeService. The two UI coordination flags below stay in god
   // (cross widget boundary for overlay + send pause).
-  String?
-  _pendingChanceTimeEvent; // set when wheel lands; cleared after UI reads it
   bool _chanceTimePendingTrigger =
       false; // true for one cycle to pop the overlay
   // The single event the web/mobile "reveal your fate" modal shows + accepts
@@ -2967,7 +2964,6 @@ class ChatService extends ChangeNotifier {
   double get generationProgress => _generationProgress;
   int get tokensGenerated => _tokensGenerated;
   int get maxTokens => _maxTokens;
-  bool get isBuffering => _isBuffering;
   GenerationPhase get generationPhase => _generationPhase;
 
   /// Seconds elapsed since entering the prefill phase. Returns 0 if not prefilling.
@@ -3171,7 +3167,6 @@ class ChatService extends ChangeNotifier {
   bool get isEvaluatingRealism => _isEvaluatingRealism;
   bool get isCancellingRealismEval => _isCancellingRealismEval;
   bool get isProcessingGreeting => _isProcessingGreeting;
-  String get realismEvalStreamText => _realismEvalStreamText;
 
   // Verifier phase (for overlay header "🕵️ Verifying Realism output" + pass progress, and bubble chip data source).
   // God coordination only; leaf drives via cb thins (no new god void _).
@@ -3184,7 +3179,6 @@ class ChatService extends ChangeNotifier {
       _stripThinkBlocks(_realismEvalStreamText);
   String get characterEmotion => _characterEmotion;
 
-  String getCurrentEmotion() => _characterEmotion;
 
   String get emotionIntensity => _emotionIntensity;
 
@@ -3235,9 +3229,6 @@ class ChatService extends ChangeNotifier {
   }
 
   bool get chaosNsfwEnabled => _chaosModeService.chaosNsfwEnabled;
-
-  /// Non-null for exactly one notification cycle. UI reads then calls clearChanceTimeEvent().
-  String? get pendingChanceTimeEvent => _pendingChanceTimeEvent;
 
   /// True when auto-trigger fires. UI reads then calls consumeChanceTimeTrigger().
   bool get chanceTimePendingTrigger => _chanceTimePendingTrigger;
@@ -3302,7 +3293,13 @@ class ChatService extends ChangeNotifier {
   /// When classification mode is 'onnx', uses the ONNX classifier result.
   /// Otherwise maps the nuanced emotion to a standard label
   /// using [EmotionLabels.nuancedToStandard].
-  // (currentExpressionLabel / resolveExpressionAvatar / setManualExpression @Dep shims excised; use expressionService; main wiring note: update main if using the removed setExpressionClassifierService shim)
+  // NOTE: an earlier version of this comment claimed currentExpressionLabel,
+  // resolveExpressionAvatar, setManualExpression and setExpressionClassifierService
+  // had been "excised". They had not. All four still exist and are live:
+  // chat_page.dart calls currentExpressionLabel and resolveExpressionAvatar, and
+  // main.dart calls setExpressionClassifierService during startup wiring. A
+  // cleanup that trusted the old comment would have deleted working code.
+  // They delegate to _expressionService; prefer calling that directly in new code.
 
   /// Set the CharacterRepository so group mode can look up characters.
   void setCharacterRepository(CharacterRepository repo) {
@@ -3943,8 +3940,6 @@ class ChatService extends ChangeNotifier {
 
     final newIndex = msg.swipeIndex + direction;
 
-    final oldIndex = msg.swipeIndex;
-
     // Guest-message swipes carry no Realism/Needs, so navigating between them
     // must never touch the active character's state (parity) — true even for a
     // guest who has since left the scene, hence the authoritative check.
@@ -3954,7 +3949,7 @@ class ChatService extends ChangeNotifier {
     if (direction < 0) {
       if (newIndex >= 0) {
         msg.swipeIndex = newIndex;
-        if (!isGuestMsg) _syncRealismStateForSwipe(msg, oldIndex, newIndex);
+        if (!isGuestMsg) _syncRealismStateForSwipe(msg);
         // Timeline integrity: the active variant at this position changed —
         // cards journaled from the other swipe are now phantom.
         _invalidateJournalFrom(messageIndex);
@@ -3968,7 +3963,7 @@ class ChatService extends ChangeNotifier {
     if (newIndex < msg.swipes.length) {
       // Navigate to existing swipe
       msg.swipeIndex = newIndex;
-      if (!isGuestMsg) _syncRealismStateForSwipe(msg, oldIndex, newIndex);
+      if (!isGuestMsg) _syncRealismStateForSwipe(msg);
       // Timeline integrity — same as the left-swipe branch above.
       _invalidateJournalFrom(messageIndex);
       await _saveChat();
@@ -3979,7 +3974,7 @@ class ChatService extends ChangeNotifier {
     }
   }
 
-  void _syncRealismStateForSwipe(ChatMessage msg, int oldIndex, int newIndex) {
+  void _syncRealismStateForSwipe(ChatMessage msg) {
     if (!_realismEnabled) return;
 
     // Natively restore the frozen runtime variables for the selected alternate

@@ -195,12 +195,6 @@ extension ChatServiceControls on ChatService {
     notifyListeners();
   }
 
-  /// Clear the pending event after the UI has consumed it.
-  void clearChanceTimeEvent() {
-    _pendingChanceTimeEvent = null;
-    // no notifyListeners — avoids rebuild storms; UI already consumed it
-  }
-
   /// Returns 8 randomly-sampled events for the wheel UI to display.
   List<String> spinWheelEvents() {
     return _chaosModeService.spinWheelEvents();
@@ -217,7 +211,6 @@ extension ChatServiceControls on ChatService {
     final completer = _chanceTimeCompleter;
     if (completer == null || completer.isCompleted) return;
     final display = event.replaceAll('{{char}}', charName);
-    _pendingChanceTimeEvent = display;
     await _chaosModeService.applyPreparedEvent(display);
     // Resume the paused sendMessage flow (UI coordination stays in god).
     // Re-check: applyPreparedEvent awaited above, so the other surface could
