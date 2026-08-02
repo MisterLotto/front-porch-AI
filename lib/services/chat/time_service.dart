@@ -40,6 +40,53 @@ import 'package:front_porch_ai/services/llm_service.dart' show LlmToolResponse;
 /// period so time can never freeze forever. The old 6-turn gate, its
 /// `hold_time` veto, and the eligible/not-eligible prompt branching are gone.
 ///
+/// ── WHY PASSAGE OF TIME CANNOT BE DECOUPLED FROM THE REALISM ENGINE ──────
+///
+/// Settled 2026-08-02 after the full engine audit, and written here because
+/// this class is where anyone attempting the split would start. The clock LOOKS
+/// separable — this service takes no realism input, its constructor is clean,
+/// and its test suite builds it with realism nowhere in sight. That appearance
+/// is why the idea keeps coming back. Do not act on it.
+///
+/// Four reasons, each verified in code:
+///
+/// 1. THE QUALITY OF TIME *IS* AN LLM EVAL. How far the clock moves comes from
+///    [_fireSceneTimeEval] asking a model how long the latest exchange took.
+///    Remove that and the only thing left is [StoryClock.failureDriftMinutes],
+///    which is a FAILURE fallback, not a time model: a two-line greeting and a
+///    two-hour dinner would advance the clock by the same fixed constant. Time
+///    would keep ticking and stop meaning anything.
+///
+/// 2. THE EVAL IS FUSED WITH POSTURE. That same call returns the character's
+///    spatial stance, which is a realism scalar. Splitting time out means
+///    either a SECOND model call every single turn, or keeping the posture
+///    callback — in which case the coupling survives the split and you have
+///    paid for nothing.
+///
+/// 3. ONE-SHOT MODE HAS NO SEPARATE TIME CALL TO EXTRACT. It fuses
+///    `minutes_elapsed` and `new_day` into the single realism JSON
+///    (realism_tools.dart, realism_prompt_builder.dart). There is nothing to
+///    lift out; there is only a field in somebody else's payload.
+///
+/// 4. THE WIRE FORMAT IS `realism_state`. The clock is patched into each
+///    message's realism_state snapshot and restored from it on swipe and regen
+///    ([onPatchLastMessageRealismState], [restoreTimeFromRealismState]).
+///    Decoupling is therefore a persistence-format change with a migration,
+///    not a code move.
+///
+/// The OOC time-skip path ([detectOocTimeSkip]) is pure regex and would survive
+/// on its own — but it is a narrow fast path over enumerated phrasings, it is
+/// gated on [_passageOfTimeEnabled], and it does not cover a model narrating a
+/// long journey in words nobody listed. It is not a substitute for the eval.
+///
+/// COROLLARY, for the prompt composer: do NOT un-gate the time fragment for
+/// realism-off users. The clock cannot advance in that state (every writer is
+/// gated and no eval runs), so the fragment would inject the SAME frozen
+/// timestamp on every turn while the story visibly moves — worse than saying
+/// nothing. See `_sceneFactsEnabled` in realism_state_injection.dart.
+///
+/// Formalise the seam; do not cut it.
+///
 /// Time remains *chat-scoped* (shared across group members, not per-speaker).
 /// Cross-state (pending chip metadata, last-message realism_state patching
 /// for nudge/set survival across swipe/regen/reload, save/notify) is accessed

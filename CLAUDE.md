@@ -190,6 +190,25 @@ A multi-component system spanning `chat_service.dart` (orchestration, `_groupRea
 - Emotion tracking with inertia between turns (ExpressionClassifier)
 - Bond/trust relationship scoring (bond clamped to ±300, arousal ±100) (RelationshipService)
 - Time progression — `lib/services/chat/time_service.dart` (`TimeService`) + `story_clock.dart`. Advancement is CONTINUOUS AND PER-TURN: the scene-time eval reports `minutes_elapsed` for the exchange, clamped by `StoryClock.maxMinutesPerTurn`, with `StoryClock.failureDriftMinutes` as the deterministic floor when the eval fails and a `stallBackstopTurns` backstop so time can never freeze. **The old 6-turn gate and its `hold_time` veto are GONE** — do not reason about a turn counter.
+
+  **PASSAGE OF TIME CANNOT BE DECOUPLED FROM REALISM. Settled 2026-08-02 — do
+  not re-propose it.** TimeService looks separable (clean constructor, no
+  realism input, a test suite that builds it with realism nowhere in sight) and
+  that appearance is why the idea keeps recurring. Four reasons, all verified:
+  (1) the clock's ACCURACY is an LLM eval — `_fireSceneTimeEval` asks the model
+  how long the exchange took, and without it the only fallback is
+  `failureDriftMinutes`, a fixed constant, so a two-line greeting and a two-hour
+  dinner would move the clock equally; (2) that eval is FUSED with posture, a
+  realism scalar, so splitting costs a second model call every turn or keeps the
+  coupling anyway; (3) one-shot mode has no separate time call to extract — it
+  fuses `minutes_elapsed`/`new_day` into the realism JSON; (4) the clock is
+  persisted and restored through each message's `realism_state`, so decoupling
+  is a migration, not a code move. The OOC skip path (`detectOocTimeSkip`) is
+  regex and would survive alone, but it only matches enumerated phrasings and is
+  itself gated on `passageOfTimeEnabled` — it is a fast path, not a substitute.
+  COROLLARY: never un-gate the time PROMPT FRAGMENT for realism-off users; the
+  clock cannot advance in that state, so it would inject the same frozen
+  timestamp every turn. Formalise the seam; do not cut it.
 - Fixation engine (emotional obsessions)
 - Character evolution (trait development) (EvolutionService)
 - Chaos Mode / "Chance Time" random events (ChaosModeService)

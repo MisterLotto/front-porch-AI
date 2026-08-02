@@ -122,12 +122,27 @@ class RealismStateInjection {
   /// gate at all, weather gates on the weather being null, and ambitions and
   /// promises gate on having any.
   ///
-  /// They are gated on realism here anyway, because that is what shipped and
-  /// changing it is a PRODUCT decision rather than a cleanup: a realism-off
-  /// user would start receiving a story-time line, their ambitions and their
-  /// open promises — new prompt content and new tokens they do not pay for
-  /// today. Flipping this getter is the entire change when that decision is
-  /// made; it was previously impossible to make without unpicking the composer.
+  /// They stay gated, and the audit's framing that this is merely "incidental
+  /// coupling" was WRONG for two of the four. Settled 2026-08-02:
+  ///
+  /// - TIME must stay gated. The clock cannot advance with realism off — every
+  ///   writer is gated and the scene-time eval does not run — so un-gating this
+  ///   fragment would inject the SAME frozen timestamp every turn while the
+  ///   story visibly moves. That is not a little extra context; it is a lie
+  ///   told once per turn. See the decision block on TimeService for why the
+  ///   clock's ACCURACY lives inside the realism eval and cannot be lifted out.
+  /// - WEATHER is moot. currentWeather returns null with realism off, so
+  ///   un-gating changes nothing — and weather is a function of the day count,
+  ///   so it inherits the frozen clock above regardless.
+  /// - AMBITIONS and PROMISES are the only genuinely open questions. Both are
+  ///   static text that does not need the engine running, so un-gating them is
+  ///   a real product choice: a realism-off user would start receiving them,
+  ///   and paying for them, on every prompt.
+  ///
+  /// So this getter is not a decoupling switch. It is a two-item product
+  /// question wearing a four-item costume, and flipping it wholesale would
+  /// reintroduce the "saves, confirms, reaches the model never" class of bug
+  /// this audit spent its time removing.
   bool get _sceneFactsEnabled => getRealismEnabled();
 
   /// CHARACTER STATE: how this character is right now. Genuinely realism, and
