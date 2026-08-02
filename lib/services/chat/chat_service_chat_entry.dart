@@ -189,7 +189,6 @@ extension ChatServiceChatEntry on ChatService {
       // Lorebook already reset above via _lorebookScanner (keeps blocks in sync; see cross-ref comment at top of this reset).
       _relationshipService.resetForFreshChat();
       _expressionService.resetForFreshChat();
-      _moodDecayCounter = 0;
       _greetingEvalPending = false;
       _isProcessingGreeting = false;
       _pendingRealismMetadata = null;

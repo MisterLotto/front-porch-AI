@@ -1243,9 +1243,17 @@ class ChatService extends ChangeNotifier {
   // are mid-deactivation throw "Looking up a deactivated widget's ancestor".
   Timer? _evalChunkTimer;
 
-  // Short-term mood (counter only; decay logic for affection/short-term relationship
-  // moved to RelationshipService; moodDelta resets kept here for snapshot/regen parity).
-  int _moodDecayCounter = 0;
+  // TOMBSTONE: `_moodDecayCounter` lived here. It was captured into every
+  // message's realism_state, written to sessions.moodDecayCounter, and dutifully
+  // restored on regen — and NO decay logic ever read it. The counter that
+  // actually gates short-term bond decay is RelationshipService's
+  // (_turnsSinceDecayCheck in 1:1, the per-member 'turnsSinceDecayCheck' map key
+  // in a group), and that one was never restored, so the regen revert only
+  // looked like it rewound the cadence. Both are now captured and restored for
+  // real via captureCadenceAndFeelings / restoreFromMessageState.
+  // The sessions.moodDecayCounter COLUMN is deliberately left in place and
+  // dormant (it defaults to 0) — dropping it is a schema change, and external
+  // tools write this database directly.
 
   // Emotional state
   String _characterEmotion = '';

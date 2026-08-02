@@ -375,7 +375,6 @@ extension ChatServiceSessionLoad on ChatService {
     // instead of a short topic — truncate to keep the UI and prompts sane.
     _relationshipService.sanitizeFixationIfTooLong();
     _realismEnabled = s.realismEnabled;
-    _moodDecayCounter = s.moodDecayCounter;
     _characterEmotion = s.characterEmotion;
     _emotionIntensity = s.emotionIntensity;
     _timeService.loadTimeScalars(

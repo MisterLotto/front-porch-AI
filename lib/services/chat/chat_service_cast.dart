@@ -307,8 +307,6 @@ extension ChatServiceCast on ChatService {
       _realismEnabled = true;
       _needsSimEnabled = wasNeedsOn;
       _relationshipService.restoreFromMessageState(snapshot);
-      _moodDecayCounter =
-          (snapshot['moodDecayCounter'] as int?) ?? _moodDecayCounter;
       _characterEmotion =
           (snapshot['characterEmotion'] as String?) ?? _characterEmotion;
       _emotionIntensity =
@@ -397,8 +395,6 @@ extension ChatServiceCast on ChatService {
     if (realismOn) {
       _realismEnabled = true;
       _relationshipService.restoreFromMessageState(state);
-      _moodDecayCounter =
-          (state['moodDecayCounter'] as int?) ?? _moodDecayCounter;
       _characterEmotion =
           (state['characterEmotion'] as String?) ?? _characterEmotion;
       _emotionIntensity =

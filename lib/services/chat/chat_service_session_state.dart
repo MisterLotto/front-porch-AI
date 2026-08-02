@@ -336,7 +336,6 @@ extension ChatServiceSessionState on ChatService {
           _relationshipService.shortTermDeltasSummary,
         ),
         realismEnabled: drift.Value(_realismEnabled),
-        moodDecayCounter: drift.Value(_moodDecayCounter),
         characterEmotion: drift.Value(_characterEmotion),
         emotionIntensity: drift.Value(_emotionIntensity),
         timeOfDay: drift.Value(_timeService.timeOfDay),

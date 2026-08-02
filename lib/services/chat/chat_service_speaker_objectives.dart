@@ -246,7 +246,6 @@ extension ChatServiceSpeakerObjectives on ChatService {
 
     final state = meta['realism_state'] as Map<String, dynamic>;
     _relationshipService.restoreFromMessageState(state);
-    _moodDecayCounter = state['moodDecayCounter'] as int? ?? _moodDecayCounter;
     _characterEmotion =
         state['characterEmotion'] as String? ?? _characterEmotion;
     _emotionIntensity =

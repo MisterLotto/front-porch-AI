@@ -30,6 +30,24 @@ extension ChatServiceRealismDance on ChatService {
   /// Uses temporary impersonation of _activeCharacter so that all existing
   /// realism eval methods (_evaluateOneShotCall, _evaluateRelationshipCall, etc.)
   /// and their parsing/inertia logic are reused without duplication.
+  ///
+  /// THE EVAL RUNS BEFORE GENERATION ON PURPOSE, AND A REGENERATED REPLY MUST
+  /// NEVER INFLUENCE ITS OWN EVALUATION. Settled 2026-08-02 — do not re-propose
+  /// moving this after generation.
+  ///
+  /// The deltas answer one question: how does this character feel about what
+  /// the USER just said. They are not a review of the character's own reply.
+  /// Scoring the reply would mean the character's mood was set by words the
+  /// model happened to choose for them, so rerolling a line would reroll their
+  /// feelings — bond and trust would become a slot machine the user pulls by
+  /// pressing Regenerate, instead of a response to what the user actually did.
+  ///
+  /// This is why realism deliberately lags one exchange, and why a regen is
+  /// expected to reproduce the SAME deltas: the input it scores (the user's
+  /// message and the state before the turn) is identical, so the answer should
+  /// be identical. When two regens disagree, that is a bug in what was rewound
+  /// — not the engine being lifelike. See restoreFromMessageState +
+  /// captureCadenceAndFeelings for the pair that keeps the rewind honest.
   Future<void> _evaluateRealismForUpcomingSpeaker(
     CharacterCard speaker,
   ) async {

@@ -164,7 +164,13 @@ extension ChatServiceRealismEvals on ChatService {
       'longTermTier': _relationshipService.longTermTier,
       'turnsSinceLongTermCheck': _relationshipService.turnsSinceLongTermCheck,
       'shortTermDeltasSummary': _relationshipService.shortTermDeltasSummary,
-      'moodDecayCounter': _moodDecayCounter,
+      // The decay cadence + the group's hidden inter-character feelings. These
+      // are the eval inputs that used to be missing from this snapshot, so a
+      // group regen could not rewind them; see captureCadenceAndFeelings.
+      // (They replaced 'moodDecayCounter', which was captured, persisted and
+      // restored while no decay logic read it — the real counter was, and is,
+      // RelationshipService's.)
+      ..._relationshipService.captureCadenceAndFeelings(),
       'characterEmotion': _characterEmotion,
       'emotionIntensity': _emotionIntensity,
       'timeOfDay': _timeService.timeOfDay,

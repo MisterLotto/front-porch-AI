@@ -587,7 +587,6 @@ extension ChatServiceReprocess on ChatService {
 
         if (lastMsg.activeMetadata != null) {
           final bondDelta = lastMsg.activeMetadata!['bond_delta'] as int? ?? 0;
-          final moodDelta = lastMsg.activeMetadata!['mood_delta'] as int? ?? 0;
           final arousalDelta =
               lastMsg.activeMetadata!['arousal_delta'] as int? ?? 0;
           final trustDelta =
@@ -600,14 +599,6 @@ extension ChatServiceReprocess on ChatService {
               -bondDelta,
               recordMilestone: false,
             );
-          }
-          // Session-level mood cadence: 1:1 zeroes it here as an intermediate
-          // (the baseline restore below then sets the real value and the 1:1
-          // tail re-ticks). Group regen neither restores nor re-ticks the
-          // counter — the rejected turn's tick stands — so zeroing here would
-          // permanently reset the cadence. Leave it untouched for groups.
-          if (moodDelta != 0 && !isGroupHostRegen) {
-            _moodDecayCounter = 0;
           }
           if (trustDelta != 0) {
             _relationshipService.setTrustLevelForRevert(
@@ -656,7 +647,17 @@ extension ChatServiceReprocess on ChatService {
         // This ensures the new regenerated message is evaluated against the correct baseline,
         // not from scratch which would produce wildly different realism values.
         if (previousMessageState != null) {
-          _relationshipService.restoreFromMessageState(previousMessageState);
+          // groupSpeakerId is what lets the revert rewind the two registers
+          // that ride the group map rather than the scalar set — the hidden
+          // inter-character feelings and the decay cadence. Without it a group
+          // regen left both drifted, which is why repeated group regens
+          // returned different bond/trust numbers while 1:1 regens returned
+          // the same ones. Null in 1:1: there is no map, and the cadence there
+          // is a scalar the same call restores.
+          _relationshipService.restoreFromMessageState(
+            previousMessageState,
+            groupSpeakerId: isGroupHostRegen ? regenSpeakerSid : null,
+          );
           _characterEmotion =
               previousMessageState['characterEmotion'] as String? ??
               _characterEmotion;
@@ -692,17 +693,11 @@ extension ChatServiceReprocess on ChatService {
           );
         }
 
-        // Session-level baseline (the shared clock + mood-decay cadence) comes
-        // from the most recent stamped bot message of ANY speaker — identical
-        // to previousMessageState in 1:1. Group regen skips the mood counter:
-        // groups tick mood decay in sendMessage (not replayed on regen), so
-        // the rejected turn's tick correctly stands for the replacement turn.
+        // Session-level baseline (the shared story clock) comes from the most
+        // recent stamped bot message of ANY speaker — identical to
+        // previousMessageState in 1:1. The decay cadence is NOT session-level:
+        // it is per-character, so it rides previousMessageState above instead.
         if (previousSessionState != null) {
-          if (!isGroupHostRegen) {
-            _moodDecayCounter =
-                previousSessionState['moodDecayCounter'] as int? ??
-                _moodDecayCounter;
-          }
           _timeService.restoreTimeForSwipeOrRegen(
             previousSessionState,
             wasNudged: wasNudged,

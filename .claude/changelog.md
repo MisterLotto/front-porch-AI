@@ -8182,3 +8182,62 @@ function so a service added there is fixed for all three flows at once. Net −2
 
 **Verification.** `flutter analyze --no-fatal-warnings --no-fatal-infos` → No issues found.
 New test pins the three traps (singleton lifecycle, MemoryService rebind, liveDatabase).
+
+---
+
+## 2026-08-02 — Group regen: rewind the two registers that were never snapshotted
+
+**Files:** `lib/services/chat/relationship_service.dart`,
+`lib/services/chat/chat_service_realism_evals.dart`,
+`lib/services/chat/chat_service_reprocess.dart`,
+`lib/services/chat/chat_service_realism_dance.dart`,
+`lib/services/chat_service.dart`, `lib/services/chat/chat_service_cast.dart`,
+`lib/services/chat/chat_service_chat_entry.dart`,
+`lib/services/chat/chat_service_session_load.dart`,
+`lib/services/chat/chat_service_session_state.dart`,
+`lib/services/chat/chat_service_speaker_objectives.dart`, `CLAUDE.md`,
+`docs/Rawhide.md`, `test/services/chat/regen_rewind_cadence_and_feelings_test.dart` (new).
+
+**The bug.** Every realism value is a scalar, and scalars are snapshotted into each
+message's `realism_state` and rewound on regen. Two are NOT scalars — they ride the
+per-member `_groupRealism` map:
+
+1. the hidden inter-character feelings (`'relationships'`), and
+2. the short-term bond-decay cadence (`'turnsSinceDecayCheck'`).
+
+Neither was in `_captureRealismState`, so a group regen could not put them back.
+The feelings are re-scored after EVERY generation by a keyword sweep over the freshly
+written reply (`chat_service_generation.dart:1693` →
+`relationship_service.updateInterCharacterFeelingsFromRecentExchange`), so each press of
+Regenerate stacked another ±2/±4 on the last press — one-way, invisible, unrecoverable.
+Twenty presses moves a pair from neutral past the +25 band, at which point the generation
+prompt starts telling the model they are "warm and friendly toward" each other. The
+cadence had the matching hole: every press burned a turn of it, and every tenth spent a
+−1 bond that was never refunded.
+
+**The decoy.** `ChatService._moodDecayCounter` was captured into `realism_state`, written
+to `sessions.moodDecayCounter`, and restored on regen — and no decay logic ever read it.
+The counter that actually gates decay is `RelationshipService`'s. The revert only *looked*
+like it rewound the cadence. Removed (field + 8 plumbing sites); the DB column is left in
+place and dormant, since dropping it is a schema change and external tools write this
+database directly.
+
+**Approach.** One capture/restore pair on the service that owns both registers
+(`captureCadenceAndFeelings` / `restoreFromMessageState(..., groupSpeakerId:)`), spread
+into the existing snapshot. Only the regen revert passes an id — it is the sole caller
+that knows which member is being undone; without one a group session skips rather than
+guess. Messages predating the keys restore nothing, which is exactly today's behaviour.
+`applyShortTermDecay`'s speaker/branch resolution collapsed into the two private getters
+the new pair uses, so the group-vs-1:1 rule is defined once.
+
+**Not the delta-difference explanation.** This was found while investigating why group
+regens return different eval deltas. It is NOT the cause: Grok correctly pointed out that
+the inter-character injection reaches only the GENERATION prompt
+(`chat_service_speaker_objectives.dart:196` → `chat_service_generation.dart:564`), never
+the eval prompts. The leak is real and worth fixing on its own merits — it corrupts how
+group members behave toward each other — but the delta question is still open.
+
+**Verification.** `flutter analyze --no-fatal-warnings --no-fatal-infos` → No issues
+found. `dart fix --dry-run` → Nothing to fix. Full suite `flutter test --concurrency=1
+--exclude-tags golden` → 2843 passed. `./scripts/ci-local.sh` (Linux goldens) → passed.
+The new test was proven load-bearing: neutering the restore turns 3 of its 9 red.

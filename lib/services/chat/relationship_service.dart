@@ -764,9 +764,8 @@ class RelationshipService {
   /// legacy shared register.
   void applyShortTermDecay() {
     final isGroup = getIsGroupActive() && !getObserverMode();
-    final perSpeaker =
-        isGroup && getGroupCounter != null && setGroupCounter != null;
-    final speakerId = isGroup ? getCurrentSpeakerIdForRealism() : '';
+    final perSpeaker = _perSpeakerDecay;
+    final speakerId = isGroup ? _decaySpeakerId : '';
     var turns = perSpeaker
         ? getGroupCounter!(speakerId, 'turnsSinceDecayCheck', defaultValue: 0)
         : _turnsSinceDecayCheck;
@@ -870,6 +869,55 @@ class RelationshipService {
         debugPrint('[Realism:OneShot] New obsession: $f (3 turns)');
       }
     }
+  }
+
+  // ── The two registers that live outside the scalar set ────────────────────
+  //
+  // Everything else the realism eval reads is a scalar, so it is snapshotted
+  // into every message's `realism_state` and rewound when a turn is
+  // regenerated. These two are not scalars — they ride the _groupRealism map —
+  // and both feed the eval prompt:
+  //
+  //   * the inter-character feelings map is injected verbatim, in stepped
+  //     bands at ±5 / ±25 / ±60 (relationship_injection
+  //     .buildInterCharacterFeelingsInjection)
+  //   * the decay cadence decides whether this turn spends a −1 bond
+  //
+  // Because neither was ever captured, a GROUP regen could not put them back.
+  // Every press of Regenerate re-ran the post-generation keyword scan over the
+  // freshly written reply (chat_service_generation.dart →
+  // updateInterCharacterFeelingsFromRecentExchange) and nudged the hidden
+  // feelings another ±2/±4 on top of the last press — permanently, in one
+  // direction, with no way back. Once the drift crossed a band, a whole new
+  // sentence appeared in the eval prompt, so the eval saw different input and
+  // returned different bond/trust numbers. That is the entire reason group
+  // regens produced fresh deltas while 1:1 regens produced the same ones every
+  // time: 1:1 has no inter-character map, and at temperature 0.1 an identical
+  // prompt yields an identical answer.
+  //
+  // Capture/restore are a pair. Keep them that way.
+
+  bool get _perSpeakerDecay =>
+      getIsGroupActive() &&
+      !getObserverMode() &&
+      getGroupCounter != null &&
+      setGroupCounter != null;
+
+  String get _decaySpeakerId => getCurrentSpeakerIdForRealism();
+
+  /// Snapshot the two out-of-band registers in the form
+  /// [restoreFromMessageState] reads back. Spread into `realism_state`.
+  Map<String, dynamic> captureCadenceAndFeelings() {
+    final id = _decaySpeakerId;
+    return <String, dynamic>{
+      'turnsSinceDecayCheck': _perSpeakerDecay
+          ? getGroupCounter!(id, 'turnsSinceDecayCheck', defaultValue: 0)
+          : _turnsSinceDecayCheck,
+      if (getIsGroupActive() && getShouldTrackInterCharacterRelationships())
+        'interCharacterRelationships': Map<String, int>.from(
+          getInterCharacterRelationships(id),
+        ),
+    };
   }
 
   // ── Inter-character (verbatim) ─────────────────────────────────────────────
@@ -1004,7 +1052,15 @@ class RelationshipService {
 
   // ── Snapshot / restore support (for message state roundtrips in regen) ─────
 
-  void restoreFromMessageState(Map<dynamic, dynamic> state) {
+  /// [groupSpeakerId] names the member being rewound, and is passed ONLY by the
+  /// regen revert — the one caller that knows which member's turn is being
+  /// undone. Without it a group session skips the two out-of-band registers
+  /// rather than guess: writing the 1:1 scalar would silently do nothing, and
+  /// writing another member's map entry would corrupt them.
+  void restoreFromMessageState(
+    Map<dynamic, dynamic> state, {
+    String? groupSpeakerId,
+  }) {
     _affectionScore = (state['affectionScore'] as int?) ?? _affectionScore;
     _relationshipTier =
         (state['relationshipTier'] as int?) ?? _relationshipTier;
@@ -1020,6 +1076,25 @@ class RelationshipService {
     _fixationLifespan =
         (state['fixationLifespan'] as int?) ?? _fixationLifespan;
     _spatialStance = (state['spatialStance'] as String?) ?? _spatialStance;
+
+    // The pair to captureCadenceAndFeelings. Messages written before these keys
+    // existed simply carry neither, so both stay null and nothing is restored —
+    // which is exactly the old behaviour, not a new failure mode.
+    final cadence = state['turnsSinceDecayCheck'] as int?;
+    final rels = state['interCharacterRelationships'];
+    if (groupSpeakerId != null && groupSpeakerId.isNotEmpty) {
+      if (cadence != null && setGroupCounter != null) {
+        setGroupCounter!(groupSpeakerId, 'turnsSinceDecayCheck', cadence);
+      }
+      if (rels is Map) {
+        setGroupInterCharacterRelationships(
+          groupSpeakerId,
+          rels.map((k, v) => MapEntry(k.toString(), (v as num).toInt())),
+        );
+      }
+    } else if (!getIsGroupActive() && cadence != null) {
+      _turnsSinceDecayCheck = cadence;
+    }
   }
 
   // Minimal surface for regen revert of trust (avoids re-arming the repair window

@@ -217,6 +217,23 @@ A multi-component system spanning `chat_service.dart` (orchestration, `_groupRea
 
 **Known gotcha**: GBNF grammar constraints cause many KoboldCPP models to return empty eval responses. Evals use stop sequences + regex parsing (no grammar). Remote APIs work fine without grammar. **Tools transport (2026-07-06)**: every flat-JSON eval — the 4 realism evals (relationship, emotional, narrative, one-shot), the needs-impact eval, the scene-time/posture eval, the expression reclassifier, and the cast detector — tries native tool calls first (`realism_tools.dart` schemas + the ONE shared negotiation `fireStructuredEval` in `pass_support.dart`, same probe-and-fallback as Journal/Growth via the shared `ToolTransportProbe`); a successful call is converted to the canonical flat-JSON text and flows through the UNCHANGED verifier/parse/apply pipeline, so parity holds by construction. The regex text path remains the floor and the sole path for tool-less backends. Deliberately text-only: the Director/verifier critique output, the AI character creator, and the story pipeline (streaming live-preview + their own repair machinery).
 
+**The eval scores the USER's message, never the character's own reply. Settled
+2026-08-02 — do not re-propose post-generation evaluation.** Evals fire BEFORE
+generation (`_evaluateRealismForUpcomingSpeaker`), so realism deliberately lags
+one exchange. That is the design, not an oversight: bond/trust/emotion answer
+"how does this character feel about what the user just did". If the eval scored
+the reply instead, the character's mood would be set by whichever words the
+model happened to pick for them — so **rerolling a line would reroll their
+feelings**, turning bond and trust into a slot machine the user pulls by
+pressing Regenerate. COROLLARY: **a regen is SUPPOSED to reproduce the same
+deltas.** Its input (the user's message + the pre-turn state) is identical, and
+evals run at temperature 0.1 (`llm_eval_engine.dart`), so an identical prompt
+must give an identical answer. Two regens disagreeing is a **rewind bug** — some
+state the turn changed was not put back — not the engine being lifelike. The
+non-scalar state that regen must rewind lives in `captureCadenceAndFeelings` /
+`restoreFromMessageState` (`relationship_service.dart`); anything new that feeds
+an eval prompt and is NOT a scalar must join that pair.
+
 **One-shot vs Normal Path Parity (strict)**: When `_storageService.realismOneShotEval` is true, `_evaluateOneShotCall` **must** produce 1:1 equivalent outputs for Bond/Trust/Emotion/Arousal/Fixation/Spatial Stance/Time/Needs deltas as the normal multi-call path (relationship + emotional-state + physical-state + narrative calls). The one-shot path exists purely for token/latency optimization — it must not change observable Realism or Needs behavior.
 
 **Realism & Needs Parity (1:1 vs Group)**: Observable behavior (bond/trust deltas, emotion inertia, needs decay + scene rewards + buffers + catastrophes, time advance every 6, climax refractory, etc.) must be identical whether a character is in a 1:1 chat or a group (per-speaker). Orchestration differs (scalar fields vs `_groupRealism` map + load/save + speaker impersonation), but the simulation results and UI must not diverge. Any change touching these areas requires auditing both paths and the "keep reset blocks in sync" sites in `chat_service.dart`.
