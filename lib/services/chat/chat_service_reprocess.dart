@@ -24,7 +24,12 @@ part of '../chat_service.dart';
 /// realism rollback. Extracted verbatim from `chat_service.dart` (zero behaviour
 /// change) to shrink the god file; as `part of` it reaches the private services,
 /// messages, and dance helpers exactly as before.
+
 extension ChatServiceReprocess on ChatService {
+
+  /// Which cast member said [msg]. See [resolveGroupSpeakerForMessage].
+  CharacterCard? _resolveGroupSpeakerForMessage(ChatMessage msg) =>
+      resolveGroupSpeakerForMessage(_groupCharacters, msg);
   Future<bool> manualReprocessNeeds(int index, String critique) async {
     if (index < 0 || index >= _messages.length) return false;
     if (_isTurnBusy) return false;
@@ -60,11 +65,8 @@ extension ChatServiceReprocess on ChatService {
     String? sid;
     CharacterCard? targetSpeakerCard;
     if (isGroupNonObs) {
-      if (_groupCharacters.isEmpty) return false;
-      targetSpeakerCard = _groupCharacters.firstWhere(
-        (c) => c.name == msg.sender,
-        orElse: () => _groupCharacters.first,
-      );
+      targetSpeakerCard = _resolveGroupSpeakerForMessage(msg);
+      if (targetSpeakerCard == null) return false;
       sid = _getCharacterIdFromCard(targetSpeakerCard);
     }
 
@@ -251,11 +253,8 @@ extension ChatServiceReprocess on ChatService {
     String? sid;
     CharacterCard? targetSpeakerCard;
     if (isGroupNonObs) {
-      if (_groupCharacters.isEmpty) return false;
-      targetSpeakerCard = _groupCharacters.firstWhere(
-        (c) => c.name == msg.sender,
-        orElse: () => _groupCharacters.first,
-      );
+      targetSpeakerCard = _resolveGroupSpeakerForMessage(msg);
+      if (targetSpeakerCard == null) return false;
       sid = _getCharacterIdFromCard(targetSpeakerCard);
     }
 
@@ -927,11 +926,12 @@ extension ChatServiceReprocess on ChatService {
         // so the next natural generation continues the correct rotation instead
         // of repeating the same character.
         if (_activeGroup != null) {
-          final originalSpeaker = _groupCharacters.firstWhere(
-            (c) => c.name == lastMsg.sender,
-            orElse: () => _groupCharacters.first,
-          );
-          _groupManager?.advanceAfterRegeneration(originalSpeaker);
+          // Same resolution rule: advancing past the WRONG member would make
+          // the next natural turn repeat a character or skip one.
+          final originalSpeaker = _resolveGroupSpeakerForMessage(lastMsg);
+          if (originalSpeaker != null) {
+            _groupManager?.advanceAfterRegeneration(originalSpeaker);
+          }
         }
       }
     } else if (_messages.last.isUser) {
