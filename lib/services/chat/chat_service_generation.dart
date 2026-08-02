@@ -132,6 +132,26 @@ extension ChatServiceGeneration on ChatService {
       // Guests (guestSpeaker != null) carry no realism.
       if (guestSpeaker == null &&
           _activeGroup != null &&
+          _realismActiveThisMode &&
+          mode == GenerationMode.continue_) {
+        // Continue extends the reply already on screen — the same exchange,
+        // not a new one — so it must NOT re-run the dance: that charged the
+        // speaker a second needs decay tick, a second bond/trust evaluation
+        // and a second clock advance for one turn. The comment above spells
+        // out the intent for 1:1 (its evaluation lives in sendMessage, so a
+        // continuation cannot reach it); the group branch runs inside
+        // _generateResponse and never got the matching guard.
+        //
+        // But it must still LOAD. The previous turn ended by saving this
+        // speaker's scalars back to the map and restoring the pointer to
+        // whoever was active before, so without this the continuation would be
+        // written against another member's bond, trust and needs — the prompt
+        // injection reads the live scalars. Load only: no evaluation, no
+        // second charge, right member.
+        final sid = _getCharacterIdFromCard(speakingCharacter);
+        if (sid.isNotEmpty) _loadGroupRealismIntoScalars(sid);
+      } else if (guestSpeaker == null &&
+          _activeGroup != null &&
           _realismActiveThisMode) {
         await _evaluateRealismForUpcomingSpeaker(speakingCharacter);
         // Cancel-aborts-generation, group edition: the dance leaves the
@@ -1658,7 +1678,12 @@ extension ChatServiceGeneration on ChatService {
           // This makes the invisible tracking react to actual dialogue.
           if (_activeGroup != null &&
               !_observerMode &&
-              finalResponse.isNotEmpty) {
+              finalResponse.isNotEmpty &&
+              // Same one-exchange rule as the two gates around it. This is a
+              // keyword heuristic over the recent text, and after a Continue
+              // the first half of the reply is still in that text — so the
+              // same phrases scored the same feelings a second time.
+              mode != GenerationMode.continue_) {
             // Use the ACTUAL speaker of this turn, not a by-name lookup with a
             // first-member fallback — duplicate display names would otherwise
             // route this member's inter-character feelings to the wrong card.
@@ -1702,7 +1727,15 @@ extension ChatServiceGeneration on ChatService {
               }
             }
 
-            await _runPostGenNeedsChecks(finalResponse);
+            // Skipped on Continue for the same reason: this applies THIS
+            // exchange's scene impact (needs deltas, climax/sexual/daily
+            // checks), and the exchange already had it applied when the reply
+            // was first generated. Running it again applied a second set of
+            // deltas in both 1:1 and group — invisible to the user, because
+            // the chips are not re-attached on a continuation.
+            if (mode != GenerationMode.continue_) {
+              await _runPostGenNeedsChecks(finalResponse);
+            }
 
             // Re-stamp the needs vector inside THIS message's realism_state snapshot
             // with the now-final (post-impact) vector. The snapshot was captured
