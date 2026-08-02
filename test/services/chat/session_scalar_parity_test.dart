@@ -16,8 +16,11 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-// Phase 2 test gate, item 1 of the Realism engine audit: EVERY realism scalar
-// stored on a session must survive a round trip, and both load paths must agree.
+// Phase 2 test gate, item 1 of the Realism engine audit: every realism scalar
+// STORED ON THE SESSION ROW must survive a round trip, and both load paths must
+// agree with each other AND with the values that were written. Scope is
+// deliberately the session row — needs, journal and growth live elsewhere and
+// are not claimed here.
 //
 // Why this file exists, in one sentence: a `required` parameter was accepted by
 // TimeService.loadTimeScalars and then never assigned, so a chat's saved
@@ -89,6 +92,8 @@ void main() {
     'longTerm': chat.relationshipService.longTermScore,
     'trust': chat.relationshipService.trustLevel,
     'fixation': chat.relationshipService.activeFixation,
+    'fixationLifespan': chat.relationshipService.fixationLifespan,
+    'spatialStance': chat.relationshipService.spatialStance,
     'emotion': chat.characterEmotion,
     'emotionIntensity': chat.emotionIntensity,
     'arousal': chat.nsfwService.arousalLevel,
@@ -113,6 +118,9 @@ void main() {
         characterEmotion: const Value('joy'),
         emotionIntensity: const Value('strong'),
         arousalLevel: const Value(25),
+        activeFixation: const Value('the way she hums'),
+        fixationLifespan: const Value(6),
+        spatialStance: const Value('close'),
         chaosModeEnabled: const Value(true),
         chaosPressure: const Value(9),
         passageOfTimeEnabled: Value(passageOfTime),
@@ -141,8 +149,17 @@ void main() {
       );
     });
 
-    test('a saved passage-of-time ON stays on', () async {
+    test('a saved passage-of-time ON survives a chat that had it OFF', () async {
+      // Deliberately ordered: load an OFF chat first so the live flag is false,
+      // THEN load the ON chat. A plain "ON stays on" assertion would also pass
+      // under the original bug, because entering a chat forces the flag true —
+      // it has to be driven from false to be worth anything.
+      await seedRichSession('sess-off2', 'char-a', passageOfTime: false);
       await seedRichSession('sess-on', 'char-b', passageOfTime: true);
+
+      await chat.setActiveCharacter(_card('Alice', 'char-a'));
+      expect(chat.timeService.passageOfTimeEnabled, isFalse);
+
       await chat.setActiveCharacter(_card('Bob', 'char-b'));
       expect(chat.timeService.passageOfTimeEnabled, isTrue);
     });
@@ -180,17 +197,47 @@ void main() {
       await chat.loadSession('sess-full');
       final viaPicker = liveScalars();
 
-      // Compare field by field so a failure says WHICH scalar drifted.
-      for (final key in viaLibrary.keys) {
+      // THREE-WAY, on purpose. Asserting only that the two paths agree is the
+      // same shape as the stale tests this gate exists to replace: if BOTH
+      // paths drop the same scalar they agree perfectly and the test stays
+      // green while the value is gone. Each path is therefore also compared
+      // against the literals the row was seeded with.
+      const oracle = {
+        'affection': 77,
+        'longTerm': 41,
+        'trust': 33,
+        'fixation': 'the way she hums',
+        'fixationLifespan': 6,
+        'spatialStance': 'close',
+        'emotion': 'joy',
+        'emotionIntensity': 'strong',
+        'arousal': 25,
+        'chaosEnabled': true,
+        'chaosPressure': 9,
+        'passageOfTime': false,
+        'dayCount': 4,
+      };
+
+      for (final key in oracle.keys) {
+        expect(
+          viaLibrary[key],
+          oracle[key],
+          reason: '"$key" was not restored by the library path',
+        );
         expect(
           viaPicker[key],
-          viaLibrary[key],
-          reason:
-              '"$key" differs between the two load paths — they must go '
-              'through the same hydrate. library=${viaLibrary[key]} '
-              'picker=${viaPicker[key]}',
+          oracle[key],
+          reason: '"$key" was not restored by the picker path',
         );
       }
+      expect(
+        viaLibrary.keys.toSet(),
+        oracle.keys.toSet(),
+        reason:
+            'liveScalars() and the oracle must cover the same fields — a '
+            'scalar added to one and not the other is an untested field '
+            'masquerading as a tested one',
+      );
     });
 
     test('the values that come back are the values that were stored', () async {
@@ -209,6 +256,10 @@ void main() {
       expect(chat.chaosModeService.chaosModeEnabled, isTrue);
       expect(chat.chaosModeService.chaosPressure, 9);
       expect(chat.timeService.passageOfTimeEnabled, isFalse);
+      expect(chat.timeService.dayCount, 4);
+      expect(chat.relationshipService.activeFixation, 'the way she hums');
+      expect(chat.relationshipService.fixationLifespan, 6);
+      expect(chat.relationshipService.spatialStance, 'close');
     });
   });
 }

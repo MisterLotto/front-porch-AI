@@ -28,7 +28,10 @@
 // ITEM 3 — the per-speaker round trip, at the leaf. In a group every member's
 // relationship state is swapped in and out of one shared set of scalars on
 // every turn. If a field is written by save and not read by load (or vice
-// versa) one character silently inherits another's feelings. The existing
+// versa) one character silently inherits another's feelings. Covers the eight
+// fields saveRelationshipScalarsToGroup actually writes — the three scores, the
+// two fixation fields, spatial stance and both tiers. The bond-decay counter it
+// also writes through setGroupCounter is not covered here. The existing
 // realism_parity_test hand-rolls its own load/save pair rather than driving the
 // real ones, so it cannot catch a field that the real methods forget.
 //
@@ -173,7 +176,9 @@ void main() {
       expect(svc.trustLevel, 100, reason: 'trust does not');
     });
 
-    test('the seed path clamps too, and agrees with the delta path', () {
+    // Long-term bond has no public per-turn delta mutator (it grows inside the
+    // relationship pass), so its bound is only reachable through the seed path.
+    test('the seed path clamps to the same bounds', () {
       final svc = _svc()..seedFromCardV2OrExt(
         shortTermBond: 9999,
         longTermBond: -9999,
@@ -199,13 +204,19 @@ void main() {
 
       svc.saveRelationshipScalarsToGroup('alice');
 
-      // Wipe the working registers the way switching speakers does.
-      svc.loadScalars(
-        affectionScore: 0,
-        longTermScore: 0,
-        trustLevel: 0,
-      );
-      expect(svc.affectionScore, 0, reason: 'sanity: registers really cleared');
+      // Wipe the working registers the way switching speakers does, and prove
+      // the wipe is total before reloading. Without this, a load that simply
+      // FAILS to overwrite an omitted field would look like a successful
+      // round trip — the value would still be sitting there from before.
+      svc.loadScalars(affectionScore: 0, longTermScore: 0, trustLevel: 0);
+      expect(svc.affectionScore, 0);
+      expect(svc.longTermScore, 0);
+      expect(svc.trustLevel, 0);
+      expect(svc.activeFixation, isEmpty);
+      expect(svc.fixationLifespan, 0);
+      expect(svc.spatialStance, isEmpty,
+          reason: 'the omitted-field defaults must clear, or the round trip '
+              'below proves nothing');
 
       svc.loadRelationshipScalarsForSpeaker('alice');
 
@@ -215,16 +226,25 @@ void main() {
       expect(svc.activeFixation, 'her laugh');
       expect(svc.fixationLifespan, 5);
       expect(svc.spatialStance, 'close');
+      // The real save writes tiers too — 8 fields, not 6. Derived from the
+      // scores, so a load that restored scores but not tiers would show the
+      // right number under the wrong word.
+      expect(svc.relationshipTier, RelationshipService.bondTierFor(123));
+      expect(svc.longTermTier, RelationshipService.bondTierFor(45));
     });
 
     test('two members keep separate state — no bleed between speakers', () {
       final svc = _svc();
 
+      // Every field differs between the two, so a single shared slot fails on
+      // whichever one it clobbers — not just on bond.
       svc.loadScalars(
         affectionScore: 200,
         longTermScore: 150,
         trustLevel: 80,
         activeFixation: 'alice-thing',
+        fixationLifespan: 7,
+        spatialStance: 'close',
       );
       svc.saveRelationshipScalarsToGroup('alice');
 
@@ -233,22 +253,47 @@ void main() {
         longTermScore: -20,
         trustLevel: -10,
         activeFixation: 'bob-thing',
+        fixationLifespan: 2,
+        spatialStance: 'distant',
       );
       svc.saveRelationshipScalarsToGroup('bob');
 
+      Map<String, Object?> snapshot() => {
+        'affection': svc.affectionScore,
+        'longTerm': svc.longTermScore,
+        'trust': svc.trustLevel,
+        'fixation': svc.activeFixation,
+        'lifespan': svc.fixationLifespan,
+        'stance': svc.spatialStance,
+      };
+
+      const alice = {
+        'affection': 200,
+        'longTerm': 150,
+        'trust': 80,
+        'fixation': 'alice-thing',
+        'lifespan': 7,
+        'stance': 'close',
+      };
+      const bob = {
+        'affection': -50,
+        'longTerm': -20,
+        'trust': -10,
+        'fixation': 'bob-thing',
+        'lifespan': 2,
+        'stance': 'distant',
+      };
+
       svc.loadRelationshipScalarsForSpeaker('alice');
-      expect(svc.affectionScore, 200);
-      expect(svc.activeFixation, 'alice-thing');
+      expect(snapshot(), alice);
 
       svc.loadRelationshipScalarsForSpeaker('bob');
-      expect(svc.affectionScore, -50);
-      expect(svc.activeFixation, 'bob-thing');
+      expect(snapshot(), bob);
 
       // And back again — loading bob must not have disturbed alice's slot.
       svc.loadRelationshipScalarsForSpeaker('alice');
-      expect(svc.affectionScore, 200);
-      expect(svc.trustLevel, 80);
-      expect(svc.activeFixation, 'alice-thing');
+      expect(snapshot(), alice,
+          reason: 'alice must be untouched by bob having spoken');
     });
 
     test('a CLEARED fixation propagates — not just a set one', () {
