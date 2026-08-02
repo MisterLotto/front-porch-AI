@@ -97,9 +97,14 @@ class _GroupRealismDynamicsEditorState
     // Detect the group-wide needs toggle from the ACTUAL stored seeds (a
     // realism-on/needs-off group has no `needs` sub-map). Fresh/realism-off
     // groups default to needs on, matching the creator.
+    // Prefer the explicit flag; fall back to the old presence-inference only
+    // for groups saved before it existed. The inference was load-bearing, so
+    // correcting or removing the needs map could silently switch Needs off.
     _needsEnabled = parsed.isEmpty
         ? true
         : parsed.values.any((s) {
+            final explicit = s['needsEnabled'];
+            if (explicit is bool) return explicit;
             final n = s['needs'];
             return n is Map && n.isNotEmpty;
           });

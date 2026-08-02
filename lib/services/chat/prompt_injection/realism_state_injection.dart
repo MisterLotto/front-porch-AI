@@ -116,21 +116,46 @@ class RealismStateInjection {
     return getActiveCharacter()?.name ?? 'the character';
   }
 
-  String buildRealismStateInjection() {
-    if (!getRealismEnabled()) return '';
+  /// SCENE FACTS: where and when the scene is, what this character is working
+  /// toward, and what they owe. Four of the fragments below are these, and not
+  /// one of them contains a realism check of its own — time_injection has no
+  /// gate at all, weather gates on the weather being null, and ambitions and
+  /// promises gate on having any.
+  ///
+  /// They are gated on realism here anyway, because that is what shipped and
+  /// changing it is a PRODUCT decision rather than a cleanup: a realism-off
+  /// user would start receiving a story-time line, their ambitions and their
+  /// open promises — new prompt content and new tokens they do not pay for
+  /// today. Flipping this getter is the entire change when that decision is
+  /// made; it was previously impossible to make without unpicking the composer.
+  bool get _sceneFactsEnabled => getRealismEnabled();
 
+  /// CHARACTER STATE: how this character is right now. Genuinely realism, and
+  /// correctly gated.
+  bool get _characterStateEnabled => getRealismEnabled();
+
+  String buildRealismStateInjection() {
+    // No blanket early return. One gate used to sit here and silently delete
+    // all eleven fragments — including the four that are not realism features —
+    // which made the coupling invisible to anyone reading a single builder.
+    // Each fragment now declares which gate it answers to, in the original
+    // order, so the emitted prompt is unchanged while the dependency is legible.
     final fragments = <String>[
-      timeInjection.buildTimeInjection(),
-      weatherInjection.buildWeatherInjection(),
-      relationshipInjection.buildRelationshipInjection(),
-      relationshipInjection.buildTrustBehaviorInjection(),
-      emotionInjection.buildEmotionInjection(),
-      needsInjection.buildNeedsInjection(),
-      nsfwInjection.buildNsfwCooldownInjection(),
-      ambitionInjection.buildAmbitionInjection(),
-      promiseDebtInjection.buildPromiseDebtInjection(),
-      behavioralInjection.buildBehavioralMechanicsInjection(),
-      relationshipInjection.buildInterCharacterFeelingsInjection(),
+      if (_sceneFactsEnabled) timeInjection.buildTimeInjection(),
+      if (_sceneFactsEnabled) weatherInjection.buildWeatherInjection(),
+      if (_characterStateEnabled)
+        relationshipInjection.buildRelationshipInjection(),
+      if (_characterStateEnabled)
+        relationshipInjection.buildTrustBehaviorInjection(),
+      if (_characterStateEnabled) emotionInjection.buildEmotionInjection(),
+      if (_characterStateEnabled) needsInjection.buildNeedsInjection(),
+      if (_characterStateEnabled) nsfwInjection.buildNsfwCooldownInjection(),
+      if (_sceneFactsEnabled) ambitionInjection.buildAmbitionInjection(),
+      if (_sceneFactsEnabled) promiseDebtInjection.buildPromiseDebtInjection(),
+      if (_characterStateEnabled)
+        behavioralInjection.buildBehavioralMechanicsInjection(),
+      if (_characterStateEnabled)
+        relationshipInjection.buildInterCharacterFeelingsInjection(),
     ].where((f) => f.trim().isNotEmpty).map((f) => f.trim()).toList();
 
     if (fragments.isEmpty) return '';

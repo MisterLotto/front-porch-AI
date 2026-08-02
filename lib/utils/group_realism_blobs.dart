@@ -96,13 +96,24 @@ Map<String, dynamic> defaultGroupMemberRealismSeed() => {
   'emotionIntensity': 'mild',
   'timeOfDay': 'morning',
   'dayCount': 1,
+  // The engine's key set, exactly: NeedsSimulation.needKeys. This map used to
+  // carry 'thirst' and 'rest', which exist nowhere else in the codebase, while
+  // omitting 'energy', 'fun' and 'comfort', which are real. So a new group
+  // member started with two needs the simulation ignores and three silently
+  // filled from defaults — and the per-member baseline sliders in the group
+  // wizard, which write into this shape, could not reach half the needs.
+  //
+  // Values are NeedsSimulation.needDefaults, so a seeded member and a member
+  // who falls back to defaults now start in the same place instead of two
+  // different ones.
   'needs': <String, int>{
-    'hunger': 70,
-    'thirst': 75,
-    'rest': 65,
-    'social': 60,
-    'hygiene': 80,
-    'bladder': 85,
+    'hunger': 75,
+    'bladder': 80,
+    'energy': 80,
+    'social': 65,
+    'fun': 65,
+    'hygiene': 75,
+    'comfort': 70,
   },
   'enjoysLowHygiene': false,
   'verificationEnabled': false,

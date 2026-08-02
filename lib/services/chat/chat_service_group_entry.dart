@@ -191,7 +191,11 @@ extension ChatServiceGroupEntry on ChatService {
         _realismEnabled = true;
         // Infer needs from whether the seeded per-char states actually contain needs data.
         // (Creator omits the 'needs' sub-map entirely when the user disabled Needs in the wizard.)
+        // Explicit flag first; the presence-inference below is the legacy
+        // path for groups saved before it existed.
         _needsSimEnabled = _groupRealism.values.any((state) {
+          final explicit = state['needsEnabled'];
+          if (explicit is bool) return explicit;
           final n = state['needs'];
           return n is Map && n.isNotEmpty;
         });
