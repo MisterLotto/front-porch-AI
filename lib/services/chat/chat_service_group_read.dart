@@ -81,6 +81,28 @@ extension ChatServiceGroupRead on ChatService {
     return (_groupRealism[id]?['affection'] as num?)?.toInt() ?? 0;
   }
 
+  /// Long-term bond for one group member.
+  ///
+  /// This accessor was simply missing, and both clients worked around its
+  /// absence by showing something else: the desktop member card passed the
+  /// SHORT-term score to both bond rows, and the web facade hard-coded 0 under
+  /// a comment claiming long-term is not tracked per member. It is — the
+  /// per-speaker load/save pair moves `longTermScore` in and out of the group
+  /// blob on every turn, and it grows on its own cadence, so it genuinely
+  /// diverges from short-term.
+  ///
+  /// Falls back to short-term when the key is absent, matching what
+  /// [RelationshipService.loadRelationshipScalarsForSpeaker] does when it seeds
+  /// a member who predates the key.
+  int getLongTermForGroupCharacter(CharacterCard character) {
+    if (!isGroupRealismActive) return 0;
+    final id = _getCharacterIdFromCard(character);
+    final entry = _groupRealism[id];
+    return (entry?['longTermScore'] as num?)?.toInt() ??
+        (entry?['affection'] as num?)?.toInt() ??
+        0;
+  }
+
   int getTrustForGroupCharacter(CharacterCard character) {
     if (!isGroupRealismActive) return 0;
     final id = _getCharacterIdFromCard(character);

@@ -48,7 +48,14 @@ class ChatRealismRead {
       final arousalLevel = _chat.getArousalForGroupCharacter(card);
       // Per-member tier names + bar percents via the shared relationship/nsfw
       // scale helpers, so a group member's stats read IDENTICALLY to the 1:1 host
-      // (no blank tiers / empty bars). Long-term isn't tracked per member → 0.
+      // (no blank tiers / empty bars).
+      //
+      // Long-term WAS hard-coded to 0 here under a comment claiming it "isn't
+      // tracked per member". It is: the per-speaker load/save pair moves
+      // longTermScore through the group blob every turn and it grows on its own
+      // cadence. Web therefore showed every member as Neutral/0 forever while
+      // desktop showed a real number.
+      final longTermScore = _chat.getLongTermForGroupCharacter(card);
       return {
         'realismEnabled': true,
         'bond': {
@@ -57,9 +64,9 @@ class ChatRealismRead {
           'percent': rel.bondPercentForScore(bondScore),
         },
         'longTerm': {
-          'score': 0,
-          'tier': rel.longTermTierNameForScore(0),
-          'percent': 0,
+          'score': longTermScore,
+          'tier': rel.longTermTierNameForScore(longTermScore),
+          'percent': rel.bondPercentForScore(longTermScore),
         },
         'trust': {
           'level': trustLevel,

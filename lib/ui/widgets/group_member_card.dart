@@ -21,6 +21,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/services/chat/chat.dart';
 import 'package:front_porch_ai/ui/pages/edit_group_page.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/theme/tier_colors.dart';
@@ -92,6 +93,9 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
     final affection = isRealism
         ? chat.getAffectionForGroupCharacter(widget.character)
         : 0;
+    final longTerm = isRealism
+        ? chat.getLongTermForGroupCharacter(widget.character)
+        : 0;
     final trust = isRealism
         ? chat.getTrustForGroupCharacter(widget.character)
         : 0;
@@ -111,19 +115,28 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
         ? chat.getTopUrgentNeedsForGroupCharacter(widget.character, count: 2)
         : const <(String, int)>[];
 
-    final bondTier = TierColors.calcTier(affection);
-    final bondName = TierColors.tierName(bondTier);
+    final bondTier = RelationshipService.bondTierFor(affection);
+    final bondName = RelationshipService.bondTierLabel(bondTier);
+    final longTermTier = RelationshipService.bondTierFor(longTerm);
+    final longTermName = RelationshipService.longTermTierLabel(longTermTier);
     final bondColor = TierColors.tierColor(context, bondTier);
 
-    final trustTier = TierColors.calcTier(trust);
-    final trustName = TierColors.tierName(trustTier);
+    final trustTier = RelationshipService.bondTierFor(trust);
+    // Trust has its own vocabulary ('Deeply Trusting'), and it is a +/-100
+    // scale. Using the bond table here printed bond words like 'Smitten'
+    // against a trust score.
+    final trustName = RelationshipService.trustTierLabel(trustTier);
     final trustColor = TierColors.tierColor(context, trustTier);
 
     // Lust visibility follows the stable per-member group flag (the live
     // nsfwService scalar is per-speaker-volatile in groups).
     final lustOn = chat.isGroupNsfwEnabled;
-    final arousalTier = TierColors.calcTier(arousal);
-    final arousalName = chat.nsfwService.arousalTierName;
+    // Arousal has its own ±100 ladder (level ÷ 10) and its own vocabulary, and
+    // both must be read for THIS member. The tier came from the bond ladder,
+    // and the name came from nsfwService.arousalTierName — the LIVE SPEAKER's
+    // scalar — so in a group every member's card showed whoever spoke last.
+    final arousalTier = NsfwService.arousalTierForLevel(arousal);
+    final arousalName = chat.nsfwService.arousalTierNameForLevel(arousal);
     final arousalColor = arousalTier >= 6
         ? AppColors.lustDeepOf(context)
         : arousalTier <= -1
@@ -361,14 +374,15 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                   ),
                   const SizedBox(height: 8),
 
-                  // Long-Term Bond (exact 1:1 treatment — separate row even if data shares affection)
+                  // Long-Term Bond. This row was fed `affection` — the SHORT
+                  // term score — so the card drew the same number twice.
                   RealismProgressRow(
                     label: 'Long-Term Bond',
-                    value: affection,
-                    tier: bondTier,
-                    tierName: bondName,
-                    color: bondColor,
-                    icon: affection < 0
+                    value: longTerm,
+                    tier: longTermTier,
+                    tierName: longTermName,
+                    color: TierColors.tierColor(context, longTermTier),
+                    icon: longTerm < 0
                         ? Icons.heart_broken_sharp
                         : Icons.monitor_heart,
                   ),

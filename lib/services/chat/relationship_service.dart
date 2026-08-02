@@ -457,7 +457,14 @@ class RelationshipService {
 
   // ── Core logic (verbatim mechanical extraction) ───────────────────────────
 
-  int _calculateTier(int score) {
+  int _calculateTier(int score) => bondTierFor(score);
+
+  /// The canonical bond tier ladder. THE one definition — `TierColors.calcTier`
+  /// used to carry a second, hand-copied version of this that had drifted at
+  /// three rungs (75/110/150 instead of 80/120/160), so a bond of 76 was tier 4
+  /// to the engine and tier 5 on the group member card. Anything that needs a
+  /// tier from a bond score calls this.
+  static int bondTierFor(int score) {
     final absScore = score.abs();
     if (absScore < 5) return 0;
     if (absScore < 15) return score > 0 ? 1 : -1;

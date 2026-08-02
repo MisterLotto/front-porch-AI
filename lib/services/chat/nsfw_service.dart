@@ -91,12 +91,19 @@ class NsfwService {
   int get arousalLevel => _arousalLevel;
 
   /// Calculate arousal tier from level score (-100 to +100)
-  int get arousalTier {
+  int get arousalTier => arousalTierForLevel(_arousalLevel);
+
+  /// Pure arousal tier index for a level (-100..100), so per-member consumers
+  /// can ask about somebody OTHER than the live speaker.
+  ///
+  /// Arousal is a ±100 scale and its tiers are simply level ÷ 10. Without this
+  /// the group member card borrowed the BOND ladder (a ±300 scale with bands at
+  /// 5/15/30/50/80/…), which put an arousal of 60 at tier 4 instead of 6.
+  static int arousalTierForLevel(int level) {
     // Convert -100 to +100 scale to tier index -10 to +10
     // Each tier represents 10 points
-    final raw = _arousalLevel ~/ 10; // integer division
-    final tierIndex = raw > 10 ? 10 : (raw < -10 ? -10 : raw);
-    return tierIndex;
+    final raw = level ~/ 10; // integer division
+    return raw > 10 ? 10 : (raw < -10 ? -10 : raw);
   }
 
   /// Get arousal tier name matching the relationship system
