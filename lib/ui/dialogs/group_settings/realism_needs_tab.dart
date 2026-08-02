@@ -122,9 +122,36 @@ class _GroupRealismNeedsTabState extends State<GroupRealismNeedsTab> {
 
       // Load editable realism baselines from baseline seed + card extensions.
       final seed = _baselineSeeds[id]!;
-      _editShortTermBond[id] = (seed['affection'] as num?)?.toInt() ?? 50;
-      _editLongTermBond[id] = (seed['trust'] as num?)?.toInt() ?? 50;
-      _editTrustLevel[id] = (seed['trust'] as num?)?.toInt() ?? 50;
+      // These three must map to the three keys the engine actually reads:
+      // affection / longTermScore / trust. Long-Term Bond used to LOAD from
+      // 'trust' and, worse, SAVE into it — so dragging a ±300 bond slider
+      // overwrote the ±100 trust baseline, while Trust Level never persisted
+      // at all. longTermScore falls back to affection, matching what
+      // RelationshipService does when seeding a member that predates the key.
+      final rawTrust = (seed['trust'] as num?)?.toInt();
+      final rawLongTerm = (seed['longTermScore'] as num?)?.toInt();
+
+      // Repair for groups edited under the old code. Back then this editor
+      // SAVED the Long-Term Bond slider into 'trust', so a group that was ever
+      // edited has a ±300 bond number sitting in a ±100 trust field. Left
+      // alone, that value now reaches a Slider declared min -100 / max 100,
+      // which asserts and takes the whole Group Settings dialog down.
+      //
+      // |trust| > 100 is impossible for a real trust value, so when there is
+      // also no 'longTermScore' the number can only have come from that slider.
+      // Move it back where it was meant to go and give trust its default —
+      // the old code never stored a real trust value, so there is none to
+      // recover, and inventing one from a bond score would be worse.
+      final poisoned = rawLongTerm == null && rawTrust != null && rawTrust.abs() > 100;
+
+      _editShortTermBond[id] = ((seed['affection'] as num?)?.toInt() ?? 50)
+          .clamp(-300, 300);
+      _editLongTermBond[id] =
+          (poisoned
+                  ? rawTrust
+                  : rawLongTerm ?? (seed['affection'] as num?)?.toInt() ?? 50)
+              .clamp(-300, 300);
+      _editTrustLevel[id] = (poisoned ? 50 : rawTrust ?? 50).clamp(-100, 100);
       _editEmotion[id] = (seed['emotion'] as String?) ?? 'neutral';
       _editEmotionIntensity[id] =
           (seed['emotionIntensity'] as String?) ?? 'moderate';
@@ -252,7 +279,8 @@ class _GroupRealismNeedsTabState extends State<GroupRealismNeedsTab> {
     try {
       widget.chatService.setBaselineSeedForGroupCharacter(char, {
         'affection': _editShortTermBond[id] ?? 50,
-        'trust': _editLongTermBond[id] ?? 50,
+        'longTermScore': _editLongTermBond[id] ?? 50,
+        'trust': _editTrustLevel[id] ?? 50,
         'emotion': _editEmotion[id] ?? 'neutral',
         'emotionIntensity': _editEmotionIntensity[id] ?? 'moderate',
       });
@@ -372,14 +400,15 @@ class _GroupRealismNeedsTabState extends State<GroupRealismNeedsTab> {
     setState(() {
       _chaosModeEnabled = value;
     });
-    widget.chatService.chaosModeService.setModeEnabled(value);
+    // ChatService wrapper — saves + notifies (the raw service does neither).
+    widget.chatService.setChaosModeEnabled(value);
   }
 
   void _updateChaosNsfw(bool value) {
     setState(() {
       _chaosNsfwEnabled = value;
     });
-    widget.chatService.chaosModeService.setNsfwEnabled(value);
+    widget.chatService.setChaosNsfwEnabled(value);
   }
 
   void _updateNsfwEnhancements(bool value) {

@@ -88,8 +88,19 @@ extension ChatServiceSpeakerObjectives on ChatService {
       baseline = {};
     }
 
+    // NOTE: this REPLACES the per-character entry with exactly this shape, so a
+    // key missing here is silently dropped no matter what the caller passes.
+    // 'longTermScore' was missing, which is half of why the Group Settings
+    // "Long-Term Bond" slider never persisted — the editor wrote it into
+    // 'trust' instead, and even the correct key would have been discarded here.
+    // Defaults to affection, matching how RelationshipService seeds a member
+    // that predates the key.
     baseline[charId] = {
       'affection': (values['affection'] as num?)?.toInt() ?? 50,
+      'longTermScore':
+          (values['longTermScore'] as num?)?.toInt() ??
+          (values['affection'] as num?)?.toInt() ??
+          50,
       'trust': (values['trust'] as num?)?.toInt() ?? 50,
       'emotion': (values['emotion'] as String?) ?? 'neutral',
       'emotionIntensity': (values['emotionIntensity'] as String?) ?? 'moderate',

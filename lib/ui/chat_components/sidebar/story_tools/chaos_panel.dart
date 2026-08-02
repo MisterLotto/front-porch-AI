@@ -53,7 +53,12 @@ class ChaosPanel extends StatelessWidget {
           accent: AppColors.chaosAccentOf(context),
           trailing: Switch(
             value: enabled,
-            onChanged: (v) => chat.chaosModeService.setModeEnabled(v),
+            // Route through ChatService, not the raw service: the wrapper
+            // also saves the chat and notifies listeners. Calling the
+            // service directly left the sidebar showing a stale value until
+            // something else happened to repaint. The web facade already
+            // uses the wrapper.
+            onChanged: (v) => chat.setChaosModeEnabled(v),
             activeThumbColor: AppColors.chaosAccentOf(context),
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
@@ -110,7 +115,7 @@ class ChaosPanel extends StatelessWidget {
                 height: 24,
                 child: Switch(
                   value: chat.chaosNsfwEnabled,
-                  onChanged: (v) => chat.chaosModeService.setNsfwEnabled(v),
+                  onChanged: (v) => chat.setChaosNsfwEnabled(v),
                   activeThumbColor: AppColors.lustAccentOf(context),
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),

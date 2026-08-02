@@ -1966,7 +1966,12 @@ class _CreateGroupChatPageState extends State<CreateGroupChatPage> {
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
                     child: Text(
-                      'All realism features (bond, trust, emotion, needs, fixation, chaos pressure, etc.) are disabled for this group while the master toggle is off.',
+                      // Chaos deliberately left OUT of this list: Chance Time
+                      // pressure builds and fires regardless of the master
+                      // toggle (the pressure tick sits above the realism gate
+                      // in sendMessage). Naming it here promised users
+                      // something the engine does not do.
+                      'Bond, trust, emotion, needs and fixation are not tracked for this group while the master toggle is off. Chaos Mode is separate and keeps working.',
                       style: TextStyle(
                         fontSize: 11,
                         color: AppColors.textTertiary(context),
