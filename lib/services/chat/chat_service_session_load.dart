@@ -384,9 +384,15 @@ extension ChatServiceSessionLoad on ChatService {
       startDayOfWeek: s.startDayOfWeek,
       storyClock: s.storyClock,
       storyStartDate: s.storyStartDate,
-      passageOfTimeEnabled:
-          s.passageOfTimeEnabled &&
-          _storageService.realismSettings.passageOfTimeDefault,
+      // The saved per-chat value, NOT AND-ed with the global default. That
+      // global is a seed-time ceiling: the four seedFromV2OrExt callers apply
+      // it when a chat is first created ("Global ceiling applied before
+      // passing"). Applying it again on every load would let switching the
+      // global off retroactively disable time in chats the user had already
+      // turned it on for. Until now the AND was computed and then thrown away
+      // by loadTimeScalars, so it was inert; assigning the parameter without
+      // removing it here would have quietly switched that behaviour on.
+      passageOfTimeEnabled: s.passageOfTimeEnabled,
     );
     _nsfwService.loadNsfwScalars(
       nsfwCooldownEnabled: s.nsfwCooldownEnabled,

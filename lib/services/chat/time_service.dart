@@ -205,6 +205,15 @@ class TimeService {
     String? storyClock,
     String? storyStartDate,
   }) {
+    // Load-bearing: this was declared `required` and then never assigned, so a
+    // chat's saved setting was read out of the database, handed to us, and
+    // dropped. Because TimeService outlives a single chat, the value left over
+    // from whatever came before stayed in place — and since entering a chat
+    // runs resetForFreshChat() first (which forces true), a saved `false` could
+    // never survive a reopen, and the next save wrote `true` back over it. The
+    // setting was not merely ignored; it was destroyed.
+    _passageOfTimeEnabled = passageOfTimeEnabled;
+
     final clock = StoryClock.parse(storyClock);
     final anchor = StoryClock.parse(storyStartDate);
     if (clock != null && anchor != null) {
