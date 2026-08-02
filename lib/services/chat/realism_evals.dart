@@ -1017,7 +1017,38 @@ class RealismEvals {
         buildPrompt: buildPrompt,
         onChunk: onChunk,
       );
-      if (raw == null) return;
+      if (raw == null) {
+        // PARITY. The four-call path reaches TimeService unconditionally, and
+        // when its own scene-time eval returns nothing it drifts the clock by
+        // StoryClock.failureDriftMinutes — "deterministic drift so time never
+        // freezes", as that path's own comment puts it. One-shot returned here,
+        // more than a hundred lines before its clock call, so ONE failed
+        // evaluation (backend down, empty reply, timeout) froze the story clock
+        // for the whole turn. The project's strictest written rule is that
+        // one-shot must be 1:1 equivalent to the four-call path; this is the
+        // failure case of that rule.
+        //
+        // An empty oneShotText takes the same branch the four-call path takes:
+        // oneShotMode makes no LLM call, minutes parse as null so the drift
+        // applies, and an OOC time skip that already moved the clock this turn
+        // still suppresses it.
+        await timeService.evaluateTimeProgressAndPostureIfNeeded(
+          charName: charName,
+          recent: recent,
+          shortTermTierName: relationshipService.shortTermTierName,
+          onChunk: onChunk,
+          fireLLMEval: fireLLMEval,
+          stripThinkBlocks: stripThinkBlocks,
+          extractJsonBool: extractJsonBool,
+          setSpatialStance: relationshipService.setSpatialStance,
+          getCurrentSpatialStance: () => relationshipService.spatialStance,
+          getCharacterEmotion: getCharacterEmotion,
+          getEmotionIntensity: getEmotionIntensity,
+          oneShotMode: true,
+          oneShotText: '',
+        );
+        return;
+      }
 
       final searchText = stripThinkBlocks(raw);
       final text = searchText.isNotEmpty ? searchText : raw;
