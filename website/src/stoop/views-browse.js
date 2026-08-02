@@ -261,8 +261,8 @@
         ]),
         el('p', null, [
           '⚠️ ',
-          el('strong', null, 'Rawhide (nightly) builds only for now'),
-          ' — the current stable release can’t import .fpworld files yet. Worlds support reaches stable with the next release.',
+          el('strong', null, 'Needs Front Porch AI 1.2 or newer'),
+          ' — the portable .fpworld file arrived in 1.2, so older versions can’t open one. Update the app first, then import.',
         ]),
       ]),
     ]);
@@ -410,8 +410,8 @@
               'Import it in the app under ',
               el('strong', null, 'Worlds → Import Place'),
               ', then attach it to any character or chat. ',
-              el('strong', null, '⚠️ Rawhide (nightly) builds only for now'),
-              ' — the current stable release can’t import .fpworld files yet.',
+              el('strong', null, '⚠️ Needs Front Porch AI 1.2 or newer'),
+              ' — the portable .fpworld file arrived in 1.2, so older versions can’t open one.',
             ]),
           ])
         : isGroup

@@ -221,7 +221,7 @@
         if (!json) { restore(); toast('That world couldn’t be downloaded.', 'err'); return; }
         saveFile(JSON.stringify(json, null, 2), safe + '.fpworld', 'application/json');
         restore();
-        toast('World saved! Import it under Worlds → Import Place — Rawhide (nightly) builds only for now.');
+        toast('World saved! Import it under Worlds → Import Place — needs Front Porch AI 1.2 or newer.');
         return;
       }
       var done = function () {
@@ -251,21 +251,25 @@
   function confirmAdult(onConfirm) {
     dialog('Adults only (18+)', [
       el('p', { class: 'hub-dim' },
-        'The Stoop is strictly for adults. NSFW cards can include explicit adult content. ' +
+        'The Stoop is strictly for adults. NSFW cards can include adult writing and suggestive art. ' +
         'By continuing you confirm that you are 18 years of age or older.'),
       el('p', { class: 'hub-dim hub-small' },
-        'Making a free account remembers this and unlocks voting, following, and sharing your own cards.'),
+        'Making a free account remembers this and unlocks voting, following, and — once you ' +
+        'confirm your email — sharing your own cards.'),
     ], [
       { label: 'Cancel', kind: 'btn-ghost' },
       { label: 'I’m 18 or older — show NSFW', kind: 'btn-amber', onclick: function () { onConfirm(); } },
     ]);
   }
 
-  /** Banner for a signed-in user whose address isn't confirmed yet. Sharing is
-      the ONLY thing this blocks — browsing and downloading stay open — so the
-      wording says exactly that instead of sounding like a lockout. Returns null
-      when there's nothing to say (verified, or an older server that doesn't
-      report the field at all). */
+  /** Banner for a signed-in user whose address isn't confirmed yet. Two things
+      stay locked until they confirm: sharing their own cards (the upload
+      endpoint rejects with `email_not_verified`) and setting a profile picture
+      (`canAvatar` in views-inbox.js). Browsing and downloading stay open, so
+      the wording names both blocked things instead of sounding like a total
+      lockout — or, worse, like confirming only matters to uploaders. Returns
+      null when there's nothing to say (verified, or an older server that
+      doesn't report the field at all). */
   function verifyBanner(onVerified) {
     Api = Api || window.Stoop.api;
     var u = Api.state.user;
@@ -292,9 +296,10 @@
     return el('div', { class: 'hub-verify-banner' }, [
       el('span', { class: 'hub-verify-ico' }, '\u2709\uFE0F'),
       el('div', { class: 'hub-verify-text' }, [
-        el('strong', null, 'Confirm your email to share your own cards.'),
-        el('p', null, 'We sent a link to ' + (u.email || 'your address') +
-          '. Browsing and downloading work without it \u2014 confirming is only needed to upload.'),
+        el('strong', null, 'Confirm your email to share cards and set a profile photo.'),
+        el('p', null, 'I sent a link to ' + (u.email || 'your address') +
+          '. Browsing and downloading work without it \u2014 confirming is what unlocks ' +
+          'sharing your own cards and adding a profile photo.'),
       ]),
       btn,
     ]);
