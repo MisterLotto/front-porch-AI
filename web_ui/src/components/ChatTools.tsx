@@ -503,9 +503,21 @@ export function ChatTools({
               </div>
             ))}
           </div>
+          {/* Disabled with realism off. The server's nudgeTimePeriod returns
+              immediately in that state, so these used to be dead clicks: a 200
+              response and a clock that never moved. Desktop hides them; the
+              calendar modal below already gated on the same flag. */}
           <div className="tool-row">
-            <button onClick={() => apply(api.post<ToolsState>(`/api/chat/tools/time${q}`, { delta: -1 }))}>◀ Earlier</button>
-            <button onClick={() => apply(api.post<ToolsState>(`/api/chat/tools/time${q}`, { delta: 1 }))}>Later ▶</button>
+            <button
+              disabled={!t.realismEnabled}
+              title={t.realismEnabled ? undefined : 'Realism Mode is off, so the story clock is paused'}
+              onClick={() => apply(api.post<ToolsState>(`/api/chat/tools/time${q}`, { delta: -1 }))}
+            >◀ Earlier</button>
+            <button
+              disabled={!t.realismEnabled}
+              title={t.realismEnabled ? undefined : 'Realism Mode is off, so the story clock is paused'}
+              onClick={() => apply(api.post<ToolsState>(`/api/chat/tools/time${q}`, { delta: 1 }))}
+            >Later ▶</button>
           </div>
           <Toggle label="Auto passage of time" value={t.time.passageEnabled} onChange={(v) => toggle('passageOfTime', v)} />
         </div>

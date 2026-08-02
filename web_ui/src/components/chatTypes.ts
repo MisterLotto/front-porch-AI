@@ -41,6 +41,12 @@ export interface Message {
 }
 
 export interface Realism {
+  /**
+   * Whether the Realism Engine is switched on for this chat. Optional because
+   * an older desktop build will not send it; treat a missing value as `true`
+   * so those clients keep their current behaviour rather than going blank.
+   */
+  realismEnabled?: boolean;
   bond: { score: number; tier: string; percent: number };
   longTerm: { score: number; tier: string; percent: number };
   trust: { level: number; tier: string; percent: number };

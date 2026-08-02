@@ -102,6 +102,12 @@ class ChatRealismRead {
     final rel = _chat.relationshipService;
     final nsfw = _chat.nsfwService;
     return {
+      // Whether the engine is actually running. Disabling realism deliberately
+      // PRESERVES the last numbers rather than zeroing them, so without this
+      // flag the web panel had no way to tell a live score from a frozen one —
+      // it rendered the full dashboard forever while desktop replaced it with
+      // "Realism Mode is off". Additive and nullable-safe for older clients.
+      'realismEnabled': _chat.realismEnabled,
       'bond': {
         'score': rel.affectionScore,
         'tier': rel.shortTermTierName,

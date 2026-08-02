@@ -436,10 +436,17 @@ export function ChatPage() {
   const editId = !state.isGroupMode ? focused?.dbId ?? state.character?.id : undefined;
   // Speaker lookup for per-message avatars/names in a multi-character scene.
   const castById = new Map(cast.map((c) => [c.id, c]));
+  // A lite scene guest has no realism of its own. Falling through to
+  // `state.realism` here showed the HOST's bond/trust/needs under the
+  // guest's name; desktop shows a 'Lite NPC' banner instead.
+  const focusedMember = focusedId ? cast.find((c) => c.id === focusedId) : undefined;
+  const focusedIsLiteGuest =
+    !!focusedMember && !focusedMember.isHost && !focusedMember.realismEnabled;
   const realismForPanel = focusRealism ?? state.realism;
   const insight = realismForPanel ? (
     <ChatInsight
       realism={realismForPanel}
+      focusedIsLiteGuest={focusedIsLiteGuest}
       lorebook={state.lorebook}
       loreTokens={state.loreTokens}
       loreBudget={state.loreBudget}
