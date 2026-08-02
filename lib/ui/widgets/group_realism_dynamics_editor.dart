@@ -97,14 +97,17 @@ class _GroupRealismDynamicsEditorState
     // Detect the group-wide needs toggle from the ACTUAL stored seeds (a
     // realism-on/needs-off group has no `needs` sub-map). Fresh/realism-off
     // groups default to needs on, matching the creator.
-    // Prefer the explicit flag; fall back to the old presence-inference only
-    // for groups saved before it existed. The inference was load-bearing, so
-    // correcting or removing the needs map could silently switch Needs off.
+    // NOTE: this infers the group-wide Needs toggle from whether a needs map
+    // is PRESENT. That inference is load-bearing — deleting the map (as opposed
+    // to correcting its keys, which is what happened) would silently switch
+    // Needs off for existing groups. Replacing it with an explicit stored flag
+    // was attempted and backed out: the flag is group-wide, and putting it in
+    // the per-member seed breaks the parse(build(x)) == x round trip that
+    // group_realism_blobs_test pins. It belongs at the blob's top level, which
+    // is a schema decision with its own migration question.
     _needsEnabled = parsed.isEmpty
         ? true
         : parsed.values.any((s) {
-            final explicit = s['needsEnabled'];
-            if (explicit is bool) return explicit;
             final n = s['needs'];
             return n is Map && n.isNotEmpty;
           });

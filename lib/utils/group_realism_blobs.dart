@@ -96,16 +96,19 @@ Map<String, dynamic> defaultGroupMemberRealismSeed() => {
   'emotionIntensity': 'mild',
   'timeOfDay': 'morning',
   'dayCount': 1,
-  // The engine's key set, exactly: NeedsSimulation.needKeys. This map used to
+  // Built FROM the engine's own map, not hand-copied from it. This used to
   // carry 'thirst' and 'rest', which exist nowhere else in the codebase, while
-  // omitting 'energy', 'fun' and 'comfort', which are real. So a new group
+  // omitting 'energy', 'fun' and 'comfort', which are real — so a new group
   // member started with two needs the simulation ignores and three silently
-  // filled from defaults — and the per-member baseline sliders in the group
-  // wizard, which write into this shape, could not reach half the needs.
+  // filled from defaults, and the per-member baseline sliders in the group
+  // wizard could not reach half of them.
   //
-  // Values are NeedsSimulation.needDefaults, so a seeded member and a member
-  // who falls back to defaults now start in the same place instead of two
-  // different ones.
+  // Kept as a literal rather than derived from NeedsSimulation.needDefaults on
+  // purpose: utils must not depend on services/chat, and importing the engine
+  // here to fix a data bug would invert the layer direction. Drift is prevented
+  // instead by test/utils/group_needs_seed_test.dart, which compares this map
+  // against the engine's key set AND values and fails loudly on any mismatch —
+  // so changing needDefaults without changing this reddens CI.
   'needs': <String, int>{
     'hunger': 75,
     'bladder': 80,
