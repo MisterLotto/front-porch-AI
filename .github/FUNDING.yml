@@ -1,14 +1,17 @@
-# Renders the "Sponsor" button at the top of the repo page and in the sidebar.
+# Drives the "Sponsor" button at the top of the repo page and in the sidebar.
 #
-# GitHub only reads this file from the DEFAULT branch (main), so a copy sitting
-# only on Rawhide would do nothing.
+# TWO things have to be true for the button to appear, and this file is only one
+# of them:
+#   1. This file exists on the DEFAULT branch (main). A copy living only on
+#      Rawhide does nothing.
+#   2. Settings -> General -> Features -> "Sponsorships" is ticked. That toggle
+#      is separate from this file and defaults to OFF; with it off GitHub parses
+#      the funding links correctly and still renders no button at all, which is
+#      exactly how this looked broken on 2026-08-02.
+# Check both with:
+#   gh api graphql -f query='{repository(owner:"linux4life1",name:"front-porch-AI"){hasSponsorshipsEnabled fundingLinks{platform url}}}'
 #
-# Ko-fi is the same destination the app already links to, in the sidebar and in
-# the update dialog — one place to support the project, not three.
+# Ko-fi is the same destination the app already links to from the sidebar and
+# the update dialog, so supporters land in the same place wherever they start.
+github: [linux4life1]
 ko_fi: sosukeaizen37411
-
-# GitHub Sponsors is not set up on this account yet (checked 2026-08-02:
-# hasSponsorsListing = false). An entry here for a non-existent listing renders
-# nothing, so it stays commented out. To turn it on: enable a listing at
-# https://github.com/sponsors, then uncomment the line below.
-# github: [linux4life1]
