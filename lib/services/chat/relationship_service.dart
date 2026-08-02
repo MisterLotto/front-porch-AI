@@ -241,7 +241,10 @@ class RelationshipService {
     final abs = score.abs();
     final base = _bondScaleBase(abs);
     final total = _bondScaleTarget(abs) - base;
-    return total <= 0 ? 0.0 : ((abs - base) / total).clamp(0.0, 1.0);
+    // At the TOP band there is no next tier to fill toward, so base == target
+    // and this used to return 0.0 — the bar read EMPTY at a maxed-out score,
+    // which looks like the relationship reset. Maxed means full.
+    return total <= 0 ? 1.0 : ((abs - base) / total).clamp(0.0, 1.0);
   }
 
   static int _bondScaleBase(int abs) {
@@ -273,7 +276,10 @@ class RelationshipService {
     final abs = level.abs();
     final base = _trustScaleBase(abs);
     final total = _trustScaleTarget(abs) - base;
-    return total <= 0 ? 0.0 : ((abs - base) / total).clamp(0.0, 1.0);
+    // At the TOP band there is no next tier to fill toward, so base == target
+    // and this used to return 0.0 — the bar read EMPTY at a maxed-out score,
+    // which looks like the relationship reset. Maxed means full.
+    return total <= 0 ? 1.0 : ((abs - base) / total).clamp(0.0, 1.0);
   }
 
   static int _trustScaleBase(int abs) {
@@ -307,7 +313,11 @@ class RelationshipService {
       case 9:
         return 'Enamored';
       case 8:
-        return 'Devoted';
+        // Was 'Devoted', which tier 10 also returns — so a bond of 200 and a
+        // bond of 300 printed the same word and the top of the ladder read as
+        // broken. 'Inseparable' sits between Intimate (7) and Enamored (9) and
+        // does not presume romance, which bond does not either.
+        return 'Inseparable';
       case 7:
         return 'Intimate';
       case 6:

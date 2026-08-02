@@ -370,6 +370,11 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                     tier: bondTier,
                     tierName: bondName,
                     color: bondColor,
+                    // Fill toward the NEXT tier, then drain and refill — the
+                    // same bar the 1:1 sidebar draws. The group card used the
+                    // absolute ±300 fill, so the same score looked different
+                    // depending on which screen you were on.
+                    progress: RelationshipService.bondScalePercent(affection),
                     icon: affection < 0 ? Icons.heart_broken : Icons.favorite,
                   ),
                   const SizedBox(height: 8),
@@ -381,6 +386,7 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                     value: longTerm,
                     tier: longTermTier,
                     tierName: longTermName,
+                    progress: RelationshipService.bondScalePercent(longTerm),
                     color: TierColors.tierColor(context, longTermTier),
                     icon: longTerm < 0
                         ? Icons.heart_broken_sharp
@@ -392,6 +398,7 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                   RealismProgressRow(
                     label: 'Trust',
                     value: trust,
+                    progress: RelationshipService.trustScalePercent(trust),
                     tier: trustTier,
                     tierName: trustName,
                     color: trustColor,
