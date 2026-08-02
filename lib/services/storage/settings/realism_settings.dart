@@ -35,6 +35,8 @@ class RealismSettings with SettingsBase {
   bool _absenceAckEnabled = false;
   int _absenceThresholdHours = 24;
   bool _dreamsEnabled = true;
+  bool _ambitionsEnabled = true;
+  bool _promiseLedgerEnabled = true;
   List<String> _bannedPhrases = [];
 
   bool get realismDefault => _realismDefault;
@@ -62,6 +64,20 @@ class RealismSettings with SettingsBase {
   /// Living Time dreams (living-time-features.md §1). Effective only when
   /// realism + passage-of-time + the Journal are on — ChatService gates.
   bool get dreamsEnabled => _dreamsEnabled;
+
+  /// Long-term character goals. Independent of the Realism Engine on purpose:
+  /// the goals themselves are authored on the character card, so they are never
+  /// stale and cost nothing extra to inject. Only their PROGRESS annotation
+  /// comes from the engine, and a progress figure that stops moving is far less
+  /// misleading than a stale fact would be.
+  bool get ambitionsEnabled => _ambitionsEnabled;
+
+  /// The promise/debt ledger. Also independent of Realism, but NOT free and NOT
+  /// unconditional: detection is one extra model call per reply, and storage is
+  /// the Journal (one journal card per commitment), so it does nothing with the
+  /// Journal switched off. Both facts are surfaced in the settings copy —
+  /// spending a user's tokens without telling them is not acceptable.
+  bool get promiseLedgerEnabled => _promiseLedgerEnabled;
   List<String> get bannedPhrases => List.unmodifiable(_bannedPhrases);
 
   void load() {
@@ -78,6 +94,9 @@ class RealismSettings with SettingsBase {
     _absenceThresholdHours =
         prefs?.getInt(k('absence_threshold_hours')) ?? 24;
     _dreamsEnabled = prefs?.getBool(k('dreams_enabled')) ?? true;
+    _ambitionsEnabled = prefs?.getBool(k('ambitions_enabled')) ?? true;
+    _promiseLedgerEnabled =
+        prefs?.getBool(k('promise_ledger_enabled')) ?? true;
 
     final bannedJson = prefs?.getString(k('banned_phrases'));
     if (bannedJson != null) {
@@ -87,6 +106,18 @@ class RealismSettings with SettingsBase {
         _bannedPhrases = [];
       }
     }
+  }
+
+  Future<void> setAmbitionsEnabled(bool value) async {
+    _ambitionsEnabled = value;
+    await prefs?.setBool(k('ambitions_enabled'), value);
+    notify();
+  }
+
+  Future<void> setPromiseLedgerEnabled(bool value) async {
+    _promiseLedgerEnabled = value;
+    await prefs?.setBool(k('promise_ledger_enabled'), value);
+    notify();
   }
 
   Future<void> setWeatherEnabled(bool value) async {

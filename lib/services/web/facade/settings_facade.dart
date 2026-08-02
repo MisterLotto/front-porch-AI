@@ -70,12 +70,34 @@ class SettingsFacade {
         // Away pace (Living Time) — additive.
         'dynamicResponsePacePeriods': g.dynamicResponsePacePeriods,
       },
+      // Ambitions + the promise ledger. Both work with the Realism Engine off,
+      // so they are the two realism-adjacent settings the web needs first.
+      // Additive and nullable-safe: an older web client ignores the key.
+      'realism': {
+        'ambitionsEnabled': _storage.realismSettings.ambitionsEnabled,
+        'promiseLedgerEnabled': _storage.realismSettings.promiseLedgerEnabled,
+        // Read-only context so the web can show the same honest warnings the
+        // desktop does: the promise pass needs the Journal, and with realism
+        // off there is no passage of time.
+        'journalEnabled': _storage.memorySettings.journalEnabled,
+        'realismDefault': _storage.realismSettings.realismDefault,
+      },
     };
   }
 
   Future<void> update(Map<String, dynamic> body) async {
     final g = _storage.generationSettings;
     final b = _storage.backendSettings;
+
+    final realism = body['realism'];
+    if (realism is Map) {
+      final amb = realism['ambitionsEnabled'];
+      if (amb is bool) await _storage.realismSettings.setAmbitionsEnabled(amb);
+      final prom = realism['promiseLedgerEnabled'];
+      if (prom is bool) {
+        await _storage.realismSettings.setPromiseLedgerEnabled(prom);
+      }
+    }
 
     final backend = body['backend']?.toString();
     if (backend != null) {

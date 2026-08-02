@@ -280,6 +280,53 @@ class GeneralTab extends StatelessWidget {
                 ),
               ),
           ],
+
+          // OUTSIDE the realism block on purpose. Both work without the
+          // Realism Engine, so hiding them when it is off would hide them
+          // exactly when a user needs to find them.
+          subToggle(
+            icon: Icons.flag_outlined,
+            label: 'Ambitions',
+            blurb:
+                'Characters carry long-term goals written on their card, and '
+                'those goals colour how they steer a scene. Works with or '
+                'without the Realism Engine, and costs nothing extra — the '
+                'goals are already on the card. With Realism off you still see '
+                'the goals; only their progress stops updating.',
+            value: storageService.realismSettings.ambitionsEnabled,
+            onChanged: (val) =>
+                storageService.realismSettings.setAmbitionsEnabled(val),
+          ),
+          subToggle(
+            icon: Icons.handshake_outlined,
+            label: 'Promises',
+            blurb:
+                'Commitments either of you make are remembered, and kept or '
+                'broken ones come back later. USES ONE EXTRA AI REQUEST PER '
+                'REPLY to spot them, so it is slower and costs more on a paid '
+                'API. Needs the Journal switched on — a promise is stored as a '
+                'journal entry, so with the Journal off this does nothing.',
+            value: storageService.realismSettings.promiseLedgerEnabled,
+            onChanged: (val) =>
+                storageService.realismSettings.setPromiseLedgerEnabled(val),
+          ),
+          if (!storageService.realismDefault)
+            Padding(
+              padding: const EdgeInsets.only(left: 24, top: 8, bottom: 4),
+              child: Text(
+                'Heads up: with the Realism Engine off there is no passage of '
+                'time — the story clock stops, and weather, needs and mood '
+                'stop with it. Ambitions and promises still work, but scenes '
+                'will not move through the day. Working out how long a scene '
+                'took is part of the Realism Engine and cannot be separated '
+                'from it.',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textTertiary(context),
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
         ],
       ),
     );

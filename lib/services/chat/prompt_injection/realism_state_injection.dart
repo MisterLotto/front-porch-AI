@@ -77,6 +77,18 @@ class RealismStateInjection {
   final NeedsInjection needsInjection;
 
   final bool Function() getRealismEnabled;
+
+  /// Long-term goals. Independent of realism: card-authored, never stale.
+  ///
+  /// Optional so existing callers (and the protected prompt_injection_test)
+  /// keep compiling; absent means "on", which matches how these behaved
+  /// whenever realism was enabled.
+  final bool Function()? getAmbitionsEnabled;
+
+  /// The promise ledger. Independent of realism, but stored as Journal cards,
+  /// so the caller's predicate must also require the Journal. Optional for the
+  /// same reason as above.
+  final bool Function()? getPromisesEnabled;
   final bool Function() getIsGroupNonObserverMode;
   final String Function() getCurrentSpeakerIdForRealism;
   final List<CharacterCard> Function() getGroupCharacters;
@@ -88,6 +100,8 @@ class RealismStateInjection {
     required this.emotionInjection,
     required this.timeInjection,
     required this.weatherInjection,
+    this.getAmbitionsEnabled,
+    this.getPromisesEnabled,
     required this.ambitionInjection,
     required this.promiseDebtInjection,
     required this.behavioralInjection,
@@ -134,15 +148,15 @@ class RealismStateInjection {
   /// - WEATHER is moot. currentWeather returns null with realism off, so
   ///   un-gating changes nothing — and weather is a function of the day count,
   ///   so it inherits the frozen clock above regardless.
-  /// - AMBITIONS and PROMISES are the only genuinely open questions. Both are
-  ///   static text that does not need the engine running, so un-gating them is
-  ///   a real product choice: a realism-off user would start receiving them,
-  ///   and paying for them, on every prompt.
+  /// - AMBITIONS and PROMISES were the genuinely open ones, and they are no
+  ///   longer gated here at all: each now answers to its own user-facing
+  ///   switch (getAmbitionsEnabled / getPromisesEnabled), because neither needs
+  ///   the engine running. Ambitions are card-authored text; promises are
+  ///   Journal cards detected from dialogue.
   ///
-  /// So this getter is not a decoupling switch. It is a two-item product
-  /// question wearing a four-item costume, and flipping it wholesale would
-  /// reintroduce the "saves, confirms, reaches the model never" class of bug
-  /// this audit spent its time removing.
+  /// So this getter now covers only time and weather, and for those the answer
+  /// is settled: they stay gated. Flipping it would reintroduce the "saves,
+  /// confirms, reaches the model never" class of bug this audit removed.
   bool get _sceneFactsEnabled => getRealismEnabled();
 
   /// CHARACTER STATE: how this character is right now. Genuinely realism, and
@@ -165,8 +179,10 @@ class RealismStateInjection {
       if (_characterStateEnabled) emotionInjection.buildEmotionInjection(),
       if (_characterStateEnabled) needsInjection.buildNeedsInjection(),
       if (_characterStateEnabled) nsfwInjection.buildNsfwCooldownInjection(),
-      if (_sceneFactsEnabled) ambitionInjection.buildAmbitionInjection(),
-      if (_sceneFactsEnabled) promiseDebtInjection.buildPromiseDebtInjection(),
+      if (getAmbitionsEnabled?.call() ?? true)
+        ambitionInjection.buildAmbitionInjection(),
+      if (getPromisesEnabled?.call() ?? true)
+        promiseDebtInjection.buildPromiseDebtInjection(),
       if (_characterStateEnabled)
         behavioralInjection.buildBehavioralMechanicsInjection(),
       if (_characterStateEnabled)

@@ -2149,6 +2149,13 @@ class ChatService extends ChangeNotifier {
   /// This gives the model one clearly grouped, number-first view of relationship,
   /// emotion, time, needs (with x/100), behavioral anchors, nsfw state, etc.
   late final _realismStateInjection = RealismStateInjection(
+    // Both independent of the Realism Engine. Ambitions are card-authored text
+    // and cost nothing; promises are Journal cards, so that gate also requires
+    // the Journal — without it there is nothing to read.
+    getAmbitionsEnabled: () => _storageService.realismSettings.ambitionsEnabled,
+    getPromisesEnabled: () =>
+        _storageService.realismSettings.promiseLedgerEnabled &&
+        _storageService.memorySettings.journalEnabled,
     relationshipInjection: _relationshipInjection,
     emotionInjection: _emotionInjection,
     timeInjection: _timeInjection,
@@ -4263,11 +4270,19 @@ class ChatService extends ChangeNotifier {
     await _journalMaintenance.runMaintenancePass(force: true);
   }
 
-  /// Train B — promise/debt ledger pass (fire-and-forget). Runs after a
-  /// normal generation when realism + journal are on. Detects new
+  /// Train B — promise/debt ledger pass (fire-and-forget). Detects new
   /// commitments or kept/broken resolutions for the current speaker's diary.
+  ///
+  /// Gated on the Journal and its own switch, NOT on the Realism Engine. It
+  /// used to require realism, but nothing here consumes realism state: the pass
+  /// reads the recent exchange text and writes a journal card. The story day
+  /// and clock it stamps are nullable and nothing reads them back, so a frozen
+  /// clock costs nothing. The Journal genuinely is required — a commitment IS a
+  /// journal card — and the separate switch exists because this is one extra
+  /// model call per reply, which a user who turned realism off to save calls
+  /// deserves to opt into rather than inherit.
   void _maybeRunPromiseDebtPass() {
-    if (!_realismEnabled) return;
+    if (!_storageService.realismSettings.promiseLedgerEnabled) return;
     if (!_storageService.memorySettings.journalEnabled) return;
     final sessionId = _currentSessionId;
     if (sessionId == null) return;
