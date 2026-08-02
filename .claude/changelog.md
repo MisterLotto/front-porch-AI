@@ -8293,3 +8293,60 @@ Left alone rather than bundled into an urgent fix.
 **Verification.** `flutter analyze` → No issues found. Full suite → 2848 passed.
 `./scripts/ci-local.sh` → passed. New test pins the schema contract and the
 tool-call→JSON bridge (including a stringified `"true"` from a loose backend).
+
+---
+
+## 2026-08-02 — Deleted 2,326 lines of tests that could never fail
+
+**Files deleted:** `test/services/relationship_tier_test.dart` (488),
+`test/services/chat_service_time_test.dart` (585),
+`test/services/realism_state_test.dart` (858),
+`test/services/chat_service_group_realism_test.dart` (342),
+`test/services/chat_service_realism_test.dart` (20),
+`test/services/chat_service_staleness_extended_test.dart` (17),
+`test/services/image_prompt/image_prompt_builder_test.dart` (16).
+
+Suite 2848 → 2712. Nothing else changed; analyze clean, ci-local green.
+
+**Two kinds of worthless, both removed.**
+
+*Theatre* (3 files, 53 lines). The entire test body is `expect(true, isTrue)`. Their group
+names say `[reduced for 0-fail suite]` — real tests were gutted to make the suite green and
+a stub left behind. One of them was `chat_service_realism_test.dart`: the headline feature's
+namesake test file, asserting nothing, printing a reassuring line on every CI run.
+
+*Mirrors* (4 files, 2,273 lines, 133 tests). Each declares a private stub class that
+re-implements production logic inside the test file and then tests the copy. Six of the
+seven files import ZERO production code — they cannot execute the app under any
+circumstances. Evidence they had already drifted:
+- `relationship_tier_test.dart` carries its own `calculateTier` "Mirrors
+  ChatService._calculateTier (line 728)" with rungs 10/25/45/70/100. Production's ladder
+  moved; the copy did not.
+- `chat_service_time_test.dart` tests `_turnsSinceLastTimeAdvance` — the 6-turn gate that
+  CLAUDE.md records as GONE.
+- `chat_service_group_realism_test.dart`'s own header: "LEGACY STUB duplicating extracted
+  logic (real coverage now in relationship_service_test.dart + ...)".
+- `realism_state_test.dart:42` is the clearest admission in the codebase: "decay rates kept
+  local as they intentionally differ (hunger 8 vs NeedsSimulation 4) **to preserve this
+  stub's historical test math**." It changed the numbers so its own assertions would keep
+  passing.
+
+**Coverage checked before deleting, not after.** Every deleted file has a live counterpart
+that drives real production code: relationship → `chat/relationship_service_test.dart` +
+`relationship_clamp_and_speaker_roundtrip_test.dart` + `relationship_milestones_test.dart`;
+time → `chat/time_service_test.dart` + `chat/story_clock_test.dart`; realism state →
+`chat_service_realism_engine_test.dart` + `chat/realism_parity_test.dart`; group realism →
+the two files its own header names; staleness → `character_staleness_test.dart`.
+Only `ImagePromptBuilder` loses its namesake file, and it lost nothing real — that file
+asserted `expect(true, isTrue)`.
+
+**Deliberately NOT deleted.** Five files contain a scattered `expect(true, true)` among
+real tests (`realism_evals_test.dart` 14 of 36, `needs_impact_evaluator_test.dart`,
+`llm_eval_engine_test.dart`, `one_shot_parity_test.dart`, `objective_proposal_test.dart`).
+Those bodies DO call production code and DO fail on a throw, so they are weak, not empty.
+They need strengthening into real assertions — a separate piece of work, not a deletion.
+
+**Gate note.** `.github/workflows/test-integrity.yml` runs on `pull_request_target` and
+blocks any PR that deletes a test without the maintainer's `approved-test-change` label. A
+direct push to Rawhide does not pass through it. This deletion was maintainer-directed in
+conversation; recording it here because the gate did not and could not review it.
