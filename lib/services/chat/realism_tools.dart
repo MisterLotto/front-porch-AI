@@ -217,6 +217,23 @@ final List<Map<String, dynamic>> kNeedsImpactEvalTools = [
       'bladder_delta',
       'comfort_delta',
       'reason',
+      // is_climax MUST be required. A model answering a tool call fills in what
+      // the schema demands and skips what it does not, and this field was
+      // optional — so orgasm detection was silently off on every tools-capable
+      // backend. Observed live: the model returned exactly these eight fields
+      // and nothing else, with a reason reading "Violet experiences her first
+      // orgasm ever ... an overwhelming first climax". It had understood the
+      // scene completely; it just never emitted the key, so the refractory
+      // never started and the Lust bar stayed pinned at 100/100.
+      //
+      // This is the SAME failure the text path already learned (see the comment
+      // on climaxGuidance in llm_eval_engine.dart: a model "won't guess at an
+      // undefined field"). The tools transport re-created it by a different
+      // route — the field was defined, but optional. Forcing an explicit
+      // true/false is that lesson expressed in schema. refractory_turns rides
+      // along because it is meaningless to answer one without the other.
+      'is_climax',
+      'refractory_turns',
     ],
   ),
 ];

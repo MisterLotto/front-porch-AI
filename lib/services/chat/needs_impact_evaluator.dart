@@ -411,30 +411,9 @@ class NeedsImpactEvaluator {
       ).firstMatch(effectiveText);
       final reason = reasonMatch?.group(1)?.trim();
 
-      bool isClimax = false;
-      int crashTurns = 5;
-      if (parsed.isNotEmpty) {
-        final c = parsed['is_climax'];
-        if (c is bool) {
-          isClimax = c;
-        } else if (c is String) {
-          isClimax = c.toLowerCase() == 'true';
-        }
-
-        final t = parsed['crashTurns'] ?? parsed['refractory_turns'];
-        if (t is num) crashTurns = t.toInt();
-      } else {
-        final re = RegExp(r'"is_climax"\s*:\s*(true|false)');
-        final m = re.firstMatch(effectiveText);
-        if (m != null) isClimax = m.group(1) == 'true';
-        crashTurns =
-            _extractInt(effectiveText, 'crashTurns') ??
-            _extractInt(effectiveText, 'refractory_turns') ??
-            5;
-      }
-
-      if (isClimax) {
-        onClimax?.call(crashTurns.clamp(1, 10));
+      final climax = _readClimax(parsed, effectiveText);
+      if (climax.isClimax) {
+        onClimax?.call(climax.crashTurns.clamp(1, 10));
       }
 
       final impact = NeedsImpact(
@@ -452,6 +431,46 @@ class NeedsImpactEvaluator {
     } catch (e) {
       debugPrint('[Realism:Needs] evaluateAndApply error: $e');
     }
+  }
+
+  /// Read the climax verdict out of an eval result. Was two byte-identical
+  /// copies, one per eval path; a fix to one silently missed the other.
+  ///
+  /// WHY THE TEXT FALLBACK RUNS EVEN ON A GOOD PARSE. `is_climax` is a field
+  /// the model has to volunteer, and the old code only consulted the raw text
+  /// when parsing produced NOTHING — so a perfectly well-formed reply that
+  /// simply omitted the key was read as "no climax" and never looked at again.
+  /// That is how orgasm detection shipped silently broken: a backend returned
+  /// the eight required delta/reason fields and no others, with a reason
+  /// reading "Violet experiences her first orgasm ever". The schema now
+  /// requires the field (realism_tools.dart), and this second look means one
+  /// backend ignoring `required` cannot switch the whole feature off again.
+  ({bool isClimax, int crashTurns}) _readClimax(
+    Map<String, dynamic> parsed,
+    String effectiveText,
+  ) {
+    bool? climax;
+    final c = parsed['is_climax'];
+    if (c is bool) {
+      climax = c;
+    } else if (c is String) {
+      climax = c.toLowerCase() == 'true';
+    }
+    if (climax == null) {
+      final m = RegExp(
+        r'"is_climax"\s*:\s*(true|false)',
+      ).firstMatch(effectiveText);
+      if (m != null) climax = m.group(1) == 'true';
+    }
+
+    final t = parsed['crashTurns'] ?? parsed['refractory_turns'];
+    final turns = t is num
+        ? t.toInt()
+        : (_extractInt(effectiveText, 'crashTurns') ??
+              _extractInt(effectiveText, 'refractory_turns') ??
+              5);
+
+    return (isClimax: climax ?? false, crashTurns: turns);
   }
 
   int? _extractInt(String text, String key) {

@@ -8241,3 +8241,55 @@ group members behave toward each other — but the delta question is still open.
 found. `dart fix --dry-run` → Nothing to fix. Full suite `flutter test --concurrency=1
 --exclude-tags golden` → 2843 passed. `./scripts/ci-local.sh` (Linux goldens) → passed.
 The new test was proven load-bearing: neutering the restore turns 3 of its 9 red.
+
+---
+
+## 2026-08-02 — Orgasm detection was off on every tools-capable backend
+
+**Files:** `lib/services/chat/realism_tools.dart`,
+`lib/services/chat/needs_impact_evaluator.dart`,
+`lib/services/chat/realism_verification.dart`, `docs/Rawhide.md`,
+`test/services/chat/climax_detection_tool_schema_test.dart` (new).
+
+**The bug.** `is_climax` is the ONLY signal that starts the post-orgasm refractory —
+nothing else in the app inspects the text. It was an *optional* field in
+`kNeedsImpactEvalTools`, and a model answering a tool call fills in what the schema
+demands and skips what it does not. The field never arrived, `parsed['is_climax']` was
+null, the verdict defaulted to false, and the Lust bar stayed pinned at 100/100 through
+an unmistakable climax. No error, nothing in the log.
+
+Caught in live use. The model returned exactly the eight required fields and no others:
+
+    {"hunger_delta":80,"energy_delta":-40,"hygiene_delta":-15,"fun_delta":60,
+     "social_delta":55,"bladder_delta":0,"comfort_delta":45,
+     "reason":"Violet experiences her first orgasm ever ... an overwhelming first
+               climax that leaves her emotionally shattered and physically spent"}
+
+It understood the scene completely and wrote it in the reason. It just never emitted the
+key it was not obliged to emit.
+
+This is the SAME failure the text path already learned (`llm_eval_engine.dart` ~500: a
+model "won't guess at an undefined field", which is why `climaxGuidance` exists). The
+tools transport, added 2026-07-06, re-created it by a different route — defined, but
+optional.
+
+**Three holes, all closed.**
+1. `is_climax` + `refractory_turns` are now REQUIRED in the tool schema, so the model has
+   to answer.
+2. The parse now re-reads the raw text when a *successful* parse lacks the key. It
+   previously consulted the text only when parsing produced nothing at all, so a
+   well-formed reply that omitted the field was never looked at again. Both eval paths
+   had byte-identical copies of that logic; consolidated into one `_readClimax`.
+3. The Director's `needs_impact` critique hint told it to preserve "reason + activities"
+   and never mentioned the verdict — and the Director REWRITES the text that gets parsed,
+   so a correction pass could drop the climax silently. It now names `is_climax` and
+   `refractory_turns` explicitly. (`activities` is a field nothing in the app has ever
+   read — see below.)
+
+**Noted, not fixed:** `activities` and `intensity` exist in the needs-impact schema and
+`NeedsImpact.detectedActivities` is never populated from an eval — dead prompt weight.
+Left alone rather than bundled into an urgent fix.
+
+**Verification.** `flutter analyze` → No issues found. Full suite → 2848 passed.
+`./scripts/ci-local.sh` → passed. New test pins the schema contract and the
+tool-call→JSON bridge (including a stringified `"true"` from a loose backend).
