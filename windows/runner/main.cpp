@@ -7,9 +7,20 @@
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
-  // Attach to console when present (e.g., 'flutter run') or create a
-  // new console when running with a debugger.
-  if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent()) {
+  // Production builds are a WINDOWS-subsystem GUI app. The stock Flutter
+  // template only AllocConsole() under a debugger, so launching
+  // front_porch_ai.exe from cmd/PowerShell attached the parent console but
+  // never rebound stdout/stderr — the prompt looked idle and RAG/engine
+  // logs never appeared. Fix:
+  //   1) Attach to parent console when launched from a terminal, and always
+  //      freopen + FlutterDesktopResyncOutputStreams.
+  //   2) --console forces a dedicated console (double-click / shortcuts).
+  //   3) Debugger still gets a console (Flutter default).
+  const bool force_console =
+      command_line != nullptr && wcsstr(command_line, L"--console") != nullptr;
+  if (::AttachConsole(ATTACH_PARENT_PROCESS)) {
+    RedirectIoToConsole();
+  } else if (force_console || ::IsDebuggerPresent()) {
     CreateAndAttachConsole();
   }
 

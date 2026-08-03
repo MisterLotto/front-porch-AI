@@ -8522,3 +8522,24 @@ green ×4 (after each move) · ci-local goldens green · theme_interaction E2E
 app_smoke E2E (send, realism, sidebar, persistence). The ratchet fired twice
 mid-work demanding its baseline be tightened — first live proof it enforces
 rule 3 on real work, not just in its tamper test.
+
+---
+
+## 2026-08-03 — God-file campaign, second kill: create_group_chat_page.dart 3,131 → 969
+
+**Files:** donor (−2,162), 7 new `part of` files split along the wizard's own
+steps — steps_cast 286, steps_opening 400, steps_lore 280, steps_realism 421,
+member_realism_card 223 (the 628-line realism step's per-member ExpansionTile,
+extracted at the `_members.map` seam so both halves clear the 500 cap),
+steps_dynamics 264, steps_review 465 (review + step indicator + nav buttons).
+`test/baselines/god_files.json` entry DELETED — 24 remain.
+
+Same mechanics as the chat_page kill: byte-verbatim line surgery, content
+asserts on every boundary before any write, extensions on the State class,
+the rebuildState bridge (31 setState sites), mandatory step-indicator flow
+untouched. The one non-trivial seam: `..._members.map((c) {...})` became
+`..._members.map(_buildMemberRealismCard)` — same widgets, same order.
+
+**Verification:** analyze 0 issues · dart fix nothing · full suite 2,728 ·
+ci-local goldens · group_smoke E2E (macOS). GitHub CI on the previous push
+(ratchet + chat_page kill) confirmed green while this ran.

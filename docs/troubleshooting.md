@@ -66,9 +66,22 @@ When something goes wrong, this page is the fastest route back to chatting. Find
 
 1. **Quit and relaunch — properly.** Close the app with its own close button (not force-quit), wait a few seconds, and start it again. A clean close does real work: it writes the last turn's Realism and Needs state to the database and shuts the AI engine down instead of orphaning it. Force-quitting mid-generation is how you lose the last exchange's state and end up with a leftover engine blocking the next launch.
 2. **Update.** Many "known issues" are already fixed. Settings → **General** → **Check for Updates Now**. That button only appears where the app can update itself — Windows (installer builds), macOS, and the Linux **AppImage**. If you installed from `apt`, `dnf`, or the AUR, update the normal way (`sudo apt upgrade`, `sudo dnf upgrade`, `yay -Syu`). One exception to know about: the AUR package is a **full release behind** right now — `front-porch-ai-bin` is on 1.1.2 while apt and dnf serve 1.2.0, because the automatic push is being rejected at the AUR's end and I can't promise a fix date. So check your installed version rather than assuming `yay -Syu` moved you, and use the AppImage or `.tar.gz` from the [Releases page](https://github.com/linux4life1/front-porch-AI/releases) if you need current. See the [install guide](install.md) for more.
-3. **Launch from a terminal** so you can see error messages:
-   - **Windows:** open the install folder, then run `front_porch_ai.exe` from a Command Prompt opened there.
-   - **macOS:** in Terminal: `/Applications/FrontPorchAI.app/Contents/MacOS/FrontPorchAI` (nightly builds install as `FrontPorchAI-Rawhide.app`).
+3. **Launch from a terminal** so you can see error messages (RAG, engine, crashes):
+   - **Windows:** open **cmd** (not by double-clicking the app), then:
+     ```bat
+     cd %LOCALAPPDATA%\Front Porch AI
+     front_porch_ai.exe
+     ```
+     Leave that window open while you use the app — logs stream there. The GUI is a separate window; the command prompt staying “at a blinking cursor” while the app runs is normal on older builds, and on current builds you should see print lines as things happen (embeddings, RAG hits, KoboldCpp, etc.).
+
+     If you need a console when starting from a shortcut/Explorer instead:
+     ```bat
+     front_porch_ai.exe --console
+     ```
+     That opens a dedicated console window.
+
+     **Note:** builds before the Windows console fix could attach to cmd but still print nothing (stdout never rebound). Update to a build that includes that fix, or use a dev `flutter run -d windows` session if you’re on an older installer.
+   - **macOS:** in Terminal: `/Applications/front_porch_ai.app/Contents/MacOS/FrontPorchAI` (stable package name) or `/Applications/FrontPorchAI-Rawhide.app/Contents/MacOS/FrontPorchAI` for nightlies.
    - **Linux:** run `front-porch-ai` if you installed a package, or the `front_porch_ai` binary / the AppImage directly.
 
    Whatever it prints when things go wrong is gold — include it if you ask for help.
