@@ -8584,3 +8584,35 @@ New campaign rule recorded in the design doc: any page without interaction
 coverage gets its pump test BEFORE being split — green, split, still green.
 
 Suite 2,728 → 2,730. analyze clean, ci-local green.
+
+---
+
+## 2026-08-03 — U7 precondition: the group realism wiring E2E
+
+**File:** `integration_test/group_realism_wiring_test.dart` (new; CI picks up
+integration_test/*_test.dart automatically).
+
+The realism audit's Phase 2 recorded its own gap: the speaker-resolution RULE
+was pinned, the live-ChatService WIRING was not. This E2E closes it and is the
+explicit precondition for U7 (retyping `_groupRealism`): three scored
+round-robin turns, then (1) the sessions row's group_realism_state JSON must
+carry the full required key inventory per member with correct types, (2) the
+JSON must agree with the public per-member getters, (3) after a full reload,
+the next OUTBOUND PROMPT must contain the stored emotion and posture — the
+whole map → load → injection dance observed from outside.
+
+Findings while writing it, worth recording:
+- The column is a WRAPPER ({perChar, globalDecayRates, authorNotes, ...,
+  objectives, savedAt}); member slots live under perChar.
+- A live slot carries 41 keys: 19 runtime state + ~22 per-member config/seed
+  keys (needsBaseline*/needsDecay*/verification*/timeOfDay/dayCount/...).
+  U7's typed class therefore needs typed runtime fields PLUS verbatim
+  pass-through of unrecognized keys, or imports/config would be dropped.
+- Runtime member ids fall back to the SANITIZED DISPLAY NAME when a member
+  has no avatar file on disk (resolution requires the file to exist). An
+  avatar-less seeding therefore dual-keys the map (name-keyed live writes,
+  id-keyed orphaned seeds). Production wizard members always write
+  '<mid>.png', so real groups are single-keyed — but group_smoke_test.dart
+  seeds WITHOUT avatar files, so its 'member_$i'-keyed seeds are never read
+  (its own assertions don't depend on them; noting, not editing a protected
+  test). This E2E seeds real avatar files and asserts the single key space.
