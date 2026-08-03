@@ -235,7 +235,16 @@ extension ChatServiceImpersonate on ChatService {
       plan.add(id: 'persona', inSystem: true, text: '$personaBlock\n');
       plan.add(id: 'lore.after', inSystem: true, text: loreAfter);
       plan.add(id: 'user_persona', inSystem: true, text: userPersonaBlock);
-      plan.add(id: 'scenario', inSystem: true, text: 'Scenario: $scenario\n');
+      plan.add(
+        id: 'scenario',
+        inSystem: true,
+        text: ScenarioFade.wrapScenario(
+          scenario,
+          ScenarioFade.strengthForUserMessageCount(
+            _messages.where((m) => m.isUser).length,
+          ),
+        ),
+      );
       plan.add(id: 'lore.ex_top', inSystem: true, text: loreExTop);
       plan.add(id: 'examples', inSystem: true, text: mesExampleBlock);
       plan.add(id: 'lore.ex_bottom', inSystem: true, text: loreExBottom);

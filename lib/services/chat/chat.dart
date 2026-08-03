@@ -55,6 +55,7 @@ export 'realism_tools.dart';
 export 'realism_verification.dart';
 export 'relationship_milestones.dart';
 export 'relationship_service.dart';
+export 'scenario_fade.dart';
 export 'scene_guest_director.dart';
 export 'scene_guest_factory.dart';
 export 'stop_sequences.dart';
