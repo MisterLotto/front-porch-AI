@@ -150,6 +150,45 @@ extension ChatServiceGroupRealismHelpers on ChatService {
     return const <String, int>{};
   }
 
+  /// Re-stamp the just-generated message's `realism_state` snapshot with the
+  /// POST-generation values, so every consumer that restores a message's
+  /// snapshot as a baseline (regenerating a later message, the regen merge's
+  /// _restoreRealismStateForSpeaker, swipe navigation, delete time-travel)
+  /// sees the turn's final state, not the pre-impact one.
+  ///
+  /// Two shipped bugs live here as warnings:
+  ///  * NEEDS: the snapshot is captured during the pre-gen eval, before the
+  ///    needs impact applies scene rewards — restoring it reverted them
+  ///    ("Hygiene snaps back after regenerating the next message").
+  ///  * NSFW (the "orgasm detection doesn't work" report, Violet Vance chat):
+  ///    a climax fires in the post-gen checks — arousal to 0, refractory
+  ///    started — AFTER the snapshot froze arousal at 100 / cooldown 0. The
+  ///    1:1 regen merge then restored that stale snapshot and ERASED the
+  ///    climax seconds after detection: the swipe's own metadata carried
+  ///    climax_triggered=true while the session row still said 100/0/0.
+  ///
+  /// metadata and swipeMetadata[i] share one map instance, so this in-place
+  /// update sticks through the regen swipe merge and persists. 1:1 and group
+  /// alike: the speaker's scalars are loaded when this runs. Guests carry no
+  /// realism_state, so this no-ops for them.
+  void _restampRealismSnapshotPostGen(ChatMessage msg) {
+    if (msg.isUser) return;
+    final rs = msg.activeMetadata?['realism_state'];
+    if (rs is! Map) return;
+    if (_needsSimEnabled &&
+        _needsSimulation.vector.isNotEmpty &&
+        rs['needs'] is Map) {
+      (rs['needs'] as Map)['vector'] = Map<String, int>.from(
+        _needsSimulation.vector,
+      );
+    }
+    if (rs.containsKey('arousalLevel')) {
+      rs['arousalLevel'] = _nsfwService.arousalLevel;
+      rs['cooldownTurnsRemaining'] = _nsfwService.cooldownTurnsRemaining;
+      rs['cooldownTurnsTotal'] = _nsfwService.cooldownTurnsTotal;
+    }
+  }
+
   /// Give back what a deleted message spent.
   ///
   /// A message's chips (`needs_deltas`) ARE the record of what that turn did to

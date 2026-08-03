@@ -8711,3 +8711,43 @@ email on every nightly/release with no possible success.
 Reinstatement: `git log -S publish-aur` recovers the full job text; the
 AUR_SSH_KEY secret is deliberately left configured. front-porch-ai-bin and
 front-porch-ai-beta-bin go stale on the AUR until then.
+
+---
+
+## 2026-08-03 — Climax was detected, then ERASED: the stale-snapshot wipe
+
+**Files:** `lib/services/chat/chat_service_generation.dart` (−18 net; both
+re-stamp blocks consolidated), `chat_service_group_realism_helpers.dart`
+(+`_restampRealismSnapshotPostGen`), baseline tightened (generation 1978→1960),
+`docs/Rawhide.md`.
+
+Field report: "orgasm detection still doesn't work" (Violet Vance chat,
+latest code). Forensics on the user's stable DB proved the OPPOSITE half:
+the active swipe's metadata carried climax_triggered=true + pre_climax_arousal
+(the schema fix WORKS; the model now answers is_climax) — while the session
+row said arousal=100, cooldown 0/0.
+
+Root cause: a message's realism_state snapshot is captured PRE-generation;
+the post-gen re-stamp refreshed only the needs vector under a comment
+claiming everything else was already final. False on climax turns: onClimax
+zeroes arousal and starts the refractory AFTER capture. The 1:1 regen merge
+then calls _restoreRealismStateForSpeaker(lastMsg) — restoring the stale
+snapshot and wiping the climax seconds after it fired. The user was testing
+BY regenerating the scene, so they hit the wipe every time. (Plain sends were
+already correct post-schema-fix.)
+
+Fix: keep the snapshot truthful — re-stamp arousal/cooldown alongside needs
+after the post-gen checks, in one consolidated helper (the two inline blocks
+were one concern; extraction also brought generation.dart 18 lines UNDER its
+ratchet ceiling). Reference semantics verified: the swipe merge's
+Map.from copy is shallow, so the in-place realism_state mutation rides into
+the accepted swipe. Every snapshot-restore path (regen merge, swipe-back,
+delete time-travel) inherits the fix; group parity holds (restamp runs while
+the speaker's scalars are loaded, before _saveScalarsIntoGroupRealism).
+
+The user's current session still holds the stale 100/0/0 — it self-heals on
+the next detected climax.
+
+**Verification:** analyze 0 · full suite 2,746 · ci-local goldens ·
+app_smoke + wiring E2Es green. Live confirmation needs the user's model:
+regenerate the scene once and check Lust drops + cooldown starts.

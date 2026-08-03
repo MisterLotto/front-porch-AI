@@ -1737,29 +1737,11 @@ extension ChatServiceGeneration on ChatService {
               await _runPostGenNeedsChecks(finalResponse);
             }
 
-            // Re-stamp the needs vector inside THIS message's realism_state snapshot
-            // with the now-final (post-impact) vector. The snapshot was captured
-            // during the pre-generation realism eval — BEFORE _runPostGenNeedsChecks
-            // applied this turn's needs impact (scene rewards like a bath's +Hygiene).
-            // Every other field in it is already the final post-turn value; only the
-            // needs vector was frozen pre-impact. Consumers that restore a message's
-            // realism_state as a baseline — regenerating a LATER message, navigating
-            // swipes, objective checks — would otherwise revert this turn's accepted
-            // needs deltas (the reported "Hygiene snaps back after regenerating the
-            // next message"). metadata and swipeMetadata[i] share one map instance, so
-            // this in-place update sticks and persists. 1:1 and group alike: the
-            // per-speaker vector is loaded above and is final here (before the group
-            // persist below).
-            if (_needsSimEnabled &&
-                !streamTarget.isUser &&
-                _needsSimulation.vector.isNotEmpty) {
-              final rs = streamTarget.activeMetadata?['realism_state'];
-              if (rs is Map && rs['needs'] is Map) {
-                (rs['needs'] as Map)['vector'] = Map<String, int>.from(
-                  _needsSimulation.vector,
-                );
-              }
-            }
+            // Keep this message's realism_state snapshot TRUTHFUL now that the
+            // post-gen checks have run — needs vector AND the NSFW scalars a
+            // climax just changed. See the helper for the two bugs this
+            // prevents (hygiene snap-back; climax erased by the regen merge).
+            _restampRealismSnapshotPostGen(streamTarget);
 
             if (prePostActiveChar != null) {
               _activeCharacter = prePostActiveChar;
