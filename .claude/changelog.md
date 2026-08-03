@@ -8689,3 +8689,25 @@ CANCELLED the earlier CI run (superseded), which had looked mysterious.
 
 **Verification:** analyze 0 · wire-format 8/8 · full suite 2,746 · ci-local
 goldens · wiring E2E + app_smoke green on macOS.
+
+---
+
+## 2026-08-03 — AUR publishing removed from all three release workflows
+
+**Files:** `.github/workflows/nightly.yml`, `release.yml`, `beta-release.yml`
+(each loses its trailing publish-aur job; tombstone comment left in place).
+MUST be synced to main — cron runs main's copy of nightly.yml, and release
+tags are cut from main.
+
+Why: the AUR disabled package adoption 2026-07-30 and froze ALL pushes
+2026-08-01 after the third malware wave since June ("Atomic Arch": ~1,500
+orphaned packages adopted and trojaned in June; ELF-in-PKGBUILD wave in July;
+malicious follow-up commits wave late July). Official announcement by Robin
+Candau (Arch DevOps) on aur-general gives NO restoration ETA — "we will send
+a follow-up once we're able to." Our jobs failed at `git clone ssh://aur@…`
+("Could not read from remote repository"), producing a red X and a failure
+email on every nightly/release with no possible success.
+
+Reinstatement: `git log -S publish-aur` recovers the full job text; the
+AUR_SSH_KEY secret is deliberately left configured. front-porch-ai-bin and
+front-porch-ai-beta-bin go stale on the AUR until then.
