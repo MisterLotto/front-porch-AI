@@ -12,7 +12,10 @@
 # event-agnostic, finds this shell by tag, uploads the built assets and the
 # generated notes, and leaves the title untouched.
 #
-# The tag itself must stay strict vX.Y.Z — it becomes the app version, the
+# The tag must be vX.Y.Z with up to two optional extra numeric segments
+# (vX.Y.Z.N / vX.Y.Z.N.M) — the project's documented "deep" versioning, which
+# release.yml's Sync Version step already normalizes (e.g. v1.2.0.1 →
+# pubspec 1.2.0+1, display "1.2.0.1"). It becomes the app version, the
 # installer metadata, and the APT/RPM package versions. Titles live ONLY in
 # the release name (display-only; the in-app updater never reads it).
 
@@ -45,8 +48,8 @@ jobs:
     steps:
       - name: Validate tag shape (it becomes the version everywhere)
         run: |
-          [[ "${{ inputs.tag }}" =~ ^[vV][0-9]+\.[0-9]+\.[0-9]+$ ]] \
-            || { echo "::error::tag '${{ inputs.tag }}' must be strict vX.Y.Z"; exit 1; }
+          [[ "${{ inputs.tag }}" =~ ^[vV][0-9]+(\.[0-9]+){2,4}$ ]] \
+            || { echo "::error::tag '${{ inputs.tag }}' must be vX.Y.Z (deep patch segments allowed, e.g. v1.2.0.1)"; exit 1; }
 
       - name: Create tag + release shell (or move an existing tag to the target tip)
         env:

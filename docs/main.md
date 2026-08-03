@@ -2,6 +2,16 @@
 
 These notes feed the in-app "Update Available" dialog for stable releases on `main`.
 
+## v1.2.0.1 — Stays Put
+
+Three fixes for things that wouldn't stay the way you set them — or wouldn't let you set them at all.
+
+- 💾 **Fixed: your context limit kept resetting itself** — Set a custom context size, close the app, come back — and sooner or later it was 16k again. The saving was never broken: the Settings screen itself was quietly re-running its first-time auto-configuration on every visit for anyone running without GPU offload (GPU layers at 0), and writing its own suggestion over your saved numbers — context limit and GPU layers both. That first-run helper now runs exactly once on a truly fresh install, treats GPU layers set to 0 as the deliberate choice it is, and always starts from your saved values instead of a built-in default. What you set is what you keep.
+
+- ⬇️ **Fixed: the model downloader refused to fetch models bigger than your VRAM** — Any model the app judged too large for your graphics card showed a dead "Too Large" button, even though such models run fine with some layers on the CPU — and if the app couldn't read your VRAM at all, *every* model was blocked. The Download button now always works: oversize models just ask "this won't fully fit — download anyway?" first, and when your VRAM can't be detected the app says "fit unknown" instead of pretending everything is too big.
+
+- 🛟 **Fixed: a damaged settings file could stop the app opening at all** — If your PC crashed or lost power at the wrong moment, the app's settings file could be left scrambled — and the next launch died on an error screen blaming the *database* and suggesting fixes that couldn't help. Your characters and chats were never in danger; only the settings file was hurt. The app now notices the damage, sets the broken file aside, and opens normally with fresh settings — telling you plainly what happened. One thing to check afterwards: if you'd moved your storage folder somewhere custom, re-pick it in Settings and your library reappears. And in the rare case the app still can't start, the error screen now tells you the actual problem and the actual fix.
+
 ## v1.2 — Occupy Mars
 
 - 🌍 **Worlds — build a place, then share it** — Places carry real climates you can author: rename conditions, give them emoji and flavour, set temperature bands, and choose the **atmosphere and gravity**. Mars stops shipping with breathable air, volcano heat and Martian cold are real to the engine, and characters feel them, dress for them and complain about them. Finished a world? **Post it to The Stoop** like a character — full upload and download — and a new chat inherits its character's world automatically.

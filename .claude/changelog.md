@@ -8297,3 +8297,22 @@ path — desktop-only bug, no parity work.
 the context round-trip, the configured-vs-0 distinction (including reload), and
 the optimizer honoring requestedContextSize verbatim. Full test/services +
 test/ui/pages suites pass (2178).
+
+## 2026-08-03 — v1.2.0.1 release prep (notes + cut-release deep-tag support)
+
+**Files.** `docs/main.md`, `.github/workflows/cut-release.yml`
+
+**Why.** Maintainer requested tag v1.2.0.1 from main ("Stays Put") to ship the
+three fixes as a stable release. Two blockers: (1) docs/main.md's first `## `
+section is the release body (publish-release awk) and was still v1.2's; (2)
+cut-release.yml — the only tag path from a remote session (git proxy 403s
+refs/tags/*) — validated strict vX.Y.Z, rejecting the maintainer's requested
+deep tag even though release.yml's Sync Version step explicitly documents and
+normalizes deep tags (v1.2.0.1 → pubspec 1.2.0+1, display "1.2.0.1").
+
+**Approach.** Added the "## v1.2.0.1 — Stays Put" section (three user-facing
+bullets, same text as docs/Rawhide.md) above v1.2's; widened the cut-release
+regex to `^[vV][0-9]+(\.[0-9]+){2,4}$` and corrected its comment to match
+release.yml's documented convention. Then: dispatch cut-release.yml (tag +
+titled shell), then dispatch release.yml on the tag ref, per cut-release's own
+header instructions.
