@@ -2,7 +2,6 @@
   "lib/services/chat_service.dart": 4637,
   "lib/database/database.dart": 3717,
   "lib/main.dart": 2105,
-  "lib/ui/pages/edit_character_page.dart": 2059,
   "lib/services/image_gen_service.dart": 2011,
   "lib/ui/pages/create_character_page.dart": 1999,
   "lib/services/chat/chat_service_generation.dart": 1978,

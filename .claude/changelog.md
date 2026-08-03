@@ -8543,3 +8543,17 @@ untouched. The one non-trivial seam: `..._members.map((c) {...})` became
 **Verification:** analyze 0 issues · dart fix nothing · full suite 2,728 ·
 ci-local goldens · group_smoke E2E (macOS). GitHub CI on the previous push
 (ratchet + chat_page kill) confirmed green while this ran.
+
+---
+
+## 2026-08-03 — God-file campaign, third kill: edit_character_page.dart 2,059 → 858
+
+**Files:** donor (−1,201), 4 new `part of` files — tabs_core 412 (Details +
+Dialogue), tabs_lore 332 (Lorebook tab + entry cards), tab_worlds 202,
+realism_section 447. Baseline entry DELETED — 23 remain. Same mechanics
+(verbatim line surgery + boundary asserts + rebuildState bridge). One part
+initially landed at 509 post-format — over the 500 cap for new files — and the
+Worlds tab was carved into its own part before gates rather than shipped over.
+
+**Verification:** analyze 0 · full suite 2,728 · ci-local goldens · app_smoke
+E2E (macOS).
