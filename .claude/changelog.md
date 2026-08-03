@@ -8557,3 +8557,30 @@ Worlds tab was carved into its own part before gates rather than shipped over.
 
 **Verification:** analyze 0 · full suite 2,728 · ci-local goldens · app_smoke
 E2E (macOS).
+
+---
+
+## 2026-08-03 — Interaction nets for the two uncovered creation surfaces
+
+**Files:** `test/ui/pages/edit_character_page_interaction_test.dart` (new),
+`test/ui/pages/create_group_chat_page_interaction_test.dart` (new),
+`docs/design/god-file-elimination.md` (provability rule).
+
+Maintainer question mid-campaign: "our E2E doesn't cover any part of character
+creation — is this refactor safe and provable?" Audit answer: NOTHING pumped
+EditCharacterPage or CreateGroupChatPage — no widget test, no golden, no E2E —
+so the two completed splits were safe (verbatim moves + analyzer) but not
+provable at their hand-written seams. create_character_page already has
+step-walking goldens.
+
+The nets: the editor test taps through all four real tabs asserting a landmark
+from each extracted part; the wizard test builds a roster with real taps,
+names the group, and presses the real Next button through all eight steps,
+each step asserting landmark text owned by its part file. Both use the shared
+golden fakes (one local subclass stubs coverImageFileFor rather than widening
+the shared fake).
+
+New campaign rule recorded in the design doc: any page without interaction
+coverage gets its pump test BEFORE being split — green, split, still green.
+
+Suite 2,728 → 2,730. analyze clean, ci-local green.

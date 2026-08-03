@@ -56,6 +56,21 @@ dead-code audit, the works.
 **Decisions log (2026-08-03):** database.dart excluded; main.dart confirmed in
 scope; execution order confirmed A → B → C, starting with `chat_page.dart`.
 
+## The provability rule (added 2026-08-03, maintainer-prompted)
+
+The maintainer asked the load-bearing question: "our E2E doesn't cover any
+part of character creation — is this safe and provable?" Verbatim moves +
+analyzer make a split *safe*; they do not make it *provable*, because the
+hand-written seams are new code and the themes bug proved a seam can compile,
+paint, and still eat every tap. Therefore:
+
+**A page with no interaction coverage gets a pump test BEFORE it is split.**
+Green on the unsplit file → split → still green. Pages that already have
+step-walking goldens (create_character_page) or E2E coverage are exempt.
+The two splits that predated this rule got their nets retroactively:
+`edit_character_page_interaction_test.dart` (tab walk) and
+`create_group_chat_page_interaction_test.dart` (full 8-step wizard walk).
+
 ## Per-split definition of done (every file, no exceptions)
 1. Behavior-identical: extraction only, no logic edits smuggled in.
 2. Extracted pieces land under 500 lines each (the CLAUDE.md cap for new files).
