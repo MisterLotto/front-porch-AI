@@ -55,6 +55,7 @@ import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 // Services and modules not yet in the services barrel (internal, low-frequency, or side-effect heavy)
 import 'package:front_porch_ai/services/download_manager.dart';
+import 'package:front_porch_ai/services/prefs_recovery.dart';
 import 'package:front_porch_ai/services/setup_service.dart';
 import 'package:front_porch_ai/services/db_reunification_service.dart';
 import 'package:front_porch_ai/services/embedding_service.dart';
@@ -65,6 +66,7 @@ import 'package:front_porch_ai/services/web/web_server_host.dart';
 
 // Dialogs and specific widgets used only in main.dart (direct imports are appropriate)
 import 'package:front_porch_ai/ui/dialogs/dialogs.dart';
+import 'package:front_porch_ai/ui/widgets/db_init_error_app.dart';
 
 /// Prefix SharedPreferences keys for beta builds so window state is
 /// isolated from the stable installation.  Unchanged for stable builds.
@@ -134,67 +136,6 @@ void _ignoreSigpipe() {
   }
 }
 
-/// Last-resort screen shown when the database can't be opened at startup (disk
-/// full, no write permission, or another copy of the app holding the file).
-/// Deliberately self-contained — it runs before the theme/AppColors exist, so
-/// it hardcodes a dark bootstrap palette rather than depend on any provider.
-class _DbInitErrorApp extends StatelessWidget {
-  const _DbInitErrorApp({required this.details});
-
-  final String details;
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        backgroundColor: const Color(0xFF0F172A),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.storage_rounded,
-                  color: Colors.orangeAccent,
-                  size: 48,
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  "Front Porch AI couldn't open its database",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'This is usually a full disk, missing write permission, or '
-                  'another copy of Front Porch AI already running. Free up '
-                  'space, close any other copies, then reopen the app.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  details,
-                  textAlign: TextAlign.center,
-                  maxLines: 4,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white38, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 void _mark(String step) => StartupTrace.mark(step);
 
 void main(List<String> args) async {
@@ -231,6 +172,16 @@ void main(List<String> args) async {
   // to watch SIGPIPE, so we set the disposition directly via libc.
   _ignoreSigpipe();
 
+  // Self-heal a corrupt shared_preferences.json BEFORE anything reads it.
+  // On Windows/Linux a crash or power loss mid-write can leave the settings
+  // file full of NUL bytes; the first getInstance() then throws a
+  // FormatException inside the database-open guard below and the app died on
+  // a misleading "couldn't open its database" screen. Moving the broken file
+  // aside here lets the app boot with default settings instead; the
+  // post-first-frame notice (see the update-check block) tells the user.
+  await PrefsRecovery.healIfCorrupt();
+  _mark('PrefsRecovery.healIfCorrupt');
+
   // Consolidate files BEFORE loading database or any configs.
   try {
     await FileConsolidationService.consolidate();
@@ -266,7 +217,15 @@ void main(List<String> args) async {
     dbHealthy = true;
   } catch (e, st) {
     debugPrint('[DB] FATAL: could not open the database: $e\n$st');
-    runApp(_DbInitErrorApp(details: e.toString()));
+    // A FormatException here is the settings file failing to parse (the
+    // first prefs read lives inside this guard), not the database — and it
+    // means PrefsRecovery couldn't heal it. Show the accurate variant.
+    runApp(
+      DbInitErrorApp(
+        details: e.toString(),
+        settingsFileCorrupt: e is FormatException,
+      ),
+    );
     return;
   }
   _MyAppState._dbHealthy = dbHealthy;
@@ -1173,6 +1132,26 @@ class _MyAppState extends State<MyApp> with WindowListener {
               if (!_updateChecked) {
                 _updateChecked = true;
                 WidgetsBinding.instance.addPostFrameCallback((_) {
+                  // A settings reset must never be silent — especially the
+                  // custom storage folder, whose loss makes the library look
+                  // empty until the user re-selects it in Settings.
+                  if (PrefsRecovery.recovered) {
+                    showWarmDialog<void>(
+                      context,
+                      title: 'Your settings were reset',
+                      icon: Icons.settings_backup_restore_rounded,
+                      content: const WarmDialogText(
+                        'Front Porch AI found its settings file damaged — '
+                        'this can happen after a crash or power loss — and '
+                        'started fresh so the app could open. Your '
+                        'characters and chats are unaffected.\n\n'
+                        'If you had moved your storage folder, point the '
+                        'app back at it in Settings and everything will '
+                        'reappear.',
+                      ),
+                      actions: [warmDialogCancel(context, label: 'OK')],
+                    );
+                  }
                   _checkForUpdates(context);
                   _autoStartWebServer(context);
                   // Start auto-backup (always on, every 10 minutes)

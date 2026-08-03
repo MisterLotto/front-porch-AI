@@ -8219,3 +8219,41 @@ nothing to fix. New 4-case interaction test (oversize→confirm→download,
 cancel→no download, fits→no dialog, vram-unknown→neutral+no dialog) passes; full
 `test/ui` + `test/utils` + `test/models` suites pass (629); the
 `leaf_animated_golden_test.dart` golden (HFModelCard collapsed) is pixel-identical.
+
+## 2026-08-03 — Corrupt shared_preferences.json killed startup with a misleading DB error
+
+**Files.**
+- `lib/services/prefs_recovery.dart` (NEW)
+- `lib/ui/widgets/db_init_error_app.dart` (NEW — extracted `_DbInitErrorApp` from main.dart, now public + two variants)
+- `lib/main.dart` (heal call in main(), flagged catch, post-first-frame reset notice; net −21 lines)
+- `test/services/prefs_recovery_test.dart` (NEW)
+- `test/ui/widgets/db_init_error_app_test.dart` (NEW)
+- `docs/Rawhide.md`
+
+**Why.** Field report (Windows screenshot): "Front Porch AI couldn't open its
+database … FormatException: Unexpected character (at character 1)" over a run of
+NUL glyphs. The database was fine. On Windows/Linux shared_preferences stores
+everything in one shared_preferences.json with no atomic write, so a crash or
+power loss mid-write leaves it NUL-filled; the FIRST `SharedPreferences.getInstance()`
+of the launch happens inside the database-open guard (`AppDatabase.instance()`
+reads root_path at database.dart:766), so the jsonDecode FormatException was
+caught there and reported as a database failure — with advice (free disk space,
+close other copies) that could never fix it, and no recovery path at all.
+
+**Approach.** `PrefsRecovery.healIfCorrupt()` runs at the top of main() before
+anything reads prefs: it probes getInstance(), and on FormatException (only —
+other errors are passed through untouched) moves the broken file to
+`shared_preferences.json.corrupt` (kept for diagnosis, never deleted) and
+retries once, so the app boots with default settings. A post-first-frame warm
+dialog tells the user their settings were reset and — critically — that a
+custom storage folder needs re-selecting in Settings (its path lived in the
+lost file; without the notice the library looks silently empty). If healing
+fails, the error screen now has a settings-corruption variant with accurate
+advice; `_DbInitErrorApp` moved out of the >500-line main.dart to
+`ui/widgets/db_init_error_app.dart` as public `DbInitErrorApp` so the copy is
+testable. macOS is a deliberate no-op (NSUserDefaults plist, not this file).
+
+**Verification.** flutter analyze → No issues. dart fix → nothing. New tests:
+file-surgery (NUL-filled move, stale-backup replace, missing-file false) and
+both error-screen variants' copy. Full test/services + test/ui suites pass
+(2273). main.dart net smaller (2126 → 2105 lines).
