@@ -195,8 +195,8 @@ extension ChatServiceGroupEntry on ChatService {
         // group_realism_dynamics_editor. An explicit flag belongs at the blob's
         // top level, not in the per-member seed; that is a schema change.
         _needsSimEnabled = _groupRealism.values.any((state) {
-          final n = state['needs'];
-          return n is Map && n.isNotEmpty;
+          final n = state.needs;
+          return n != null && n.isNotEmpty;
         });
         if (_needsSimEnabled) {
           // Seed from group definition's per-char needs baselines (falls back to 80 when absent).

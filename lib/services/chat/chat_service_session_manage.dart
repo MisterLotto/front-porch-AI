@@ -549,7 +549,7 @@ extension ChatServiceSessionManage on ChatService {
         if (_activeGroup != null) {
           _groupRealism = parseGroupRealismSeeds(
             _activeGroup!.defaultMemberRealismState,
-          );
+          ).map((k, v) => MapEntry(k, GroupMemberRealism.fromJson(v)));
         }
         _activeObjectives = [];
         _messagesSinceLastCheck = 0;

@@ -8616,3 +8616,43 @@ Findings while writing it, worth recording:
   seeds WITHOUT avatar files, so its 'member_$i'-keyed seeds are never read
   (its own assertions don't depend on them; noting, not editing a protected
   test). This E2E seeds real avatar files and asserts the single key space.
+
+---
+
+## 2026-08-03 — U7: `_groupRealism` typed (Phase 5 of the realism audit)
+
+**Files:** `lib/services/chat/group_member_realism.dart` (new, ~230),
+`lib/services/chat/chat.dart` (barrel export), `lib/services/chat_service.dart`
+(field + 13 callback wirings; net −3 lines), `chat_service_group_realism_helpers.dart`
+(`_memberForWrite` replaces `_setGroupRealismValue`/`_getGroupInt`/`_getGroupString`
+— all three DELETED), `chat_service_group_read.dart` (11 getters typed),
+`chat_service_realism_dance.dart`, `chat_service_session_state.dart` (save via
+implicit toJson, load via fromJson), `chat_service_session_manage.dart`,
+`chat_service_group_entry.dart`, `chat_service_cast.dart`,
+`chat_service_group_settings.dart`, `chat_service_controls.dart`,
+`test/services/chat/group_member_realism_wire_format_test.dart` (new),
+`test/baselines/god_files.json` (chat_service tightened 4637→4634).
+
+**Design: a wrapper, not fields — deliberately.** GroupMemberRealism owns the
+raw map and exposes nullable typed accessors. Three properties make it safe
+WITHOUT the data migration the audit originally priced in:
+(1) toJson returns the live backing map → wire format byte-identical across
+all three persistence paths, old builds read new data and vice versa;
+(2) absence stays absent → presence-based inference survives (a `needs` key
+appearing is what flags Needs enabled for a whole group — a field-per-key
+class with defaults would have silently switched it on for needs-off groups);
+(3) unknown keys (the ~22 config/seed keys + anything future) pass through
+verbatim. Every runtime key name now lives in ONE place (GroupRealismKeys);
+the two generic leaf-service bridges (nsfw get/setGroupValue, counters) go
+through a debug-asserted allowlist so stringly access cannot creep back.
+
+Reads are now defensive (wrong-typed values read as absent, never throw) —
+strictly safer than the old `as num?` casts, which threw on a hand-edited
+export carrying a string in a numeric key.
+
+**Verification:** analyze 0 · wire-format unit test (fromJson→toJson identity
+on the real 41-key slot the wiring E2E captured, absence preservation, double
+coercion, garbage tolerance, deep-copy, allowlist) · full suite 2,736 ·
+ci-local goldens · wiring E2E green ON THE TYPED MAP · group_smoke E2E green ·
+dart fix clean. The ratchet fired again (chat_service shrank 3 lines) and was
+tightened. Grok worktree review launched; findings to be reconciled.

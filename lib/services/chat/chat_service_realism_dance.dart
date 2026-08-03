@@ -313,12 +313,8 @@ extension ChatServiceRealismDance on ChatService {
     // Note: group uses 'arousal' key (historical) vs snapshot 'arousalLevel' for compat.
     _nsfwService.loadNsfwScalarsForSpeaker(charId);
 
-    _characterEmotion = _getGroupString(charId, 'emotion');
-    _emotionIntensity = _getGroupString(
-      charId,
-      'emotionIntensity',
-      defaultValue: 'moderate',
-    );
+    _characterEmotion = _groupRealism[charId]?.emotion ?? '';
+    _emotionIntensity = _groupRealism[charId]?.emotionIntensity ?? 'moderate';
 
     // Needs vector. _getGroupNeeds fills every key in NeedsSimulation.needKeys,
     // falling back to needDefaults, so it can never come back empty — the
@@ -338,10 +334,10 @@ extension ChatServiceRealismDance on ChatService {
     _nsfwService.saveNsfwScalarsToGroup(charId);
 
     if (_characterEmotion.isNotEmpty) {
-      _setGroupRealismValue(charId, 'emotion', _characterEmotion);
+      _memberForWrite(charId).emotion = _characterEmotion;
     }
     if (_emotionIntensity.isNotEmpty) {
-      _setGroupRealismValue(charId, 'emotionIntensity', _emotionIntensity);
+      _memberForWrite(charId).emotionIntensity = _emotionIntensity;
     }
 
     // Persist current needs vector for this speaker

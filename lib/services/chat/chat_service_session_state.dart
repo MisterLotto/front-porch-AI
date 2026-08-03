@@ -91,8 +91,10 @@ extension ChatServiceSessionState on ChatService {
               map; // support both wrapped and direct formats during transition
           if (perChar is Map) {
             _groupRealism = perChar.map(
-              (k, v) =>
-                  MapEntry(k.toString(), Map<String, dynamic>.from(v as Map)),
+              (k, v) => MapEntry(
+                k.toString(),
+                GroupMemberRealism.fromJson(v as Map),
+              ),
             );
           }
 

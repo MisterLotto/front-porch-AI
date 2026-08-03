@@ -77,8 +77,8 @@ extension ChatServiceControls on ChatService {
     if (_activeGroup != null) {
       for (final c in _groupCharacters) {
         final id = _getCharacterIdFromCard(c);
-        final entry = _groupRealism[id] ??= <String, dynamic>{};
-        entry['nsfwCooldownEnabled'] = enabled;
+        final entry = _memberForWrite(id);
+        entry.nsfwCooldownEnabled = enabled;
         // Parity with 1:1: NsfwService.setNsfwCooldownEnabled(false) zeroes
         // the scalar arousal + cooldowns, so disabling must clear each
         // member's persisted values too — otherwise re-enabling resumed
@@ -86,9 +86,10 @@ extension ChatServiceControls on ChatService {
         // fresh. (Also the documented escape hatch: toggling off and on
         // resets a chat's lust state to neutral in BOTH modes.)
         if (!enabled) {
-          entry['arousal'] = 0;
-          entry['cooldownTurnsRemaining'] = 0;
-          entry['cooldownTurnsTotal'] = 0;
+          entry
+            ..arousal = 0
+            ..cooldownTurnsRemaining = 0
+            ..cooldownTurnsTotal = 0;
         }
       }
     }

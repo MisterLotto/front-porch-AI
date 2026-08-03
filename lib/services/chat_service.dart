@@ -1137,7 +1137,10 @@ class ChatService extends ChangeNotifier {
 
   /// Per-character realism / needs / state for group chats.
   /// Keyed by stable charId. Populated from the hidden checkpoint.
-  Map<String, Map<String, dynamic>> _groupRealism = {};
+  /// Per-member realism state, typed (U7). Keys are runtime member ids
+  /// (stableGroupId). The wrapper preserves the legacy wire format exactly —
+  /// see group_member_realism.dart for why it is a wrapper and not fields.
+  Map<String, GroupMemberRealism> _groupRealism = {};
 
   /// The group member id (`_getCharacterIdFromCard`) whose realism state is being
   /// processed for the turn currently generating. Set the moment the speaker is
@@ -1361,9 +1364,11 @@ class ChatService extends ChangeNotifier {
   // without god privates. 0 new private methods in god.
   // _runPostGenNeedsChecks thin (consolidated to needs_impact_evaluator); 3 group cbs only (onNotify/onSaveChat removed as dead; god owns save/notify for post-gen fidelity per plan). (cross-ref setActiveCharacter:1572 etc)
   late final _nsfwService = NsfwService(
-    getGroupInt: _getGroupInt,
-    getGroupValue: (charId, key) => _groupRealism[charId]?[key],
-    setGroupValue: _setGroupRealismValue,
+    getGroupInt: (charId, key, {int defaultValue = 0}) =>
+        (_groupRealism[charId]?.valueFor(key) as num?)?.toInt() ??
+        defaultValue,
+    getGroupValue: (charId, key) => _groupRealism[charId]?.valueFor(key),
+    setGroupValue: (charId, key, v) => _memberForWrite(charId).setValue(key, v),
   );
 
   // ── Lorebook scanner (extracted to LorebookScanner) ────────────────────────
@@ -1712,53 +1717,43 @@ class ChatService extends ChangeNotifier {
     getMessageCount: () => _messages.length,
     getIsGroupRealismActive: () => isGroupRealismActive,
     getGroupAffectionScore: (charId, {int defaultValue = 0}) =>
-        (_groupRealism[charId]?['affection'] as num?)?.toInt() ?? defaultValue,
-    setGroupAffectionScore: (charId, v) =>
-        _setGroupRealismValue(charId, 'affection', v),
+        _groupRealism[charId]?.affection ?? defaultValue,
+    setGroupAffectionScore: (charId, v) => _memberForWrite(charId).affection = v,
     getGroupLongTermScore: (charId, {int defaultValue = 0}) =>
-        (_groupRealism[charId]?['longTermScore'] as num?)?.toInt() ??
-        defaultValue,
+        _groupRealism[charId]?.longTermScore ?? defaultValue,
     setGroupLongTermScore: (charId, v) =>
-        _setGroupRealismValue(charId, 'longTermScore', v),
+        _memberForWrite(charId).longTermScore = v,
     getGroupTrustLevel: (charId, {int defaultValue = 0}) =>
-        (_groupRealism[charId]?['trust'] as num?)?.toInt() ?? defaultValue,
-    setGroupTrustLevel: (charId, v) =>
-        _setGroupRealismValue(charId, 'trust', v),
+        _groupRealism[charId]?.trust ?? defaultValue,
+    setGroupTrustLevel: (charId, v) => _memberForWrite(charId).trust = v,
     getGroupFixation: (charId, {String defaultValue = ''}) =>
-        (_groupRealism[charId]?['fixation'] as String?) ?? defaultValue,
-    setGroupFixation: (charId, v) =>
-        _setGroupRealismValue(charId, 'fixation', v),
+        _groupRealism[charId]?.fixation ?? defaultValue,
+    setGroupFixation: (charId, v) => _memberForWrite(charId).fixation = v,
     getGroupFixationLifespan: (charId, {int defaultValue = 0}) =>
-        (_groupRealism[charId]?['fixationLifespan'] as num?)?.toInt() ??
-        defaultValue,
+        _groupRealism[charId]?.fixationLifespan ?? defaultValue,
     setGroupFixationLifespan: (charId, v) =>
-        _setGroupRealismValue(charId, 'fixationLifespan', v),
+        _memberForWrite(charId).fixationLifespan = v,
     getGroupRelationshipTier: (charId, {int defaultValue = 0}) =>
-        (_groupRealism[charId]?['relationshipTier'] as num?)?.toInt() ??
-        defaultValue,
+        _groupRealism[charId]?.relationshipTier ?? defaultValue,
     setGroupRelationshipTier: (charId, v) =>
-        _setGroupRealismValue(charId, 'relationshipTier', v),
+        _memberForWrite(charId).relationshipTier = v,
     getGroupLongTermTier: (charId, {int defaultValue = 0}) =>
-        (_groupRealism[charId]?['longTermTier'] as num?)?.toInt() ??
-        defaultValue,
+        _groupRealism[charId]?.longTermTier ?? defaultValue,
     setGroupLongTermTier: (charId, v) =>
-        _setGroupRealismValue(charId, 'longTermTier', v),
+        _memberForWrite(charId).longTermTier = v,
     getGroupSpatialStance: (charId, {String defaultValue = ''}) =>
-        (_groupRealism[charId]?['spatialStance'] as String?) ?? defaultValue,
+        _groupRealism[charId]?.spatialStance ?? defaultValue,
     setGroupSpatialStance: (charId, v) =>
-        _setGroupRealismValue(charId, 'spatialStance', v),
-    getGroupInterCharacterRelationships: (charId) {
-      final raw = _groupRealism[charId]?['relationships'];
-      if (raw is Map) {
-        return raw.map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
-      }
-      return const <String, int>{};
-    },
+        _memberForWrite(charId).spatialStance = v,
+    getGroupInterCharacterRelationships: (charId) =>
+        _groupRealism[charId]?.relationships ?? const <String, int>{},
     setGroupInterCharacterRelationships: (charId, rels) =>
-        _setGroupRealismValue(charId, 'relationships', rels),
+        _memberForWrite(charId).relationships = rels,
     getGroupCounter: (charId, key, {int defaultValue = 0}) =>
-        (_groupRealism[charId]?[key] as num?)?.toInt() ?? defaultValue,
-    setGroupCounter: (charId, key, v) => _setGroupRealismValue(charId, key, v),
+        (_groupRealism[charId]?.valueFor(key) as num?)?.toInt() ??
+        defaultValue,
+    setGroupCounter: (charId, key, v) =>
+        _memberForWrite(charId).setValue(key, v),
     // Living Time §7 v1.5: bond/trust tier crossings → "Our Story" cards.
     // Fire-and-forget; plant never throws into the eval path. Diary owner is
     // the current speaker (1:1 host or group speaker whose scalars just moved).
@@ -1863,7 +1858,9 @@ class ChatService extends ChangeNotifier {
     getActiveCharacter: () => _activeCharacter,
     getShouldTrackInterCharacterRelationships: () =>
         _shouldTrackInterCharacterRelationships,
-    getGroupInt: _getGroupInt,
+    getGroupInt: (charId, key, {int defaultValue = 0}) =>
+        (_groupRealism[charId]?.valueFor(key) as num?)?.toInt() ??
+        defaultValue,
     getCharacterIdFromCard: _getCharacterIdFromCard,
     getInterCharacterRelationships:
         _relationshipService.getInterCharacterRelationships,

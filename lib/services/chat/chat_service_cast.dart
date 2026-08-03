@@ -225,7 +225,7 @@ extension ChatServiceCast on ChatService {
     // per-speaker load only ran above when realism is on; reading the live nsfw
     // scalar otherwise could pick up a stale impersonated value).
     final bool soleNsfwEnabled =
-        (_groupRealism[soleId]?['nsfwCooldownEnabled'] as bool?) ??
+        _groupRealism[soleId]?.nsfwCooldownEnabled ??
         _nsfwService.nsfwCooldownEnabled;
     final bool solePassageEnabled = _timeService.passageOfTimeEnabled;
     final bool soleChaosEnabled = _chaosModeService.chaosModeEnabled;

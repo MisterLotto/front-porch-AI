@@ -51,21 +51,15 @@ extension ChatServiceGroupRealismHelpers on ChatService {
     return _getCharacterIdFromCard(_groupCharacters.first);
   }
 
-  // ── Per-character realism state helpers (group mode) ────────────────────
-  void _setGroupRealismValue(String charId, String key, dynamic value) {
-    if (_activeGroup == null) return;
-    _groupRealism.putIfAbsent(charId, () => <String, dynamic>{});
-    _groupRealism[charId]![key] = value;
+  // ── Per-character realism state access (group mode, typed — U7) ─────────
+  /// The one write door to a member's typed state. Outside group mode it
+  /// hands back a THROWAWAY object, so writes vanish — byte-for-byte the
+  /// same no-op the old `if (_activeGroup == null) return;` guard performed,
+  /// without every caller needing to re-check the mode.
+  GroupMemberRealism _memberForWrite(String charId) {
+    if (_activeGroup == null) return GroupMemberRealism();
+    return _groupRealism.putIfAbsent(charId, GroupMemberRealism.new);
   }
-
-  int _getGroupInt(String charId, String key, {int defaultValue = 0}) =>
-      (_groupRealism[charId]?[key] as num?)?.toInt() ?? defaultValue;
-
-  String _getGroupString(
-    String charId,
-    String key, {
-    String defaultValue = '',
-  }) => (_groupRealism[charId]?[key] as String?) ?? defaultValue;
 
   // Tolerant coercion for a needs vector that may arrive as JSON-decoded
   // (num values), dynamic map from metadata/snapshots/pre_state, or proper
@@ -89,21 +83,17 @@ extension ChatServiceGroupRealismHelpers on ChatService {
   }
 
   Map<String, int> _getGroupNeeds(String charId) {
-    final raw = _groupRealism[charId]?['needs'];
+    final raw = _groupRealism[charId]?.needs;
     final result = <String, int>{};
     for (final k in NeedsSimulation.needKeys) {
-      final v = (raw is Map) ? raw[k] : null;
-      if (v is num) {
-        result[k] = v.toInt();
-      } else {
-        result[k] = NeedsSimulation.needDefaults[k] ?? 80;
-      }
+      final v = raw?[k];
+      result[k] = v ?? (NeedsSimulation.needDefaults[k] ?? 80);
     }
     return result;
   }
 
   void _setGroupNeeds(String charId, Map<String, int> needs) {
-    _setGroupRealismValue(charId, 'needs', needs);
+    _memberForWrite(charId).needs = needs;
   }
 
   /// Needs decay rates for the character being decayed on the CURRENT turn.
