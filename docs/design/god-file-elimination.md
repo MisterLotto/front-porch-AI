@@ -48,11 +48,13 @@ dead-code audit, the works.
   stays; no behavior change.
 - **`main.dart` 2105** — service init order is delicate. Split into ordered
   startup builders that make the order *explicit* rather than positional.
-- **`database.dart` 3717** — Drift schema + migration ladder. A pure file
-  reorganization (tables into schema part-files, the `onUpgrade` ladder into
-  its own file) changes nothing about the SQLite schema external tools read —
-  but this file is on the never-touch list, so it moves only with explicit
-  approval, last.
+- **`database.dart` 3717 — OUT OF SCOPE (maintainer decision 2026-08-03).**
+  It keeps a permanent baseline entry; the campaign's finish line is a
+  baseline containing exactly this one file. Do not propose splitting it
+  again without a new maintainer decision.
+
+**Decisions log (2026-08-03):** database.dart excluded; main.dart confirmed in
+scope; execution order confirmed A → B → C, starting with `chat_page.dart`.
 
 ## Per-split definition of done (every file, no exceptions)
 1. Behavior-identical: extraction only, no logic edits smuggled in.

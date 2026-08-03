@@ -8493,3 +8493,32 @@ Campaign tranches in the design doc: A = 15 UI pages/dialogs (settled split
 precedent), B = 8 services (parity duty on realism ones), C = the protected
 core (chat_service via late-final initializer extraction to parts; main.dart
 ordered startup builders; database.dart only with explicit approval).
+
+---
+
+## 2026-08-03 — God-file campaign, first kill: chat_page.dart 3,521 → 979
+
+**Files:** `lib/ui/pages/chat_page.dart` (donor, −2,542), 8 new `part of` files
+(`chat_page.sidebar.dart` 329, `chat_page.sidebar_widgets.dart` 473,
+`chat_page.input.dart` 325, `chat_page.input_bar.dart` 176,
+`chat_page.input_actions.dart` 430, `chat_page.scene_dialogs.dart` 333,
+`chat_page.session_dialogs.dart` 448, `chat_page.image_consent.dart` ~200),
+`test/baselines/god_files.json` (entry DELETED — 25 remain).
+
+Settings_page precedent applied wholesale: `part of` files holding extensions
+on `_ChatPageState` (same library → privates stay visible), plus the same
+public `rebuildState(fn)` bridge for the protected `setState`. Every move was
+byte-verbatim via line-range surgery with content asserts on both boundaries
+of every cut — the two off-by-one attempts were caught by the asserts BEFORE
+any write, not after. Seams are whole-widget child extractions only; the one
+list-shaped seam (`_buildInputActionButtons`) spreads the same widgets in the
+same order, which is an identical child list.
+
+Also deleted: an orphaned doc comment left behind by the command-helper move.
+
+**Verification:** analyze 0 issues · `dart fix` nothing · full suite 2,728
+green ×4 (after each move) · ci-local goldens green · theme_interaction E2E
+(the hit-test sweep that exists because of the 10-theme dead-button bug) ·
+app_smoke E2E (send, realism, sidebar, persistence). The ratchet fired twice
+mid-work demanding its baseline be tightened — first live proof it enforces
+rule 3 on real work, not just in its tamper test.

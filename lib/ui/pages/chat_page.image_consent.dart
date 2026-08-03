@@ -1,0 +1,171 @@
+// Copyright (C) 2026 Front Porch AI
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of Front Porch AI.
+//
+// Front Porch AI is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Front Porch AI is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
+//
+// The external-image consent flow: the one-time "allow images from the
+// internet?" dialog (risk list + per-character persisted consent) that
+// MessageBubble raises via onRequestImagePermission. Extracted verbatim from
+// the build() closure in chat_page.dart (god-file campaign, Tranche A).
+
+part of 'chat_page.dart';
+
+extension _ChatPageImageConsent on _ChatPageState {
+  /// Verbatim the old onRequestImagePermission closure body.
+  Future<bool> _requestExternalImagePermission() async {
+    if (_externalImagesAllowed != null) {
+      return _externalImagesAllowed!;
+    }
+    // Check persisted consent first
+    if (!_imageConsentChecked) {
+      _imageConsentChecked = true;
+      final prefs = await SharedPreferences.getInstance();
+      final consented = prefs.getStringList('image_consent_characters') ?? [];
+      final charName =
+          Provider.of<ChatService>(
+            context,
+            listen: false,
+          ).activeCharacter?.name ??
+          '';
+      if (charName.isNotEmpty && consented.contains(charName)) {
+        if (mounted) {
+          rebuildState(() => _externalImagesAllowed = true);
+        }
+        return true;
+      }
+    }
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E293B),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        icon: const Icon(
+          Icons.shield_outlined,
+          color: Colors.orangeAccent,
+          size: 36,
+        ),
+        title: const Text(
+          'External Image Detected',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'This message contains images hosted on an external server. '
+              'Loading them carries security risks:',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: 13,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _buildRiskItem(
+              Icons.visibility,
+              'Your IP address will be exposed to the image host',
+            ),
+            _buildRiskItem(
+              Icons.bug_report,
+              'Maliciously crafted images could potentially exploit vulnerabilities',
+            ),
+            _buildRiskItem(
+              Icons.track_changes,
+              'The URL may be used for tracking',
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'The source has not been verified as safe.',
+              style: TextStyle(
+                color: Colors.orangeAccent.withValues(alpha: 0.8),
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text(
+              'Block Images',
+              style: TextStyle(color: Colors.white54),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orangeAccent,
+              foregroundColor: Colors.black87,
+            ),
+            child: const Text('Accept Risk & Load'),
+          ),
+        ],
+      ),
+    );
+    final allowed = result ?? false;
+    if (allowed) {
+      // Persist consent for this character
+      final prefs = await SharedPreferences.getInstance();
+      final charName =
+          Provider.of<ChatService>(
+            context,
+            listen: false,
+          ).activeCharacter?.name ??
+          '';
+      if (charName.isNotEmpty) {
+        final consented = prefs.getStringList('image_consent_characters') ?? [];
+        if (!consented.contains(charName)) {
+          consented.add(charName);
+          await prefs.setStringList('image_consent_characters', consented);
+        }
+      }
+    }
+    if (mounted) {
+      rebuildState(() => _externalImagesAllowed = allowed);
+    }
+    return allowed;
+  }
+}
+
+Widget _buildRiskItem(IconData icon, String text) {
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 16, color: Colors.orangeAccent),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: Colors.white60,
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
