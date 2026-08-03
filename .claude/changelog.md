@@ -8350,3 +8350,39 @@ They need strengthening into real assertions — a separate piece of work, not a
 blocks any PR that deletes a test without the maintainer's `approved-test-change` label. A
 direct push to Rawhide does not pass through it. This deletion was maintainer-directed in
 conversation; recording it here because the gate did not and could not review it.
+## 2026-08-03 — Model downloader: "Too Large" hard block removed (VRAM gate → confirm dialog)
+
+**Files.**
+- `lib/ui/widgets/hf_quant_row.dart` (NEW — extracted from hf_model_card.dart)
+- `lib/ui/widgets/hf_model_card.dart` (shrunk 515 → ~290 lines)
+- `test/ui/widgets/hf_quant_row_test.dart` (NEW)
+- `docs/Rawhide.md`
+
+**Why.** Users on main AND Rawhide reported they could not download any model that
+didn't fully fit in VRAM. The downloader's per-file row disabled the Download button
+outright (`onPressed: null`, label "Too Large") whenever
+`VramEstimator.getFitStatus` returned `exceeds`. Two amplifiers made it worse than
+intended: (1) the estimate adds a 16K-context KV-cache allowance + 5% overhead on
+top of file size, so a file that fits on disk-size grounds still trips the gate;
+(2) `getFitStatus` returns `exceeds` when `availableMb <= 0`, so a failed VRAM
+detection (HardwareService leaves vramMb at 0 on several AMD/Intel/Linux paths)
+blocked every model in the search tab. Blocking was wrong in principle: KoboldCpp
+runs oversize models with partial CPU offload, and downloading costs disk, not VRAM.
+
+**Approach.** The button is now always tappable. Oversize files route through a
+`showWarmDialog` confirmation ("Larger than your VRAM… you can still run it by
+offloading some layers to the CPU") before downloading; fitting/tight files download
+immediately as before. `availableVramMb <= 0` now renders a neutral "VRAM not
+detected — fit unknown" row (nullable fit status, UI-only — `getFitStatus` semantics
+are unchanged and its pinned tests untouched). Because `hf_model_card.dart` was
+already over the 500-line cap, the whole quant-file row (badge, VRAM indicator,
+progress, action button, dialog, color helpers) was extracted into `HFQuantRow`;
+the card keeps collapse/expand + header only. While in there: the download button's
+`Colors.blue` chrome was warmed to `porchAmberOf` per the theme standard. The web
+UI's downloader never had a VRAM gate, so no web change is needed for parity.
+
+**Verification.** `flutter analyze` → No issues found. `dart fix --dry-run` →
+nothing to fix. New 4-case interaction test (oversize→confirm→download,
+cancel→no download, fits→no dialog, vram-unknown→neutral+no dialog) passes; full
+`test/ui` + `test/utils` + `test/models` suites pass (629); the
+`leaf_animated_golden_test.dart` golden (HFModelCard collapsed) is pixel-identical.

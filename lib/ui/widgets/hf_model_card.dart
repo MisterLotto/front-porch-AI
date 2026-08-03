@@ -20,7 +20,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/utils/utils.dart';
+import 'package:front_porch_ai/ui/widgets/hf_quant_row.dart';
 
 /// Glassmorphic card displaying a HuggingFace model with expandable quant options.
 ///
@@ -94,25 +94,6 @@ class _HFModelCardState extends State<HFModelCard>
         _expandController.reverse();
       }
     });
-  }
-
-  Color _getQuantColor(String category) {
-    switch (category) {
-      case 'red':
-        return const Color(0xFFFF5252);
-      case 'orange':
-        return const Color(0xFFFFB74D);
-      case 'yellow':
-        return const Color(0xFFFFD54F);
-      case 'green':
-        return const Color(0xFF69F0AE);
-      case 'blue':
-        return const Color(0xFF40C4FF);
-      case 'purple':
-        return const Color(0xFFB388FF);
-      default:
-        return Colors.grey;
-    }
   }
 
   @override
@@ -286,229 +267,18 @@ class _HFModelCardState extends State<HFModelCard>
 
     return Column(
       mainAxisSize: MainAxisSize.min,
-      children: sorted.map((file) => _buildQuantRow(file)).toList(),
-    );
-  }
-
-  Widget _buildQuantRow(HFModelFile file) {
-    final vramNeeded = VramEstimator.estimateForHfFile(
-      file: file,
-      contextSize: widget.contextSize,
-    );
-    final fitStatus = VramEstimator.getFitStatus(
-      neededMb: vramNeeded,
-      availableMb: widget.availableVramMb,
-    );
-    final isDownloading = widget.downloadingFiles.containsKey(file.filename);
-    final downloadTask = widget.downloadingFiles[file.filename];
-    final isDownloaded = widget.downloadedFiles.contains(file.filename);
-
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.resolve(
-          context,
-          Colors.white.withValues(alpha: 0.03),
-          Colors.black.withValues(alpha: 0.02),
-        ),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: AppColors.resolve(
-            context,
-            Colors.white.withValues(alpha: 0.05),
-            AppColors.borderOf(context),
-          ),
-        ),
-      ),
-      child: Row(
-        children: [
-          // Quant badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: _getQuantColor(
-                file.quantType.colorCategory,
-              ).withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                color: _getQuantColor(
-                  file.quantType.colorCategory,
-                ).withValues(alpha: 0.3),
-              ),
+      children: sorted
+          .map(
+            (file) => HFQuantRow(
+              file: file,
+              availableVramMb: widget.availableVramMb,
+              contextSize: widget.contextSize,
+              downloadTask: widget.downloadingFiles[file.filename],
+              isDownloaded: widget.downloadedFiles.contains(file.filename),
+              onDownload: widget.onDownload,
             ),
-            child: Text(
-              file.quantType.label,
-              style: TextStyle(
-                color: _getQuantColor(file.quantType.colorCategory),
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-
-          // File info
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  file.filename,
-                  style: TextStyle(
-                    color: AppColors.textPrimary(context),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 4),
-
-                // VRAM indicator
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Status dot
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: _getFitStatusColor(fitStatus),
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: _getFitStatusColor(
-                              fitStatus,
-                            ).withValues(alpha: 0.4),
-                            blurRadius: 4,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-
-                    // VRAM text
-                    Flexible(
-                      child: Text(
-                        '${file.sizeDisplay} | VRAM: ${VramEstimator.formatVramEstimate(vramNeeded)} | ${fitStatus.description(vramNeeded, widget.availableVramMb)}',
-                        style: TextStyle(
-                          color: _getFitStatusColor(
-                            fitStatus,
-                          ).withValues(alpha: 0.8),
-                          fontSize: 11,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-
-                // Download progress if active
-                if (isDownloading && downloadTask != null) ...[
-                  const SizedBox(height: 6),
-                  LinearProgressIndicator(
-                    value: downloadTask.progress,
-                    minHeight: 3,
-                    backgroundColor: AppColors.resolve(
-                      context,
-                      Colors.white.withValues(alpha: 0.1),
-                      AppColors.borderOf(context).withValues(alpha: 0.3),
-                    ),
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      _getFitStatusColor(fitStatus),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    downloadTask.statusString,
-                    style: TextStyle(
-                      color: AppColors.textTertiary(context),
-                      fontSize: 10,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-
-          // Action button
-          const SizedBox(width: 12),
-          _buildActionButton(fitStatus, isDownloading, isDownloaded, file),
-        ],
-      ),
+          )
+          .toList(),
     );
-  }
-
-  Widget _buildActionButton(
-    VramFitStatus fitStatus,
-    bool isDownloading,
-    bool isDownloaded,
-    HFModelFile file,
-  ) {
-    if (isDownloaded) {
-      return const Icon(
-        Icons.check_circle_rounded,
-        color: Color(0xFF69F0AE),
-        size: 20,
-      );
-    }
-
-    if (isDownloading) {
-      final task = widget.downloadingFiles[file.filename];
-      if (task?.state == DownloadTaskState.downloading) {
-        return IconButton(
-          icon: Icon(
-            Icons.pause_circle_rounded,
-            color: AppColors.iconSecondary(context),
-            size: 22,
-          ),
-          onPressed: () {
-            // Pause handled by parent via task ID
-          },
-          constraints: const BoxConstraints(),
-          padding: EdgeInsets.zero,
-        );
-      }
-      return Icon(
-        Icons.hourglass_bottom_rounded,
-        color: AppColors.iconSecondary(context),
-        size: 20,
-      );
-    }
-
-    return ElevatedButton(
-      onPressed: fitStatus == VramFitStatus.exceeds
-          ? null
-          : () => widget.onDownload(file),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: fitStatus == VramFitStatus.exceeds
-            ? Colors.red.withValues(alpha: 0.2)
-            : Colors.blue.withValues(alpha: 0.3),
-        foregroundColor: fitStatus == VramFitStatus.exceeds
-            ? Colors.red.withValues(alpha: 0.6)
-            : AppColors.textPrimary(context),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-        minimumSize: const Size(0, 0),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      ),
-      child: Text(
-        fitStatus == VramFitStatus.exceeds ? 'Too Large' : 'Download',
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
-
-  Color _getFitStatusColor(VramFitStatus status) {
-    switch (status) {
-      case VramFitStatus.fits:
-        return const Color(0xFF69F0AE); // Green
-      case VramFitStatus.tight:
-        return const Color(0xFFFFD54F); // Yellow
-      case VramFitStatus.exceeds:
-        return const Color(0xFFFF5252); // Red
-    }
   }
 }
