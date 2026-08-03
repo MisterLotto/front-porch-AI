@@ -1365,8 +1365,7 @@ class ChatService extends ChangeNotifier {
   // _runPostGenNeedsChecks thin (consolidated to needs_impact_evaluator); 3 group cbs only (onNotify/onSaveChat removed as dead; god owns save/notify for post-gen fidelity per plan). (cross-ref setActiveCharacter:1572 etc)
   late final _nsfwService = NsfwService(
     getGroupInt: (charId, key, {int defaultValue = 0}) =>
-        (_groupRealism[charId]?.valueFor(key) as num?)?.toInt() ??
-        defaultValue,
+        _groupIntOr(charId, key, defaultValue),
     getGroupValue: (charId, key) => _groupRealism[charId]?.valueFor(key),
     setGroupValue: (charId, key, v) => _memberForWrite(charId).setValue(key, v),
   );
@@ -1750,8 +1749,7 @@ class ChatService extends ChangeNotifier {
     setGroupInterCharacterRelationships: (charId, rels) =>
         _memberForWrite(charId).relationships = rels,
     getGroupCounter: (charId, key, {int defaultValue = 0}) =>
-        (_groupRealism[charId]?.valueFor(key) as num?)?.toInt() ??
-        defaultValue,
+        _groupIntOr(charId, key, defaultValue),
     setGroupCounter: (charId, key, v) =>
         _memberForWrite(charId).setValue(key, v),
     // Living Time §7 v1.5: bond/trust tier crossings → "Our Story" cards.
@@ -1859,8 +1857,7 @@ class ChatService extends ChangeNotifier {
     getShouldTrackInterCharacterRelationships: () =>
         _shouldTrackInterCharacterRelationships,
     getGroupInt: (charId, key, {int defaultValue = 0}) =>
-        (_groupRealism[charId]?.valueFor(key) as num?)?.toInt() ??
-        defaultValue,
+        _groupIntOr(charId, key, defaultValue),
     getCharacterIdFromCard: _getCharacterIdFromCard,
     getInterCharacterRelationships:
         _relationshipService.getInterCharacterRelationships,

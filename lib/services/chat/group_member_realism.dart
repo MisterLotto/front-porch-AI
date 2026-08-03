@@ -105,14 +105,19 @@ abstract final class GroupRealismKeys {
 class GroupMemberRealism {
   GroupMemberRealism() : _data = <String, dynamic>{};
 
-  /// Wraps a JSON-decoded slot. Deep-copies the top level and re-types nested
-  /// maps so later writes never alias the decoder's internal structures.
+  /// Wraps a JSON-decoded slot. Deep-copies recursively so later writes never
+  /// alias the decoder's internal structures at ANY depth — the known member
+  /// shape nests one level (needs/relationships), but unknown pass-through
+  /// keys from imports may nest deeper (Grok review finding, 2026-08-03).
   GroupMemberRealism.fromJson(Map<dynamic, dynamic> raw)
-    : _data = <String, dynamic>{
-        for (final e in raw.entries)
+    : _data = _deepCopy(raw);
+
+  static Map<String, dynamic> _deepCopy(Map<dynamic, dynamic> src) =>
+      <String, dynamic>{
+        for (final e in src.entries)
           e.key.toString(): e.value is Map
-              ? Map<String, dynamic>.from(e.value as Map)
-              : e.value,
+              ? _deepCopy(e.value as Map)
+              : (e.value is List ? List<dynamic>.from(e.value as List) : e.value),
       };
 
   final Map<String, dynamic> _data;

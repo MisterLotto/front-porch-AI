@@ -16,6 +16,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'package:front_porch_ai/models/models.dart';
+
 /// Automatic scenario-injection fade for long chats.
 ///
 /// Card/group scenario text stays stored forever; only the **prompt
@@ -54,6 +56,16 @@ class ScenarioFade {
 
   /// Wrap resolved scenario prose for the system prompt, or `''` when faded
   /// out / empty. Strength bands mirror Author's Note wording intensity.
+  /// One-call form for the generation plan: auto-fades with chat length
+  /// (strength 10→0 at 60 user messages). Lives here rather than inline in
+  /// chat_service_generation.dart so the fade policy has exactly one home
+  /// (and the generation file stays under its god-file ratchet ceiling).
+  static String wrapForChat(String scenario, List<ChatMessage> messages) =>
+      wrapScenario(
+        scenario,
+        strengthForUserMessageCount(messages.where((m) => m.isUser).length),
+      );
+
   static String wrapScenario(String scenario, int strength) {
     final text = scenario.trim();
     if (text.isEmpty || strength <= 0) return '';

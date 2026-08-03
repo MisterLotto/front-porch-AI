@@ -157,6 +157,40 @@ void main() {
       expect(m.valueFor(GroupRealismKeys.turnsSinceDecayCheck), 7);
     });
 
+    test('the REAL encode site shape: jsonEncode sees through the wrapper', () {
+      // The sessions save writes jsonEncode({'perChar': _groupRealism, ...})
+      // and relies on jsonEncode calling toJson() implicitly — a path the
+      // analyzer cannot type-check. Grok's review flagged that the round-trip
+      // test above never exercised it; this does, wrapper-in-map and all.
+      final wrapped = {
+        'perChar': {
+          'member_0': GroupMemberRealism.fromJson(_fullSlot),
+        },
+      };
+      final decoded = jsonDecode(jsonEncode(wrapped)) as Map<String, dynamic>;
+      expect(
+        (decoded['perChar'] as Map)['member_0'],
+        jsonDecode(jsonEncode(_fullSlot)),
+        reason: 'the sessions column would silently store the wrong shape',
+      );
+    });
+
+    test('deep unknown maps do not alias the decoder output either', () {
+      // Known slots nest one level (needs/relationships), but pass-through
+      // keys from imports may nest deeper. Grok's review proved the old
+      // one-level copy left depth>=2 aliased; fromJson now copies recursively.
+      final source = jsonDecode(
+        '{"importedConfig": {"outer": {"inner": 1}}}',
+      ) as Map;
+      final m = GroupMemberRealism.fromJson(source);
+      ((m.toJson()['importedConfig'] as Map)['outer'] as Map)['inner'] = 999;
+      expect(
+        ((source['importedConfig'] as Map)['outer'] as Map)['inner'],
+        1,
+        reason: 'a depth-2 write leaked back into the decoded JSON',
+      );
+    });
+
     test('fromJson deep-copies: mutating the wrapper never aliases the '
         'decoder output', () {
       final source = jsonDecode(jsonEncode(_fullSlot)) as Map;

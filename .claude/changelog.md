@@ -8656,3 +8656,36 @@ coercion, garbage tolerance, deep-copy, allowlist) · full suite 2,736 ·
 ci-local goldens · wiring E2E green ON THE TYPED MAP · group_smoke E2E green ·
 dart fix clean. The ratchet fired again (chat_service shrank 3 lines) and was
 tightened. Grok worktree review launched; findings to be reconciled.
+
+---
+
+## 2026-08-03 — U7 hardenings from Grok's review + ratchet enforcement on a parallel commit
+
+**Files:** `lib/services/chat/group_member_realism.dart` (recursive deep copy;
+comment fix in helpers), `lib/services/chat_service.dart` +
+`chat_service_group_realism_helpers.dart` (`_groupIntOr` — the 3 generic
+bridge reads get the same is-num defensive semantics as typed getters; god
+file net −3, 4634→4631), `lib/services/chat/scenario_fade.dart` +
+`chat_service_generation.dart` (`wrapForChat` — fade policy consolidated, one
+call-site line), wire-format test +2 cases (the real jsonEncode({'perChar':…})
+shape; depth-2 alias), baseline tightened (chat_service 4631).
+
+Grok reviewed the U7 diff in a throwaway worktree (its read-only mode remains
+broken; the worktree route WORKS and is now the pattern). Verdict: no
+ship-blockers; encode/load verified by its own probes; allowlist complete.
+Applied its three low findings: throw-vs-swallow inconsistency between bridges
+and typed getters (fixed via _groupIntOr), depth>=2 alias hole in fromJson
+(fixed via recursive copy + pinned by test), missing encode-site unit coverage
+(added). Also corrected my overclaiming "byte-for-byte" comment on
+_memberForWrite to "observationally equivalent".
+
+Separately: the maintainer's parallel-session commit 7ca32596 (scenario fade)
+grew chat_service_generation.dart 1978→1984 and tripped the ratchet — its
+first enforcement against third-party growth, three days after shipping. Per
+the ratchet's own prescription, extracted rather than raised: the two-step
+fade call became ScenarioFade.wrapForChat (policy lives in ONE file), and the
+generation file is back at exactly 1978. That parallel push is also what
+CANCELLED the earlier CI run (superseded), which had looked mysterious.
+
+**Verification:** analyze 0 · wire-format 8/8 · full suite 2,746 · ci-local
+goldens · wiring E2E + app_smoke green on macOS.

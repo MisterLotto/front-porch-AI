@@ -680,13 +680,7 @@ extension ChatServiceGeneration on ChatService {
           id: 'scenario',
           label: 'Scenario',
           inSystem: true,
-          // Auto-fades with chat length (strength 10→0 at 60 user msgs).
-          text: ScenarioFade.wrapScenario(
-            scenario,
-            ScenarioFade.strengthForUserMessageCount(
-              _messages.where((m) => m.isUser).length,
-            ),
-          ),
+          text: ScenarioFade.wrapForChat(scenario, _messages),
         );
         plan.add(
           id: 'lore.ex_top',

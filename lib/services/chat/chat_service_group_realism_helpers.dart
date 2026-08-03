@@ -53,13 +53,24 @@ extension ChatServiceGroupRealismHelpers on ChatService {
 
   // ── Per-character realism state access (group mode, typed — U7) ─────────
   /// The one write door to a member's typed state. Outside group mode it
-  /// hands back a THROWAWAY object, so writes vanish — byte-for-byte the
-  /// same no-op the old `if (_activeGroup == null) return;` guard performed,
-  /// without every caller needing to re-check the mode.
+  /// hands back a THROWAWAY object, so writes vanish — observationally the
+  /// same no-op the old `if (_activeGroup == null) return;` guard performed
+  /// (it allocates one discarded object; nothing reaches the map), without
+  /// every caller needing to re-check the mode.
   GroupMemberRealism _memberForWrite(String charId) {
     if (_activeGroup == null) return GroupMemberRealism();
     return _groupRealism.putIfAbsent(charId, GroupMemberRealism.new);
   }
+
+  /// Defensive int read for the generic bridge callbacks (counters, nsfw).
+  /// Same is-num semantics as the typed getters — Grok's U7 review flagged
+  /// that the bridges still THREW on a wrong-typed value while every typed
+  /// read defaulted, so one bad blob could crash one path and not another.
+  int _groupIntOr(String charId, String key, int defaultValue) =>
+      switch (_groupRealism[charId]?.valueFor(key)) {
+        final num v => v.toInt(),
+        _ => defaultValue,
+      };
 
   // Tolerant coercion for a needs vector that may arrive as JSON-decoded
   // (num values), dynamic map from metadata/snapshots/pre_state, or proper
