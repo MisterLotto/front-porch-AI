@@ -398,6 +398,7 @@ To prevent "God files" (historically some `.dart` files exceeded 9,000 lines):
 - **Do One Thing and Do It Well**: Every class, widget, or service has exactly one primary purpose. Extract complex sub-domains into distinct, focused files rather than piling them into existing god files.
 - **Strict File Size Cap**: Every Dart source file (excluding generated `.g.dart` and third-party code) **must be kept under 500 lines**.
 - **Action on Existing Files**: If modifying a file that already exceeds 500 lines (such as `chat_service.dart`), do not grow it. Extract cohesive chunks into new, focused classes under 500 lines.
+- **The 1,000-line ratchet is CI-enforced** (maintainer-set 2026-08-02, elimination campaign: `docs/design/god-file-elimination.md`): `test/hygiene/god_file_ratchet_test.dart` + `test/baselines/god_files.json` make the god-file count monotonically decreasing. No file outside the baseline may ever reach 1,000 lines; baseline files may only shrink; a shrink must lower its baseline entry in the same change; below 1,000 the entry is deleted forever. The baseline **only ever loses entries** — adding one requires the maintainer's `approved-test-change` label. The 500 cap above remains the target for new and extracted files; the ratchet sits at 1,000 so routine fixes to mid-size files never fight CI.
 
 ### Reuse Existing Code
 - **Prefer existing variables and scaffolds** — do not add complexity when unnecessary.

@@ -8464,3 +8464,32 @@ path — desktop-only bug, no parity work.
 the context round-trip, the configured-vs-0 distinction (including reload), and
 the optimizer honoring requestedContextSize verbatim. Full test/services +
 test/ui/pages suites pass (2178).
+
+---
+
+## 2026-08-02/03 — God-file elimination: the ratchet (campaign start)
+
+**Files:** `test/hygiene/god_file_ratchet_test.dart` (new),
+`test/baselines/god_files.json` (new, 26 entries), `CLAUDE.md`,
+`docs/design/god-file-elimination.md` (new).
+
+Maintainer mandate: no god files left; enforcement bar at 1,000 LOC (500 stays
+the target for new/extracted files). Census: 26 files >= 1,000 lines, 22,650
+excess lines; web_ui is already clean at this bar (max 695).
+
+Permanence before burn-down: a ratchet test makes the count monotonically
+decreasing — (1) no non-baseline file may reach 1,000; (2) baseline files may
+only shrink; (3) a shrink must tighten its baseline entry in the same change;
+(4) below 1,000 the entry is deleted and rule 1 guards it forever. Baseline
+lives under test/ so test-integrity.yml blocks silent PR edits (same protection
+as dependency_floors.json), and the test runs in the normal suite on all
+platforms + the ci-local container — no new CI job, no workflow edit.
+
+All four rules proven to fire (tamper test: fake 1,000-line file, understated
+count, overstated count, below-bar entry — each produced its targeted message),
+then restored to green. `flutter analyze` clean.
+
+Campaign tranches in the design doc: A = 15 UI pages/dialogs (settled split
+precedent), B = 8 services (parity duty on realism ones), C = the protected
+core (chat_service via late-final initializer extraction to parts; main.dart
+ordered startup builders; database.dart only with explicit approval).
