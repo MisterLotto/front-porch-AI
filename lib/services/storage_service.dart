@@ -525,6 +525,7 @@ class StorageService extends ChangeNotifier {
   int get gpuId => backendSettings.gpuId;
   Future<void> setGpuId(int v) => backendSettings.setGpuId(v);
   int get gpuLayers => backendSettings.gpuLayers;
+  bool get gpuLayersConfigured => backendSettings.gpuLayersConfigured;
   Future<void> setGpuLayers(int v) => backendSettings.setGpuLayers(v);
   int get contextSize => backendSettings.contextSize;
   Future<void> setContextSize(int v) => backendSettings.setContextSize(v);

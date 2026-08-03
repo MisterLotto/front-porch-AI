@@ -8424,3 +8424,43 @@ testable. macOS is a deliberate no-op (NSUserDefaults plist, not this file).
 file-surgery (NUL-filled move, stale-backup replace, missing-file false) and
 both error-screen variants' copy. Full test/services + test/ui suites pass
 (2273). main.dart net smaller (2126 → 2105 lines).
+
+## 2026-08-03 — Custom context limit silently reverted by the Settings page's silent auto-config
+
+**Files.**
+- `lib/ui/pages/settings_page.controls.dart` (the fix)
+- `lib/services/storage/settings/backend_settings.dart` (+`gpuLayersConfigured` getter)
+- `lib/services/storage_service.dart` (flat accessor)
+- `test/services/backend_settings_persistence_test.dart` (NEW)
+- `docs/Rawhide.md`
+
+**Why.** Field reports: custom generation settings — the context limit above all —
+"don't persist after the app is closed". The persistence layer was never the bug
+(`setContextSize` round-trips fine; pinned by new tests). The clobber:
+`_applyHardwareDefaults` runs on every Settings-page open (initState post-frame,
+settings_page.dart:153) and, when `_selectedModelPath != null && storage.gpuLayers
+== 0`, silently ran `_applyAutoConfiguration` — which reads the context TEXT FIELD
+as "the user's wish" and PERSISTS the result. Two compounding flaws: (1) the
+mutually-exclusive else-branch meant the controllers were never seeded from
+storage before the auto-config read them, so it ran against the constructor
+default '16384' (settings_page.dart:69) instead of the user's saved value and
+wrote 16384 (or lower) over it via `storage.setContextSize`; (2) `gpuLayers == 0`
+is not "never configured" — it's every CPU-only user's deliberate choice and a
+legitimate low-VRAM solver output, so exactly the users least able to raise
+gpuLayers got re-configured (context AND gpuLayers overwritten) on every visit.
+Set 32k → close → reopen → open Settings → back to 16k, forever.
+
+**Approach.** Two changes in the same function: the controllers are now seeded
+from storage FIRST, unconditionally (so even when auto-config legitimately runs,
+`requestedContextSize` is the saved value, which `OptimizationService` returns
+verbatim — context becomes a no-op); and the silent-run gate is the new
+`BackendSettings.gpuLayersConfigured` (`prefs.containsKey('gpu_layers')`) —
+"the pref has never been written" — instead of `== 0`, so a deliberate CPU-only
+0 is respected and the silent pass runs exactly once per fresh install. The
+explicit Auto-Configure button is unchanged. Web facade has no auto-config
+path — desktop-only bug, no parity work.
+
+**Verification.** flutter analyze → No issues. dart fix → nothing. New tests pin
+the context round-trip, the configured-vs-0 distinction (including reload), and
+the optimizer honoring requestedContextSize verbatim. Full test/services +
+test/ui/pages suites pass (2178).
