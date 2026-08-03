@@ -119,20 +119,26 @@ extension _SettingsLaunchControls on _SettingsPageState {
       rebuildState(() {});
     }
 
-    // Trigger silent autoconfig on load if model is present
-    // BUT only if user hasn't manually customized GPU layers.
-    // A non-zero persisted gpuLayers means the user or a previous
-    // explicit auto-config set it — don't silently overwrite.
-    if (_selectedModelPath != null && storage.gpuLayers == 0) {
+    // Mirror the persisted settings into the UI controllers FIRST. The silent
+    // auto-config below reads the context field as the user's wish, and it
+    // used to run against the controllers' construction defaults ('16384') —
+    // and because it PERSISTS its result, every Settings visit silently
+    // overwrote a custom context limit ("my context size doesn't survive a
+    // restart", field-reported).
+    _gpuLayersController.text = storage.gpuLayers.toString();
+    _contextSizeController.text = storage.backendSettings.contextSize
+        .toString();
+
+    // Trigger silent autoconfig on load ONLY when GPU offload has never been
+    // configured at all (the pref has never been written). The old guard was
+    // `gpuLayers == 0`, which is NOT that signal: 0 is a deliberate CPU-only
+    // choice, and the low-VRAM solver legitimately recommends 0 — so CPU and
+    // low-VRAM users got silently re-configured on every visit.
+    if (_selectedModelPath != null && !storage.gpuLayersConfigured) {
       // Warm before the silent auto-config so the solver gets good data on first run
       final modelManager = Provider.of<ModelManager>(context, listen: false);
       modelManager.getModelArchitectureInfo(_selectedModelPath!);
       _applyAutoConfiguration(silent: true);
-    } else if (_selectedModelPath != null) {
-      // Respect previously saved settings — just load them into the UI
-      _gpuLayersController.text = storage.gpuLayers.toString();
-      _contextSizeController.text = storage.backendSettings.contextSize
-          .toString();
     }
   }
 

@@ -117,6 +117,16 @@ class BackendSettings with SettingsBase {
   int get blasBatchSize => _blasBatchSize;
   int get gpuId => _gpuId;
   int get gpuLayers => _gpuLayers;
+
+  /// True once the gpu_layers pref has ever been written — i.e. the user (or
+  /// an explicit auto-configure) has made a GPU-offload choice. A VALUE of 0
+  /// is not that signal: 0 is a deliberate CPU-only choice, and the low-VRAM
+  /// layer solver legitimately recommends 0. The Settings page's silent
+  /// first-run auto-config gates on this instead of `gpuLayers == 0`, which
+  /// re-ran it on every visit for CPU users and clobbered their saved
+  /// context size.
+  bool get gpuLayersConfigured => prefs?.containsKey(k('gpu_layers')) ?? false;
+
   int get contextSize => _contextSize;
   int get kvQuantizationLevel => _kvQuantizationLevel;
 
