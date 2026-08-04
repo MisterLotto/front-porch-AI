@@ -1586,6 +1586,13 @@ extension ChatServiceGeneration on ChatService {
       }
 
       _isGenerating = false;
+      // Settling starts the instant the last token lands — the finalization
+      // below (sanitizer, lorebook, _saveChat, post-gen checks, chip attach)
+      // is still the turn. The old late raise left an awaits-wide gap where
+      // guards + isSettlingTurn reported the turn done and a new turn could
+      // interleave (message_actions Windows CI: chips silently lost).
+      // Cleared in the outer finally on every exit.
+      _isPostGenerating = true;
       _cancelRequested = false;
       _generationProgress = 0.0;
       _generationPhase = GenerationPhase.idle;
@@ -1703,20 +1710,12 @@ extension ChatServiceGeneration on ChatService {
           // to the prior speaker; the thin delegate relies on the pointer for cbs. We restore the
           // pointer after the checks (scalars remain correct for the persist below).
           CharacterCard? prePostActiveChar;
-          // Everything from here to the chip attach is the awaited post-gen
-          // critical section: it mutates _activeCharacter, the needs scalars
-          // and _groupRealism, across two awaits. _isGenerating is already
-          // false by now (cleared when the last token landed), so without this
-          // flag every re-entrancy guard stands open for the duration — a
-          // delete could shift the timeline under a running eval, and a new
-          // turn could interleave with this one's persist.
-          //
-          // The try/finally is not decoration. If _runPostGenNeedsChecks
-          // throws, the inline restore below is skipped and _activeCharacter
-          // stays pinned to this speaker with their scalars loaded — the next
-          // turn's save would then write to the wrong member. The finally
-          // makes both the pointer restore and the flag clear unconditional.
-          _isPostGenerating = true;
+          // The awaited post-gen critical section: mutates _activeCharacter,
+          // the needs scalars and _groupRealism across two awaits
+          // (_isPostGenerating has been up since the last token landed).
+          // The try/finally is not decoration: if _runPostGenNeedsChecks
+          // throws, the inline restore below is skipped and the next turn's
+          // save would write to the wrong member.
           try {
             if (_activeGroup != null && !_observerMode) {
               prePostActiveChar = _activeCharacter;
@@ -1774,15 +1773,12 @@ extension ChatServiceGeneration on ChatService {
               await _attachNeedsDeltaChipToLastMessage();
             }
           } finally {
-            // Unconditional: an exception inside the critical section must
-            // not leave the group impersonating this speaker (the inline
-            // restore above is skipped on a throw), and must never leave the
-            // guard latched — a stuck flag would silently refuse deletes,
-            // regenerates and group edits for the rest of the session.
+            // Unconditional pointer restore on a throw. The settling flag is
+            // cleared in the OUTER finally so guest turns, stale epochs and
+            // earlier errors are covered too.
             if (prePostActiveChar != null) {
               _activeCharacter = prePostActiveChar;
             }
-            _isPostGenerating = false;
           }
 
           // Journal maintenance pass if due (fire-and-forget): memory cards +
@@ -1955,6 +1951,9 @@ extension ChatServiceGeneration on ChatService {
       // turn's pre-pick window (e.g. _applyMoodDecay) keeps its prior
       // nextCharacter-based behaviour instead of seeing a stale speaker.
       _turnSpeakerIdForRealism = null;
+      // Settling over, on EVERY exit — a latched flag would refuse deletes,
+      // regenerates and group edits for the rest of the session.
+      _isPostGenerating = false;
     }
   }
 }
