@@ -41,6 +41,9 @@ by CI automatically.
 | Weather: live + seed-stable across reload | `app_smoke` | currentWeather/upcomingWeather non-null; no re-roll on reload |
 | Backups: create → restore → rebind (v1.2 class) | `backup_restore` | real page + confirm dialog; post-snapshot char gone, portrait PNG kept, full chat turn + folder/persona writes on the rebound DB |
 | Personas: create in real form, ride the session | `persona_folder` | New Persona→Save activates it; loadSession re-activates the chatted persona |
+| Lorebook import wizard: all three steps | `lorebook_import` | native picker stubbed via PickerPrefs seam; SillyTavern dialect decodes, Review counts entries, This-chat destination commits |
+| Custom climate authoring | `climate_editor` | dropdown → editor; rename activates a weather, the missing danger level BLOCKS save, biomeJson round-trips and biomeId clears |
+| Story Auto-Write (drafter/editor/validator/archivist) | `story_autowrite` | exact stage order per beat; the editor's polish is what persists, not the draft |
 | Personas: default vs per-chat binding | `persona_default` | Persona page moves the default only; open chat keeps its own across a turn; new chat seeds from the default; reopening does not drag the default back |
 | Folders: create, move via context menu, open | `persona_folder` | toolbar dialog; right-click → Move to Folder…; membership survives reload |
 | Chat lorebook: author entry, preview, inject | `lorebook_chat` | real Add dialog; WOULD TRIGGER NEXT on draft; content in outbound body; all 4 import dialects decode (wizard's picker step is native — not drivable) |
@@ -76,19 +79,18 @@ HardwareService.testVramOverrideMb, BackporchApi.overrideBaseUrl — the last
 one matters beyond tests: the desktop UI constructs bare BackporchApi()
 everywhere and the dart-define override is compile-time only).
 
+**P4 — DONE 2026-08-04** (`lorebook_import`, `climate_editor`,
+`story_autowrite`). The import wizard needed the one thing that had blocked it:
+`PickerPrefs.testPickFilesOverride`, a seam over the NATIVE file dialog. That
+dialog belongs to the OS, so every import journey in the app stopped at the
+button — the seam unblocks all of them, not just this one.
+
 Honest residue (still open, low priority):
-- The lorebook IMPORT WIZARD's step 0 is a native file picker no test can
-  drive; the dialect decode layer it rides is proven programmatically in
-  `lorebook_chat`, and steps 1–2 remain uncovered as widgets.
-- The custom climate EDITOR (showClimateEditorDialog) is not driven —
-  `worlds_management` proves the dropdown offers it; authoring is unit-level
-  territory.
-- Story: the writer page's Auto-Write leg (Drafter+Editor+Validator+
-  Archivist) is not driven — `story_pipeline` covers the generateFullAct
-  path the desktop UI uses; the Cancel-Realism overlay path is likewise
-  uncovered (the Stop-button cancel is).
-- Stoop messaging (inbox thread + typing over the WebSocket) is not driven;
-  the fake holds the socket open and serves unread=0.
+- Stoop messaging (inbox thread + typing over the WebSocket) — maintainer
+  ruled 2026-08-04 that the surface is confirmed good and needs no suite; the
+  fake holds the socket open and serves unread=0.
+- The story writer's Cancel-Realism overlay path (the Stop-button cancel IS
+  covered, by `swipe_fork_cancel`).
 
 **Deliberately not coverable offline (documented, not forgotten):**
 - RAG/embeddings (consent-gated model download; pre-consent UI IS covered).

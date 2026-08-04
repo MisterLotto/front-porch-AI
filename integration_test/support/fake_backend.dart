@@ -340,6 +340,44 @@ class FakeBackendServer {
       ]);
       return;
     }
+    // ── Auto-Write stages (Drafter → Editor → Validator → Archivist) ───
+    // A DIFFERENT path from the 'prose' branch below: generateFullAct writes a
+    // scene in one combined call, while the writer page's Auto-Write runs these
+    // four per beat. Both exist in the app, so both are modeled.
+    if (lastContent.contains(
+      'You are an award-winning author working on your next novel.',
+    )) {
+      storyStagesServed.add('drafter');
+      await _streamSse(req, [
+        'The lamp guttered once. ',
+        'Wren did not move to steady it.',
+      ]);
+      return;
+    }
+    if (lastContent.contains('You are a Ruthless Editor.')) {
+      storyStagesServed.add('editor');
+      await _streamSse(req, [
+        'The lamp guttered once, and Wren let it. Some things keep '
+            'themselves alight.',
+      ]);
+      return;
+    }
+    if (lastContent.contains('You are a Script Doctor.')) {
+      storyStagesServed.add('validator');
+      await _streamSse(req, [
+        jsonEncode({'valid': true, 'reason': '', 'rectified_beats': []}),
+      ]);
+      return;
+    }
+    if (lastContent.contains('You are the Story Archivist.')) {
+      storyStagesServed.add('archivist');
+      // Deliberately empty updates: the archivist's PARSE is what this
+      // exercises; inventing cast edits would couple the suite to its schema.
+      await _streamSse(req, [
+        jsonEncode({'cast_updates': [], 'world_lore': []}),
+      ]);
+      return;
+    }
     if (lastContent.contains(
       'You are a skilled novelist writing one section of a larger scene.',
     )) {

@@ -9272,3 +9272,56 @@ needs maintainer input + rationale (which behaviour changed, why the old
 assertion is now false rather than inconvenient, what replaces it) — and if the
 honest answer is "my change broke a correct test", fix the change instead, as in
 99859c8.
+
+## 2026-08-04 — P4 E2E: import wizard, climate editor, Auto-Write
+
+**Files.** `lib/utils/picker_prefs.dart`,
+`integration_test/lorebook_import_test.dart` (new),
+`integration_test/climate_editor_test.dart` (new),
+`integration_test/story_autowrite_test.dart` (new),
+`integration_test/support/fake_backend.dart`,
+`docs/design/e2e-coverage-map.md`.
+
+Maintainer closed out the coverage map's residue (2026-08-04), keeping Stoop
+messaging uncovered ("confirmed good") and asking for the other three.
+
+**The seam that unblocked the import wizard.** `PickerPrefs
+.testPickFilesOverride` — a `@visibleForTesting` stand-in for the OS file
+dialog. That dialog is why every import journey in the app stopped at the
+button; one seam covers all of them, and it takes a FUNCTION (not a fixed
+result) so a suite can assert which category/extensions a flow asked for. The
+fixture is a SillyTavern `entries`-keyed-by-index book, so the dialect decode
+runs on the same tap a user makes.
+
+**The climate suite found the better test by failing.** Renaming a weather
+ACTIVATES it, and an active weather with no danger level is a blocking error
+("otherwise characters would picnic in it") — so Save was disabled and the
+first draft timed out. The suite now drives the whole gate: rename → PICK ONE
+appears → choose Harsh → Save enables. It also asserts biomeId is CLEARED for a
+custom climate, because Biome.resolve prefers JSON and a stale id would be a
+silent second source of truth.
+
+**Auto-Write is a genuinely different path** from the one story_pipeline covers:
+generateFullAct writes a scene in one combined call, Auto-Write runs
+Drafter→Editor per beat, a Validator BETWEEN beats, and one Archivist for the
+scene. Four new fake branches; the suite asserts the exact order
+(drafter, editor, validator, drafter, editor, archivist) and that the EDITOR's
+text is what persists, not the draft's.
+
+**All three negative-checked** (the new CLAUDE.md rule, applied on its first
+day):
+- lorebook_import: commit line removed → red ("have 0"), restored → green.
+- climate_editor: biomeJson forced null on save → red ("Expected: not null"),
+  restored → green.
+- story_autowrite: validator call removed → red, and it named the exact
+  difference (`['drafter','editor','drafter','editor','archivist']`).
+
+**Three finder traps hit in one sitting, all the same shape** — a confirmation
+that was ALREADY TRUE before the tap, so `tapUntil`'s `while (!done())` never
+tapped: `find.text('Review')` (a step DOT label present on every step), and
+`Create World` (the world dialog stays mounted UNDER the climate editor). Plus
+one self-inflicted `.last` on a possibly-empty finder, which throws instead of
+reporting empty — the exact thing ChatDriver's own doc warns about.
+
+**Verification.** analyze clean; each suite run individually then the full local
+Linux leg (25 files); no lib behaviour changed beyond the picker seam.
