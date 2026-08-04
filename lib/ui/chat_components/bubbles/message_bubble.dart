@@ -1604,10 +1604,10 @@ class _MessageBubbleState extends State<MessageBubble> {
               borderRadius: BorderRadius.circular(4),
               border: Border.all(color: Colors.white10),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: _spaced(needsChipList, 8),
-            ),
+            // Wrap, not Row: all seven needs can carry a delta at once (a
+            // manual reprocess routinely returns a full set) and seven chips
+            // overflow the bubble — Windows hit it first, by 0.668px.
+            child: Wrap(spacing: 8, runSpacing: 4, children: needsChipList),
           ),
 
           // Row 3: Manual Reprocess / Revert buttons (only for last non-user msg with usable needs state)
