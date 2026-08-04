@@ -1925,6 +1925,17 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _themeOverridesMeta = const VerificationMeta(
+    'themeOverrides',
+  );
+  @override
+  late final GeneratedColumn<String> themeOverrides = GeneratedColumn<String>(
+    'theme_overrides',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _groupRealismStateMeta = const VerificationMeta(
     'groupRealismState',
   );
@@ -2025,6 +2036,7 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     generationSettings,
     userPersonaId,
     selectedLookAvatarId,
+    themeOverrides,
     groupRealismState,
     createdAt,
     updatedAt,
@@ -2461,6 +2473,15 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         ),
       );
     }
+    if (data.containsKey('theme_overrides')) {
+      context.handle(
+        _themeOverridesMeta,
+        themeOverrides.isAcceptableOrUnknown(
+          data['theme_overrides']!,
+          _themeOverridesMeta,
+        ),
+      );
+    }
     if (data.containsKey('group_realism_state')) {
       context.handle(
         _groupRealismStateMeta,
@@ -2697,6 +2718,10 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         DriftSqlType.string,
         data['${effectivePrefix}selected_look_avatar_id'],
       ),
+      themeOverrides: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}theme_overrides'],
+      ),
       groupRealismState: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}group_realism_state'],
@@ -2781,9 +2806,19 @@ class Session extends DataClass implements Insertable<Session> {
 
   /// The gallery "look" (avatar) selected for THIS chat, or null → show the
   /// character's library face (`imagePath`). Per-chat selection over the global
-  /// look collection. Nullable + additive; the external card tool (Character
-  /// Card Forge) simply omits it (NULL).
+  /// look collection. Nullable + additive.
   final String? selectedLookAvatarId;
+
+  /// Per-chat theme overrides (preset + font/color/border/background), JSON.
+  /// Previously existed ONLY via the always-on schema repair + raw SQL
+  /// accessors, so fresh createAll() databases (unit tests, and first launch
+  /// before the repair) lacked the column and every _saveChat logged a
+  /// save-skip. Declared here 2026-08-04 (maintainer-approved): no
+  /// schemaVersion bump needed — live databases are guaranteed the column by
+  /// _repairMissingSchemaColumns before AppDatabase.open() returns, and fresh
+  /// databases now get it from createAll. Reads/writes stay on the raw-SQL
+  /// helpers (patchSessionThemeOverrides & co.).
+  final String? themeOverrides;
 
   /// Live per-character realism/needs state for group sessions.
   /// JSON map: { charId: { emotion, needs, affection, trust, fixation, relationships, ... } }
@@ -2844,6 +2879,7 @@ class Session extends DataClass implements Insertable<Session> {
     this.generationSettings,
     this.userPersonaId,
     this.selectedLookAvatarId,
+    this.themeOverrides,
     required this.groupRealismState,
     required this.createdAt,
     required this.updatedAt,
@@ -2932,6 +2968,9 @@ class Session extends DataClass implements Insertable<Session> {
     if (!nullToAbsent || selectedLookAvatarId != null) {
       map['selected_look_avatar_id'] = Variable<String>(selectedLookAvatarId);
     }
+    if (!nullToAbsent || themeOverrides != null) {
+      map['theme_overrides'] = Variable<String>(themeOverrides);
+    }
     map['group_realism_state'] = Variable<String>(groupRealismState);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -3019,6 +3058,9 @@ class Session extends DataClass implements Insertable<Session> {
       selectedLookAvatarId: selectedLookAvatarId == null && nullToAbsent
           ? const Value.absent()
           : Value(selectedLookAvatarId),
+      themeOverrides: themeOverrides == null && nullToAbsent
+          ? const Value.absent()
+          : Value(themeOverrides),
       groupRealismState: Value(groupRealismState),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
@@ -3104,6 +3146,7 @@ class Session extends DataClass implements Insertable<Session> {
       selectedLookAvatarId: serializer.fromJson<String?>(
         json['selectedLookAvatarId'],
       ),
+      themeOverrides: serializer.fromJson<String?>(json['themeOverrides']),
       groupRealismState: serializer.fromJson<String>(json['groupRealismState']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -3168,6 +3211,7 @@ class Session extends DataClass implements Insertable<Session> {
       'generationSettings': serializer.toJson<String?>(generationSettings),
       'userPersonaId': serializer.toJson<String?>(userPersonaId),
       'selectedLookAvatarId': serializer.toJson<String?>(selectedLookAvatarId),
+      'themeOverrides': serializer.toJson<String?>(themeOverrides),
       'groupRealismState': serializer.toJson<String>(groupRealismState),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -3226,6 +3270,7 @@ class Session extends DataClass implements Insertable<Session> {
     Value<String?> generationSettings = const Value.absent(),
     Value<String?> userPersonaId = const Value.absent(),
     Value<String?> selectedLookAvatarId = const Value.absent(),
+    Value<String?> themeOverrides = const Value.absent(),
     String? groupRealismState,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -3297,6 +3342,9 @@ class Session extends DataClass implements Insertable<Session> {
     selectedLookAvatarId: selectedLookAvatarId.present
         ? selectedLookAvatarId.value
         : this.selectedLookAvatarId,
+    themeOverrides: themeOverrides.present
+        ? themeOverrides.value
+        : this.themeOverrides,
     groupRealismState: groupRealismState ?? this.groupRealismState,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -3440,6 +3488,9 @@ class Session extends DataClass implements Insertable<Session> {
       selectedLookAvatarId: data.selectedLookAvatarId.present
           ? data.selectedLookAvatarId.value
           : this.selectedLookAvatarId,
+      themeOverrides: data.themeOverrides.present
+          ? data.themeOverrides.value
+          : this.themeOverrides,
       groupRealismState: data.groupRealismState.present
           ? data.groupRealismState.value
           : this.groupRealismState,
@@ -3502,6 +3553,7 @@ class Session extends DataClass implements Insertable<Session> {
           ..write('generationSettings: $generationSettings, ')
           ..write('userPersonaId: $userPersonaId, ')
           ..write('selectedLookAvatarId: $selectedLookAvatarId, ')
+          ..write('themeOverrides: $themeOverrides, ')
           ..write('groupRealismState: $groupRealismState, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -3562,6 +3614,7 @@ class Session extends DataClass implements Insertable<Session> {
     generationSettings,
     userPersonaId,
     selectedLookAvatarId,
+    themeOverrides,
     groupRealismState,
     createdAt,
     updatedAt,
@@ -3621,6 +3674,7 @@ class Session extends DataClass implements Insertable<Session> {
           other.generationSettings == this.generationSettings &&
           other.userPersonaId == this.userPersonaId &&
           other.selectedLookAvatarId == this.selectedLookAvatarId &&
+          other.themeOverrides == this.themeOverrides &&
           other.groupRealismState == this.groupRealismState &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
@@ -3678,6 +3732,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
   final Value<String?> generationSettings;
   final Value<String?> userPersonaId;
   final Value<String?> selectedLookAvatarId;
+  final Value<String?> themeOverrides;
   final Value<String> groupRealismState;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -3734,6 +3789,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.generationSettings = const Value.absent(),
     this.userPersonaId = const Value.absent(),
     this.selectedLookAvatarId = const Value.absent(),
+    this.themeOverrides = const Value.absent(),
     this.groupRealismState = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -3791,6 +3847,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.generationSettings = const Value.absent(),
     this.userPersonaId = const Value.absent(),
     this.selectedLookAvatarId = const Value.absent(),
+    this.themeOverrides = const Value.absent(),
     this.groupRealismState = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -3848,6 +3905,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Expression<String>? generationSettings,
     Expression<String>? userPersonaId,
     Expression<String>? selectedLookAvatarId,
+    Expression<String>? themeOverrides,
     Expression<String>? groupRealismState,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -3915,6 +3973,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       if (userPersonaId != null) 'user_persona_id': userPersonaId,
       if (selectedLookAvatarId != null)
         'selected_look_avatar_id': selectedLookAvatarId,
+      if (themeOverrides != null) 'theme_overrides': themeOverrides,
       if (groupRealismState != null) 'group_realism_state': groupRealismState,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -3974,6 +4033,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Value<String?>? generationSettings,
     Value<String?>? userPersonaId,
     Value<String?>? selectedLookAvatarId,
+    Value<String?>? themeOverrides,
     Value<String>? groupRealismState,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
@@ -4036,6 +4096,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       generationSettings: generationSettings ?? this.generationSettings,
       userPersonaId: userPersonaId ?? this.userPersonaId,
       selectedLookAvatarId: selectedLookAvatarId ?? this.selectedLookAvatarId,
+      themeOverrides: themeOverrides ?? this.themeOverrides,
       groupRealismState: groupRealismState ?? this.groupRealismState,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -4211,6 +4272,9 @@ class SessionsCompanion extends UpdateCompanion<Session> {
         selectedLookAvatarId.value,
       );
     }
+    if (themeOverrides.present) {
+      map['theme_overrides'] = Variable<String>(themeOverrides.value);
+    }
     if (groupRealismState.present) {
       map['group_realism_state'] = Variable<String>(groupRealismState.value);
     }
@@ -4282,6 +4346,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
           ..write('generationSettings: $generationSettings, ')
           ..write('userPersonaId: $userPersonaId, ')
           ..write('selectedLookAvatarId: $selectedLookAvatarId, ')
+          ..write('themeOverrides: $themeOverrides, ')
           ..write('groupRealismState: $groupRealismState, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -13916,6 +13981,18 @@ class $GroupMembersTable extends GroupMembers
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -13938,6 +14015,7 @@ class $GroupMembersTable extends GroupMembers
     rawExtensions,
     memberState,
     updatedAt,
+    createdAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -14104,6 +14182,12 @@ class $GroupMembersTable extends GroupMembers
         updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
       );
     }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
     return context;
   }
 
@@ -14193,6 +14277,10 @@ class $GroupMembersTable extends GroupMembers
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_at'],
+      )!,
     );
   }
 
@@ -14235,6 +14323,14 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
   /// This column keeps the member rows free of "the card" blobs while still self-contained.
   final String memberState;
   final DateTime updatedAt;
+
+  /// Raw epoch INTEGER, DEFAULT 0 — matches the physical column the schema
+  /// repair has always enforced (`created_at INTEGER NOT NULL DEFAULT 0`).
+  /// Declared 2026-08-04 alongside sessions.themeOverrides so createAll()
+  /// finally produces the same shape the repair does; no schemaVersion bump
+  /// for the same reason (see themeOverrides). IntColumn, not DateTimeColumn,
+  /// so the Dart default stays byte-identical to the repaired shape.
+  final int createdAt;
   const GroupMemberRow({
     required this.id,
     required this.groupId,
@@ -14256,6 +14352,7 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
     this.rawExtensions,
     required this.memberState,
     required this.updatedAt,
+    required this.createdAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -14292,6 +14389,7 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
     }
     map['member_state'] = Variable<String>(memberState);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['created_at'] = Variable<int>(createdAt);
     return map;
   }
 
@@ -14327,6 +14425,7 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
           : Value(rawExtensions),
       memberState: Value(memberState),
       updatedAt: Value(updatedAt),
+      createdAt: Value(createdAt),
     );
   }
 
@@ -14362,6 +14461,7 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
       rawExtensions: serializer.fromJson<String?>(json['rawExtensions']),
       memberState: serializer.fromJson<String>(json['memberState']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
     );
   }
   @override
@@ -14390,6 +14490,7 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
       'rawExtensions': serializer.toJson<String?>(rawExtensions),
       'memberState': serializer.toJson<String>(memberState),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'createdAt': serializer.toJson<int>(createdAt),
     };
   }
 
@@ -14414,6 +14515,7 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
     Value<String?> rawExtensions = const Value.absent(),
     String? memberState,
     DateTime? updatedAt,
+    int? createdAt,
   }) => GroupMemberRow(
     id: id ?? this.id,
     groupId: groupId ?? this.groupId,
@@ -14442,6 +14544,7 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
         : this.rawExtensions,
     memberState: memberState ?? this.memberState,
     updatedAt: updatedAt ?? this.updatedAt,
+    createdAt: createdAt ?? this.createdAt,
   );
   GroupMemberRow copyWithCompanion(GroupMembersCompanion data) {
     return GroupMemberRow(
@@ -14489,6 +14592,7 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
           ? data.memberState.value
           : this.memberState,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
 
@@ -14514,13 +14618,14 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
           ..write('frontPorchExtensions: $frontPorchExtensions, ')
           ..write('rawExtensions: $rawExtensions, ')
           ..write('memberState: $memberState, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     groupId,
     name,
@@ -14541,7 +14646,8 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
     rawExtensions,
     memberState,
     updatedAt,
-  );
+    createdAt,
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -14565,7 +14671,8 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
           other.frontPorchExtensions == this.frontPorchExtensions &&
           other.rawExtensions == this.rawExtensions &&
           other.memberState == this.memberState &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.createdAt == this.createdAt);
 }
 
 class GroupMembersCompanion extends UpdateCompanion<GroupMemberRow> {
@@ -14589,6 +14696,7 @@ class GroupMembersCompanion extends UpdateCompanion<GroupMemberRow> {
   final Value<String?> rawExtensions;
   final Value<String> memberState;
   final Value<DateTime> updatedAt;
+  final Value<int> createdAt;
   final Value<int> rowid;
   const GroupMembersCompanion({
     this.id = const Value.absent(),
@@ -14611,6 +14719,7 @@ class GroupMembersCompanion extends UpdateCompanion<GroupMemberRow> {
     this.rawExtensions = const Value.absent(),
     this.memberState = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   GroupMembersCompanion.insert({
@@ -14634,6 +14743,7 @@ class GroupMembersCompanion extends UpdateCompanion<GroupMemberRow> {
     this.rawExtensions = const Value.absent(),
     this.memberState = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        groupId = Value(groupId),
@@ -14659,6 +14769,7 @@ class GroupMembersCompanion extends UpdateCompanion<GroupMemberRow> {
     Expression<String>? rawExtensions,
     Expression<String>? memberState,
     Expression<DateTime>? updatedAt,
+    Expression<int>? createdAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -14684,6 +14795,7 @@ class GroupMembersCompanion extends UpdateCompanion<GroupMemberRow> {
       if (rawExtensions != null) 'raw_extensions': rawExtensions,
       if (memberState != null) 'member_state': memberState,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -14709,6 +14821,7 @@ class GroupMembersCompanion extends UpdateCompanion<GroupMemberRow> {
     Value<String?>? rawExtensions,
     Value<String>? memberState,
     Value<DateTime>? updatedAt,
+    Value<int>? createdAt,
     Value<int>? rowid,
   }) {
     return GroupMembersCompanion(
@@ -14733,6 +14846,7 @@ class GroupMembersCompanion extends UpdateCompanion<GroupMemberRow> {
       rawExtensions: rawExtensions ?? this.rawExtensions,
       memberState: memberState ?? this.memberState,
       updatedAt: updatedAt ?? this.updatedAt,
+      createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -14804,6 +14918,9 @@ class GroupMembersCompanion extends UpdateCompanion<GroupMemberRow> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -14833,6 +14950,7 @@ class GroupMembersCompanion extends UpdateCompanion<GroupMemberRow> {
           ..write('rawExtensions: $rawExtensions, ')
           ..write('memberState: $memberState, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -16630,6 +16748,7 @@ typedef $$SessionsTableCreateCompanionBuilder =
       Value<String?> generationSettings,
       Value<String?> userPersonaId,
       Value<String?> selectedLookAvatarId,
+      Value<String?> themeOverrides,
       Value<String> groupRealismState,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -16688,6 +16807,7 @@ typedef $$SessionsTableUpdateCompanionBuilder =
       Value<String?> generationSettings,
       Value<String?> userPersonaId,
       Value<String?> selectedLookAvatarId,
+      Value<String?> themeOverrides,
       Value<String> groupRealismState,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -16951,6 +17071,11 @@ class $$SessionsTableFilterComposer
 
   ColumnFilters<String> get selectedLookAvatarId => $composableBuilder(
     column: $table.selectedLookAvatarId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get themeOverrides => $composableBuilder(
+    column: $table.themeOverrides,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -17234,6 +17359,11 @@ class $$SessionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get themeOverrides => $composableBuilder(
+    column: $table.themeOverrides,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get groupRealismState => $composableBuilder(
     column: $table.groupRealismState,
     builder: (column) => ColumnOrderings(column),
@@ -17500,6 +17630,11 @@ class $$SessionsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get themeOverrides => $composableBuilder(
+    column: $table.themeOverrides,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get groupRealismState => $composableBuilder(
     column: $table.groupRealismState,
     builder: (column) => column,
@@ -17593,6 +17728,7 @@ class $$SessionsTableTableManager
                 Value<String?> generationSettings = const Value.absent(),
                 Value<String?> userPersonaId = const Value.absent(),
                 Value<String?> selectedLookAvatarId = const Value.absent(),
+                Value<String?> themeOverrides = const Value.absent(),
                 Value<String> groupRealismState = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -17649,6 +17785,7 @@ class $$SessionsTableTableManager
                 generationSettings: generationSettings,
                 userPersonaId: userPersonaId,
                 selectedLookAvatarId: selectedLookAvatarId,
+                themeOverrides: themeOverrides,
                 groupRealismState: groupRealismState,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -17707,6 +17844,7 @@ class $$SessionsTableTableManager
                 Value<String?> generationSettings = const Value.absent(),
                 Value<String?> userPersonaId = const Value.absent(),
                 Value<String?> selectedLookAvatarId = const Value.absent(),
+                Value<String?> themeOverrides = const Value.absent(),
                 Value<String> groupRealismState = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -17763,6 +17901,7 @@ class $$SessionsTableTableManager
                 generationSettings: generationSettings,
                 userPersonaId: userPersonaId,
                 selectedLookAvatarId: selectedLookAvatarId,
+                themeOverrides: themeOverrides,
                 groupRealismState: groupRealismState,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -22405,6 +22544,7 @@ typedef $$GroupMembersTableCreateCompanionBuilder =
       Value<String?> rawExtensions,
       Value<String> memberState,
       Value<DateTime> updatedAt,
+      Value<int> createdAt,
       Value<int> rowid,
     });
 typedef $$GroupMembersTableUpdateCompanionBuilder =
@@ -22429,6 +22569,7 @@ typedef $$GroupMembersTableUpdateCompanionBuilder =
       Value<String?> rawExtensions,
       Value<String> memberState,
       Value<DateTime> updatedAt,
+      Value<int> createdAt,
       Value<int> rowid,
     });
 
@@ -22538,6 +22679,11 @@ class $$GroupMembersTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -22650,6 +22796,11 @@ class $$GroupMembersTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$GroupMembersTableAnnotationComposer
@@ -22744,6 +22895,9 @@ class $$GroupMembersTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
 }
 
 class $$GroupMembersTableTableManager
@@ -22797,6 +22951,7 @@ class $$GroupMembersTableTableManager
                 Value<String?> rawExtensions = const Value.absent(),
                 Value<String> memberState = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => GroupMembersCompanion(
                 id: id,
@@ -22819,6 +22974,7 @@ class $$GroupMembersTableTableManager
                 rawExtensions: rawExtensions,
                 memberState: memberState,
                 updatedAt: updatedAt,
+                createdAt: createdAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -22843,6 +22999,7 @@ class $$GroupMembersTableTableManager
                 Value<String?> rawExtensions = const Value.absent(),
                 Value<String> memberState = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => GroupMembersCompanion.insert(
                 id: id,
@@ -22865,6 +23022,7 @@ class $$GroupMembersTableTableManager
                 rawExtensions: rawExtensions,
                 memberState: memberState,
                 updatedAt: updatedAt,
+                createdAt: createdAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

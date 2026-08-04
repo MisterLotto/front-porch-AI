@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-04 — chore(db+docs): theme_overrides/created_at join the Dart schema (approved); Character Card Forge retired from CLAUDE.md
+- **Character Card Forge is abandonware (maintainer ruling):** all three CLAUDE.md references removed — the external-direct-writers warning, the Important Constraints bullet, and the database.dart never-touch sentence. Schema changes no longer need to accommodate raw-SQL third-party writers; the never-touch entry keeps its migration-planning + breaking-change-confirmation requirements.
+- **forTesting schema gap fixed (maintainer sign-off given):** `sessions.theme_overrides` and `group_members.created_at` existed ONLY via the always-on startup schema repair — absent from the Dart Table definitions, so `createAll()` databases (every unit test, and first launch before the repair) lacked them and full-turn unit tests logged `_doSaveChat` save-skips on the theme patch. Both columns are now declared in the Table classes, byte-matched to the repaired physical shape (`theme_overrides TEXT` nullable; `created_at INTEGER NOT NULL DEFAULT 0` as an IntColumn so the default matches exactly). **No schemaVersion bump:** live databases are guaranteed the columns by `_repairMissingSchemaColumns` before `AppDatabase.open()` returns, fresh databases now get them from createAll, and reunification reads raw `SELECT *` so old backup files are unaffected. Raw-SQL theme accessors unchanged.
+- **Gates:** build_runner regenerated database.g.dart; analyze clean; regen/delete-refund/theme-overrides tests green with the save-skip gone; full non-golden suite run before push.
+- **Files:** `CLAUDE.md`, `lib/database/database.dart` (+ `database.g.dart`).
+
 ## 2026-08-04 — fix(realism): the regen wrapper ran unguarded, chips had two sources of truth, and regen chips missed decay
 - **Why (maintainer-approved plan after the regen-chip investigation):** three items — guard the regen wrapper, consolidate chip attachment, pin the contract with a test. The test then caught a fourth, real bug on its first run.
 - **Did:**

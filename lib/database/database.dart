@@ -205,9 +205,19 @@ class Sessions extends Table {
 
   /// The gallery "look" (avatar) selected for THIS chat, or null → show the
   /// character's library face (`imagePath`). Per-chat selection over the global
-  /// look collection. Nullable + additive; the external card tool (Character
-  /// Card Forge) simply omits it (NULL).
+  /// look collection. Nullable + additive.
   TextColumn get selectedLookAvatarId => text().nullable()();
+
+  /// Per-chat theme overrides (preset + font/color/border/background), JSON.
+  /// Previously existed ONLY via the always-on schema repair + raw SQL
+  /// accessors, so fresh createAll() databases (unit tests, and first launch
+  /// before the repair) lacked the column and every _saveChat logged a
+  /// save-skip. Declared here 2026-08-04 (maintainer-approved): no
+  /// schemaVersion bump needed — live databases are guaranteed the column by
+  /// _repairMissingSchemaColumns before AppDatabase.open() returns, and fresh
+  /// databases now get it from createAll. Reads/writes stay on the raw-SQL
+  /// helpers (patchSessionThemeOverrides & co.).
+  TextColumn get themeOverrides => text().nullable()();
 
   /// Live per-character realism/needs state for group sessions.
   /// JSON map: { charId: { emotion, needs, affection, trust, fixation, relationships, ... } }
@@ -664,6 +674,14 @@ class GroupMembers extends Table {
   TextColumn get memberState => text().withDefault(const Constant('{}'))();
 
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  /// Raw epoch INTEGER, DEFAULT 0 — matches the physical column the schema
+  /// repair has always enforced (`created_at INTEGER NOT NULL DEFAULT 0`).
+  /// Declared 2026-08-04 alongside sessions.themeOverrides so createAll()
+  /// finally produces the same shape the repair does; no schemaVersion bump
+  /// for the same reason (see themeOverrides). IntColumn, not DateTimeColumn,
+  /// so the Dart default stays byte-identical to the repaired shape.
+  IntColumn get createdAt => integer().withDefault(const Constant(0))();
 
   @override
   Set<Column> get primaryKey => {id};

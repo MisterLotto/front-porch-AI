@@ -182,7 +182,7 @@ Key tables (REAL SQL names — verify against `database.g.dart`, not memory): `c
 
 **Identity gotcha that has already caused data loss:** `objectives`, `message_embeddings` and `data_bank_entries` key their `character_id` by the character's **stableGroupId** (the portable image-filename basename, e.g. `Jennifer_1782587668376`), NOT by the `characters.id` UUID. `avatar_images` DOES use the UUID. Joining the former against `characters.id` matches nothing and marks every row an orphan — that shipped in Database Cleanup and would have deleted 107/107 objectives and 68/68 RAG embeddings on a real library. Resolve identities via `stableGroupIdFrom()` in `lib/utils/character_id.dart`.
 
-**Important — external direct writers**: A community companion app (Character Card Forge — https://github.com/FrozenKangaroo/Character-Card-Forge) performs direct raw SQL `INSERT`/`UPDATE` into the database files (primarily `characters`, `sessions`, `messages`, `avatar_images`, `sync_meta`). Schema changes can break it. See "Files Requiring Discussion Before Changes".
+**External direct writers**: none. (Character Card Forge, a community app that wrote raw SQL into these files, is abandonware — maintainer ruling 2026-08-04. Schema changes no longer need to accommodate it.)
 
 ### Realism Engine
 
@@ -330,12 +330,11 @@ copy, so it protects only branches that actually carry the file.
 - All AI processing is local/offline by default; cloud APIs (ElevenLabs, OpenRouter) are opt-in.
 - Character cards follow V2/V2.5 spec (PNG/JSON with embedded metadata).
 - Drift database uses UUID primary keys for cloud sync merge compatibility.
-- **Database schema changes affecting external direct writers**: Character Card Forge writes directly via SQL. Any schema change that could break it (non-nullable new columns, removed/renamed columns, structural changes to `characters`/`sessions`/`avatar_images`/`sync_meta`) requires explicit maintainer approval before implementation.
 
 ## Files Requiring Discussion Before Changes
 
 ### Never touch without discussion
-- `lib/database/database.dart` (the Drift schema + its `onUpgrade` migration ladder; there is NO `database/migrations/` directory) — schema changes require migration planning. **Do not introduce breaking changes** (especially to columns/tables written by external tools such as `characters`, `sessions`, `messages`, `avatar_images`, `sync_meta`) without direct maintainer confirmation. Character Card Forge relies on direct raw SQL writes.
+- `lib/database/database.dart` (the Drift schema + its `onUpgrade` migration ladder; there is NO `database/migrations/` directory) — schema changes require migration planning and direct maintainer confirmation for anything breaking (removed/renamed columns, structural changes).
 - `lib/main.dart` — service initialization order is delicate.
 - `pubspec.yaml` — **do not edit unless directly instructed.** CI/CD normalizes the release version. Local dev uses standard semver (e.g. `0.9.8+1`).
 - `analysis_options.yaml` — linting rules.
