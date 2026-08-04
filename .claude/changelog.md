@@ -8751,3 +8751,47 @@ the next detected climax.
 **Verification:** analyze 0 · full suite 2,746 · ci-local goldens ·
 app_smoke + wiring E2Es green. Live confirmation needs the user's model:
 regenerate the scene once and check Lust drops + cooldown starts.
+
+## 2026-08-04 — Regression-net phase 1: settings journey E2E, group reload deflake, release asset gate
+
+**Files.**
+- `integration_test/settings_persistence_test.dart` (NEW — the "Stays Put" class journey)
+- `integration_test/group_smoke_test.dart` (deflake — maintainer-approved edit)
+- `.github/workflows/release.yml` (publish-release gains "Verify release assets are complete")
+- `docs/design/e2e-coverage-map.md` (NEW — living coverage inventory + tranche plan)
+- `CLAUDE.md` (E2E section updated: suite list current, coverage map pointer, waitSendable rule)
+
+**Why (maintainer directive).** "Whenever we fix something we break something
+else; we are reactive, not proactive; the net doesn't catch regressions."
+Phase 1 lands the three approved highest-ROI guards, each aimed at a bug class
+that actually shipped:
+1. **Settings journey**: the v1.2.0.1 context-limit clobber was invisible to
+   unit tests by construction (a legal write of a sane value on page open).
+   The new suite sets the context size through the REAL Generation-tab input,
+   sets the rest of the generation/backend surface, reopens Settings twice
+   asserting zero drift (storage AND displayed UI), then rebuilds
+   BackendSettings/GenerationSettings from the persisted store — the layer a
+   real restart exercises. Any future page-open/tab-switch/hardware-detect
+   write-over trips it, mechanism unknown in advance.
+2. **Group reload deflake**: the "expected 26, got 13" Windows CI flake (fired
+   2 consecutive days, once on a docs-only commit) was the test capturing and
+   reloading after the PRE-GEN bond move but while generation + settle (the
+   _groupRealism persist) still ran. One `await d.waitSendable()` before the
+   capture block — the driver's own settle barrier — closes it. A flaky guard
+   is worse than none: both prior reds were answered with "re-run it".
+3. **Release asset gate**: the Linux tarball was missing from every stable
+   release for ~3 months (matrix-variable removal in 5bc2b9c6) because
+   softprops tolerates missing files by design — green, incomplete releases.
+   publish-release now lists the release's actual assets via gh and fails
+   naming any missing/sub-1MB installer.
+
+**Verification.** flutter analyze clean; dart fix nothing; release.yml YAML
+parses. E2E execution in this container is impossible — control experiment:
+the KNOWN-GREEN app_smoke dies identically at ~1s under this xvfb setup
+(native process exits; same run is green on real CI three-OS legs today) —
+so suite validation is the CI run on push, watched to green.
+
+**Coverage map** (docs/design/e2e-coverage-map.md) records what is covered,
+what is deliberately not coverable offline, and the P1–P3 tranche order the
+maintainer's "full coverage" directive continues with (next: message actions,
+backups/restore, persona+folder journeys).

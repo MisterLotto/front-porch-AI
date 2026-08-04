@@ -578,12 +578,21 @@ and `database.dart` has no barrel anyway).
   `golden` tag, so a green macOS `flutter test` NEVER runs them. Run
   `./scripts/ci-local.sh` (the fpai-golden linux/amd64 container) before pushing — the
   script's own header notes this is how a red-CI commit once reached Rawhide.
-- **E2E lives in `integration_test/`**: `app_smoke_test.dart` (1:1 journey — realism,
-  needs, chaos, objectives, journal, persistence, backend-failure resilience, worlds +
-  lorebook injection), `group_smoke_test.dart` (per-speaker `_groupRealism` isolation +
-  persistence), `theme_interaction_test.dart` (every theme preset must leave bubble
-  controls hit-testable). CI globs `integration_test/*_test.dart` and runs ONE
-  invocation per file on macOS/Windows/Linux — a new suite is picked up automatically.
+- **E2E lives in `integration_test/`** — the authoritative inventory (covered
+  surfaces, priority order for the rest, rules for adding a suite) is
+  `docs/design/e2e-coverage-map.md`; update it in the same PR as any new suite.
+  Today: `app_smoke_test.dart` (1:1 journey — realism, needs, chaos, objectives,
+  journal, persistence, backend-failure resilience, worlds + lorebook injection),
+  `group_smoke_test.dart` (per-speaker `_groupRealism` isolation + settle-guarded
+  reload persistence), `group_realism_wiring_test.dart` (post-reload turns),
+  `realism_off_test.dart` (engine disabled), `theme_interaction_test.dart` (every
+  theme preset must leave bubble controls hit-testable),
+  `settings_persistence_test.dart` (the "Stays Put" class: settings survive page
+  reopens + a settings-layer reload). CI globs `integration_test/*_test.dart` and
+  runs ONE invocation per file on macOS/Windows/Linux — a new suite is picked up
+  automatically. Before capturing or persist-asserting chat state in ANY suite,
+  `await d.waitSendable()` — the settling window (`isSettlingTurn`) is part of
+  the turn, and skipping it is exactly the Windows reload flake.
 - **Interaction coverage is the point.** Goldens answer "does it look right"; only an
   E2E tap answers "can a user actually do this". The 10-theme dead-button bug
   (512e4803) shipped with pixel-identical goldens and a fully green suite because

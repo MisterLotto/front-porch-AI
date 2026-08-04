@@ -261,6 +261,17 @@ void main() {
           'Bex $bexBefore->${chatService.getAffectionForGroupCharacter(bex)})',
     );
 
+    // The bond moves in memory during turn 3's PRE-GEN eval, long before the
+    // turn is over: generation, the post-gen checks, and the settling section
+    // — which is what PERSISTS _groupRealism to the DB — are all still
+    // running at this point. Capturing and reloading without this barrier
+    // raced that persist, and on slower Windows runners the reload read the
+    // previous turn's numbers (the "expected 26, got 13" CI flake that fired
+    // on two consecutive days, including on a docs-only commit). waitSendable
+    // insists the whole turn — isSettlingTurn included — is finished before
+    // any state below is trusted.
+    await d.waitSendable();
+
     final adaBond = chatService.getAffectionForGroupCharacter(ada);
     final bexBond = chatService.getAffectionForGroupCharacter(bex);
     final adaMoved = adaBond != adaBefore;
