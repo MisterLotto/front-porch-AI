@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-04 — test(e2e): The Stoop journey passes end-to-end; only the traffic audit tripped
+- **Why:** P3 round 6. Both macOS and Windows failed at `stoop_test.dart:229` with `Expected: empty / Actual: ['GET /creators/u1', 'GET /creators/u1']` — that is the LAST line of the suite, `expect(stoop.unexpectedPaths, isEmpty)`. Everything before it passed on both platforms: sign-in, the 18+ AUP gate round-trip, browse, Download-to-library with a real V2 import into CharacterRepository, the detail panel, the four-step share wizard, and the multipart upload (`uploadRequests == 1`). The multipart drain fix from round 5 held.
+- **Root cause:** the fake never modelled `GET /creators/{id}` — the @you tab fetches the signed-in user's creator profile. The `unexpectedPaths` audit did exactly its job: it named the endpoint instead of letting a silent 404 skew behavior.
+- **Did:** modelled the creator profile (minimal — every field in `StoopCreator.fromJson` is defaulted). Collapsed `/creators/<anything>` to a single route key rather than casing on fixture ids, so a new id can't reopen the hole; `unexpectedPaths` still records the real path for diagnostics.
+- **Still unproven:** `story_pipeline` and `swipe_fork_cancel`. macOS/Windows stop at the first failing file and `stoop` sorts before both, so they have STILL never executed. This fix is what unblocks them.
+- **Gates:** analyze clean; format clean.
+- **Files:** `integration_test/support/fake_stoop.dart`.
+
 ## 2026-08-04 — test(e2e): the Stoop fake choked on its own multipart upload; fakes now fail loudly
 - **Why:** P3 round 5. Everything the previous rounds fixed held — sign-in, the AUP gate, browse, download-to-library (the card really imported), the detail panel, and the share wizard all the way through step 3 PASSED on macOS. It died at the final submit, and the log named it: `[FakeStoopServer] handler error on /characters: FormatException: Unexpected extension byte (at offset 1998)`.
 - **Root cause (my fake, not the app):** the handler drained every request body with `utf8.decodeStream(req)`. `POST /characters` is the MULTIPART upload carrying a PNG, and UTF-8-decoding binary throws. The handler aborted before its switch ran, so no JSON was written and `uploadRequests` never incremented — the app saw an empty response and the suite waited out a four-minute timeout on a symptom.

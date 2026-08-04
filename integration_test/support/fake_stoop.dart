@@ -28,6 +28,7 @@ class FakeStoopServer {
   int detailRequests = 0;
   int downloadRequests = 0;
   int uploadRequests = 0;
+  int creatorRequests = 0;
 
   final List<String> unexpectedPaths = [];
 
@@ -104,7 +105,13 @@ class FakeStoopServer {
       // handler error while the suite waited out a four-minute timeout.
       await req.drain<void>();
       Object? reply;
-      switch ('${req.method} $path') {
+      // Creator ids are data, not routes — collapse /creators/<anything> to
+      // one case so a new fixture id can't reopen the unmodelled-path hole.
+      // unexpectedPaths still records the REAL path for diagnostics.
+      final route = path.startsWith('/creators/') && !path.endsWith('/follow')
+          ? '${req.method} /creators/*'
+          : '${req.method} $path';
+      switch (route) {
         case 'POST /auth/login':
           loginRequests++;
           reply = {
@@ -138,6 +145,22 @@ class FakeStoopServer {
         case 'POST /characters':
           uploadRequests++;
           reply = {'id': 'up1', 'status': 'PENDING'};
+        case 'GET /creators/*':
+          // The @you tab renders the signed-in user's own creator profile.
+          // Every field is defaulted by StoopCreator.fromJson, so a minimal
+          // profile parses fine.
+          creatorRequests++;
+          reply = {
+            'id': path.split('/').last,
+            'displayName': 'PorchFriend',
+            'followers': 0,
+            'following': false,
+            'isMe': path.endsWith('u1'),
+            'cards': <Object>[],
+            'bio': '',
+            'links': <String>[],
+            'stats': {'cards': 0, 'downloads': 0, 'score': 0},
+          };
         case 'GET /me/messages/unread':
           reply = {'count': 0};
         case 'GET /me/characters':
