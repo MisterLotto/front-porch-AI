@@ -171,7 +171,17 @@ void main() {
     // ── Persistence: the clock rides realism_state through a reload ─────
     final sessionId = chatService.currentSessionId;
     expect(sessionId, isNotNull);
+    // Full quiescence FIRST, then capture immediately before the reload:
+    // trailing post-settle work (the realism_state patch on the last
+    // message) can legitimately advance the clock after the earlier
+    // capture — the first CI run compared against a stale snapshot and
+    // went red by exactly one 5-minute tick (Linux leg, attempt 1). The
+    // persistence contract is "reload preserves the clock", not "nothing
+    // advanced it since an arbitrary earlier moment".
     await d.waitSendable();
+    await tester.pump(const Duration(seconds: 1));
+    await d.waitSendable();
+    final isoBeforeReload = chatService.timeService.storyClockIso;
     await chatService.loadSession(sessionId!);
     await d.waitFor(
       () => chatService.messages.length >= 5,
@@ -181,7 +191,7 @@ void main() {
     );
     expect(
       chatService.timeService.storyClockIso,
-      isoAfterTurns,
+      isoBeforeReload,
       reason:
           'the story clock must be restored from the last message\'s '
           'realism_state on reload — a reset here is the frozen-timestamp '

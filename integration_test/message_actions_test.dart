@@ -137,14 +137,40 @@ void main() {
     await d.waitForWidget(find.textContaining(_kGreeting, findRichText: true));
     await d.waitForWidget(d.input);
 
-    /// The MessageBubble that renders [text] — ancestor-addressed so bubble
-    /// order in the (reversed) list never matters.
-    Finder bubbleWith(String text) => find
-        .ancestor(
-          of: find.textContaining(text, findRichText: true).first,
-          matching: find.byType(MessageBubble),
-        )
-        .first;
+    /// The bubble for a SPECIFIC message, revealed by scrolling. Bubbles are
+    /// keyed GlobalObjectKey(msg), which sidesteps two traps the first CI
+    /// run of this suite hit: the reversed list VIRTUALIZES, so an old
+    /// message's bubble may not be built at all until scrolled into view
+    /// (macOS leg), and the fake backend's replies share identical text, so
+    /// text-ancestor matching is ambiguous. Positive drags reveal older
+    /// messages in the reversed list; the negative tail is insurance.
+    Future<Finder> revealBubbleFor(ChatMessage msg) async {
+      final f = find.byKey(GlobalObjectKey(msg));
+      if (f.evaluate().isNotEmpty) return f;
+      final scrollable = find
+          .ancestor(
+            of: find.byType(MessageBubble).first,
+            matching: find.byType(Scrollable),
+          )
+          .first;
+      const drags = [
+        300.0, 300.0, 300.0, 300.0, 300.0, 300.0, //
+        -300.0, -300.0, -300.0, -300.0, -300.0, -300.0,
+      ];
+      for (final dy in drags) {
+        if (f.evaluate().isNotEmpty) break;
+        await tester.drag(scrollable, Offset(0, dy));
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+      expect(
+        f,
+        findsWidgets,
+        reason:
+            'the bubble for "${msg.text}" must be reachable by scrolling '
+            'the chat list',
+      );
+      return f;
+    }
 
     // ── Seed two turns so realism + needs have scored an exchange ───────
     await d.sendMessage('The porch swing creaks as I sit down.');
@@ -167,8 +193,9 @@ void main() {
     await d.waitSendable();
 
     // ── EDIT: greeting text changes through the dialog and sticks ───────
+    final greetingBubble = await revealBubbleFor(chatService.messages.first);
     final editBtn = find.descendant(
-      of: bubbleWith(_kGreeting),
+      of: greetingBubble,
       matching: find.byTooltip('Edit message'),
     );
     await tester.ensureVisible(editBtn);
@@ -227,19 +254,38 @@ void main() {
     );
     expect(chatService.messages.last.isUser, isFalse);
 
-    // ── DELETE: the last reply, through the confirm dialog, with refund ──
+    // ── DELETE: a CHIP-CARRYING reply, through the confirm dialog, with
+    //    refund. The target is found by its chips, not by position: the
+    //    first CI run targeted the just-regenerated reply, whose chip map is
+    //    legitimately empty on some paths (Linux leg) — the message the
+    //    needs-impact pipeline actually charged is the one whose deletion
+    //    must refund.
     await d.waitSendable();
-    final target = chatService.messages.last;
+    final target = chatService.messages.lastWhere(
+      (m) =>
+          !m.isUser &&
+          m.sender != 'System' &&
+          _deltasOf(
+            (m.activeMetadata?['needs_deltas'] as Map?)
+                ?.cast<String, dynamic>(),
+          ).isNotEmpty,
+      orElse: () => fail(
+        'no bot message carries nonzero needs_deltas — the needs-impact '
+        'pipeline attached no chips anywhere. Metadata keys per message: '
+        '${chatService.messages.map((m) => m.activeMetadata?.keys.toList()).toList()}',
+      ),
+    );
     final deltas = _deltasOf(
       (target.activeMetadata?['needs_deltas'] as Map?)?.cast<String, dynamic>(),
     );
     final needsBefore = Map<String, int>.from(
       chatService.needsSimulation.vector,
     );
-    final targetText = _kReplyPieces.join();
+    final countBeforeDelete = chatService.messages.length;
 
+    final targetBubble = await revealBubbleFor(target);
     final deleteBtn = find.descendant(
-      of: bubbleWith(targetText),
+      of: targetBubble,
       matching: find.byIcon(Icons.delete_outline),
     );
     await tester.ensureVisible(deleteBtn.first);
@@ -251,25 +297,26 @@ void main() {
     );
     await tester.tap(find.text('Delete'));
     await d.waitFor(
-      () => chatService.messages.length == messagesBeforeRegen - 1,
+      () => chatService.messages.length == countBeforeDelete - 1,
       () =>
           'the delete to land '
           '(messages=${chatService.messages.length})',
       timeout: const Duration(seconds: 15),
     );
-    expect(chatService.messages.last.isUser, isTrue);
+    expect(
+      chatService.messages.contains(target),
+      isFalse,
+      reason: 'the deleted message instance must leave the list',
+    );
+    expect(
+      find.byKey(GlobalObjectKey(target)),
+      findsNothing,
+      reason: 'the deleted message\'s bubble must leave the tree',
+    );
 
     // The refund contract (unit-pinned arithmetic; this asserts the JOURNEY
     // delivers it): every nonzero chip on the deleted message is subtracted
     // from the needs the character holds now.
-    expect(
-      deltas,
-      isNotEmpty,
-      reason:
-          'the canned needs eval pays nonzero deltas — an empty chip map '
-          'means the needs-impact pipeline never ran on the deleted reply, '
-          'and the refund below would be vacuously green',
-    );
     final needsAfter = chatService.needsSimulation.vector;
     deltas.forEach((need, delta) {
       expect(
@@ -280,13 +327,6 @@ void main() {
             '(before=${needsBefore[need]}, after=${needsAfter[need]})',
       );
     });
-
-    // The deleted turn's realism metadata is gone from the timeline.
-    expect(
-      find.textContaining(targetText, findRichText: true),
-      findsNothing,
-      reason: 'the deleted reply must leave the visible transcript',
-    );
 
     expect(backend.unexpectedPaths, isEmpty);
 

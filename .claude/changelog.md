@@ -8849,3 +8849,28 @@ coverage made explicit), `CLAUDE.md` (suite list).
 **Verification.** flutter analyze clean; dart fix nothing; formatted. E2E
 runs impossible in this container (phase 1 control experiment) — the CI
 three-OS runs on this push validate, watcher armed.
+
+## 2026-08-04 — First three-OS CI round: two suite defects + one race fixed from real logs
+
+**Files.** `integration_test/message_actions_test.dart`, `integration_test/story_time_test.dart`.
+
+**Round 1 verdict (run 30866809076, 0fbf7d6):** 7 of 9 E2E files green on
+Linux — including settings_persistence, web_server, and the DEFLAKED
+group_smoke. Two new-suite defects, both caught by CI exactly as designed:
+1. message_actions (macOS): targeting the greeting bubble by text-ancestor
+   crashed — the reversed chat list VIRTUALIZES, so the oldest bubble
+   isn't built until scrolled into view. And the fake's identical reply
+   texts made text-matching ambiguous anyway. Fix: `revealBubbleFor(msg)` —
+   bubbles are keyed GlobalObjectKey(msg), so target the exact message's
+   key and reveal it with a bounded drag loop.
+2. message_actions (Linux): the delete-refund phase targeted the
+   just-REGENERATED reply, whose chip map is legitimately empty on that
+   path. Fix: target the chip-carrying message (found by its chips), with
+   a diagnostic fail if none exists so the guard can't go vacuous.
+3. story_time (Linux, attempt 1 only): trailing post-settle realism_state
+   patching advanced the clock one 5-min tick between capture and reload.
+   Fix: capture immediately before loadSession after full quiescence — the
+   contract is "reload preserves the clock", not "nothing advanced it
+   since an arbitrary earlier moment".
+
+**Verification.** analyze clean; formatted; pushed for CI round 2.
