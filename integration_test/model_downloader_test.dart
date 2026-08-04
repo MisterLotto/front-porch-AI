@@ -150,6 +150,25 @@ void main() {
     );
 
     // ── Oversize → dialog → Cancel queues NOTHING ───────────────────────
+    // PRECONDITION, not an optimism: the Download button is only a confirm
+    // trigger while the row's fit status is `exceeds`. If VRAM reads as 0
+    // the row goes neutral and the very same tap becomes a plain download —
+    // silently queueing the file and leaving the dialog forever absent
+    // (round 1 burned both macOS and Windows on exactly that). Gate on the
+    // row's own rendered verdict so a regression here names its cause.
+    String vramRowTexts() => find
+        .textContaining('VRAM:')
+        .evaluate()
+        .map((e) => (e.widget as Text).data ?? '')
+        .join(' || ');
+    await d.waitFor(
+      () => find.textContaining('over your VRAM').evaluate().isNotEmpty,
+      () =>
+          'the oversize row to report an exceeds fit before any tap '
+          '(vram=${hardware.hardwareInfo?.vramMb}, rows: ${vramRowTexts()})',
+      timeout: const Duration(seconds: 30),
+    );
+
     final oversizeTitle = find.text('Larger than your VRAM');
     for (
       var attempt = 0;
@@ -161,7 +180,14 @@ void main() {
       await tester.tap(downloadBtns.last, warnIfMissed: false);
       await tester.pump(const Duration(milliseconds: 400));
     }
-    await d.waitForWidget(oversizeTitle);
+    await d.waitFor(
+      () => oversizeTitle.evaluate().isNotEmpty,
+      () =>
+          'the oversize confirm dialog to open '
+          '(vram=${hardware.hardwareInfo?.vramMb}, queued=${downloads.queue.length}, '
+          'rows: ${vramRowTexts()})',
+      timeout: const Duration(seconds: 30),
+    );
     await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
     await d.waitFor(
       () => oversizeTitle.evaluate().isEmpty,
@@ -184,7 +210,13 @@ void main() {
       await tester.tap(downloadBtns.last, warnIfMissed: false);
       await tester.pump(const Duration(milliseconds: 400));
     }
-    await d.waitForWidget(oversizeTitle);
+    await d.waitFor(
+      () => oversizeTitle.evaluate().isNotEmpty,
+      () =>
+          'the oversize confirm dialog to reopen for the Download Anyway leg '
+          '(vram=${hardware.hardwareInfo?.vramMb}, rows: ${vramRowTexts()})',
+      timeout: const Duration(seconds: 30),
+    );
     await tester.tap(find.widgetWithText(ElevatedButton, 'Download Anyway'));
     await d.waitFor(
       () => downloads.queue.isNotEmpty,

@@ -21,7 +21,13 @@ import 'dart:convert';
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:front_porch_ai/app_version.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/utils/utils.dart';
+
+// HardwareInfo moved to models/hardware_info.dart (this file was one edit
+// from the 1,000-line god-file bar). Re-exported so the ~7 consumers that
+// import it from here keep compiling unchanged.
+export 'package:front_porch_ai/models/hardware_info.dart';
 
 /// Parsed output of `nvidia-smi --query-gpu=name,memory.total`.
 /// Used internally by [HardwareService._parseNvidiaSmi] so the multi-line CSV
@@ -32,71 +38,24 @@ class _NvidiaSmiResult {
   _NvidiaSmiResult({required this.name, required this.vramMb});
 }
 
-class HardwareInfo {
-  final String gpuName;
-  final int vramMb;
-  final int ramMb;
-  final String vendor; // 'Nvidia', 'AMD', 'Intel', 'Unknown'
-  final bool hasCuda;
-  final bool hasRocm;
-  final bool hasMetal;
-  final bool isSharedMemory; // Intel ARC iGPU, AMD APU, etc.
-  final String
-  linuxDistro; // 'arch', 'ubuntu', 'debian', 'fedora', 'rhel', 'opensuse', 'unknown'
-
-  HardwareInfo({
-    required this.gpuName,
-    required this.vramMb,
-    required this.ramMb,
-    required this.vendor,
-    this.hasCuda = false,
-    this.hasRocm = false,
-    this.hasMetal = false,
-    this.isSharedMemory = false,
-    this.linuxDistro = 'unknown',
-  });
-
-  @override
-  String toString() =>
-      '$gpuName (VRAM: ${vramMb}MB, RAM: ${ramMb}MB, Shared: $isSharedMemory, Distro: $linuxDistro) [CUDA: $hasCuda, ROCm: $hasRocm, Metal: $hasMetal]';
-
-  Map<String, dynamic> toJson() => {
-    'gpuName': gpuName,
-    'vramMb': vramMb,
-    'ramMb': ramMb,
-    'vendor': vendor,
-    'hasCuda': hasCuda,
-    'hasRocm': hasRocm,
-    'hasMetal': hasMetal,
-    'isSharedMemory': isSharedMemory,
-    'linuxDistro': linuxDistro,
-  };
-
-  /// Rebuilds from [toJson]. Every field is read defensively — a cache written
-  /// by an older build (or a partially-written entry) degrades to defaults
-  /// rather than throwing on startup.
-  static HardwareInfo? fromJson(Map<String, dynamic> json) {
-    final gpuName = json['gpuName'];
-    if (gpuName is! String) return null;
-    return HardwareInfo(
-      gpuName: gpuName,
-      vramMb: (json['vramMb'] as num?)?.toInt() ?? 0,
-      ramMb: (json['ramMb'] as num?)?.toInt() ?? 0,
-      vendor: json['vendor'] as String? ?? 'Unknown',
-      hasCuda: json['hasCuda'] as bool? ?? false,
-      hasRocm: json['hasRocm'] as bool? ?? false,
-      hasMetal: json['hasMetal'] as bool? ?? false,
-      isSharedMemory: json['isSharedMemory'] as bool? ?? false,
-      linuxDistro: json['linuxDistro'] as String? ?? 'unknown',
-    );
-  }
-}
-
 class HardwareService extends ChangeNotifier {
   HardwareInfo? _hardwareInfo;
   bool _isDetecting = false;
 
-  HardwareInfo? get hardwareInfo => _hardwareInfo;
+  /// The detected hardware, with [testVramOverrideMb] applied when set.
+  /// Applied at the READ because detection assigns `_hardwareInfo` several
+  /// times while narrowing down the GPU and every interim value is 0 MB on a
+  /// headless runner — a consumer rebuilding in that window (Model Manager
+  /// reads it per build) sees 0, calls fit unknowable, and drops its
+  /// VRAM-dependent affordances. Here no detection pass can race it.
+  HardwareInfo? get hardwareInfo {
+    final override = testVramOverrideMb;
+    if (override == null) return _hardwareInfo;
+    // JSON round-trip: other fields keep detected values, no copy to drift.
+    final base = _hardwareInfo?.toJson() ?? {'gpuName': 'E2E Override GPU'};
+    return HardwareInfo.fromJson({...base, 'vramMb': override});
+  }
+
   bool get isDetecting => _isDetecting;
 
   /// True when this machine can only run local models on the CPU, slowly.
@@ -182,10 +141,9 @@ class HardwareService extends ChangeNotifier {
     }
   }
 
-  /// Forces the detected VRAM to this value (MB). Detection on a headless CI
-  /// runner lands at vramMb: 0, which makes every VRAM-dependent surface
-  /// (fit estimates, the oversize-download confirm) unreachable — the E2E
-  /// suite sets this so those journeys are drivable. Null = real detection.
+  /// Forces reported VRAM to this value (MB). A headless CI runner detects
+  /// 0 MB, which hides every VRAM-dependent surface (fit estimates, the
+  /// oversize-download confirm) from the E2E suite. Null = real detection.
   @visibleForTesting
   static int? testVramOverrideMb;
 
@@ -209,13 +167,6 @@ class HardwareService extends ChangeNotifier {
     } catch (e) {
       print('Hardware detection failed: $e');
     } finally {
-      final override = testVramOverrideMb;
-      if (override != null) {
-        // Round-trip through the JSON codec: every other field keeps its
-        // detected (or default) value with no field-by-field copy to drift.
-        final base = _hardwareInfo?.toJson() ?? {'gpuName': 'E2E Override GPU'};
-        _hardwareInfo = HardwareInfo.fromJson({...base, 'vramMb': override});
-      }
       _isDetecting = false;
       if (!_disposed) notifyListeners();
       StartupTrace.mark(

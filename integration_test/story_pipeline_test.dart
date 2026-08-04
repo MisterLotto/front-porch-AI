@@ -142,7 +142,7 @@ void main() {
     await pumpUntilFound(
       tester,
       find.text('Generate Act Structure'),
-      timeout: const Duration(minutes: 2),
+      timeout: const Duration(seconds: 60),
     );
     expect(backend.storyStagesServed, ['architect']);
     await pumpUntilTrue(
@@ -158,7 +158,7 @@ void main() {
     await pumpUntilFound(
       tester,
       find.text('View Structure & Write'),
-      timeout: const Duration(minutes: 2),
+      timeout: const Duration(seconds: 60),
     );
     expect(backend.storyStagesServed, ['architect', 'acts']);
 
@@ -169,14 +169,14 @@ void main() {
     await pumpUntilFound(
       tester,
       find.text('Reading the Flicker'),
-      timeout: const Duration(minutes: 3),
+      timeout: const Duration(seconds: 90),
     );
     // The scene row's trailing proseCount/beats counter proves the beat was
     // written, not just planned.
     await pumpUntilFound(
       tester,
       find.text('1/1'),
-      timeout: const Duration(minutes: 2),
+      timeout: const Duration(seconds: 60),
     );
     expect(backend.storyStagesServed, [
       'architect',

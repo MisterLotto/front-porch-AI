@@ -144,10 +144,13 @@ jobs:
             experimental: false
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
-    # 16 suites per OS, each failing suite retried once with a full rebuild —
-    # 30 minutes truncated the 2026-08-04 Linux round mid-list, hiding four
-    # suites' verdicts. 45 keeps red rounds fully diagnostic.
-    timeout-minutes: 45
+    # 20 suites per OS, each failing suite retried once with a full rebuild.
+    # Sizing history: 30 truncated a Linux round mid-list (hid four verdicts);
+    # 45 then ran out on the first 20-suite round, because a FAILING suite is
+    # far more expensive than a passing one — its waits burn their full
+    # CI-scaled deadline (kCiTimeoutScale = 4) twice over, once per attempt.
+    # 60 keeps a red round fully diagnostic instead of hiding the tail.
+    timeout-minutes: 60
     steps:
       - name: Checkout Code
         uses: actions/checkout@v5
