@@ -399,6 +399,25 @@ extension ChatServiceReprocess on ChatService {
 
   Future<void> regenerateLastMessage() async {
     if (_messages.isEmpty || _isTurnBusy || _guestBusy) return;
+    // Hold the settling flag across the WHOLE regen — the realism revert +
+    // eval replay before generation and the swipe-merge after it both run
+    // outside _generateResponse, and used to run with every guard open: a
+    // send/delete/chat-switch landing there operated on a timeline with the
+    // last message popped or the merge half-done (the same interleave class
+    // the in-generate settling fix closed). _generateResponse restores the
+    // caller's hold on exit instead of hard-clearing, so this survives the
+    // nested call; the finally makes a wedged flag impossible. The body is
+    // extracted (not inlined in the try) purely so its early returns and
+    // this hold compose without re-indenting the whole flow.
+    _isPostGenerating = true;
+    try {
+      await _regenerateLastMessageHeld();
+    } finally {
+      _isPostGenerating = false;
+    }
+  }
+
+  Future<void> _regenerateLastMessageHeld() async {
     // Backend gate BEFORE the pop below — aborting after removeLast would
     // drop the popped reply (the deep guard in _generateResponse cannot
     // restore it; see _abortIfBackendDown).
@@ -736,20 +755,24 @@ extension ChatServiceReprocess on ChatService {
           });
         }
 
-        // Apply decay and cooldown — mirrors the normal path (lines 3933-3937).
-        // This ensures _needsVector differs from the saved pre-turn vector
-        // so post-generation deltas are non-zero.
-        _applyMoodDecay();
-        _needsSimulation.tickDecay();
-        _nsfwService.decrementCooldownIfActive();
-
         // Record the (restored) needs baseline as the pre-turn vector BEFORE
-        // generation so the post-generation checks can compute proper deltas.
+        // the decay tick below — sendMessage stamps pre-tick and the group
+        // dance stamps preDecay, so a regen's chips must count the decay the
+        // same way or they understate the turn by exactly the decay component
+        // (and deleting the regenerated reply under-refunds by it — caught by
+        // regen_chip_attach_test: the original showed a hygiene chip, the
+        // regen didn't).
         if (_needsSimEnabled && _needsSimulation.vector.isNotEmpty) {
           _pendingRealismMetadata ??= {};
           _pendingRealismMetadata!['needs_pre_turn_vector'] =
               Map<String, int>.from(_needsSimulation.vector);
         }
+
+        // Apply decay and cooldown — mirrors the normal path, which decays
+        // AFTER capturing the baseline so the chips record decay + impact.
+        _applyMoodDecay();
+        _needsSimulation.tickDecay();
+        _nsfwService.decrementCooldownIfActive();
 
         if (_storageService.realismSettings.realismOneShotEval) {
           await _evaluateOneShotCall(onChunk: handleChunk);
@@ -820,7 +843,6 @@ extension ChatServiceReprocess on ChatService {
       // happens inside _generateResponse via _evaluateRealismForUpcomingSpeaker
       // for the correctly-forced speaker. Skip the 1:1 scalar synthesis here.
       Map<String, int>? regenPreTurn;
-      Map<String, dynamic>? needsDeltas;
       if (_activeGroup == null && regenGuest == null) {
         // Save pre-turn vector BEFORE _generateResponse (which clears
         // _pendingRealismMetadata).
@@ -858,23 +880,12 @@ extension ChatServiceReprocess on ChatService {
       // the guest and the entire Realism/Needs post-gen block is skipped (the
       // `guestSpeaker == null` guard). For a host message regenGuest is null and
       // this is the unchanged host path: _generateResponse runs the post-gen
-      // needs checks (climax, sexual, daily, fulfillment) that modify the needs
-      // vector, so we compute needs_deltas AFTER generation below.
+      // needs checks AND the chip attach — a regen runs in normal mode, so
+      // needs_deltas land on the streamed message exactly like a fresh turn
+      // (1:1 and group alike) and ride newMetadata into the swipe-merge below.
+      // The duplicate post-generation recompute that used to live here was a
+      // second source of truth for the same numbers; deleted 2026-08-04.
       await _generateResponse(GenerationMode.normal, guestSpeaker: regenGuest);
-
-      // Compute needs_deltas AFTER generation so the post-generation checks
-      // are reflected. This mirrors the normal generation path (line ~4053).
-      // Apply directly to the message since _pendingRealismMetadata was consumed.
-      // (For groups, the per-speaker path inside generate already attached the
-      // correct per-character needs_deltas; we only compute scalar here for 1:1.)
-      if (_activeGroup == null &&
-          regenGuest == null &&
-          _needsSimEnabled &&
-          _needsSimulation.vector.isNotEmpty) {
-        needsDeltas = _needsSimulation.computeNeedsDeltasWithReasons(
-          regenPreTurn ?? const <String, int>{},
-        );
-      }
 
       // After generation, merge the new response as a swipe on the original message
       if (_messages.isNotEmpty &&
@@ -900,13 +911,10 @@ extension ChatServiceReprocess on ChatService {
           lastMsg.swipeMetadata.add(null);
         }
         lastMsg.swipeIndex = newSwipeIndex;
-        // New swipe metadata only — prior swipes (incl. manual reprocess) stay intact.
-        if (needsDeltas != null && needsDeltas.isNotEmpty) {
-          lastMsg.swipeMetadata[newSwipeIndex] = {
-            ...(newMetadata ?? {}),
-            'needs_deltas': needsDeltas,
-          };
-        } else if (newMetadata != null) {
+        // New swipe metadata only — prior swipes (incl. manual reprocess) stay
+        // intact. newMetadata already carries this swipe's needs_deltas: the
+        // chip attach inside _generateResponse is the one source of truth.
+        if (newMetadata != null) {
           lastMsg.swipeMetadata[newSwipeIndex] = newMetadata;
         }
         _messages.add(lastMsg);

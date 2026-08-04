@@ -77,6 +77,8 @@ extension ChatServiceGeneration on ChatService {
     CharacterCard? guestSpeaker,
   }) async {
     if (await _abortIfBackendDown()) return;
+    // regenerateLastMessage holds the settling flag; the finally restores it.
+    final callerHeldSettling = _isPostGenerating;
     final epoch = ++_generationEpoch;
     _isGenerating = true;
     _generationProgress = 0.0;
@@ -1588,10 +1590,8 @@ extension ChatServiceGeneration on ChatService {
       _isGenerating = false;
       // Settling starts the instant the last token lands — the finalization
       // below (sanitizer, lorebook, _saveChat, post-gen checks, chip attach)
-      // is still the turn. The old late raise left an awaits-wide gap where
-      // guards + isSettlingTurn reported the turn done and a new turn could
-      // interleave (message_actions Windows CI: chips silently lost).
-      // Cleared in the outer finally on every exit.
+      // is still the turn; the old late raise let a new turn interleave
+      // (message_actions Windows CI). Restored in the outer finally.
       _isPostGenerating = true;
       _cancelRequested = false;
       _generationProgress = 0.0;
@@ -1764,11 +1764,11 @@ extension ChatServiceGeneration on ChatService {
               }
             }
 
-            // Per-message needs chips for whoever just spoke. Lives here (not in
-            // sendMessage) so EVERY speaker gets them — group auto-advance, /speak
-            // and chime-ins reach _generateResponse but never sendMessage's old
-            // chip block, which is why only the first responder showed chips.
-            // Normal turns only; regen/continue manage their own chips.
+            // Per-message needs chips for whoever just spoke. Lives here so
+            // EVERY speaker gets them (group auto-advance, /speak, chime-ins)
+            // — and regens too: a regen replays the turn in normal mode, and
+            // the swipe-merge copies these chips onto the accepted swipe.
+            // The ONE chip source. Continue never re-attaches.
             if (mode == GenerationMode.normal) {
               await _attachNeedsDeltaChipToLastMessage();
             }
@@ -1951,9 +1951,9 @@ extension ChatServiceGeneration on ChatService {
       // turn's pre-pick window (e.g. _applyMoodDecay) keeps its prior
       // nextCharacter-based behaviour instead of seeing a stale speaker.
       _turnSpeakerIdForRealism = null;
-      // Settling over, on EVERY exit — a latched flag would refuse deletes,
-      // regenerates and group edits for the rest of the session.
-      _isPostGenerating = false;
+      // Settling over, on EVERY exit — restore the CALLER's hold (regen keeps
+      // it raised across its swipe-merge); a latched flag would wedge input.
+      _isPostGenerating = callerHeldSettling;
     }
   }
 }
