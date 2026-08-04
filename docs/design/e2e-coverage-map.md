@@ -46,6 +46,14 @@ by CI automatically.
 | Journal review-first: park → banner → apply | `journal_review` | gear toggle via real UI; salience-kicked batch parks; Apply lands the card |
 | Growth Rings: pass → ring renders → receipt jump | `growth_rings` | real panel switch; fake's <ring> branch; tier/category render; #1 receipt seeks the cited bubble |
 | Sidebar sweep: every accordion + a live control each | `sidebar_sweep` | note field takes text; sim gear opens flyout; chaos switch truly enables chaos |
+| Swipes: regen grafts 2/2; chevrons navigate | `swipe_fork_cancel` | left/right arrows swap swipe + preserved chips; navigation fires NO generation |
+| Cancel-mid-regenerate put-back (124b8ff class) | `swipe_fork_cancel` | paced fake (chatChunkDelay) opens a real window; Stop keeps original as swipe 1, partial as new swipe, all guards release |
+| Fork: bubble button → confirm → new branch | `swipe_fork_cancel` | session id swaps; parentSessionId/forkIndex recorded; multi-swipe message carried whole |
+| Model search + download (fake HF endpoints) | `model_downloader` | ModelManager.hfBaseUrl seam; search → tree → expand card; both files land on disk |
+| VRAM oversize-confirm dialog | `model_downloader` | HardwareService.testVramOverrideMb pins 8 GB; Cancel queues nothing, Download Anyway queues; fitting file never warns |
+| The Stoop: sign-in → AUP gate → browse → download | `stoop` | BackporchApi.overrideBaseUrl seam + fake backporch server; downloaded V2 card lands in CharacterRepository |
+| The Stoop: share wizard upload | `stoop` | pick → details → standards ack → Submit for review posts the multipart upload |
+| Story pipeline: concept → bible → acts → prose | `story_pipeline` | real wizard + dashboard + structure page; fake's 5 story-stage branches; stage ORDER asserted; reader opens on finished prose |
 
 Widget-level interaction tests (in `test/ui/`, not full-app):
 `create_group_chat_page`, `edit_character_page`, folder drag/drop, expanded
@@ -55,22 +63,30 @@ editor dialog, theme goldens, and the border-painter hit-test sweep.
 
 **P1 + P2 — DONE 2026-08-04** (`backup_restore`, `persona_folder`,
 `lorebook_chat`, `worlds_management`, `journal_review`, `growth_rings`,
-`sidebar_sweep`). Honest residue from those items:
-- Message actions still leaves swipes navigation, fork, and
-  cancel-mid-regenerate to P3 (delay-capable fake needed; the put-back
-  behavior is unit-pinned meanwhile).
+`sidebar_sweep`).
+
+**P3 — DONE 2026-08-04** (`swipe_fork_cancel`, `model_downloader`, `stoop`,
+`story_pipeline`), with the fakes it needed: FakeBackendServer gained
+chatChunkDelay (paced chat stream — the cancel window) and five story-stage
+branches; new `support/fake_hf.dart` and `support/fake_stoop.dart` servers;
+three `@visibleForTesting` seams in lib (ModelManager.hfBaseUrl,
+HardwareService.testVramOverrideMb, BackporchApi.overrideBaseUrl — the last
+one matters beyond tests: the desktop UI constructs bare BackporchApi()
+everywhere and the dart-define override is compile-time only).
+
+Honest residue (still open, low priority):
 - The lorebook IMPORT WIZARD's step 0 is a native file picker no test can
   drive; the dialect decode layer it rides is proven programmatically in
   `lorebook_chat`, and steps 1–2 remain uncovered as widgets.
 - The custom climate EDITOR (showClimateEditorDialog) is not driven —
   `worlds_management` proves the dropdown offers it; authoring is unit-level
   territory.
-
-**P3 — needs new fakes first:**
-9. Model manager / downloader (fake HF endpoints on FakeBackendServer;
-   oversize-confirm dialog journey).
-10. The Stoop (fake backporch API server; browse/upload/download).
-11. Story pipeline (long-form generation against the fake).
+- Story: the writer page's Auto-Write leg (Drafter+Editor+Validator+
+  Archivist) is not driven — `story_pipeline` covers the generateFullAct
+  path the desktop UI uses; the Cancel-Realism overlay path is likewise
+  uncovered (the Stop-button cancel is).
+- Stoop messaging (inbox thread + typing over the WebSocket) is not driven;
+  the fake holds the socket open and serves unread=0.
 
 **Deliberately not coverable offline (documented, not forgotten):**
 - RAG/embeddings (consent-gated model download; pre-consent UI IS covered).

@@ -10,6 +10,7 @@
 
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 
 import 'backporch_user.dart';
@@ -49,7 +50,8 @@ class AuthResult {
 /// pass the access token where a request needs one. Uses the same `http.Client`
 /// pattern as the rest of the app's network services.
 class BackporchApi {
-  BackporchApi({String? baseUrl}) : baseUrl = baseUrl ?? defaultBaseUrl;
+  BackporchApi({String? baseUrl})
+    : baseUrl = baseUrl ?? overrideBaseUrl ?? defaultBaseUrl;
 
   /// The live server. Overridable for local development against a dev backend
   /// via `--dart-define=BACKPORCH_BASE_URL=http://localhost:8090`.
@@ -57,6 +59,15 @@ class BackporchApi {
     'BACKPORCH_BASE_URL',
     defaultValue: 'https://api.frontporchai.app',
   );
+
+  /// Runtime seam over [defaultBaseUrl]. The desktop UI constructs bare
+  /// `BackporchApi()` at every call site, and the dart-define above is
+  /// compile-time only — CI's E2E runner passes no defines, so without this
+  /// a Stoop suite would talk to the LIVE server. The E2E suite points this
+  /// at its fake before boot; an explicit constructor [baseUrl] still wins.
+  @visibleForTesting
+  static String? overrideBaseUrl;
+
   final String baseUrl;
 
   Future<AuthResult> signup({
@@ -94,8 +105,9 @@ class BackporchApi {
   /// Begin authenticator (TOTP) enrollment. Returns the shared secret, the
   /// otpauth:// URI, and a ready-to-show QR image (a `data:image/png;base64,…`
   /// URL). The secret is stored server-side but stays inactive until [confirm].
-  Future<({String secret, String otpauthUrl, String qrDataUrl})>
-  twoFactorSetup(String accessToken) async {
+  Future<({String secret, String otpauthUrl, String qrDataUrl})> twoFactorSetup(
+    String accessToken,
+  ) async {
     final json = await _post('/2fa/setup', const {}, token: accessToken);
     return (
       secret: (json['secret'] ?? '').toString(),
@@ -284,19 +296,20 @@ class BackporchApi {
     required Uint8List avatarBytes,
     required String avatarFilename,
   }) async {
-    final req = http.MultipartRequest(
-      'POST',
-      Uri.parse('$baseUrl/characters/$characterId/versions'),
-    )
-      ..headers['Authorization'] = 'Bearer $accessToken'
-      ..fields['payload'] = jsonEncode(payload)
-      ..files.add(
-        http.MultipartFile.fromBytes(
-          'avatar',
-          avatarBytes,
-          filename: avatarFilename,
-        ),
-      );
+    final req =
+        http.MultipartRequest(
+            'POST',
+            Uri.parse('$baseUrl/characters/$characterId/versions'),
+          )
+          ..headers['Authorization'] = 'Bearer $accessToken'
+          ..fields['payload'] = jsonEncode(payload)
+          ..files.add(
+            http.MultipartFile.fromBytes(
+              'avatar',
+              avatarBytes,
+              filename: avatarFilename,
+            ),
+          );
     final res = await http.Response.fromStream(
       await req.send().timeout(const Duration(seconds: 60)),
     );
@@ -310,7 +323,10 @@ class BackporchApi {
 
   /// The signed-in user's own uploads and their moderation status.
   Future<List<StoopCharacter>> myCharacters(String accessToken) async {
-    final json = await _get('/me/characters?types=$kStoopWorldTypes', accessToken);
+    final json = await _get(
+      '/me/characters?types=$kStoopWorldTypes',
+      accessToken,
+    );
     final items = (json['items'] as List?) ?? const [];
     return items
         .map((e) => StoopCharacter.fromJson(e as Map<String, dynamic>))
@@ -326,7 +342,10 @@ class BackporchApi {
   /// Cards the user has downloaded before (newest first), so they can grab them
   /// again on a new device. Returns the same shape as browse items.
   Future<List<StoopCard>> myDownloads(String accessToken) async {
-    final json = await _get('/me/downloads?types=$kStoopWorldTypes', accessToken);
+    final json = await _get(
+      '/me/downloads?types=$kStoopWorldTypes',
+      accessToken,
+    );
     final items = (json['items'] as List?) ?? const [];
     return items
         .map((e) => StoopCard.fromJson(e as Map<String, dynamic>))
@@ -505,11 +524,9 @@ class BackporchApi {
 
   /// Send a reply in the thread.
   Future<StoopMessage> sendMessage(String accessToken, String body) async {
-    final json = await _post(
-      '/me/messages',
-      {'body': body},
-      token: accessToken,
-    );
+    final json = await _post('/me/messages', {
+      'body': body,
+    }, token: accessToken);
     return StoopMessage.fromJson(json['message'] as Map<String, dynamic>);
   }
 

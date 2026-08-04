@@ -601,7 +601,13 @@ and `database.dart` has no barrel anyway).
   `journal_review_test.dart` (review-first: park → banner → apply),
   `growth_rings_test.dart` (evolution switch → pass → ring + receipt jump),
   `sidebar_sweep_test.dart` (every accordion opens; a control per section
-  responds). CI globs `integration_test/*_test.dart` and
+  responds), `swipe_fork_cancel_test.dart` (swipe chevrons, cancel-mid-regen
+  put-back via the paced fake, fork branch), `model_downloader_test.dart`
+  (fake-HF search/download + the VRAM oversize dialog),
+  `stoop_test.dart` (sign-in → AUP gate → browse → download-to-library →
+  share wizard, against a fake backporch server),
+  `story_pipeline_test.dart` (Porch Stories wizard → bible → structure →
+  prose → reader, 5 canned stages). CI globs `integration_test/*_test.dart` and
   runs ONE invocation per file on macOS/Windows/Linux — a new suite is picked up
   automatically. Before capturing or persist-asserting chat state in ANY suite,
   `await d.waitSendable()` — the settling window (`isSettlingTurn`) is part of

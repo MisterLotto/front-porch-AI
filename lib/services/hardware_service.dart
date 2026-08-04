@@ -182,6 +182,13 @@ class HardwareService extends ChangeNotifier {
     }
   }
 
+  /// Forces the detected VRAM to this value (MB). Detection on a headless CI
+  /// runner lands at vramMb: 0, which makes every VRAM-dependent surface
+  /// (fit estimates, the oversize-download confirm) unreachable — the E2E
+  /// suite sets this so those journeys are drivable. Null = real detection.
+  @visibleForTesting
+  static int? testVramOverrideMb;
+
   Future<void> detectHardware() async {
     if (_disposed) return;
     _isDetecting = true;
@@ -202,6 +209,13 @@ class HardwareService extends ChangeNotifier {
     } catch (e) {
       print('Hardware detection failed: $e');
     } finally {
+      final override = testVramOverrideMb;
+      if (override != null) {
+        // Round-trip through the JSON codec: every other field keeps its
+        // detected (or default) value with no field-by-field copy to drift.
+        final base = _hardwareInfo?.toJson() ?? {'gpuName': 'E2E Override GPU'};
+        _hardwareInfo = HardwareInfo.fromJson({...base, 'vramMb': override});
+      }
       _isDetecting = false;
       if (!_disposed) notifyListeners();
       StartupTrace.mark(
@@ -757,9 +771,8 @@ class HardwareService extends ChangeNotifier {
           final chosen = matched ?? (canFallBack ? mostShared : null);
 
           if (chosen != null) {
-            final sharedMb = (toInt(chosen['SharedSystemMemory']) /
-                    (1024 * 1024))
-                .round();
+            final sharedMb =
+                (toInt(chosen['SharedSystemMemory']) / (1024 * 1024)).round();
             final dedicatedMb = (toInt(chosen['AdapterRAM']) / (1024 * 1024))
                 .round();
             // If shared memory is significantly larger than dedicated,

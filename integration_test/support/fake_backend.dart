@@ -28,12 +28,19 @@ import 'dart:convert';
 import 'dart:io';
 
 class FakeBackendServer {
-  FakeBackendServer._(this._server, this.replyPieces);
+  FakeBackendServer._(this._server, this.replyPieces, this.chatChunkDelay);
 
   final HttpServer _server;
 
   /// The chat reply, streamed one SSE chunk per element.
   final List<String> replyPieces;
+
+  /// Pause before EACH chat-reply chunk (including the first — that is what
+  /// actually opens a cancel window; a between-chunks-only delay lets chunk 1
+  /// land instantly). Applies ONLY to conversation turns: evals, journal,
+  /// growth and story stages stay instant, so a paced suite doesn't multiply
+  /// every background call by the delay and blow its own waits.
+  final Duration chatChunkDelay;
 
   /// Non-eval chat completions served (the actual conversation turns).
   int chatRequests = 0;
@@ -52,6 +59,10 @@ class FakeBackendServer {
 
   /// Objective task-generation requests served (numbered-list format).
   int objectiveTaskRequests = 0;
+
+  /// Story pipeline stages served, in order (architect / acts / scenes /
+  /// beats / prose) — the story suite asserts the exact sequence.
+  final List<String> storyStagesServed = [];
 
   /// Tool-transport probes refused (forces the text eval fallback).
   int toolProbeRequests = 0;
@@ -88,9 +99,10 @@ class FakeBackendServer {
 
   static Future<FakeBackendServer> start({
     required List<String> replyPieces,
+    Duration chatChunkDelay = Duration.zero,
   }) async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final fake = FakeBackendServer._(server, replyPieces);
+    final fake = FakeBackendServer._(server, replyPieces, chatChunkDelay);
     server.listen(fake._handle);
     return fake;
   }
@@ -217,6 +229,123 @@ class FakeBackendServer {
       ]);
       return;
     }
+    // ── Story pipeline stages ──────────────────────────────────────────
+    // Each stage prompt opens with a distinctive role sentence (verified
+    // against story_pipeline_service.dart's prompt builders); none of them
+    // carry the eval JSON keys below, so precedence here only guards against
+    // the CHAT fallthrough (whose canned replyPieces would fail the
+    // pipeline's JSON parse). The fake returns a MINIMAL story — 1 act,
+    // 1 scene, 1 beat — so the full concept→prose journey is 5 LLM calls.
+    if (lastContent.contains('You are a Lead Narrative Designer.') ||
+        lastContent.contains('Create a story bible from the concept.')) {
+      storyStagesServed.add('architect');
+      await _streamSse(req, [
+        jsonEncode({
+          'concept': 'A porch light that never goes out.',
+          'status_quo': 'Wren tends the porch alone each evening.',
+          'inciting_incident': 'One night the light flickers a message.',
+          'themes': 'Belonging, small kindnesses',
+          'style': {
+            'genre': 'Cozy fantasy',
+            'mood': 'Warm',
+            'writing_guide': 'Short sentences. Concrete detail.',
+          },
+          'threads': [
+            {
+              'id': 't1',
+              'name': 'The flickering light',
+              'description': 'What the porch light is trying to say.',
+            },
+          ],
+          'protagonist': {
+            'name': 'Wren',
+            'role': 'Protagonist',
+            'description': 'Keeper of the porch light.',
+          },
+          'world_lore': [
+            {'topic': 'The Porch', 'detail': 'It remembers every guest.'},
+          ],
+        }),
+      ]);
+      return;
+    }
+    if (lastContent.contains('You are an author developing story structure.')) {
+      storyStagesServed.add('acts');
+      await _streamSse(req, [
+        jsonEncode({
+          'acts': [
+            {
+              'number': 1,
+              'title': 'The Message in the Light',
+              'description': 'Wren decodes the flicker and answers it.',
+              'focus_thread_ids': ['t1'],
+              'knots': [],
+            },
+          ],
+        }),
+      ]);
+      return;
+    }
+    if (lastContent.contains('You are an author creating scenes for ACT')) {
+      storyStagesServed.add('scenes');
+      await _streamSse(req, [
+        jsonEncode({
+          'scenes': [
+            {
+              'number': 1,
+              'title': 'Reading the Flicker',
+              'description': 'Wren counts the pulses and writes them down.',
+              'active_thread_ids': ['t1'],
+              'location': 'The front porch',
+              'cast_names': ['Wren'],
+              'valence': 2,
+              'causality': {
+                'interaction_type': 'Isolation',
+                'description': 'A quiet solo discovery.',
+              },
+            },
+          ],
+          'new_characters': [],
+        }),
+      ]);
+      return;
+    }
+    if (lastContent.contains(
+      'You are the architect of a single narrative scene.',
+    )) {
+      storyStagesServed.add('beats');
+      await _streamSse(req, [
+        jsonEncode({
+          'beats': [
+            {
+              'number': 1,
+              'type': 'Revelation',
+              'description': 'The flicker spells a single word: stay.',
+              'emotional_shift': 'wary to moved',
+              'valence': 4,
+              'pacing': 1,
+            },
+          ],
+        }),
+      ]);
+      return;
+    }
+    if (lastContent.contains(
+      'You are a skilled novelist writing one section of a larger scene.',
+    )) {
+      storyStagesServed.add('prose');
+      // Multiple chunks on purpose: tokenCount increments once per stream
+      // event, and the running overlay's 'N tokens generated' line is the
+      // suite's streaming assertion.
+      await _streamSse(req, [
+        'The porch light blinked, ',
+        'paused, and blinked again. ',
+        'Wren counted the pulses twice before believing them: ',
+        'stay.',
+      ]);
+      return;
+    }
+
     // Objective task generation — plain numbered-list format, not JSON.
     if (lastContent.contains('numbered list of exactly')) {
       objectiveTaskRequests++;
@@ -301,12 +430,17 @@ class FakeBackendServer {
 
     chatRequests++;
     lastChatBody = body;
-    await _streamSse(req, replyPieces);
+    await _streamSse(req, replyPieces, delay: chatChunkDelay);
   }
 
-  Future<void> _streamSse(HttpRequest req, List<String> pieces) async {
+  Future<void> _streamSse(
+    HttpRequest req,
+    List<String> pieces, {
+    Duration delay = Duration.zero,
+  }) async {
     req.response.headers.set('Content-Type', 'text/event-stream');
     for (final piece in pieces) {
+      if (delay > Duration.zero) await Future<void>.delayed(delay);
       req.response.write(
         'data: ${jsonEncode({
           'choices': [

@@ -232,12 +232,19 @@ class ModelManager extends ChangeNotifier {
     }
   }
 
+  /// HuggingFace endpoint root. A static seam, not a constructor param: the
+  /// three URL builders (search, tree, download in [HFModelFile.fromApiMap])
+  /// were hardcoded, which made the search/download journey untestable —
+  /// the E2E suite points this at a local fake server.
+  @visibleForTesting
+  static String hfBaseUrl = 'https://huggingface.co';
+
   /// Searches HuggingFace for models matching the query.
   /// Returns typed [HFModel] objects.
   Future<List<HFModel>> searchHFModels(String query, {int limit = 20}) async {
     final encoded = Uri.encodeComponent(query);
     final url = Uri.parse(
-      'https://huggingface.co/api/models?search=$encoded&filter=gguf,text-generation&limit=$limit&full=true',
+      '$hfBaseUrl/api/models?search=$encoded&filter=gguf,text-generation&limit=$limit&full=true',
     );
 
     try {
@@ -257,9 +264,7 @@ class ModelManager extends ChangeNotifier {
   /// Gets the list of GGUF files for a HuggingFace repository.
   /// Returns typed [HFModelFile] objects.
   Future<List<HFModelFile>> getModelFiles(String repoId) async {
-    final url = Uri.parse(
-      'https://huggingface.co/api/models/$repoId/tree/main',
-    );
+    final url = Uri.parse('$hfBaseUrl/api/models/$repoId/tree/main');
 
     try {
       final response = await http.get(url);
@@ -268,7 +273,11 @@ class ModelManager extends ChangeNotifier {
         return data
             .where((f) => f['path'].toString().endsWith('.gguf'))
             .map(
-              (f) => HFModelFile.fromApiMap(f as Map<String, dynamic>, repoId),
+              (f) => HFModelFile.fromApiMap(
+                f as Map<String, dynamic>,
+                repoId,
+                baseUrl: hfBaseUrl,
+              ),
             )
             .toList();
       }
