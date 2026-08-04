@@ -455,6 +455,11 @@ extension ChatServiceSessionLoad on ChatService {
   Future<void> loadSession(String sessionId) async {
     if (_activeCharacter == null && _activeGroup == null) return;
 
+    // A reload mid-settle reads rows the finishing turn hasn't persisted yet
+    // (chip attach's _saveChat can land AFTER getMessagesForSession below),
+    // and that turn's finalization would then write onto the replaced list.
+    await _waitForTurnToSettle();
+
     // Reset AFK idle state when loading a new session
     _cancelIdleTimer();
     _hasCompletedExchange = false;

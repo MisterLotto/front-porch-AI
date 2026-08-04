@@ -54,9 +54,29 @@ extension ChatServiceChatEntry on ChatService {
     notifyListeners();
   }
 
+  /// Wait (bounded) for a finishing turn's settling section to complete.
+  ///
+  /// [_cancelAndWaitForGeneration] stops the STREAM, but the post-gen work —
+  /// evals, chip attach, `_saveChat` — runs after `_isGenerating` drops.
+  /// Entering a session/character/group mid-settle rehydrates from rows the
+  /// persist hasn't written yet (the reloaded reply came back chip-less, so
+  /// deleting it refunded nothing — the app_smoke Windows CI catch) while
+  /// the finalization keeps writing onto the REPLACED list. Bounded so a
+  /// wedged backend degrades to the old racy behaviour instead of hanging
+  /// the UI (`_cancelAndWaitForGeneration`'s doc forbids broadening its own
+  /// unbounded spin for exactly that reason).
+  Future<void> _waitForTurnToSettle() async {
+    final deadline = DateTime.now().add(const Duration(seconds: 15));
+    while (_isTurnBusy && DateTime.now().isBefore(deadline)) {
+      await Future.delayed(const Duration(milliseconds: 50));
+    }
+  }
+
   Future<void> setActiveCharacter(CharacterCard? character) async {
-    // Cancel any in-flight generation before switching context
+    // Cancel any in-flight generation before switching context, then wait
+    // out the settling tail so the reload below reads fully-persisted rows.
     await _cancelAndWaitForGeneration();
+    await _waitForTurnToSettle();
     _generationEpoch++;
 
     // If same character is already active and has messages, just refresh

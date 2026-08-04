@@ -28,6 +28,7 @@ extension ChatServiceGroupEntry on ChatService {
   }) async {
     // Cancel any in-flight generation before switching context AND reset author note for new session context
     await _cancelAndWaitForGeneration();
+    await _waitForTurnToSettle();
     _generationEpoch++;
 
     // Reset AFK idle state when switching to a different group
