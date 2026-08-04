@@ -30,6 +30,7 @@ import 'package:front_porch_ai/main.dart' as app;
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/layout/main_layout.dart';
 
+import 'support/chat_driver.dart';
 import 'support/e2e_sandbox.dart';
 import 'support/fake_backend.dart';
 
@@ -82,28 +83,28 @@ void main() {
 
     final ctx = tester.element(find.byType(MainLayout));
     final storyRepo = Provider.of<StoryRepository>(ctx, listen: false);
+    // Every tap below is delivery-confirmed. Three CI rounds in a row were
+    // lost to a silently-missed tap (warnIfMissed: false is mandatory here),
+    // each surfacing minutes later at a wait that named a symptom instead of
+    // the cause — this suite does not get to repeat that.
+    final d = ChatDriver(
+      tester,
+      Provider.of<ChatService>(ctx, listen: false),
+      backend,
+    );
 
     // ── Home → Porch Stories → the New Porch Story wizard ───────────────
-    await tester.tap(find.text('Porch Stories').first);
-    await pumpUntilFound(
-      tester,
+    await d.tapUntil([
+      find.text('Porch Stories'),
+    ], find.widgetWithText(ElevatedButton, 'New Story'));
+    await d.tapUntil([
       find.widgetWithText(ElevatedButton, 'New Story'),
-      timeout: const Duration(seconds: 45),
-    );
-    await tester.tap(find.widgetWithText(ElevatedButton, 'New Story'));
-    await pumpUntilFound(
-      tester,
-      find.text('New Porch Story'),
-      timeout: const Duration(seconds: 45),
-    );
+    ], find.text('New Porch Story'));
 
     // Step 0 (Engine) → Concept.
-    await tester.tap(find.textContaining('Next: Concept'));
-    await pumpUntilFound(
-      tester,
-      find.widgetWithText(TextField, 'Story title...'),
-      timeout: const Duration(seconds: 45),
-    );
+    await d.tapUntil([
+      find.textContaining('Next: Concept'),
+    ], find.widgetWithText(TextField, 'Story title...'));
     await tester.enterText(
       find.widgetWithText(TextField, 'Story title...').first,
       'The Porch Light',
@@ -129,28 +130,16 @@ void main() {
       'Generate Story Bible',
     ];
     for (var i = 0; i < steps.length; i++) {
-      final confirmation = find.textContaining(after[i]);
-      for (
-        var attempt = 0;
-        attempt < 6 && confirmation.evaluate().isEmpty;
-        attempt++
-      ) {
-        await tester.tap(find.textContaining(steps[i]), warnIfMissed: false);
-        await tester.pump(const Duration(milliseconds: 400));
-      }
-      await pumpUntilFound(
-        tester,
-        confirmation,
-        timeout: const Duration(seconds: 45),
-      );
+      await d.tapUntil([
+        find.textContaining(steps[i]),
+      ], find.textContaining(after[i]));
     }
-    await tester.tap(find.text('Generate Story Bible'));
 
     // ── The dashboard auto-fires the Story Architect ────────────────────
     // The running overlay swaps the whole body; the Generate Act Structure
     // button only exists once the bible landed.
-    await pumpUntilFound(
-      tester,
+    await d.tapUntil(
+      [find.text('Generate Story Bible')],
       find.text('Generate Act Structure'),
       timeout: const Duration(seconds: 60),
     );
@@ -164,24 +153,19 @@ void main() {
     );
 
     // ── Act structure ───────────────────────────────────────────────────
-    await tester.tap(find.text('Generate Act Structure'));
-    await pumpUntilFound(
-      tester,
+    await d.tapUntil(
+      [find.text('Generate Act Structure')],
       find.text('View Structure & Write'),
       timeout: const Duration(seconds: 60),
     );
     expect(backend.storyStagesServed, ['architect', 'acts']);
 
     // ── Generate the act: weaver → beats → prose, in that order ─────────
-    await tester.tap(find.text('View Structure & Write'));
-    await pumpUntilFound(
-      tester,
-      find.text('The Message in the Light'),
-      timeout: const Duration(seconds: 45),
-    );
-    await tester.tap(find.widgetWithText(ElevatedButton, 'Generate Act'));
-    await pumpUntilFound(
-      tester,
+    await d.tapUntil([
+      find.text('View Structure & Write'),
+    ], find.text('The Message in the Light'));
+    await d.tapUntil(
+      [find.widgetWithText(ElevatedButton, 'Generate Act')],
       find.text('Reading the Flicker'),
       timeout: const Duration(seconds: 90),
     );
@@ -210,12 +194,7 @@ void main() {
     );
 
     // ── The reader opens on the finished story ──────────────────────────
-    await tester.tap(find.text('Read Story'));
-    await pumpUntilFound(
-      tester,
-      find.text('A Porch Story'),
-      timeout: const Duration(seconds: 45),
-    );
+    await d.tapUntil([find.text('Read Story')], find.text('A Porch Story'));
 
     expect(backend.unexpectedPaths, isEmpty);
 

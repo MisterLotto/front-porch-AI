@@ -235,10 +235,8 @@ void main() {
     var chatBefore = backend.chatRequests;
     final regenBtn = find.byTooltip('Regenerate');
     await d.waitForWidget(regenBtn);
-    await tester.ensureVisible(regenBtn.first);
-    await tester.pump(const Duration(milliseconds: 200));
-    await tester.tap(regenBtn.first, warnIfMissed: false);
-    await d.waitFor(
+    await d.tapUntilTrue(
+      [regenBtn],
       () => backend.chatRequests > chatBefore,
       () => 'the regenerate to fire (chat=${backend.chatRequests})',
       timeout: const Duration(seconds: 120),
@@ -256,10 +254,8 @@ void main() {
     );
     await d.waitForWidget(leftArrow);
     chatBefore = backend.chatRequests;
-    await tester.ensureVisible(leftArrow.first);
-    await tester.pump(const Duration(milliseconds: 200));
-    await tester.tap(leftArrow.first, warnIfMissed: false);
-    await d.waitFor(
+    await d.tapUntilTrue(
+      [leftArrow],
       () => reply.swipeIndex == 0,
       () => 'the left chevron to select swipe 1 (index ${reply.swipeIndex})',
     );
@@ -278,10 +274,8 @@ void main() {
       matching: find.byIcon(Icons.chevron_right),
     );
     await d.waitForWidget(rightArrow);
-    await tester.ensureVisible(rightArrow.first);
-    await tester.pump(const Duration(milliseconds: 200));
-    await tester.tap(rightArrow.first, warnIfMissed: false);
-    await d.waitFor(
+    await d.tapUntilTrue(
+      [rightArrow],
       () => reply.swipeIndex == 1,
       () => 'the right chevron to select swipe 2 (index ${reply.swipeIndex})',
     );
@@ -296,13 +290,11 @@ void main() {
     await d.waitSendable();
     chatBefore = backend.chatRequests;
     final msgCountBefore = chatService.messages.length;
-    await tester.ensureVisible(regenBtn.first);
-    await tester.pump(const Duration(milliseconds: 200));
-    await tester.tap(regenBtn.first, warnIfMissed: false);
     // Wait for the stream to actually be flowing: the composer swaps to the
     // Stop button while generating, and the paced fake means the reply text
     // is still mid-assembly when we see the first content.
-    await d.waitFor(
+    await d.tapUntilTrue(
+      [regenBtn],
       () =>
           chatService.isGenerating &&
           chatService.messages.isNotEmpty &&
@@ -361,8 +353,8 @@ void main() {
       (b) => find.descendant(of: b, matching: find.byTooltip('Fork from here')),
       find.text('Fork Conversation'),
     );
-    await tester.tap(find.widgetWithText(ElevatedButton, 'Fork'));
-    await d.waitFor(
+    await d.tapUntilTrue(
+      [find.widgetWithText(ElevatedButton, 'Fork')],
       () => chatService.currentSessionId != oldSession,
       () => 'the fork to swap in a new session id',
       timeout: const Duration(seconds: 30),
