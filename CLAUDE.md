@@ -589,8 +589,11 @@ and `database.dart` has no barrel anyway).
   theme preset must leave bubble controls hit-testable),
   `settings_persistence_test.dart` (the "Stays Put" class: settings survive page
   reopens + a settings-layer reload), `message_actions_test.dart` (edit /
-  regenerate / delete-with-needs-refund through the real bubble controls). CI
-  globs `integration_test/*_test.dart` and
+  regenerate / delete-with-needs-refund through the real bubble controls),
+  `web_server_test.dart` (WebServerHost launches for real: PWA shell served,
+  anon API 401s, setup→cookie→state loop over genuine HTTP),
+  `story_time_test.dart` (story clock advances per scored turn and survives
+  reload via realism_state). CI globs `integration_test/*_test.dart` and
   runs ONE invocation per file on macOS/Windows/Linux — a new suite is picked up
   automatically. Before capturing or persist-asserting chat state in ANY suite,
   `await d.waitSendable()` — the settling window (`isSettlingTurn`) is part of

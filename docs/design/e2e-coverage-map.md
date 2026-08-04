@@ -35,6 +35,9 @@ by CI automatically.
 | Message actions: edit → dialog → sticks | `message_actions` | real Edit button, Save, text replaced |
 | Message actions: regenerate in place | `message_actions` | real Regenerate button, count coherent |
 | Message actions: delete + needs refund | `message_actions` | real delete button + confirm; chips subtracted |
+| Web server launch + PWA + auth loop | `web_server` | real HTTP: health, shell served, anon 401, setup→cookie→state 200, clean stop |
+| Story clock: per-turn advance + reload | `story_time` | canned scene-time eval moves clock forward ≥5min; ISO identical after reload |
+| Weather: live + seed-stable across reload | `app_smoke` | currentWeather/upcomingWeather non-null; no re-roll on reload |
 
 Widget-level interaction tests (in `test/ui/`, not full-app):
 `create_group_chat_page`, `edit_character_page`, folder drag/drop, expanded

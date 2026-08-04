@@ -8820,3 +8820,32 @@ fake first (recorded in the map).
 **Verification.** flutter analyze clean; dart fix nothing; formatted. E2E
 execution impossible in this container (control experiment documented in
 phase 1) — validation is the CI three-OS run on this push, watched.
+
+## 2026-08-04 — Regression-net phase 3: web-server launch E2E + story-clock E2E
+
+**Files.** `integration_test/web_server_test.dart` (NEW),
+`integration_test/story_time_test.dart` (NEW),
+`docs/design/e2e-coverage-map.md` (+3 rows incl. weather's existing app_smoke
+coverage made explicit), `CLAUDE.md` (suite list).
+
+**Why (maintainer ask: "webUI server launch, weather, time system").**
+- web_server: the facade layer is unit-tested to death but nothing ever
+  proved WebServerHost LAUNCHES in the real app. The suite starts it on an
+  ephemeral loopback port (bind 0; LAN off; autoRemote off skips the
+  Tailscale probe; web_server_enabled pinned false so auto-start can't race
+  it), then over genuine HTTP: /api/health 200, GET / serves the built PWA
+  shell, anonymous /api/chat/state is 401 (the auth gate is load-bearing),
+  POST /api/auth/setup issues the session cookie, cookie'd state read is
+  200 JSON, and stop() actually stops. The SIGPIPE app-vanishes class and
+  the closed-DB-handle class both lived on this seam.
+- story_time: clock math is unit-pinned; the missing journey was a real
+  scored exchange moving the clock (fake backend's fused scene-time eval
+  pays minutes_elapsed: 5 — assert forward-only, ≥5min) and the clock
+  surviving loadSession via per-message realism_state (the
+  frozen-timestamp class the CLAUDE.md time section warns about).
+- weather: already journey-covered in app_smoke (live + seed-stable across
+  reload) — made explicit as a coverage-map row instead of re-testing.
+
+**Verification.** flutter analyze clean; dart fix nothing; formatted. E2E
+runs impossible in this container (phase 1 control experiment) — the CI
+three-OS runs on this push validate, watcher armed.
