@@ -480,19 +480,16 @@ class NeedsImpactEvaluator {
     return null;
   }
 
-  /// Re-evaluate this scene's needs impact under a user critique and RETURN
-  /// the corrected deltas — the caller applies them.
+  /// Re-evaluate this scene's needs impact under a user critique and apply the
+  /// result. The caller has already restored the simulation to the message's
+  /// pre-impact baseline, so applying here lands on the right vector.
   ///
-  /// Returning instead of applying is load-bearing, not style: [onlyNeeds]
-  /// scopes a pass to the needs the user ticked, which means the corrected
-  /// deltas have to be MERGED over the message's existing ones before anything
-  /// touches the simulation. A method that applied its own result could only
-  /// ever replace the whole set.
-  ///
-  /// [onlyNeeds] empty = every need the model returns (the full-set pass).
-  /// Returns null when the model gave nothing usable; the caller then leaves
-  /// the message exactly as it found it.
-  Future<NeedsImpact?> reprocessWithUserCritique(
+  /// [onlyNeeds] scopes the pass to the needs the user ticked. Scoped, the
+  /// correction is MERGED over [oldDeltas] before it is applied, so the needs
+  /// nobody asked about keep the values the turn gave them instead of
+  /// collapsing to "no change". Empty (the full-set pass) applies exactly what
+  /// the model returned, unchanged from how this always behaved.
+  Future<bool> reprocessWithUserCritique(
     String responseText,
     Map<String, int> oldDeltas,
     String critique, {
@@ -535,7 +532,7 @@ class NeedsImpactEvaluator {
         );
       }
 
-      if (text == null || text.trim().isEmpty) return null;
+      if (text == null || text.trim().isEmpty) return false;
 
       String effectiveText = text; // already stripped by evaluate path
 
@@ -582,12 +579,18 @@ class NeedsImpactEvaluator {
           '${onlyNeeds.isEmpty ? '(all needs)' : onlyNeeds.toList().toString()}'
           '; treating as failure',
         );
-        return null;
+        return false;
       }
 
       for (final k in deltas.keys.toList()) {
         deltas[k] = deltas[k]!.clamp(-30, 100);
       }
+
+      // Scoped: everything the user did NOT tick keeps the delta it already
+      // had. Unscoped stays byte-for-byte what it always was.
+      final effective = onlyNeeds.isEmpty
+          ? deltas
+          : (Map<String, int>.from(oldDeltas)..addAll(deltas));
 
       final reasonMatch = RegExp(
         r'"reason"\s*:\s*"([^"]*)"',
@@ -620,14 +623,15 @@ class NeedsImpactEvaluator {
       }
 
       final impact = NeedsImpact(
-        deltas: deltas,
+        deltas: effective,
         reason: (reason != null && reason.toLowerCase() != 'none')
             ? reason
             : null,
       );
 
-      // Deliberately NOT applied here — see the doc comment. The caller merges
-      // these over the message's existing deltas and applies once.
+      // Applied from the baseline the caller restored (see
+      // ChatServiceNeedsReprocess._needsPreImpactBaseline).
+      needsSimulation.applySceneImpact(impact);
 
       // Store the metadata for the update
       final currentMeta =
@@ -639,10 +643,10 @@ class NeedsImpactEvaluator {
       };
       setPendingRealismMetadata?.call(currentMeta);
 
-      return impact;
+      return true;
     } catch (e) {
       debugPrint('[Realism:Needs] reprocessWithUserCritique error: $e');
-      return null;
+      return false;
     }
   }
 }

@@ -187,7 +187,7 @@ extension ChatServiceNeedsReprocess on ChatService {
       await koboldForReprocess.waitForIdle();
     }
 
-    final NeedsImpact? correction = await _needsImpactEvaluator
+    final bool reprocessOk = await _needsImpactEvaluator
         .reprocessWithUserCritique(
           msg.displayText,
           oldNeedsDeltas,
@@ -195,7 +195,7 @@ extension ChatServiceNeedsReprocess on ChatService {
           onlyNeeds: onlyNeeds,
         );
 
-    if (correction == null) {
+    if (!reprocessOk) {
       // A: non-destructive: rollback to pre-op active live (historical leaves current active untouched)
       if (isGroupNonObs &&
           preOpActiveSid != null &&
@@ -220,16 +220,8 @@ extension ChatServiceNeedsReprocess on ChatService {
       return false;
     }
 
-    // Merge the correction OVER the message's existing deltas, then apply once
-    // from the baseline. Two things fall out of doing it in this order: a
-    // scoped pass leaves untouched needs exactly where they were, and a need
-    // the model simply forgot to mention keeps its old value instead of
-    // silently collapsing to "no change".
-    final merged = Map<String, int>.from(oldNeedsDeltas)
-      ..addAll(correction.deltas);
-    _needsSimulation.applySceneImpact(
-      NeedsImpact(deltas: merged, reason: correction.reason),
-    );
+    // The evaluator applied the correction onto the baseline restored above,
+    // merging over the message's existing deltas when the pass was scoped.
 
     // Success path: commit metadata always (for the target msg)
     final updatedMeta = Map<String, dynamic>.from(meta);
