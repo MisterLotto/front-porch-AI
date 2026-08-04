@@ -128,17 +128,7 @@ void main() {
     expect(hf.searchRequests, greaterThanOrEqualTo(1));
     expect(hf.treeRequests, greaterThanOrEqualTo(1));
 
-    // Expand the result card — quant rows are inside a SizeTransition and
-    // not tappable until the header expands them.
     final downloadBtns = find.widgetWithText(ElevatedButton, 'Download');
-    for (
-      var attempt = 0;
-      attempt < 6 && downloadBtns.evaluate().isEmpty;
-      attempt++
-    ) {
-      await tester.tap(find.text('Tiny-Porch-GGUF').first, warnIfMissed: false);
-      await tester.pump(const Duration(milliseconds: 400));
-    }
     await d.waitForWidget(downloadBtns);
     // Two GGUF rows (the README.md in the tree listing must be filtered
     // out), sorted smallest-first: index 0 fits, index 1 exceeds.
@@ -147,6 +137,31 @@ void main() {
       () =>
           'both quant rows to render '
           '(buttons=${downloadBtns.evaluate().length})',
+    );
+
+    // Expand the result card — and gate on the button being TAPPABLE, not on
+    // it existing. The quant rows live inside a `SizeTransition`, which
+    // builds its child unconditionally: while the card is collapsed the
+    // buttons are already in the tree, already laid out at full intrinsic
+    // size, and clipped to nothing. A presence check therefore reports
+    // "expanded" for a shut card, every tap lands on whatever is painted
+    // behind the clip, and the journey dies later with no dialog and nothing
+    // queued — round 2's macOS and Windows legs exactly.
+    for (
+      var attempt = 0;
+      attempt < 6 && !d.hitReaches(downloadBtns.last);
+      attempt++
+    ) {
+      await tester.tap(find.text('Tiny-Porch-GGUF').first, warnIfMissed: false);
+      // Longer than the card's 300ms expand animation.
+      await tester.pump(const Duration(milliseconds: 600));
+    }
+    await d.waitFor(
+      () => d.hitReaches(downloadBtns.last),
+      () =>
+          'the model card to expand far enough that its Download button is '
+          'actually hit-testable (a collapsed card still renders it)',
+      timeout: const Duration(seconds: 30),
     );
 
     // ── Oversize → dialog → Cancel queues NOTHING ───────────────────────
@@ -225,8 +240,19 @@ void main() {
     );
 
     // ── The fitting file downloads with NO dialog ───────────────────────
-    await tester.ensureVisible(downloadBtns.first);
-    await tester.pump(const Duration(milliseconds: 200));
+    // The queue panel is only rendered while the queue is non-empty, so
+    // queueing the oversize file just stole vertical space from the results
+    // list — re-establish reachability rather than assuming the row stayed
+    // put. `.first` is still the fitting row: rows sort smallest-first, and
+    // the oversize row's button is now a pause control, not a 'Download'.
+    for (
+      var attempt = 0;
+      attempt < 6 && !d.hitReaches(downloadBtns.first);
+      attempt++
+    ) {
+      await tester.ensureVisible(downloadBtns.first);
+      await tester.pump(const Duration(milliseconds: 300));
+    }
     await tester.tap(downloadBtns.first, warnIfMissed: false);
     await tester.pump(const Duration(milliseconds: 400));
     expect(

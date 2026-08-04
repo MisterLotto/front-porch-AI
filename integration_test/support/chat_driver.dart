@@ -123,16 +123,23 @@ class ChatDriver {
   );
 
   /// True when a tap at [finder]'s centre actually reaches [finder] rather
-  /// than something painted over it.
+  /// than something painted over it — or clipped away.
   ///
-  /// Existing in the tree is not the same as being tappable. Chance Time is a
-  /// `showDialog` MODAL: while its overlay is up the send button is still
-  /// found by `find.byTooltip` (finders search the whole tree) but every tap
-  /// lands on the route's barrier instead, silently. That is how a fixed
-  /// attempt budget gets burned tapping through a modal — the exact CI failure
-  /// this driver hit, whose diagnostics read `sendButtons=1` with every guard
-  /// clear and the controller holding the text.
-  bool _hitReaches(Finder finder) {
+  /// Existing in the tree is not the same as being tappable, and finders only
+  /// ever answer the first question. Two ways that bites, both of which cost a
+  /// CI round:
+  ///  * a `showDialog` MODAL (Chance Time) leaves the send button findable by
+  ///    `find.byTooltip` while every tap lands on the route's barrier —
+  ///    diagnostics read `sendButtons=1` with all guards clear;
+  ///  * a collapsed `SizeTransition` (the Model Manager's quant rows) builds
+  ///    its child ANYWAY, so the buttons inside a collapsed card are found,
+  ///    are laid out at full intrinsic size, and are clipped to nothing —
+  ///    taps hit whatever is painted behind them and vanish silently.
+  ///
+  /// Callers must ensure [finder] resolves to exactly one widget: a
+  /// `.first`/`.last`-wrapped finder THROWS on an empty tree rather than
+  /// reporting empty.
+  bool hitReaches(Finder finder) {
     if (finder.evaluate().isEmpty) return false;
     final target = tester.renderObject(finder);
     final result = tester.hitTestOnBinding(tester.getCenter(finder));
@@ -176,7 +183,7 @@ class ChatDriver {
       //   * absent  — the composer is `isGenerating ? Stop : Send`, so a
       //               background turn swapped the button out;
       //   * covered — a Chance Time modal (or any dialog) is over it.
-      if (!_hitReaches(sendBtn)) {
+      if (!hitReaches(sendBtn)) {
         await tester.pump(const Duration(milliseconds: 250));
         continue;
       }
