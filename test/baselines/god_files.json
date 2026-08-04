@@ -1,6 +1,6 @@
 {
   "lib/services/chat_service.dart": 4631,
-  "lib/database/database.dart": 3717,
+  "lib/database/database.dart": 3716,
   "lib/main.dart": 2105,
   "lib/services/image_gen_service.dart": 2011,
   "lib/ui/pages/create_character_page.dart": 1999,

@@ -208,15 +208,9 @@ class Sessions extends Table {
   /// look collection. Nullable + additive.
   TextColumn get selectedLookAvatarId => text().nullable()();
 
-  /// Per-chat theme overrides (preset + font/color/border/background), JSON.
-  /// Previously existed ONLY via the always-on schema repair + raw SQL
-  /// accessors, so fresh createAll() databases (unit tests, and first launch
-  /// before the repair) lacked the column and every _saveChat logged a
-  /// save-skip. Declared here 2026-08-04 (maintainer-approved): no
-  /// schemaVersion bump needed — live databases are guaranteed the column by
-  /// _repairMissingSchemaColumns before AppDatabase.open() returns, and fresh
-  /// databases now get it from createAll. Reads/writes stay on the raw-SQL
-  /// helpers (patchSessionThemeOverrides & co.).
+  /// Per-chat theme overrides JSON. Was repair-only until 2026-08-04 — fresh
+  /// createAll() DBs (unit tests) lacked it. No schemaVersion bump: live DBs
+  /// get it from the always-on repair before open() returns. Raw-SQL access.
   TextColumn get themeOverrides => text().nullable()();
 
   /// Live per-character realism/needs state for group sessions.
@@ -284,8 +278,6 @@ class Groups extends Table {
   // precedent of surfacing hidden state (the old __group_state__ messages) into explicit,
   // queryable, self-documenting columns. Explicit columns improve type safety, allow
   // simpler direct SQL from external tools, and make Group Card round-tripping obvious.
-  // External direct-SQL writers (e.g. Character Card Forge) must supply values or rely
-  // on the NOT NULL DEFAULTs when INSERTing into groups.
   BoolColumn get chaosModeEnabled =>
       boolean().withDefault(const Constant(false))();
   BoolColumn get chaosNsfwEnabled =>
@@ -325,13 +317,11 @@ class Groups extends Table {
   /// travels in the exported Group Card and is preserved on import, so a shared
   /// group can be UPDATED in place on The Stoop (no duplicate) and re-associated
   /// after switching devices — the group analogue of a character's stable id.
-  /// Nullable + additive; groups is outside the Character Card Forge external-
-  /// writer set, so adding it cannot break CCF. Generated lazily in code.
+  /// Nullable + additive. Generated lazily in code.
   TextColumn get stableId => text().nullable()();
 
   /// Home-screen folder membership (schema v42), the group analogue of
-  /// Characters.folderId. Null = top level. Nullable + additive; groups is
-  /// outside the Character Card Forge external-writer set.
+  /// Characters.folderId. Null = top level. Nullable + additive.
   TextColumn get folderId => text().nullable()();
 
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
@@ -675,12 +665,8 @@ class GroupMembers extends Table {
 
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 
-  /// Raw epoch INTEGER, DEFAULT 0 — matches the physical column the schema
-  /// repair has always enforced (`created_at INTEGER NOT NULL DEFAULT 0`).
-  /// Declared 2026-08-04 alongside sessions.themeOverrides so createAll()
-  /// finally produces the same shape the repair does; no schemaVersion bump
-  /// for the same reason (see themeOverrides). IntColumn, not DateTimeColumn,
-  /// so the Dart default stays byte-identical to the repaired shape.
+  /// IntColumn (not DateTime) DEFAULT 0 — byte-matches the repaired physical
+  /// shape. Was repair-only until 2026-08-04; see Sessions.themeOverrides.
   IntColumn get createdAt => integer().withDefault(const Constant(0))();
 
   @override
@@ -690,10 +676,8 @@ class GroupMembers extends Table {
 /// Web UI secure-login account credentials (the rewritten web server's auth).
 ///
 /// Single-account model: exactly one row with id 'local'. Replaces the old
-/// plaintext 6-digit web-server PIN. This is a NEW table (v33) — it is NOT in
-/// the Character Card Forge external-direct-writer set (characters/sessions/
-/// messages/avatar_images/sync_meta) and must never be confused with the chat
-/// [Sessions] table.
+/// plaintext 6-digit web-server PIN. New table (v33); must never be confused
+/// with the chat [Sessions] table.
 class WebAuthCredentials extends Table {
   TextColumn get id => text()(); // always 'local' for the single host account
   TextColumn get username => text()();
@@ -1085,9 +1069,8 @@ class AppDatabase extends _$AppDatabase {
           await _createPreRepairBackup();
           anyRepairDone = true;
         }
-        // External direct-SQL writers (e.g. Character Card Forge): see GroupMembers
-        // Dart class docs above for v33+ contract. Do not assume legacy characterIds behavior here.
-        // TODO: After this stabilizes in a tagged release, notify maintainers of external direct-SQL tools (Character Card Forge) about the new group_members table and its private-avatar contract.
+        // v33+ contract per the GroupMembers Dart class docs above. Do not
+        // assume legacy characterIds behavior here.
         await customStatement('''
           CREATE TABLE IF NOT EXISTS group_members (
             -- v33+ table (GroupMembers Dart docs): strict UUID PKs + private-avatar semantics only. No legacy characterIds.
@@ -1773,8 +1756,7 @@ class AppDatabase extends _$AppDatabase {
         // v32→v33: web secure-login tables for the rewritten web server.
         // Replaces the old plaintext web-server PIN with username + Argon2id
         // password + optional TOTP, and persists per-device sessions (so they
-        // survive app restart). Both are NEW tables — additive and outside the
-        // Character Card Forge external-writer set, so this cannot break it.
+        // survive app restart). Both are NEW tables — additive.
         await customStatement('''
           CREATE TABLE IF NOT EXISTS web_auth_credentials (
             id TEXT NOT NULL PRIMARY KEY,
@@ -1805,9 +1787,8 @@ class AppDatabase extends _$AppDatabase {
         // v33→v34: portable per-group stable id. Lets a shared group be UPDATED
         // in place on The Stoop (and re-associated after switching devices)
         // instead of creating a duplicate — the group analogue of a character's
-        // stable id. Nullable + additive, and the groups table is outside the
-        // Character Card Forge external-writer set, so this cannot break it.
-        // Backfilled lazily in code (null → generated on first export/share).
+        // stable id. Nullable + additive. Backfilled lazily in code
+        // (null → generated on first export/share).
         try {
           await customStatement('ALTER TABLE groups ADD COLUMN stable_id TEXT');
         } catch (_) {}
