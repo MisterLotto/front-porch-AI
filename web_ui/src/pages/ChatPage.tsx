@@ -14,6 +14,7 @@ import { ChatComposer } from '../components/ChatComposer';
 import { ChatInsight } from '../components/ChatInsight';
 import { ConversationsDrawer, type SessionSummary } from '../components/ConversationsDrawer';
 import { ReprocessNeedsModal } from '../components/ReprocessNeedsModal';
+import { ChatPersonaModal } from '../components/ChatPersonaModal';
 import { ChanceTimeModal } from '../components/ChanceTimeModal';
 import { ImagePromptReviewModal } from '../components/ImagePromptReviewModal';
 import { MessageEditModal } from '../components/MessageEditModal';
@@ -91,6 +92,7 @@ export function ChatPage() {
   const [showSessions, setShowSessions] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [showTheme, setShowTheme] = useState(false);
+  const [showPersona, setShowPersona] = useState(false);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
   // Fullscreen message editor — index + original text while the modal is open.
@@ -513,6 +515,13 @@ export function ChatPage() {
                 Stats ▾
               </button>
             )}
+            <button
+              className="link-btn"
+              title="Who you are in this chat"
+              onClick={() => setShowPersona(true)}
+            >
+              Persona
+            </button>
             <button className="link-btn" onClick={() => setShowTheme(true)}>
               Theme
             </button>
@@ -643,6 +652,10 @@ export function ChatPage() {
             {insight}
           </div>
         </div>
+      )}
+
+      {showPersona && (
+        <ChatPersonaModal onClose={() => setShowPersona(false)} onChanged={refresh} />
       )}
 
       {reprocessIndex !== null && (

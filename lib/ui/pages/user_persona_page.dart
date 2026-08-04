@@ -340,14 +340,14 @@ class _UserPersonaPageState extends State<UserPersonaPage>
           return _buildEmptyState(context);
         }
 
-        final activePersona = service.persona;
-        final accentColor = PersonaColors.getColorForPersona(activePersona.id);
+        final defaultPersona = service.defaultPersona;
+        final accentColor = PersonaColors.getColorForPersona(defaultPersona.id);
 
         return CustomScrollView(
           slivers: [
             // Hero header
             SliverToBoxAdapter(
-              child: _buildHeroHeader(activePersona, accentColor, service),
+              child: _buildHeroHeader(defaultPersona, accentColor, service),
             ),
 
             // Section label
@@ -391,8 +391,8 @@ class _UserPersonaPageState extends State<UserPersonaPage>
                 ),
                 delegate: SliverChildBuilderDelegate((context, index) {
                   final persona = service.personas[index];
-                  final isActive = persona.id == activePersona.id;
-                  return _buildPersonaCard(context, persona, isActive, service);
+                  final isDefault = persona.id == defaultPersona.id;
+                  return _buildPersonaCard(context, persona, isDefault, service);
                 }, childCount: service.personas.length),
               ),
             ),
@@ -405,7 +405,7 @@ class _UserPersonaPageState extends State<UserPersonaPage>
   // ── Hero Header ────────────────────────────────────────────────────────
 
   Widget _buildHeroHeader(
-    UserPersona activePersona,
+    UserPersona defaultPersona,
     Color accentColor,
     UserPersonaService service,
   ) {
@@ -466,8 +466,8 @@ class _UserPersonaPageState extends State<UserPersonaPage>
                   ],
                 ),
                 child: PersonaColors.buildPersonaAvatar(
-                  avatarPath: activePersona.avatarPath,
-                  personaId: activePersona.id,
+                  avatarPath: defaultPersona.avatarPath,
+                  personaId: defaultPersona.id,
                   radius: 44,
                   iconSize: 36,
                 ),
@@ -482,7 +482,7 @@ class _UserPersonaPageState extends State<UserPersonaPage>
                       children: [
                         Flexible(
                           child: Text(
-                            activePersona.displayLabel,
+                            defaultPersona.displayLabel,
                             style: TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
@@ -493,13 +493,13 @@ class _UserPersonaPageState extends State<UserPersonaPage>
                           ),
                         ),
                         const SizedBox(width: 10),
-                        _buildActiveBadge(accentColor),
+                        _buildDefaultBadge(accentColor),
                       ],
                     ),
-                    if (activePersona.title.isNotEmpty) ...[
+                    if (defaultPersona.title.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
-                        activePersona.name,
+                        defaultPersona.name,
                         style: TextStyle(
                           fontSize: 14,
                           color: accentColor.withValues(alpha: 0.8),
@@ -507,10 +507,10 @@ class _UserPersonaPageState extends State<UserPersonaPage>
                         ),
                       ),
                     ],
-                    if (activePersona.persona.isNotEmpty) ...[
+                    if (defaultPersona.persona.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Text(
-                        activePersona.persona,
+                        defaultPersona.persona,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -543,7 +543,7 @@ class _UserPersonaPageState extends State<UserPersonaPage>
                   color: accentColor.withValues(alpha: 0.7),
                 ),
                 tooltip: 'Edit active persona',
-                onPressed: () => _startEditing(activePersona),
+                onPressed: () => _startEditing(defaultPersona),
               ),
             ],
           ),
@@ -552,7 +552,7 @@ class _UserPersonaPageState extends State<UserPersonaPage>
     );
   }
 
-  Widget _buildActiveBadge(Color color) {
+  Widget _buildDefaultBadge(Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
@@ -568,7 +568,7 @@ class _UserPersonaPageState extends State<UserPersonaPage>
           Icon(Icons.circle, size: 6, color: color),
           const SizedBox(width: 4),
           Text(
-            'Active',
+            'Default',
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
@@ -621,15 +621,15 @@ class _UserPersonaPageState extends State<UserPersonaPage>
   Widget _buildPersonaCard(
     BuildContext context,
     UserPersona persona,
-    bool isActive,
+    bool isDefault,
     UserPersonaService service,
   ) {
     final cardColor = PersonaColors.getColorForPersona(persona.id);
 
     return _HoverScaleCard(
-      isActive: isActive,
+      isActive: isDefault,
       accentColor: cardColor,
-      onTap: () => service.setActivePersona(persona.id),
+      onTap: () => service.setDefaultPersona(persona.id),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -776,7 +776,7 @@ class _UserPersonaPageState extends State<UserPersonaPage>
             // Bottom row
             Row(
               children: [
-                if (!isActive) ...[
+                if (!isDefault) ...[
                   const Spacer(),
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -791,7 +791,7 @@ class _UserPersonaPageState extends State<UserPersonaPage>
                       ),
                     ),
                     child: Text(
-                      'Select',
+                      'Make default',
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
@@ -801,7 +801,7 @@ class _UserPersonaPageState extends State<UserPersonaPage>
                   ),
                 ] else ...[
                   const Spacer(),
-                  _buildActiveBadge(cardColor),
+                  _buildDefaultBadge(cardColor),
                 ],
               ],
             ),

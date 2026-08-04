@@ -183,12 +183,11 @@ extension ChatServiceSessionManage on ChatService {
   /// the web library card menu both land here, so the ordering below exists
   /// once).
   ///
-  /// **The order is load-bearing.** `setActiveCharacter`/`setActiveGroup` load
-  /// that cast's most recent session, and loading a session restores THAT
-  /// session's persona (see `_loadSessionInto`) — so applying the chosen
-  /// persona first would be silently overwritten by the previous chat's. It is
-  /// applied after entry and before [startNewChat], whose session write stamps
-  /// whatever persona is active.
+  /// The chosen persona rides all the way into [startNewChat] rather than being
+  /// applied here: entering a cast loads its most recent session, and that
+  /// restores the OTHER chat's persona, so anything set before the entry call
+  /// is overwritten. Handing it to the session-creating step removes the
+  /// ordering trap instead of documenting it.
   Future<void> startFreshChatWith({
     CharacterCard? character,
     GroupChat? group,
@@ -202,14 +201,32 @@ extension ChatServiceSessionManage on ChatService {
     } else {
       return;
     }
-    if (personaId.isNotEmpty) {
-      await _userPersonaService.setActivePersona(personaId);
-    }
-    await startNewChat();
+    await startNewChat(personaId: personaId.isEmpty ? null : personaId);
   }
 
-  Future<void> startNewChat() async {
+  /// Write the currently-active persona onto the open session right now.
+  ///
+  /// The in-chat switcher (desktop composer avatar, web chat menu) changes who
+  /// you are speaking as; every `_saveChat` stamps that onto the session row, so
+  /// the binding would normally land with the next message. This makes it land
+  /// immediately, so switching and then closing the app is not silently
+  /// forgotten. No-op when no chat is open.
+  Future<void> persistSessionPersona() async {
+    if (_currentSessionId == null) return;
+    await _saveChat();
+  }
+
+  /// [personaId] is the explicitly-picked persona ("Start New Chat"). Omitted —
+  /// the ordinary "tap a character" path — the chat starts as the DEFAULT
+  /// persona, never as whoever the previously-open chat happened to be. That
+  /// inheritance is exactly what showPersonaPickerDialog exists to prevent, and
+  /// it used to leak in through here whenever the picker was skipped.
+  Future<void> startNewChat({String? personaId}) async {
     if (_activeCharacter == null && _activeGroup == null) return;
+
+    await _userPersonaService.setActivePersona(
+      personaId ?? _userPersonaService.defaultPersonaId,
+    );
 
     // Reset AFK idle state when starting a new chat
     _cancelIdleTimer();

@@ -1,9 +1,15 @@
 // Copyright (C) 2026 Front Porch AI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// User-persona manager: switch the active persona, create new ones, edit and
-// delete existing ones. Thin over the /api/personas endpoints (UserPersonaService
-// on the host). Replaces the old switch-only persona section in Settings.
+// User-persona manager: choose the DEFAULT persona new chats start as, create
+// new ones, edit and delete existing ones. Thin over the /api/personas endpoints
+// (UserPersonaService on the host).
+//
+// Deliberately does NOT change who the open chat is speaking as — that is the
+// chat's own binding, switched from the chat header (see ChatPage's persona
+// picker) and stored on the session. Selecting here used to move both at once,
+// which meant a background save could stamp a Settings change onto whatever
+// chat happened to still be loaded.
 
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client';
@@ -12,7 +18,10 @@ interface Persona {
   id: string;
   label: string;
   name: string;
+  /** Who the CURRENT chat is speaking as (the in-chat switcher's answer). */
   active: boolean;
+  /** Who a NEW chat starts as — what this Settings surface controls. */
+  default: boolean;
 }
 interface PersonaDetail {
   id: string;
@@ -66,7 +75,7 @@ export function PersonaManager() {
     );
   };
 
-  const active = personas.find((p) => p.active);
+  const fallback = personas.find((p) => p.default);
 
   return (
     <section className="card">
@@ -82,8 +91,8 @@ export function PersonaManager() {
 
       {personas.length > 0 && (
         <label>
-          Active persona
-          <select value={active?.id ?? ''} onChange={(e) => select(e.target.value)} disabled={busy}>
+          Default persona for new chats
+          <select value={fallback?.id ?? ''} onChange={(e) => select(e.target.value)} disabled={busy}>
             {personas.map((p) => (
               <option key={p.id} value={p.id}>{p.label}</option>
             ))}
@@ -93,13 +102,13 @@ export function PersonaManager() {
 
       <ul className="persona-list">
         {personas.map((p) => (
-          <li key={p.id} className={p.active ? 'active' : undefined}>
+          <li key={p.id} className={p.default ? 'active' : undefined}>
             <span className="persona-av" aria-hidden>
               {(p.name || p.label || '?').charAt(0).toUpperCase()}
             </span>
             <span className="persona-main">
               <span className="pname">{p.label}</span>
-              {p.active && <span className="pactive">Active</span>}
+              {p.default && <span className="pactive">Default</span>}
             </span>
             <span className="persona-actions">
               <button className="icon-btn" title="Edit" onClick={() => beginEdit(p.id)}>✎</button>

@@ -9192,3 +9192,60 @@ The first baseline attempt would have shipped still-broken without it.
 **Verification.** analyze clean on lib/ + integration_test/; web `npm run lint` +
 34 vitest tests green; `npm run build` run (the PWA bundle is what ships);
 god-file ratchet green; full local Linux E2E leg re-run.
+
+## 2026-08-04 — persona: split the stable default from the per-chat binding
+
+**Files.** `lib/services/user_persona_service.dart`,
+`lib/services/chat/chat_service_session_manage.dart`,
+`lib/services/chat/chat_service_session_load.dart`,
+`lib/ui/pages/user_persona_page.dart`, `lib/ui/dialogs/user_persona_dialog.dart`,
+`lib/services/web/facade/chat_facade.dart`,
+`lib/services/web/routes/chat_routes.dart`,
+`web_ui/src/components/PersonaManager.tsx`,
+`web_ui/src/components/ChatPersonaModal.tsx` (new),
+`web_ui/src/pages/ChatPage.tsx`,
+`integration_test/persona_default_test.dart` (new),
+`docs/design/e2e-coverage-map.md`, `docs/Rawhide.md`.
+
+**Why.** Surfaced by the round-10 Windows failure in `persona_folder_test`: every
+`_saveChat` stamps the live persona onto the session row, so a background journal
+save landing after a persona change re-stamped the chat. Investigating it showed
+the deeper problem — `_activePersonaId` was ONE value doing two jobs. Opening a
+chat re-pointed the "global" persona at that chat's, so the next fresh chat
+inherited it; and the Persona page could move it while a chat was still loaded,
+so the next save (background or not) rewrote that chat's binding. The app's own
+picker states the intent it was violating: "a fresh chat must never silently
+inherit whatever persona the last one used."
+
+**Design (maintainer-specified, 2026-08-04).** Two values:
+`_defaultPersonaId` — persisted (the Personas isActive column), changed ONLY by a
+deliberate action on the Persona page; and `_activePersonaId` — runtime only, who
+the open chat speaks as. The durable per-chat binding stays where it always was,
+Sessions.userPersonaId. Rules: a new chat with no explicit pick seeds from the
+default; "Start New Chat" still asks; opening a chat no longer rewrites the
+default; the in-chat switcher is the only thing that may overwrite a session's
+persona and does not touch the default; a deleted persona falls back to the
+default.
+
+**Notable pieces.** `startNewChat({String? personaId})` now takes the picked
+persona instead of relying on caller ordering — `startFreshChatWith` had a
+load-bearing-order comment explaining that setting the persona before entry got
+silently overwritten; passing it through deletes the trap rather than documenting
+it. `loadSession` falls back to the default explicitly when a session names a
+persona that no longer exists (the old code's `setActivePersona` silently no-oped
+and left the previous chat's persona in place). New `persistSessionPersona()`
+saves the binding the moment the in-chat switcher is used, so switch-then-quit is
+not forgotten.
+
+**Parity.** Web Settings' persona list now sets the DEFAULT and says so. That
+alone would have LOST a capability — web had no in-chat switcher, so web users
+could no longer change an existing chat's persona at all — so
+`ChatPersonaModal.tsx` + `POST /api/chat/persona` add one, matching the desktop
+composer avatar. `personas()` gained a `default` flag alongside `active`;
+additive-only, older PWA builds keep working.
+
+**Verification.** analyze clean on lib/ + integration_test/; web lint + 34 vitest
+green; bundle rebuilt. New `persona_default_test` NEGATIVE-CHECKED: with
+`setActivePersona` temporarily restored to also move the default (the old merged
+behaviour) the suite fails; with the split it passes. Full local Linux E2E leg
+re-run. No god-file baseline moved (user_persona_page stayed exactly at 1477).

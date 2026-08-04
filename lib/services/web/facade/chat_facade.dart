@@ -500,11 +500,17 @@ class ChatFacade {
     _notify();
   }
 
-  /// All user personas (id, label, active flag) for the web persona switcher.
+  /// All user personas for the web persona surfaces.
+  ///
+  /// Two flags, because there are two distinct answers: `default` is who a NEW
+  /// chat starts as (Settings), `active` is who the CURRENT chat is speaking as
+  /// (the in-chat switcher). `active` is kept for older PWA builds that only
+  /// know that key — additive-only, per the API contract.
   List<Map<String, dynamic>> personas() {
     final svc = _personas;
     if (svc == null) return const [];
     final activeId = svc.persona.id;
+    final defaultId = svc.defaultPersonaId;
     return svc.personas
         .map(
           (p) => {
@@ -512,16 +518,30 @@ class ChatFacade {
             'label': p.displayLabel,
             'name': p.name,
             'active': p.id == activeId,
+            'default': p.id == defaultId,
           },
         )
         .toList();
   }
 
-  /// Switch the active user persona. Returns false if personas aren't wired.
+  /// Change which persona NEW chats start as (Settings → Personas). Leaves the
+  /// open chat alone. Returns false if personas aren't wired.
   Future<bool> setPersona(String id) async {
     final svc = _personas;
     if (svc == null) return false;
+    await svc.setDefaultPersona(id);
+    _notify();
+    return true;
+  }
+
+  /// Speak as [id] in the CURRENT chat, and bind the session to it — the web
+  /// counterpart of the desktop composer's persona switcher. Saves immediately
+  /// so the binding survives a reload even if the user says nothing else.
+  Future<bool> setChatPersona(String id) async {
+    final svc = _personas;
+    if (svc == null) return false;
     await svc.setActivePersona(id);
+    await _chat.persistSessionPersona();
     _notify();
     return true;
   }

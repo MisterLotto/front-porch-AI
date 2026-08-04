@@ -133,6 +133,19 @@ class _UserPersonaDialogState extends State<UserPersonaDialog> {
     );
   }
 
+  /// Switch the OPEN CHAT to [personaId] and bind the session to it. Does not
+  /// touch the default for new chats — that lives on the Persona page. The
+  /// immediate save is what makes "switch, then close the app" stick.
+  Future<void> _useInThisChat(
+    BuildContext context,
+    UserPersonaService service,
+    String personaId,
+  ) async {
+    final chat = Provider.of<ChatService>(context, listen: false);
+    await service.setActivePersona(personaId);
+    await chat.persistSessionPersona();
+  }
+
   Widget _buildList() {
     return Consumer<UserPersonaService>(
       builder: (context, service, child) {
@@ -142,7 +155,7 @@ class _UserPersonaDialogState extends State<UserPersonaDialog> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'User Personas',
+                  'Speak as…',
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
@@ -204,9 +217,12 @@ class _UserPersonaDialogState extends State<UserPersonaDialog> {
                         children: [
                           if (!isActive)
                             TextButton(
-                              onPressed: () =>
-                                  service.setActivePersona(persona.id),
-                              child: const Text('Select'),
+                              onPressed: () => _useInThisChat(
+                                context,
+                                service,
+                                persona.id,
+                              ),
+                              child: const Text('Use in this chat'),
                             ),
                           IconButton(
                             icon: const Icon(
@@ -228,7 +244,8 @@ class _UserPersonaDialogState extends State<UserPersonaDialog> {
                             ),
                         ],
                       ),
-                      onTap: () => service.setActivePersona(persona.id),
+                      onTap: () =>
+                          _useInThisChat(context, service, persona.id),
                     ),
                   );
                 },

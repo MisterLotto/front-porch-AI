@@ -467,9 +467,17 @@ extension ChatServiceSessionLoad on ChatService {
     final session = await _db.getSessionById(sessionId);
     if (session == null) return;
 
-    if (session.userPersonaId != null) {
-      await _userPersonaService.setActivePersona(session.userPersonaId!);
-    }
+    // Speak as the persona this chat was chatted under. A session with no
+    // binding (pre-v25 rows) or one naming a persona that has since been
+    // DELETED falls back to the default — not to whatever the previously-open
+    // chat left behind, which is what the old silent no-op did.
+    final sessionPersonaId = session.userPersonaId;
+    final knownPersona =
+        sessionPersonaId != null &&
+        _userPersonaService.personas.any((p) => p.id == sessionPersonaId);
+    await _userPersonaService.setActivePersona(
+      knownPersona ? sessionPersonaId : _userPersonaService.defaultPersonaId,
+    );
 
     // Load per-chat generation settings override for this session (must
     // happen before the message loop so retroactive sanitization can

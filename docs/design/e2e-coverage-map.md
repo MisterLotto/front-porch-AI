@@ -41,6 +41,7 @@ by CI automatically.
 | Weather: live + seed-stable across reload | `app_smoke` | currentWeather/upcomingWeather non-null; no re-roll on reload |
 | Backups: create → restore → rebind (v1.2 class) | `backup_restore` | real page + confirm dialog; post-snapshot char gone, portrait PNG kept, full chat turn + folder/persona writes on the rebound DB |
 | Personas: create in real form, ride the session | `persona_folder` | New Persona→Save activates it; loadSession re-activates the chatted persona |
+| Personas: default vs per-chat binding | `persona_default` | Persona page moves the default only; open chat keeps its own across a turn; new chat seeds from the default; reopening does not drag the default back |
 | Folders: create, move via context menu, open | `persona_folder` | toolbar dialog; right-click → Move to Folder…; membership survives reload |
 | Chat lorebook: author entry, preview, inject | `lorebook_chat` | real Add dialog; WOULD TRIGGER NEXT on draft; content in outbound body; all 4 import dialects decode (wizard's picker step is native — not drivable) |
 | Worlds: create place + attach to chat | `worlds_management` | real New World dialog; Places panel attach; climate dropdown present |

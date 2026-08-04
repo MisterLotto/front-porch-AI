@@ -31,6 +31,7 @@ class WebChatRoutes {
     router.get('/api/chat/sessions', _sessions);
     router.get('/api/personas', _personas);
     router.post('/api/personas/select', _selectPersona);
+    router.post('/api/chat/persona', _selectChatPersona);
     router.post('/api/personas/create', _createPersona);
     router.get('/api/personas/<id>/detail', _personaDetail);
     router.post('/api/personas/<id>/delete', _deletePersona);
@@ -111,6 +112,18 @@ class WebChatRoutes {
     final id = body['id']?.toString();
     if (id == null) return JsonResponse.badRequest('id is required');
     final ok = await _facade.setPersona(id);
+    if (!ok) return JsonResponse.error(404, 'Persona not found');
+    return JsonResponse.ok({'status': 'ok'});
+  }
+
+  /// Speak as a different persona in the CURRENT chat. Separate endpoint from
+  /// /api/personas/select on purpose: that one moves the default for new chats
+  /// and must not touch the chat you are in.
+  Future<shelf.Response> _selectChatPersona(shelf.Request request) async {
+    final body = await _json(request);
+    final id = body['id']?.toString();
+    if (id == null) return JsonResponse.badRequest('id is required');
+    final ok = await _facade.setChatPersona(id);
     if (!ok) return JsonResponse.error(404, 'Persona not found');
     return JsonResponse.ok({'status': 'ok'});
   }
