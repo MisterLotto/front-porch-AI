@@ -227,6 +227,11 @@ void main() {
     expect(stoop.uploadRequests, 1);
 
     expect(stoop.unexpectedPaths, isEmpty);
+    expect(
+      stoop.handlerErrors,
+      isEmpty,
+      reason: 'a crashed fake handler answers nothing and reads as a timeout',
+    );
     expect(backend.unexpectedPaths, isEmpty);
 
     await tester.pump(const Duration(seconds: 1));

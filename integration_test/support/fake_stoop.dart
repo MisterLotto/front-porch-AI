@@ -30,6 +30,13 @@ class FakeStoopServer {
   int uploadRequests = 0;
 
   final List<String> unexpectedPaths = [];
+
+  /// Handler crashes. Asserted empty by the suite: a fake that throws while
+  /// serving answers nothing, the app sees an empty response, and the test
+  /// dies at whatever it was waiting for — naming a symptom minutes later
+  /// instead of the broken handler. That cost a full CI round when the
+  /// multipart upload was drained with utf8.decodeStream.
+  final List<String> handlerErrors = [];
   final List<WebSocket> _sockets = [];
 
   String get baseUrl => 'http://127.0.0.1:${_server.port}';
@@ -91,7 +98,11 @@ class FakeStoopServer {
         _sockets.add(socket);
         return; // upgraded — no response object to close
       }
-      await utf8.decodeStream(req); // drain any body (JSON or multipart)
+      // Drain as BYTES, never utf8.decodeStream: the upload endpoint is
+      // multipart carrying a PNG, and UTF-8 decoding binary throws
+      // "Unexpected extension byte" — which surfaced only as a swallowed
+      // handler error while the suite waited out a four-minute timeout.
+      await req.drain<void>();
       Object? reply;
       switch ('${req.method} $path') {
         case 'POST /auth/login':
@@ -146,8 +157,8 @@ class FakeStoopServer {
         req.response.write(jsonEncode(reply));
       }
     } catch (e) {
-      // Usually a request racing test teardown — logged so a genuine handler
-      // bug can't hide. ignore: avoid_print — test support.
+      handlerErrors.add('${req.method} $path: $e');
+      // ignore: avoid_print — test support; print reaches the suite log.
       print('[FakeStoopServer] handler error on $path: $e');
     } finally {
       if (path != '/ws') {

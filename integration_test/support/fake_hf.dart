@@ -46,6 +46,11 @@ class FakeHuggingFace {
 
   final List<String> unexpectedPaths = [];
 
+  /// Handler crashes — asserted empty by the suite for the same reason as
+  /// [FakeStoopServer.handlerErrors]: a silently-broken fake presents as an
+  /// anonymous timeout in whatever the app was waiting for.
+  final List<String> handlerErrors = [];
+
   String get baseUrl => 'http://127.0.0.1:${_server.port}';
 
   static Future<FakeHuggingFace> start() async {
@@ -94,8 +99,8 @@ class FakeHuggingFace {
         req.response.statusCode = HttpStatus.notFound;
       }
     } catch (e) {
-      // Usually a request racing test teardown — logged so a genuine handler
-      // bug can't hide. ignore: avoid_print — test support.
+      handlerErrors.add('${req.method} $path: $e');
+      // ignore: avoid_print — test support; print reaches the suite log.
       print('[FakeHuggingFace] handler error on $path: $e');
     } finally {
       try {

@@ -299,6 +299,11 @@ void main() {
     );
 
     expect(hf.unexpectedPaths, isEmpty);
+    expect(
+      hf.handlerErrors,
+      isEmpty,
+      reason: 'a crashed fake handler answers nothing and reads as a timeout',
+    );
     expect(backend.unexpectedPaths, isEmpty);
 
     await tester.pump(const Duration(seconds: 1));
