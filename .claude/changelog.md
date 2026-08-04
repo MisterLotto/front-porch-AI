@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-04 — test(e2e): stoop GREEN on macOS+Windows; story_pipeline ran for the first time and found a real UX gap
+- **Why:** P3 round 7. `stoop_test` PASSED on both macOS and Windows — the `/creators/{id}` fix closed it, and the whole hub journey (sign-in → AUP gate → browse → download-with-real-import → share wizard → multipart upload → traffic audit) is now proven on two platforms. The run advanced to `story_pipeline_test`, executing for the FIRST time anywhere, and failed at line 97 with a message that named its own cause: `Found 0 widgets with text "Porch Stories"`.
+- **Root cause — a genuine app UX gap, not only a test bug:** `home_page.dart:359` returns EARLY when `repo.characters.isEmpty && groupRepo.groups.isEmpty`, rendering a "Get started by creating a new character!" panel that does **not** include the Chats/Porch Stories mode toggle. A brand-new user with an empty library therefore cannot reach Porch Stories at all — even though a story needs no character (the wizard's Cast step is optional and `useChatHistory` defaults false). Flagged to the maintainer; NOT changed unilaterally, since it is a product decision in a large page file.
+- **Did (test side only):** the suite seeds one throwaway character so the toggle renders, with a comment recording why. The story journey itself is unchanged and still uses no character.
+- **Gates:** analyze clean; format clean.
+- **Files:** `integration_test/story_pipeline_test.dart`.
+
 ## 2026-08-04 — test(e2e): The Stoop journey passes end-to-end; only the traffic audit tripped
 - **Why:** P3 round 6. Both macOS and Windows failed at `stoop_test.dart:229` with `Expected: empty / Actual: ['GET /creators/u1', 'GET /creators/u1']` — that is the LAST line of the suite, `expect(stoop.unexpectedPaths, isEmpty)`. Everything before it passed on both platforms: sign-in, the 18+ AUP gate round-trip, browse, Download-to-library with a real V2 import into CharacterRepository, the detail panel, the four-step share wizard, and the multipart upload (`uploadRequests == 1`). The multipart drain fix from round 5 held.
 - **Root cause:** the fake never modelled `GET /creators/{id}` — the @you tab fetches the signed-in user's creator profile. The `unexpectedPaths` audit did exactly its job: it named the endpoint instead of letting a silent 404 skew behavior.

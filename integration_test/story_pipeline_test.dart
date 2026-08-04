@@ -27,6 +27,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'package:front_porch_ai/main.dart' as app;
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/layout/main_layout.dart';
 
@@ -92,6 +93,21 @@ void main() {
       Provider.of<ChatService>(ctx, listen: false),
       backend,
     );
+
+    // A character must exist before the home page will show the mode
+    // toggle at ALL: the empty-library branch returns early with a "Get
+    // started by creating a new character!" panel that does NOT include it,
+    // so Porch Stories is unreachable on a virgin library. The story itself
+    // needs no character — this is scaffolding to reach the entry point.
+    // (Flagged to the maintainer as a real new-user UX gap.)
+    await Provider.of<CharacterRepository>(ctx, listen: false).addCharacter(
+      CharacterCard(
+        name: 'Story Seed',
+        description: 'Exists only so the home mode toggle renders.',
+        firstMessage: 'Hello from the story-pipeline E2E.',
+      ),
+    );
+    await Provider.of<CharacterRepository>(ctx, listen: false).loadCharacters();
 
     // ── Home → Porch Stories → the New Porch Story wizard ───────────────
     await d.tapUntil([
