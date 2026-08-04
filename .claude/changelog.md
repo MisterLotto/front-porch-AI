@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-04 — fix(windows): console-log fix hung `flutter test`/`flutter run -d windows` — CI's Windows E2E leg dead since 7201769
+- **Why:** Every Windows E2E job since commit 7201769 hung silently after "√ Built front_porch_ai.exe" and was killed by the job's 30-minute timeout (runs e91afa9 → ff43a9e, all `cancelled`). Bracketed by run history: 8ef6711 green, e91afa9 first hang; the only non-Dart change in between was the Windows runner console patch bundled into 7201769.
+- **Root cause:** the patch made `wWinMain` call `RedirectIoToConsole()` whenever `AttachConsole(ATTACH_PARENT_PROCESS)` succeeds. The flutter tool launches the exe with stdout/stderr bound to PIPES it reads — the Dart VM service URI travels over that pipe. Rebinding those streams to CONOUT$ starves the tool, which waits forever for the app to report in. The tool has a console (bash/cmd ancestor), so AttachConsole succeeds and the clobber always fired under `flutter test -d windows` and `flutter run -d windows`.
+- **Did:** capture `GetStdHandle(STD_OUTPUT_HANDLE)` BEFORE AttachConsole; only call `RedirectIoToConsole()` when the process arrived with no usable stdout. Direct cmd/PowerShell launches of a GUI-subsystem exe get NULL std handles (the case the console fix exists for — behavior preserved); tool-launched processes keep their pipes (hang fixed); `exe > log.txt` redirection is now honored instead of clobbered too. `--console` and debugger paths untouched.
+- **Not done:** no E2E timeout bump — last green Windows leg ran its suites at ~75s each; nine suites project to ~12 min, well inside 30. The hang was the whole problem.
+- **Gates:** no Dart touched (analyze n/a); C++ is a 4-line Win32 guard on the stock template pattern. Validation is the Windows CI leg itself — watching the run.
+- **Files:** `windows/runner/main.cpp`.
+
 ## 2026-07-31 — fix(worlds): the real fix — chats that predate their character's world now adopt it (DB v43)
 - **Why:** my first attempt only propagated worlds ADDED IN AN EDIT, which cannot help the maintainer's actual chat — Cindermaw was already attached to Violet, so re-saving produced an empty diff and nothing happened. He hot-reloaded, saw "Clear 55°F" again, and correctly said the fix did nothing.
 - **The hard part** is that an empty attachment list means two different things: "this chat predates the character having a world" (should adopt it) and "the user deliberately detached" (must never be overridden). Nothing distinguished them, which is exactly why I'd rejected a blanket runtime fallback twice.
