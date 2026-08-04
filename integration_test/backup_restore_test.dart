@@ -138,7 +138,8 @@ void main() {
     // completion check is also classified CHAT by the fake, so a counter
     // wait can pass before the real reply streams (the round-1 CI failure).
     await d.waitFor(
-      () => chatService.messages.isNotEmpty &&
+      () =>
+          chatService.messages.isNotEmpty &&
           !chatService.messages.last.isUser &&
           chatService.messages.last.text.contains('about backups'),
       () =>
@@ -261,7 +262,8 @@ void main() {
     // Reply-content wait for the same reason as above — the post-reload
     // objective completion check races any counter-based condition.
     await d.waitFor(
-      () => chatService.messages.length >= messagesBeforePostRestoreTurn + 2 &&
+      () =>
+          chatService.messages.length >= messagesBeforePostRestoreTurn + 2 &&
           !chatService.messages.last.isUser &&
           chatService.messages.last.text.contains('about backups'),
       () =>

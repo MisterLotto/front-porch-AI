@@ -161,7 +161,8 @@ void main() {
     expect(
       chatService.messages.length,
       greaterThanOrEqualTo(3),
-      reason: 'greeting + user turn + reply — a realism-off chat must still '
+      reason:
+          'greeting + user turn + reply — a realism-off chat must still '
           'hold a normal conversation',
     );
 
@@ -189,7 +190,8 @@ void main() {
     expect(
       backend.evalRequests,
       0,
-      reason: 'realism is off, so not one evaluation call should have been '
+      reason:
+          'realism is off, so not one evaluation call should have been '
           'made — ${backend.evalRequests} were',
     );
 
@@ -197,7 +199,8 @@ void main() {
     expect(
       time.clock,
       before.clock,
-      reason: 'the story clock advanced with realism OFF. It is gated on the '
+      reason:
+          'the story clock advanced with realism OFF. It is gated on the '
           'master switch, so either the gate broke or the clock found '
           'another way to move.',
     );
@@ -216,9 +219,9 @@ void main() {
     expect(
       offNotice.evaluate(),
       isNotEmpty,
-      reason: 'with the engine off the sidebar must explain itself instead of '
+      reason:
+          'with the engine off the sidebar must explain itself instead of '
           'presenting stale bond/trust/mood values as current',
     );
-
   });
 }

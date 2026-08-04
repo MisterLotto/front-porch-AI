@@ -159,9 +159,8 @@ void main() {
     // the id-keyed seeds are never read — so seed real avatar files, exactly
     // like the wizard does.
     final storage = Provider.of<StorageService>(ctx, listen: false);
-    final avatarsDir = Directory(
-      '${storage.groupsDir.path}/$groupId/avatars',
-    )..createSync(recursive: true);
+    final avatarsDir = Directory('${storage.groupsDir.path}/$groupId/avatars')
+      ..createSync(recursive: true);
     final onePixelPng = base64Decode(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQ'
       'DwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
@@ -227,10 +226,9 @@ void main() {
     final sessionId = chatService.currentSessionId;
     expect(sessionId, isNotNull);
     Future<Map<String, dynamic>> readColumn() async {
-      final row =
-          await (db.select(db.sessions)
-                ..where((s) => s.id.equals(sessionId!)))
-              .getSingle();
+      final row = await (db.select(
+        db.sessions,
+      )..where((s) => s.id.equals(sessionId!))).getSingle();
       final wrapper = jsonDecode(row.groupRealismState) as Map<String, dynamic>;
       // The column is a wrapper; member slots live under perChar. The other
       // wrapper keys (decay rates, author notes, objectives, sceneGuests,
@@ -285,15 +283,25 @@ void main() {
       // Types, for the keys a retype is most likely to mangle.
       expect(map['affection'], isA<num>(), reason: '$memberId affection');
       expect(map['trust'], isA<num>(), reason: '$memberId trust');
-      expect(map['emotion'], 'happy',
-          reason: '$memberId emotion must be the canned eval value');
+      expect(
+        map['emotion'],
+        'happy',
+        reason: '$memberId emotion must be the canned eval value',
+      );
       expect(map['emotionIntensity'], 'moderate', reason: memberId);
-      expect(map['spatialStance'], 'standing',
-          reason: '$memberId posture must be the canned eval value');
+      expect(
+        map['spatialStance'],
+        'standing',
+        reason: '$memberId posture must be the canned eval value',
+      );
       expect(map['needs'], isA<Map<String, dynamic>>(), reason: memberId);
-      expect(map['relationships'], isA<Map<String, dynamic>>(),
-          reason: '$memberId inter-character map must be seeded (2 members '
-              '<= the 4-cap)');
+      expect(
+        map['relationships'],
+        isA<Map<String, dynamic>>(),
+        reason:
+            '$memberId inter-character map must be seeded (2 members '
+            '<= the 4-cap)',
+      );
       expect(
         (map['relationships'] as Map).containsKey(memberId),
         isFalse,
@@ -333,8 +341,11 @@ void main() {
     // runs.)
     var sawEmotion = false;
     var sawPosture = false;
-    for (var attempt = 1; attempt <= 2 && !(sawEmotion && sawPosture);
-        attempt++) {
+    for (
+      var attempt = 1;
+      attempt <= 2 && !(sawEmotion && sawPosture);
+      attempt++
+    ) {
       final beforeChat = backend.chatRequests;
       await d.sendMessage('Post-reload check line $attempt.');
       await d.waitFor(
@@ -354,13 +365,15 @@ void main() {
     expect(
       sawEmotion,
       isTrue,
-      reason: 'after a reload, no outbound prompt carried the stored emotion '
+      reason:
+          'after a reload, no outbound prompt carried the stored emotion '
           'across two turns — map → load → injection broke somewhere',
     );
     expect(
       sawPosture,
       isTrue,
-      reason: 'after a reload, no outbound prompt carried the stored posture '
+      reason:
+          'after a reload, no outbound prompt carried the stored posture '
           'across two turns',
     );
   });

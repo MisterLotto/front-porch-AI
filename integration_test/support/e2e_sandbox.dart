@@ -14,8 +14,7 @@ import 'package:path_provider_platform_interface/path_provider_platform_interfac
 /// CI runners (2-core VMs) are several times slower than a dev machine, and
 /// every timeout in this suite was tuned locally. All wait helpers multiply
 /// their timeouts by this factor; GitHub Actions always sets CI=true.
-final int kCiTimeoutScale =
-    Platform.environment['CI'] == 'true' ? 4 : 1;
+final int kCiTimeoutScale = Platform.environment['CI'] == 'true' ? 4 : 1;
 
 /// Redirects every path_provider lookup into [root] so the app cannot touch
 /// the real installation. Extends (not implements) PathProviderPlatform so

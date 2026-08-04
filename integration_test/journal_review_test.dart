@@ -134,7 +134,8 @@ void main() {
     await tester.tap(reviewSwitch.first, warnIfMissed: false);
     await d.waitFor(
       () => storage.journalReviewFirst,
-      () => 'the review-first toggle to stick (is ${storage.journalReviewFirst})',
+      () =>
+          'the review-first toggle to stick (is ${storage.journalReviewFirst})',
     );
 
     // ── A scored turn parks a batch instead of applying it ──────────────
@@ -150,9 +151,8 @@ void main() {
       timeout: const Duration(seconds: 120),
     );
     await d.waitFor(
-      () => chatService.journalReview.hasPendingFor(
-        chatService.currentSessionId,
-      ),
+      () =>
+          chatService.journalReview.hasPendingFor(chatService.currentSessionId),
       () => 'the review batch to park for this session',
       timeout: const Duration(seconds: 60),
     );
