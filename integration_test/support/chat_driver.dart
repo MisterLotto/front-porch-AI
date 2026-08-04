@@ -215,6 +215,33 @@ class ChatDriver {
     );
   }
 
+  /// Drag the chat sidebar until [target] is BUILT, tolerating both zero and
+  /// multiple matches — the two states that kill scrollUntilVisible (its
+  /// dragUntilVisible resolves with .single, and a `.first`-wrapped finder
+  /// THROWS on an empty tree instead of reporting it, which is exactly how
+  /// round 2's lorebook suite died on macOS: the sidebar ListView builds
+  /// lazily, so a below-the-fold header has no element until dragged near).
+  /// Downward drags first (the sidebar starts at the top), a short upward
+  /// tail as insurance.
+  Future<void> revealInSidebar(Finder target) async {
+    final sidebarScrollable = find
+        .ancestor(
+          of: find.text("Author's Note"),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    const drags = [
+      -250.0, -250.0, -250.0, -250.0, -250.0, -250.0, -250.0, -250.0, //
+      250.0, 250.0, 250.0, 250.0,
+    ];
+    for (final dy in drags) {
+      if (target.evaluate().isNotEmpty) break;
+      await tester.drag(sidebarScrollable, Offset(0, dy));
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    await waitForWidget(target, timeout: const Duration(seconds: 15));
+  }
+
   /// Scroll the sidebar to the Journal & Memory accordion and expand it.
   /// Retap is gated on PANEL PRESENCE, not card text: an accordion is a
   /// toggle, and retapping after a successful expand (while content still

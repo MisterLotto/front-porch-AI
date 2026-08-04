@@ -120,24 +120,11 @@ void main() {
     await d.waitSendable();
 
     // ── Author an entry through the REAL This Chat dialog ───────────────
-    final sidebarScrollable = find
-        .ancestor(
-          of: find.text("Author's Note"),
-          matching: find.byType(Scrollable),
-        )
-        .first;
-    await tester.scrollUntilVisible(
-      find.text('Story Tools').first,
-      200,
-      scrollable: sidebarScrollable,
-    );
-    await tester.tap(find.text('Story Tools'), warnIfMissed: false);
-    await d.waitForWidget(find.text('This Chat'));
-    await tester.scrollUntilVisible(
-      find.text('This Chat').first,
-      200,
-      scrollable: sidebarScrollable,
-    );
+    // Reveal via drag loop — the sidebar ListView builds lazily, so
+    // scrollUntilVisible has nothing to resolve until the item is near.
+    await d.revealInSidebar(find.text('Story Tools'));
+    await tester.tap(find.text('Story Tools').first, warnIfMissed: false);
+    await d.revealInSidebar(find.text('This Chat'));
     final addIcon = find.descendant(
       of: find.byType(ChatLorebookSection),
       matching: find.byIcon(Icons.add),

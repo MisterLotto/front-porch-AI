@@ -30,7 +30,9 @@ import 'package:window_manager/window_manager.dart';
 import 'package:front_porch_ai/main.dart' as app;
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/ui/chat_components/sidebar/story_tools/author_note_section.dart';
 import 'package:front_porch_ai/ui/chat_components/sidebar/story_tools/chaos_panel.dart';
+import 'package:front_porch_ai/ui/chat_components/sidebar/story_tools/objective_panel.dart';
 import 'package:front_porch_ai/ui/layout/main_layout.dart';
 import 'package:front_porch_ai/ui/pages/chat_page.dart';
 
@@ -112,24 +114,13 @@ void main() {
     await d.waitForWidget(find.textContaining(_kGreeting, findRichText: true));
     await d.waitForWidget(d.input);
 
-    final sidebarScrollable = find
-        .ancestor(
-          of: find.text("Author's Note"),
-          matching: find.byType(Scrollable),
-        )
-        .first;
-
-    /// Scroll the accordion header labelled [title] into view and, if
-    /// [confirmation] is not already present, tap the header to expand it.
+    /// Reveal the accordion header labelled [title] (drag loop — tolerant of
+    /// duplicates AND of the sidebar ListView's lazy building, the two ways
+    /// scrollUntilVisible died in rounds 1-2) and, if [confirmation] is not
+    /// already present, tap the header to expand it. [confirmation] must be
+    /// an UNWRAPPED finder: .first/.last throw on an empty tree.
     Future<void> openAccordion(String title, Finder confirmation) async {
-      // scrollUntilVisible resolves its finder with .single internally, and
-      // several header labels also appear as section sub-labels — scope to
-      // .first or the whole sweep dies on "Too many elements" (round 1).
-      await tester.scrollUntilVisible(
-        find.text(title).first,
-        200,
-        scrollable: sidebarScrollable,
-      );
+      await d.revealInSidebar(find.text(title));
       await tester.pump(const Duration(milliseconds: 200));
       if (confirmation.evaluate().isEmpty) {
         await tester.tap(find.text(title).first, warnIfMissed: false);
@@ -138,9 +129,9 @@ void main() {
     }
 
     // ── Author's Note (expanded by default): the field takes text ───────
-    await openAccordion("Author's Note", find.text("Author's Note"));
+    await openAccordion("Author's Note", find.byType(AuthorNoteSection));
     final noteField = find.descendant(
-      of: find.byType(ListView).first,
+      of: find.byType(AuthorNoteSection),
       matching: find.byType(TextField),
     );
     await d.waitForWidget(noteField);
@@ -168,8 +159,8 @@ void main() {
     await d.openJournalAccordion();
     await d.waitForWidget(find.text('Where we are'));
 
-    // ── Objectives: the panel renders its section header ────────────────
-    await openAccordion('Objectives', find.text('Objectives').last);
+    // ── Objectives: the panel renders ───────────────────────────────────
+    await openAccordion('Objectives', find.byType(ObjectivePanel));
 
     // ── Story Tools: the Chaos master switch actually turns chaos on ────
     await openAccordion('Story Tools', find.text('Chaos Mode'));
@@ -189,9 +180,10 @@ void main() {
           '(is ${chatService.chaosModeService.chaosModeEnabled})',
     );
     await d.waitForWidget(find.textContaining('Pressure:'));
-    // The Places / Lorebook / This Chat sub-sections ride the same panel.
-    await d.waitForWidget(find.text('Places'));
-    await d.waitForWidget(find.text('This Chat'));
+    // The Places / This Chat sub-sections ride the same panel — reveal, not
+    // just wait: they sit below the fold of the lazily-built sidebar list.
+    await d.revealInSidebar(find.text('Places'));
+    await d.revealInSidebar(find.text('This Chat'));
 
     expect(backend.unexpectedPaths, isEmpty);
 

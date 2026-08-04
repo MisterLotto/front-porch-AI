@@ -148,27 +148,31 @@ void main() {
     );
     await d.waitSendable();
 
-    // Open Story Tools and scroll the Places sub-section into view.
-    final sidebarScrollable = find
-        .ancestor(
-          of: find.text("Author's Note"),
-          matching: find.byType(Scrollable),
-        )
-        .first;
-    await tester.scrollUntilVisible(
-      find.text('Story Tools').first,
-      200,
-      scrollable: sidebarScrollable,
+    // Open Story Tools and reveal the Places sub-section (drag loop — the
+    // sidebar list builds lazily, so below-the-fold items have no element).
+    await d.revealInSidebar(find.text('Story Tools'));
+    await tester.tap(find.text('Story Tools').first, warnIfMissed: false);
+    await d.revealInSidebar(find.text('Places'));
+    await d.revealInSidebar(find.byTooltip('Attach place'));
+    // Delivery-confirmed tap on the small + icon.
+    // The tooltip is a widget property, not tree text — the dialog TITLE is
+    // the only 'Attach place' Text, so presence means the dialog is open.
+    for (
+      var attempt = 0;
+      attempt < 6 && find.text('Attach place').evaluate().isEmpty;
+      attempt++
+    ) {
+      await tester.ensureVisible(find.byTooltip('Attach place').first);
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.tap(find.byTooltip('Attach place').first,
+          warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+    await d.waitFor(
+      () => find.text('Attach place').evaluate().isNotEmpty,
+      () => 'the Attach place dialog to open',
+      timeout: const Duration(seconds: 30),
     );
-    await tester.tap(find.text('Story Tools'), warnIfMissed: false);
-    await d.waitForWidget(find.text('Places'));
-    await tester.scrollUntilVisible(
-      find.byTooltip('Attach place').first,
-      200,
-      scrollable: sidebarScrollable,
-    );
-    await tester.tap(find.byTooltip('Attach place'), warnIfMissed: false);
-    await d.waitForWidget(find.text('Attach place'));
     await tester.tap(
       find
           .descendant(
