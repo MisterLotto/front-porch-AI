@@ -81,7 +81,11 @@ void main() {
     await pumpUntilFound(tester, find.byType(MainLayout));
     try {
       await windowManager.setAlwaysOnTop(true);
-      await windowManager.setSize(const Size(1400, 900));
+      // Deliberately modest: a big window builds the whole editor eagerly and
+      // hides the lazy-list problem that failed macOS and Windows. This size
+      // keeps the rename rows below the fold locally too, so the scroll path
+      // below is actually exercised on every run rather than only on CI.
+      await windowManager.setSize(const Size(1000, 700));
       await windowManager.setAlignment(Alignment.bottomRight);
       await windowManager.blur();
     } catch (e) {
@@ -140,7 +144,24 @@ void main() {
           w is TextField &&
           w.decoration?.hintText == 'rename (e.g. Dust Squall)',
     );
+    // The rename list is the LAST section of the editor's left column, which is
+    // a ListView — so its rows are built lazily and simply do not exist until
+    // scrolled near. On Linux the window is big enough that they happen to be
+    // built already; the macOS and Windows runners gave a shorter dialog and
+    // found zero, which is what a lazily-built off-screen row looks like.
+    // Scroll until they exist rather than assuming a viewport height.
+    final editorList = find.descendant(
+      of: find.byType(Dialog),
+      matching: find.byType(ListView),
+    );
+    for (var i = 0; i < 14 && renameFields.evaluate().isEmpty; i++) {
+      if (editorList.evaluate().isEmpty) break;
+      await tester.drag(editorList.first, const Offset(0, -220));
+      await tester.pump(const Duration(milliseconds: 200));
+    }
     await d.waitForWidget(renameFields);
+    await tester.ensureVisible(renameFields.first);
+    await tester.pump(const Duration(milliseconds: 200));
     await tester.enterText(renameFields.first, _kRenamedWeather);
     await tester.pump(const Duration(milliseconds: 250));
 
