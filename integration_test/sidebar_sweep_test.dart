@@ -114,22 +114,11 @@ void main() {
     await d.waitForWidget(find.textContaining(_kGreeting, findRichText: true));
     await d.waitForWidget(d.input);
 
-    /// Reveal the accordion header labelled [title] (drag loop — tolerant of
-    /// duplicates AND of the sidebar ListView's lazy building, the two ways
-    /// scrollUntilVisible died in rounds 1-2) and, if [confirmation] is not
-    /// already present, tap the header to expand it. [confirmation] must be
-    /// an UNWRAPPED finder: .first/.last throw on an empty tree.
-    Future<void> openAccordion(String title, Finder confirmation) async {
-      await d.revealInSidebar(find.text(title));
-      await tester.pump(const Duration(milliseconds: 200));
-      if (confirmation.evaluate().isEmpty) {
-        await tester.tap(find.text(title).first, warnIfMissed: false);
-      }
-      await d.waitForWidget(confirmation, timeout: const Duration(seconds: 30));
-    }
-
     // ── Author's Note (expanded by default): the field takes text ───────
-    await openAccordion("Author's Note", find.byType(AuthorNoteSection));
+    await d.openSidebarAccordion(
+      "Author's Note",
+      find.byType(AuthorNoteSection),
+    );
     final noteField = find.descendant(
       of: find.byType(AuthorNoteSection),
       matching: find.byType(TextField),
@@ -144,7 +133,7 @@ void main() {
     );
 
     // ── Character State: the sim-settings gear opens its flyout ─────────
-    await openAccordion('Character State', find.text('Needs'));
+    await d.openSidebarAccordion('Character State', find.text('Needs'));
     final gear = find.byTooltip('Simulation settings');
     await tester.ensureVisible(gear.first);
     await tester.pump(const Duration(milliseconds: 200));
@@ -160,10 +149,10 @@ void main() {
     await d.waitForWidget(find.text('Where we are'));
 
     // ── Objectives: the panel renders ───────────────────────────────────
-    await openAccordion('Objectives', find.byType(ObjectivePanel));
+    await d.openSidebarAccordion('Objectives', find.byType(ObjectivePanel));
 
     // ── Story Tools: the Chaos master switch actually turns chaos on ────
-    await openAccordion('Story Tools', find.text('Chaos Mode'));
+    await d.openSidebarAccordion('Story Tools', find.text('Chaos Mode'));
     expect(chatService.chaosModeService.chaosModeEnabled, isFalse);
     final chaosSwitch = find.descendant(
       of: find.byType(ChaosPanel),

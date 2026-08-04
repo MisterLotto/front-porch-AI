@@ -18,6 +18,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/ui/chat_components/sidebar/journal_memory/journal_panel.dart';
+import 'package:front_porch_ai/ui/chat_components/sidebar/sidebar_body.dart';
 import 'package:front_porch_ai/ui/dialogs/journal_dialog.dart';
 import 'package:front_porch_ai/ui/widgets/chance_time_overlay.dart';
 
@@ -195,7 +196,8 @@ class ChatDriver {
     final input0 = input.evaluate();
     final controllerText = input0.isEmpty
         ? '(input widget not found)'
-        : (tester.widget<TextField>(input).controller?.text ?? '(no controller)');
+        : (tester.widget<TextField>(input).controller?.text ??
+              '(no controller)');
     final sendBtn = find.byTooltip('Send message').evaluate().length;
     fail(
       '"$text" was never accepted by sendMessage after 8 attempts.\n'
@@ -215,6 +217,19 @@ class ChatDriver {
     );
   }
 
+  /// The sidebar's own ListView. Anchored on the SidebarBody TYPE, never on
+  /// a text inside it: the list builds lazily, so any anchor text (round 4
+  /// used "Author's Note") gets CULLED once scrolled past — and then the
+  /// `.first`-wrapped ancestor finder throws "No element" mid-drag, which is
+  /// exactly how sidebar_sweep died on Linux after its earlier phases had
+  /// scrolled the top of the list away.
+  Finder get _sidebarScrollable => find
+      .descendant(
+        of: find.byType(SidebarBody),
+        matching: find.byType(Scrollable),
+      )
+      .first;
+
   /// Drag the chat sidebar until [target] is BUILT, tolerating both zero and
   /// multiple matches — the two states that kill scrollUntilVisible (its
   /// dragUntilVisible resolves with .single, and a `.first`-wrapped finder
@@ -224,53 +239,48 @@ class ChatDriver {
   /// Downward drags first (the sidebar starts at the top), a short upward
   /// tail as insurance.
   Future<void> revealInSidebar(Finder target) async {
-    final sidebarScrollable = find
-        .ancestor(
-          of: find.text("Author's Note"),
-          matching: find.byType(Scrollable),
-        )
-        .first;
     const drags = [
       -250.0, -250.0, -250.0, -250.0, -250.0, -250.0, -250.0, -250.0, //
       250.0, 250.0, 250.0, 250.0,
     ];
     for (final dy in drags) {
       if (target.evaluate().isNotEmpty) break;
-      await tester.drag(sidebarScrollable, Offset(0, dy));
+      await tester.drag(_sidebarScrollable, Offset(0, dy));
       await tester.pump(const Duration(milliseconds: 200));
     }
     await waitForWidget(target, timeout: const Duration(seconds: 15));
   }
 
-  /// Scroll the sidebar to the Journal & Memory accordion and expand it.
-  /// Retap is gated on PANEL PRESENCE, not card text: an accordion is a
-  /// toggle, and retapping after a successful expand (while content still
-  /// paints) would collapse it again. An edge-of-viewport tap can hit-test
-  /// as a silent miss, hence ensureVisible + retry.
-  Future<void> openJournalAccordion() async {
-    final sidebarScrollable = find
-        .ancestor(
-          of: find.text("Author's Note"),
-          matching: find.byType(Scrollable),
-        )
-        .first;
-    await tester.scrollUntilVisible(
-      find.text('Journal & Memory'),
-      100,
-      scrollable: sidebarScrollable,
-    );
-    final panel = find.byType(JournalPanel);
-    for (var attempt = 0; attempt < 5 && panel.evaluate().isEmpty; attempt++) {
+  /// Reveal the accordion header labelled [title] and expand it, confirmed
+  /// by [confirmation] (a widget that only exists while the section is open
+  /// — pass an UNWRAPPED finder; .first/.last throw on an empty tree).
+  /// Retap is gated on CONFIRMATION PRESENCE, not on tap success: an
+  /// accordion is a toggle, and retapping after a successful expand (while
+  /// content still paints) would collapse it again. An edge-of-viewport tap
+  /// can hit-test as a silent miss, hence ensureVisible + retry — round 4's
+  /// Windows lorebook leg died on exactly one such unconfirmed tap.
+  Future<void> openSidebarAccordion(String title, Finder confirmation) async {
+    final header = find.text(title);
+    await revealInSidebar(header);
+    for (
+      var attempt = 0;
+      attempt < 5 && confirmation.evaluate().isEmpty;
+      attempt++
+    ) {
       await spinChanceTimeIfAsked();
-      await tester.ensureVisible(find.text('Journal & Memory'));
+      await tester.ensureVisible(header.first);
       await tester.pump(const Duration(milliseconds: 200));
-      await tester.tap(find.text('Journal & Memory'));
-      for (var i = 0; i < 6 && panel.evaluate().isEmpty; i++) {
+      await tester.tap(header.first, warnIfMissed: false);
+      for (var i = 0; i < 6 && confirmation.evaluate().isEmpty; i++) {
         await tester.pump(const Duration(milliseconds: 250));
       }
     }
-    await waitForWidget(panel, timeout: const Duration(seconds: 15));
+    await waitForWidget(confirmation, timeout: const Duration(seconds: 15));
   }
+
+  /// Scroll the sidebar to the Journal & Memory accordion and expand it.
+  Future<void> openJournalAccordion() =>
+      openSidebarAccordion('Journal & Memory', find.byType(JournalPanel));
 
   /// Open the full Journal dialog from the sidebar panel and switch to the
   /// "Our Story" timeline tab, requiring it to RESOLVE — entries, a Chance
@@ -338,7 +348,8 @@ class ChatDriver {
     }
     await waitFor(
       () => find.byType(JournalDialog).evaluate().isEmpty,
-      () => 'the Journal dialog to close so later phases are not tapping '
+      () =>
+          'the Journal dialog to close so later phases are not tapping '
           'through its modal barrier',
       timeout: const Duration(seconds: 15),
     );

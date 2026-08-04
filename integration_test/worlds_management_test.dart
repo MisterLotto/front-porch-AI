@@ -28,6 +28,7 @@ import 'package:front_porch_ai/main.dart' as app;
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/providers/app_state.dart';
 import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/ui/chat_components/sidebar/story_tools/chat_places_panel.dart';
 import 'package:front_porch_ai/ui/layout/main_layout.dart';
 import 'package:front_porch_ai/ui/pages/chat_page.dart';
 
@@ -140,7 +141,8 @@ void main() {
     // A session must exist before the Places panel renders at all.
     await d.sendMessage('Walking the black sand tonight.');
     await d.waitFor(
-      () => chatService.messages.isNotEmpty &&
+      () =>
+          chatService.messages.isNotEmpty &&
           !chatService.messages.last.isUser &&
           chatService.messages.last.text.contains('about worlds'),
       () => 'the seeding turn to generate (chat=${backend.chatRequests})',
@@ -148,11 +150,11 @@ void main() {
     );
     await d.waitSendable();
 
-    // Open Story Tools and reveal the Places sub-section (drag loop — the
-    // sidebar list builds lazily, so below-the-fold items have no element).
-    await d.revealInSidebar(find.text('Story Tools'));
-    await tester.tap(find.text('Story Tools').first, warnIfMissed: false);
-    await d.revealInSidebar(find.text('Places'));
+    // Open Story Tools (delivery-confirmed — ChatPlacesPanel only exists
+    // while the accordion is open, and the TYPE can't collide with the
+    // Worlds page still built beneath this route the way a 'Places' text
+    // could) and reveal the attach control.
+    await d.openSidebarAccordion('Story Tools', find.byType(ChatPlacesPanel));
     await d.revealInSidebar(find.byTooltip('Attach place'));
     // Delivery-confirmed tap on the small + icon.
     // The tooltip is a widget property, not tree text — the dialog TITLE is
@@ -164,8 +166,10 @@ void main() {
     ) {
       await tester.ensureVisible(find.byTooltip('Attach place').first);
       await tester.pump(const Duration(milliseconds: 200));
-      await tester.tap(find.byTooltip('Attach place').first,
-          warnIfMissed: false);
+      await tester.tap(
+        find.byTooltip('Attach place').first,
+        warnIfMissed: false,
+      );
       await tester.pump(const Duration(milliseconds: 400));
     }
     await d.waitFor(

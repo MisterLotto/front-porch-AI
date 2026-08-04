@@ -111,7 +111,8 @@ void main() {
     // A session must exist before the This Chat book accepts entries.
     await d.sendMessage('Settling in for lore tonight.');
     await d.waitFor(
-      () => chatService.messages.isNotEmpty &&
+      () =>
+          chatService.messages.isNotEmpty &&
           !chatService.messages.last.isUser &&
           chatService.messages.last.text.contains('about lorebooks'),
       () => 'the seeding turn to generate (chat=${backend.chatRequests})',
@@ -120,10 +121,13 @@ void main() {
     await d.waitSendable();
 
     // ── Author an entry through the REAL This Chat dialog ───────────────
-    // Reveal via drag loop — the sidebar ListView builds lazily, so
-    // scrollUntilVisible has nothing to resolve until the item is near.
-    await d.revealInSidebar(find.text('Story Tools'));
-    await tester.tap(find.text('Story Tools').first, warnIfMissed: false);
+    // Delivery-confirmed expansion: ChatLorebookSection only exists while
+    // Story Tools is open, so its presence proves the header tap landed
+    // (round 4's Windows leg died on one silently-missed tap here).
+    await d.openSidebarAccordion(
+      'Story Tools',
+      find.byType(ChatLorebookSection),
+    );
     await d.revealInSidebar(find.text('This Chat'));
     final addIcon = find.descendant(
       of: find.byType(ChatLorebookSection),
@@ -150,18 +154,20 @@ void main() {
       }
     }
     await d.waitForWidget(find.text('Add Lorebook Entry'));
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Name (optional)').first,
-      'The Creaky Step',
+    // The Simple tab's labels are STANDALONE Texts above bare AppTextFields
+    // (no InputDecoration.labelText), so widgetWithText(TextField, label)
+    // matches NOTHING — the round-4 macOS/Linux "Bad state: No element".
+    // Address by position instead: the dialog's IndexedStack builds both
+    // tabs, but the Simple tab is child 0, so traversal order puts its
+    // fields first — 0 = name, 1 = keywords, 2 = content.
+    final dialogFields = find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.byType(TextField),
     );
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Keywords (comma separated)').first,
-      'creaky step',
-    );
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Content').first,
-      _kLoreContent,
-    );
+    await d.waitForWidget(dialogFields);
+    await tester.enterText(dialogFields.at(0), 'The Creaky Step');
+    await tester.enterText(dialogFields.at(1), 'creaky step');
+    await tester.enterText(dialogFields.at(2), _kLoreContent);
     await tester.pump(const Duration(milliseconds: 200));
     await tester.tap(find.widgetWithText(ElevatedButton, 'Add').last);
     await d.waitFor(
