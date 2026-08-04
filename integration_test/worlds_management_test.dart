@@ -156,14 +156,14 @@ void main() {
         )
         .first;
     await tester.scrollUntilVisible(
-      find.text('Story Tools'),
+      find.text('Story Tools').first,
       200,
       scrollable: sidebarScrollable,
     );
     await tester.tap(find.text('Story Tools'), warnIfMissed: false);
     await d.waitForWidget(find.text('Places'));
     await tester.scrollUntilVisible(
-      find.byTooltip('Attach place'),
+      find.byTooltip('Attach place').first,
       200,
       scrollable: sidebarScrollable,
     );

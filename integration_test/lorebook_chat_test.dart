@@ -127,14 +127,14 @@ void main() {
         )
         .first;
     await tester.scrollUntilVisible(
-      find.text('Story Tools'),
+      find.text('Story Tools').first,
       200,
       scrollable: sidebarScrollable,
     );
     await tester.tap(find.text('Story Tools'), warnIfMissed: false);
     await d.waitForWidget(find.text('This Chat'));
     await tester.scrollUntilVisible(
-      find.text('This Chat'),
+      find.text('This Chat').first,
       200,
       scrollable: sidebarScrollable,
     );
@@ -143,7 +143,25 @@ void main() {
       matching: find.byIcon(Icons.add),
     );
     await d.waitForWidget(addIcon);
-    await tester.tap(addIcon.first, warnIfMissed: false);
+    // Delivery-confirmed tap: the 14px header icon can be missed silently
+    // (round-1 Linux never saw the dialog), so retry the reveal+tap loop
+    // until the dialog title is actually present.
+    for (
+      var attempt = 0;
+      attempt < 6 && find.text('Add Lorebook Entry').evaluate().isEmpty;
+      attempt++
+    ) {
+      await tester.ensureVisible(addIcon.first);
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.tap(addIcon.first, warnIfMissed: false);
+      for (
+        var i = 0;
+        i < 6 && find.text('Add Lorebook Entry').evaluate().isEmpty;
+        i++
+      ) {
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+    }
     await d.waitForWidget(find.text('Add Lorebook Entry'));
     await tester.enterText(
       find.widgetWithText(TextField, 'Name (optional)').first,

@@ -118,15 +118,20 @@ void main() {
     await tester.pump(const Duration(milliseconds: 200));
     await tester.tap(gear.first, warnIfMissed: false);
     await d.waitForWidget(find.text('Review updates first'));
-    await tester.tap(
-      find
-          .descendant(
-            of: find.byType(SummarySection),
-            matching: find.byType(Switch),
+    // The switch shares one Row with its label — round 1 guessed `.last`
+    // of the section's switches and hit a different toggle entirely.
+    final reviewSwitch = find.descendant(
+      of: find
+          .ancestor(
+            of: find.text('Review updates first'),
+            matching: find.byType(Row),
           )
-          .last,
-      warnIfMissed: false,
+          .first,
+      matching: find.byType(Switch),
     );
+    await tester.ensureVisible(reviewSwitch.first);
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.tap(reviewSwitch.first, warnIfMissed: false);
     await d.waitFor(
       () => storage.journalReviewFirst,
       () => 'the review-first toggle to stick (is ${storage.journalReviewFirst})',

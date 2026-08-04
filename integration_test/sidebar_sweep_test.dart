@@ -122,14 +122,17 @@ void main() {
     /// Scroll the accordion header labelled [title] into view and, if
     /// [confirmation] is not already present, tap the header to expand it.
     Future<void> openAccordion(String title, Finder confirmation) async {
+      // scrollUntilVisible resolves its finder with .single internally, and
+      // several header labels also appear as section sub-labels — scope to
+      // .first or the whole sweep dies on "Too many elements" (round 1).
       await tester.scrollUntilVisible(
-        find.text(title),
+        find.text(title).first,
         200,
         scrollable: sidebarScrollable,
       );
       await tester.pump(const Duration(milliseconds: 200));
       if (confirmation.evaluate().isEmpty) {
-        await tester.tap(find.text(title), warnIfMissed: false);
+        await tester.tap(find.text(title).first, warnIfMissed: false);
       }
       await d.waitForWidget(confirmation, timeout: const Duration(seconds: 30));
     }

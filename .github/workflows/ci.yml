@@ -144,7 +144,10 @@ jobs:
             experimental: false
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
-    timeout-minutes: 30
+    # 16 suites per OS, each failing suite retried once with a full rebuild —
+    # 30 minutes truncated the 2026-08-04 Linux round mid-list, hiding four
+    # suites' verdicts. 45 keeps red rounds fully diagnostic.
+    timeout-minutes: 45
     steps:
       - name: Checkout Code
         uses: actions/checkout@v5
