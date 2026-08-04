@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-08-04 — fix(home): Porch Stories was unreachable on an empty library (maintainer-approved)
+- **Why:** the story_pipeline E2E suite, on its first ever execution, failed with `Found 0 widgets with text "Porch Stories"`. Root cause was in the app, not the test — and it was TWO defects stacked:
+  1. `home_page.dart` returned early when `repo.characters.isEmpty && groupRepo.groups.isEmpty`, rendering a "Get started by creating a new character!" panel that did **not** include the Chats/Porch Stories mode toggle. On a fresh install the toggle did not exist.
+  2. Even with a toggle, `if (_showStories)` was checked **after** that empty branch — so flipping it would have set the flag and then fallen straight back into the empty panel. The view could never open.
+- **Maintainer decision:** "Need to be able to reach porch stories from an empty Home Screen since it doesn't require the existence of characters."
+- **Did:** the mode toggle now rides above the empty state (same placement/padding as the stories view), and the `_showStories` branch moved ABOVE the empty-library check so stories mode wins. Both sites carry comments recording why.
+- **WebUI parity — not required, verified:** the PWA reaches Stories through a permanent `/stories` nav entry in `Layout.tsx`, with no library-emptiness gate. The web UI never had this bug; its design is what desktop now matches.
+- **The E2E workaround is now the regression guard:** the seeded throwaway character added in 754cafc is REMOVED, so `story_pipeline_test` starts from a virgin library and only passes if the fix holds.
+- **Goldens unaffected:** `home_golden_test.dart` renders `CharacterCardGrid` directly, not `HomePage.build`, so the empty-library branch is not pixel-covered.
+- **Gates:** analyze clean (home_page.dart + all of integration_test); format clean, diff confined to the edited branch (no tall-style churn); home_page.dart 519 lines, far under the ratchet.
+- **Files:** `lib/ui/pages/home_page.dart`, `integration_test/story_pipeline_test.dart`, `docs/Rawhide.md`.
+
 ## 2026-08-04 — test(e2e): stoop GREEN on macOS+Windows; story_pipeline ran for the first time and found a real UX gap
 - **Why:** P3 round 7. `stoop_test` PASSED on both macOS and Windows — the `/creators/{id}` fix closed it, and the whole hub journey (sign-in → AUP gate → browse → download-with-real-import → share wizard → multipart upload → traffic audit) is now proven on two platforms. The run advanced to `story_pipeline_test`, executing for the FIRST time anywhere, and failed at line 97 with a message that named its own cause: `Found 0 widgets with text "Porch Stories"`.
 - **Root cause — a genuine app UX gap, not only a test bug:** `home_page.dart:359` returns EARLY when `repo.characters.isEmpty && groupRepo.groups.isEmpty`, rendering a "Get started by creating a new character!" panel that does **not** include the Chats/Porch Stories mode toggle. A brand-new user with an empty library therefore cannot reach Porch Stories at all — even though a story needs no character (the wizard's Cast step is optional and `useChatHistory` defaults false). Flagged to the maintainer; NOT changed unilaterally, since it is a product decision in a large page file.
