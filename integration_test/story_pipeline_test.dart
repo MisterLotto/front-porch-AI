@@ -29,6 +29,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:front_porch_ai/main.dart' as app;
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/layout/main_layout.dart';
+import 'package:front_porch_ai/ui/pages/pages.dart';
 
 import 'support/chat_driver.dart';
 import 'support/e2e_sandbox.dart';
@@ -167,9 +168,15 @@ void main() {
     expect(backend.storyStagesServed, ['architect', 'acts']);
 
     // ── Generate the act: weaver → beats → prose, in that order ─────────
+    // Confirm on the PAGE, not on the act title: the dashboard already renders
+    // every act title in its editable act cards, so a title-text confirmation
+    // is satisfied before the navigation happens — tapUntil's loop is
+    // `while (!done())`, so it would never tap at all, leave us on the
+    // dashboard, and die six minutes later at a button that only exists one
+    // route further in.
     await d.tapUntil([
       find.text('View Structure & Write'),
-    ], find.text('The Message in the Light'));
+    ], find.byType(StoryStructurePage));
     await d.tapUntil(
       [find.widgetWithText(ElevatedButton, 'Generate Act')],
       find.text('Reading the Flicker'),

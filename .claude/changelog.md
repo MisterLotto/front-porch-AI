@@ -9044,3 +9044,49 @@ set. No test was weakened — message_actions is unchanged in this commit and
 remains the regression guard on all three OSes.
 
 **Verification.** analyze clean; test/ui/widgets suite green.
+
+## 2026-08-04 — the fake backend was never actually streaming (and local Linux E2E is now usable)
+
+**Files.** `integration_test/support/fake_backend.dart`,
+`integration_test/story_pipeline_test.dart`,
+`docs/design/e2e-coverage-map.md`.
+
+**Round 9 verdict.** All three OS legs red on exactly two suites; every other
+suite green (macOS/Windows stop at the first failure and got all the way to
+`story_pipeline`, so the 18 before it passed there too).
+
+**1 — `swipe_fork_cancel`: `HttpResponse.flush()` is not a flush.** Dart's
+`HttpResponse` buffers output and only hands the buffer to the socket when the
+response CLOSES; `flush()` alone does nothing observable. So the fake's
+`chatChunkDelay` paced the SERVER's writes while the CLIENT still received one
+burst at the end — the app logged `tok=0 phase=prefilling` for the entire 5.6s
+"stream", then jumped straight to the full 90-char reply. The
+cancel-mid-regenerate phase waits for a partially-streamed message, which in
+that world can never exist. Proven in isolation with a 30-line probe: with
+`bufferOutput` left true chunk 1 arrives at +1676ms (stream end), with it false
+at +405ms. One line — `req.response.bufferOutput = false` — and every suite now
+exercises a genuinely incremental decode path for the first time.
+
+**2 — `story_pipeline`: a confirmation that was true before the tap.** The step
+tapped "View Structure & Write" and confirmed on the act title
+"The Message in the Light" — but the DASHBOARD already renders every act title
+in its editable act cards. `tapUntil`'s loop is `while (!done())`, so `done()`
+being true on entry meant it never tapped at all: the suite stayed on the
+dashboard and died six minutes later at a "Generate Act" button that only
+exists one route further in. Confirmation is now `find.byType(StoryStructurePage)`
+— the page itself, which cannot be satisfied before the navigation.
+
+**3 — local Linux E2E now runs here (the standing ask).** The blocker was never
+the sandbox: `audioplayers_linux` builds its player in the constructor and
+`throw`s a bare `const char*` when `gst_element_factory_make("playbin")` returns
+null. Nothing catches it, so the C++ runtime aborts the whole test process —
+which presents as `did not complete` ~1s in with no Dart exception, no stack and
+no hint that audio is involved. A core dump (`ulimit -c unlimited` +
+`gdb -batch -ex bt`) named it in one shot. Installing
+`gstreamer1.0-plugins-base`/`-good` fixes it; both failures above were then
+reproduced and fixed locally in minutes instead of 45-minute CI rounds. Written
+up in the coverage map so the next person doesn't re-derive it.
+
+**Verification.** `flutter analyze` clean on all changed files; full local Linux
+leg (one invocation per file) re-run after the streaming change, since it alters
+token timing for every suite.

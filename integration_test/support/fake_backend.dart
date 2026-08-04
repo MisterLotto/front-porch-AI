@@ -439,6 +439,15 @@ class FakeBackendServer {
     Duration delay = Duration.zero,
   }) async {
     req.response.headers.set('Content-Type', 'text/event-stream');
+    // MANDATORY for a real stream, and flush() alone is NOT enough: Dart's
+    // HttpResponse buffers output by default and only hands the buffer to the
+    // socket when the response CLOSES, so every "paced" chunk below arrived at
+    // the client in one burst at the end. The app then saw zero tokens for the
+    // whole generation and the full reply in a single step — which is exactly
+    // why the cancel-mid-regenerate phase could never observe a partial. Proven
+    // in isolation: with bufferOutput left true, chunk 1 lands at +1676ms
+    // (stream end); with it false, at +405ms.
+    req.response.bufferOutput = false;
     for (final piece in pieces) {
       if (delay > Duration.zero) await Future<void>.delayed(delay);
       req.response.write(

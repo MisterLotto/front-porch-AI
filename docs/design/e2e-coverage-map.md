@@ -107,3 +107,29 @@ Honest residue (still open, low priority):
   — the settling window (`isSettlingTurn`) is part of the turn.
 - Assert `backend.unexpectedPaths` empty at the end when the journey chats.
 - Update this file's table in the same PR.
+
+## Running the leg locally on Linux (do this before pushing)
+
+CI is a slow way to find a broken finder — the whole Linux leg runs here in
+about twenty minutes, one invocation per file:
+
+```bash
+for f in integration_test/*_test.dart; do
+  xvfb-run -a flutter test "$f" -d linux
+done
+```
+
+Two environment facts cost a full CI round each before they were written down:
+
+- **GStreamer is a hard requirement, and its absence looks like nothing at
+  all.** `audioplayers_linux` builds its player in the constructor and
+  `throw`s a bare `const char*` when `gst_element_factory_make("playbin")`
+  returns null. Nothing catches it, so the C++ runtime aborts the process: the
+  suite reports `did not complete` about one second in, with no Dart exception,
+  no stack, and no hint that audio was involved. Install
+  `gstreamer1.0-plugins-base` (plus `-good`) and it simply works. A core dump
+  (`ulimit -c unlimited`, then `gdb -batch -ex bt <bundle> core`) is what
+  actually named it — worth reaching for the moment a suite dies without a Dart
+  error.
+- **`xvfb-run` starts a bare `sh`**, so `flutter` must be on PATH there or you
+  get an opaque `exit 127`. Use the absolute path when in doubt.
