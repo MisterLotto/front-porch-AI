@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-08-04 — fix(hardware): detection resumed after dispose and crashed — same class as the spell-check bug
+- **Why:** Windows CI (61c39dc round) — with app_smoke, the group suites AND message_actions now GREEN on Windows (both prior fixes confirmed), the runner reached `realism_off`, whose test passed and then failed "after the test had already completed": `HardwareService.detectHardware`'s finally block called `notifyListeners()` on a disposed service. Windows-visible because detection there shells out repeatedly (nvidia-smi missing → registry → WMI), so it's still awaiting long after teardown; a real user closing the app right after launch hits the same resumption.
+- **Did:** `_disposed` flag set in a new `dispose()` override; `detectHardware` bails at entry when disposed; the finally's notify and the cache-restore notify are guarded; the post-frame re-detect callback checks the flag before firing. Field mutations after dispose stay harmless (no notify), so mid-detection awaits need no further guards.
+- **Gates:** analyze clean, god-file ratchet green (file 969 → 982, under the 1000 bar and not in baseline), both hardware test files green (13 tests).
+- **Files:** `lib/services/hardware_service.dart`.
+
 ## 2026-08-04 — fix(chat): entering a chat mid-settle raced the turn's persist — reloads read chip-less rows
 - **Why:** with the settling flag now honest (previous entry), Windows CI's app_smoke run exposed the next layer: phase 4c reloads the session right after the turn's chip attach, and `loadSession` rehydrated from rows the attach's `_saveChat` hadn't finished writing — the reloaded reply came back chip-less, so phase 4d's delete refunded nothing ("was 88, now 88" timeout). macOS/Linux pass on disk speed alone.
 - **Root cause (app, not test):** `loadSession`, `setActiveCharacter` and `setActiveGroup` all cancel a live STREAM (`_cancelAndWaitForGeneration`) but none waited out the settling tail — the post-gen evals/chip-attach/saves that run after `_isGenerating` drops. A user switching chats in that ~1s window hits the same race: state loss on the reload, and the still-running finalization then writes onto the REPLACED message list.

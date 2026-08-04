@@ -140,6 +140,16 @@ class HardwareService extends ChangeNotifier {
     _restoreThenDetect();
   }
 
+  // Detection spans awaits (process spawns, WMI — slow on Windows), so it can
+  // resume after dispose; notifyListeners then throws use-after-dispose.
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
   Future<void> _restoreThenDetect() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -148,7 +158,7 @@ class HardwareService extends ChangeNotifier {
         final cached = HardwareInfo.fromJson(
           jsonDecode(raw) as Map<String, dynamic>,
         );
-        if (cached != null) {
+        if (cached != null && !_disposed) {
           _hardwareInfo = cached;
           StartupTrace.mark('HardwareService: restored cached hardware info');
           notifyListeners();
@@ -164,13 +174,16 @@ class HardwareService extends ChangeNotifier {
     // keep working if it is ever constructed headlessly (a script, a test, the
     // web server host), where there are no frames to wait for.
     try {
-      WidgetsBinding.instance.addPostFrameCallback((_) => detectHardware());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!_disposed) detectHardware();
+      });
     } catch (_) {
       detectHardware();
     }
   }
 
   Future<void> detectHardware() async {
+    if (_disposed) return;
     _isDetecting = true;
     notifyListeners();
     final traceStart = DateTime.now();
@@ -190,7 +203,7 @@ class HardwareService extends ChangeNotifier {
       print('Hardware detection failed: $e');
     } finally {
       _isDetecting = false;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
       StartupTrace.mark(
         'HardwareService.detectHardware DONE in '
         '${DateTime.now().difference(traceStart).inMilliseconds}ms',
