@@ -8795,3 +8795,28 @@ so suite validation is the CI run on push, watched to green.
 what is deliberately not coverable offline, and the P1–P3 tranche order the
 maintainer's "full coverage" directive continues with (next: message actions,
 backups/restore, persona+folder journeys).
+
+## 2026-08-04 — Regression-net phase 2: message-actions E2E (edit / regenerate / delete-refund)
+
+**Files.** `integration_test/message_actions_test.dart` (NEW),
+`docs/design/e2e-coverage-map.md` (P1 item 1 marked done, residue noted),
+`CLAUDE.md` (suite list).
+
+**Why.** P1 item 1 of the coverage map: three shipped bugs lived on the
+message-action surface with no journey guard (delete left needs applied
+forever; regen replayed side effects; themes ate these exact buttons). The
+suite drives the REAL bubble controls: Edit button → Dialog → Save → text
+replaced and old text gone; Regenerate button → new backend request →
+message count coherent, reply still last; delete button → confirm dialog →
+message gone AND every nonzero needs chip on it refunded against the
+captured pre-delete vector (arithmetic is unit-pinned in
+delete_message_needs_rollback_test — this asserts the tap→service→UI loop
+delivers it). Chaos is deliberately OFF for this character (fewest modals;
+wheel is app_smoke's job; driver still guards). Cancel-mid-regenerate is
+deliberately deferred: the fake streams instantly so a cancel window is a
+race — the flake class this effort exists to kill; needs a delay-capable
+fake first (recorded in the map).
+
+**Verification.** flutter analyze clean; dart fix nothing; formatted. E2E
+execution impossible in this container (control experiment documented in
+phase 1) — validation is the CI three-OS run on this push, watched.

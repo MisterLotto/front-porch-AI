@@ -588,7 +588,9 @@ and `database.dart` has no barrel anyway).
   `realism_off_test.dart` (engine disabled), `theme_interaction_test.dart` (every
   theme preset must leave bubble controls hit-testable),
   `settings_persistence_test.dart` (the "Stays Put" class: settings survive page
-  reopens + a settings-layer reload). CI globs `integration_test/*_test.dart` and
+  reopens + a settings-layer reload), `message_actions_test.dart` (edit /
+  regenerate / delete-with-needs-refund through the real bubble controls). CI
+  globs `integration_test/*_test.dart` and
   runs ONE invocation per file on macOS/Windows/Linux — a new suite is picked up
   automatically. Before capturing or persist-asserting chat state in ANY suite,
   `await d.waitSendable()` — the settling window (`isSettlingTurn`) is part of

@@ -32,6 +32,9 @@ by CI automatically.
 | Group realism wiring across reload turns | `group_realism_wiring` | post-reload turns keep scoring |
 | Theme presets keep controls tappable | `theme_interaction` | hit-tests under all 10 presets |
 | Settings persistence (the "Stays Put" class) | `settings_persistence` | context via real input; reopen ×3 + settings-layer reload, zero drift |
+| Message actions: edit → dialog → sticks | `message_actions` | real Edit button, Save, text replaced |
+| Message actions: regenerate in place | `message_actions` | real Regenerate button, count coherent |
+| Message actions: delete + needs refund | `message_actions` | real delete button + confirm; chips subtracted |
 
 Widget-level interaction tests (in `test/ui/`, not full-app):
 `create_group_chat_page`, `edit_character_page`, folder drag/drop, expanded
@@ -40,9 +43,11 @@ editor dialog, theme goldens, and the border-painter hit-test sweep.
 ## Not covered — priority order for the next tranches
 
 **P1 — shipped-bug classes with no journey guard yet:**
-1. **Message actions**: delete (needs refund must apply), regenerate + cancel
-   mid-eval (message must survive), swipes, edit, fork. Three separate shipped
-   bugs live here; all invisible to unit tests.
+1. ~~Message actions~~ — DONE (`message_actions`): edit/regenerate/delete
+   journeys. Still open from this item: swipes navigation, fork, and
+   cancel-mid-regenerate (needs a delay-capable fake backend first — the
+   current fake streams instantly, so a cancel window would be a race; the
+   put-back behavior is unit-pinned meanwhile).
 2. **Backups & restore**: restore → every service rebound to the fresh DB
    (the closed-handle class from the v1.2 blocker), backup list renders,
    restore honors no-image-cleanup.
