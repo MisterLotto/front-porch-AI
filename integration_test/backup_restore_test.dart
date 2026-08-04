@@ -134,9 +134,16 @@ void main() {
     Navigator.of(ctx).push(MaterialPageRoute(builder: (_) => const ChatPage()));
     await d.waitForWidget(find.textContaining(_kGreeting, findRichText: true));
     await d.sendMessage('Remember this porch before the snapshot.');
+    // Reply-CONTENT wait, never a chatRequests count: the objective
+    // completion check is also classified CHAT by the fake, so a counter
+    // wait can pass before the real reply streams (the round-1 CI failure).
     await d.waitFor(
-      () => backend.chatRequests >= 1,
-      () => 'the pre-backup turn to generate (chat=${backend.chatRequests})',
+      () => chatService.messages.isNotEmpty &&
+          !chatService.messages.last.isUser &&
+          chatService.messages.last.text.contains('about backups'),
+      () =>
+          'the pre-backup reply to stream '
+          '(${chatService.messages.length} messages)',
       timeout: const Duration(seconds: 120),
     );
     await d.waitSendable();
@@ -249,23 +256,22 @@ void main() {
     // ignore: use_build_context_synchronously
     Navigator.of(ctx).push(MaterialPageRoute(builder: (_) => const ChatPage()));
     await d.waitForWidget(d.input);
-    final chatCallsBeforePostRestoreTurn = backend.chatRequests;
+    final messagesBeforePostRestoreTurn = chatService.messages.length;
     await d.sendMessage('Prove the porch still answers after the restore.');
+    // Reply-content wait for the same reason as above — the post-reload
+    // objective completion check races any counter-based condition.
     await d.waitFor(
-      () => backend.chatRequests > chatCallsBeforePostRestoreTurn,
+      () => chatService.messages.length >= messagesBeforePostRestoreTurn + 2 &&
+          !chatService.messages.last.isUser &&
+          chatService.messages.last.text.contains('about backups'),
       () =>
-          'the post-restore turn to generate '
-          '(chat=${backend.chatRequests})',
+          'a full reply to stream on the rebound database — the v1.2 '
+          'closed-handle class made this exact step throw '
+          '(${chatService.messages.length} messages, last from '
+          '${chatService.messages.isEmpty ? "none" : chatService.messages.last.sender})',
       timeout: const Duration(seconds: 120),
     );
     await d.waitSendable();
-    expect(
-      chatService.messages.last.isUser,
-      isFalse,
-      reason:
-          'a full reply must stream on the rebound database — the v1.2 '
-          'closed-handle class made this exact step throw',
-    );
 
     expect(backend.unexpectedPaths, isEmpty);
 

@@ -140,7 +140,9 @@ void main() {
     // A session must exist before the Places panel renders at all.
     await d.sendMessage('Walking the black sand tonight.');
     await d.waitFor(
-      () => backend.chatRequests >= 1,
+      () => chatService.messages.isNotEmpty &&
+          !chatService.messages.last.isUser &&
+          chatService.messages.last.text.contains('about worlds'),
       () => 'the seeding turn to generate (chat=${backend.chatRequests})',
       timeout: const Duration(seconds: 120),
     );

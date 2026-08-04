@@ -111,7 +111,9 @@ void main() {
     // A session must exist before the This Chat book accepts entries.
     await d.sendMessage('Settling in for lore tonight.');
     await d.waitFor(
-      () => backend.chatRequests >= 1,
+      () => chatService.messages.isNotEmpty &&
+          !chatService.messages.last.isUser &&
+          chatService.messages.last.text.contains('about lorebooks'),
       () => 'the seeding turn to generate (chat=${backend.chatRequests})',
       timeout: const Duration(seconds: 120),
     );

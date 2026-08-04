@@ -165,7 +165,9 @@ void main() {
     await d.waitForWidget(find.textContaining(_kGreeting, findRichText: true));
     await d.sendMessage('Speaking as Porchy tonight.');
     await d.waitFor(
-      () => backend.chatRequests >= 1,
+      () => chatService.messages.isNotEmpty &&
+          !chatService.messages.last.isUser &&
+          chatService.messages.last.text.contains('about personas'),
       () => 'the persona turn to generate (chat=${backend.chatRequests})',
       timeout: const Duration(seconds: 120),
     );
