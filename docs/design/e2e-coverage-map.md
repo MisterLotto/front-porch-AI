@@ -38,6 +38,14 @@ by CI automatically.
 | Web server launch + PWA + auth loop | `web_server` | real HTTP: health, shell served, anon 401, setup→cookie→state 200, clean stop |
 | Story clock: per-turn advance + reload | `story_time` | canned scene-time eval moves clock forward ≥5min; ISO identical after reload |
 | Weather: live + seed-stable across reload | `app_smoke` | currentWeather/upcomingWeather non-null; no re-roll on reload |
+| Backups: create → restore → rebind (v1.2 class) | `backup_restore` | real page + confirm dialog; post-snapshot char gone, portrait PNG kept, full chat turn + folder/persona writes on the rebound DB |
+| Personas: create in real form, ride the session | `persona_folder` | New Persona→Save activates it; loadSession re-activates the chatted persona |
+| Folders: create, move via context menu, open | `persona_folder` | toolbar dialog; right-click → Move to Folder…; membership survives reload |
+| Chat lorebook: author entry, preview, inject | `lorebook_chat` | real Add dialog; WOULD TRIGGER NEXT on draft; content in outbound body; all 4 import dialects decode (wizard's picker step is native — not drivable) |
+| Worlds: create place + attach to chat | `worlds_management` | real New World dialog; Places panel attach; climate dropdown present |
+| Journal review-first: park → banner → apply | `journal_review` | gear toggle via real UI; salience-kicked batch parks; Apply lands the card |
+| Growth Rings: pass → ring renders → receipt jump | `growth_rings` | real panel switch; fake's <ring> branch; tier/category render; #1 receipt seeks the cited bubble |
+| Sidebar sweep: every accordion + a live control each | `sidebar_sweep` | note field takes text; sim gear opens flyout; chaos switch truly enables chaos |
 
 Widget-level interaction tests (in `test/ui/`, not full-app):
 `create_group_chat_page`, `edit_character_page`, folder drag/drop, expanded
@@ -45,25 +53,18 @@ editor dialog, theme goldens, and the border-painter hit-test sweep.
 
 ## Not covered — priority order for the next tranches
 
-**P1 — shipped-bug classes with no journey guard yet:**
-1. ~~Message actions~~ — DONE (`message_actions`): edit/regenerate/delete
-   journeys. Still open from this item: swipes navigation, fork, and
-   cancel-mid-regenerate (needs a delay-capable fake backend first — the
-   current fake streams instantly, so a cancel window would be a race; the
-   put-back behavior is unit-pinned meanwhile).
-2. **Backups & restore**: restore → every service rebound to the fresh DB
-   (the closed-handle class from the v1.2 blocker), backup list renders,
-   restore honors no-image-cleanup.
-3. **Persona + folder journey**: create persona, start chat as persona,
-   persona survives reload; folder create/move/open.
-
-**P2 — feature surfaces with UI-only risk:**
-4. Lorebook manager + import wizard (fixture books for each dialect).
-5. Worlds management page (create place, climate author, assign to chat).
-6. Journal review-first mode (banner → review dialog → apply/discard).
-7. Growth Rings dialog + receipts jump.
-8. Chat sidebar sweep: every accordion opens, every pill/button hit-tests
-   (generalize the theme_interaction approach to one broad sweep).
+**P1 + P2 — DONE 2026-08-04** (`backup_restore`, `persona_folder`,
+`lorebook_chat`, `worlds_management`, `journal_review`, `growth_rings`,
+`sidebar_sweep`). Honest residue from those items:
+- Message actions still leaves swipes navigation, fork, and
+  cancel-mid-regenerate to P3 (delay-capable fake needed; the put-back
+  behavior is unit-pinned meanwhile).
+- The lorebook IMPORT WIZARD's step 0 is a native file picker no test can
+  drive; the dialect decode layer it rides is proven programmatically in
+  `lorebook_chat`, and steps 1–2 remain uncovered as widgets.
+- The custom climate EDITOR (showClimateEditorDialog) is not driven —
+  `worlds_management` proves the dropdown offers it; authoring is unit-level
+  territory.
 
 **P3 — needs new fakes first:**
 9. Model manager / downloader (fake HF endpoints on FakeBackendServer;

@@ -44,6 +44,12 @@ class FakeBackendServer {
   /// Journal maintenance passes served (XML transport exchanges).
   int journalPassRequests = 0;
 
+  /// Growth passes served (the `<ring>` XML transport). Without this branch a
+  /// growth prompt fell through to the CHAT handler: chatRequests bumped,
+  /// lastChatBody clobbered, and the canned reply had no `<ring>` tags — an
+  /// honest "no growth" that silently advanced the cursor forever.
+  int growthPassRequests = 0;
+
   /// Objective task-generation requests served (numbered-list format).
   int objectiveTaskRequests = 0;
 
@@ -195,6 +201,19 @@ class FakeBackendServer {
         '<memory action=add category=moment msgs="1 2">'
             'The porch swing creaked as they talked.</memory>\n'
             '<recap>Two friends warming up on the porch.</recap>',
+      ]);
+      return;
+    }
+    // Growth pass — its prompt teaches the <ring> tag (buildGrowthPrompt's
+    // XML transport). Same precedence rationale as the journal branch. The
+    // src receipt points at message position 1 so the receipts-jump E2E has
+    // a real target to seek.
+    if (lastContent.contains('<ring')) {
+      growthPassRequests++;
+      await _streamSse(req, [
+        '<ring action="add" category="stance" src="1">'
+            'Has started saving the porch swing for their favorite guest.'
+            '</ring>',
       ]);
       return;
     }

@@ -592,7 +592,16 @@ and `database.dart` has no barrel anyway).
   `web_server_test.dart` (WebServerHost launches for real: PWA shell served,
   anon API 401s, setup→cookie→state loop over genuine HTTP),
   `story_time_test.dart` (story clock advances per scored turn and survives
-  reload via realism_state). CI globs `integration_test/*_test.dart` and
+  reload via realism_state), `backup_restore_test.dart` (real Backups page:
+  create → restore → every service rebound, portraits kept),
+  `persona_folder_test.dart` (persona form + session round-trip; folder
+  create/move/open via real menus), `lorebook_chat_test.dart` (This Chat entry
+  dialog → trigger preview → prompt injection + dialect decodes),
+  `worlds_management_test.dart` (New World dialog + Places-panel attach),
+  `journal_review_test.dart` (review-first: park → banner → apply),
+  `growth_rings_test.dart` (evolution switch → pass → ring + receipt jump),
+  `sidebar_sweep_test.dart` (every accordion opens; a control per section
+  responds). CI globs `integration_test/*_test.dart` and
   runs ONE invocation per file on macOS/Windows/Linux — a new suite is picked up
   automatically. Before capturing or persist-asserting chat state in ANY suite,
   `await d.waitSendable()` — the settling window (`isSettlingTurn`) is part of
