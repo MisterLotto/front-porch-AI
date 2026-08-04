@@ -298,7 +298,20 @@ class WebChatRoutes {
     if (critique.isEmpty) {
       return JsonResponse.badRequest('critique is required');
     }
-    final ok = await _facade.reprocessNeeds(index, critique);
+    // Optional, and parsed defensively: an app built before scoped reprocess
+    // sends no 'needs' key at all and must keep working unchanged.
+    final rawNeeds = body['needs'];
+    final onlyNeeds = rawNeeds is List
+        ? rawNeeds
+              .map((n) => n.toString().trim().toLowerCase())
+              .where((n) => n.isNotEmpty)
+              .toSet()
+        : const <String>{};
+    final ok = await _facade.reprocessNeeds(
+      index,
+      critique,
+      onlyNeeds: onlyNeeds,
+    );
     if (!ok) return JsonResponse.error(409, 'Message cannot be reprocessed');
     return JsonResponse.ok({'status': 'ok'});
   }

@@ -67,6 +67,16 @@ class FakeBackendServer {
   /// Tool-transport probes refused (forces the text eval fallback).
   int toolProbeRequests = 0;
 
+  /// Manual needs-reprocess hook. A completion whose prompt carries
+  /// [reprocessMarker] is answered with [reprocessDeltas] instead of the
+  /// standard canned needs set. Set the deltas to something DIFFERENT on every
+  /// key: a scoped pass can then be proven to move only the needs it was given
+  /// and leave the rest exactly where the turn put them — with one shared reply
+  /// you cannot tell "correctly ignored" from "happened to match".
+  String? reprocessMarker;
+  Map<String, int> reprocessDeltas = const {};
+  int reprocessRequests = 0;
+
   /// Body of the most recent NON-eval chat completion — lets the test prove
   /// the user's message actually reached the outbound prompt.
   String lastChatBody = '';
@@ -355,6 +365,22 @@ class FakeBackendServer {
             '3. Tell the story of the creaky board.\n'
             '4. Ask about their favorite weather.\n'
             '5. Watch the sunset together.',
+      ]);
+      return;
+    }
+
+    // Manual needs reprocess — checked BEFORE the eval keys below, because a
+    // reprocess prompt is a needs-impact prompt and would otherwise be answered
+    // with the same canned set the original turn got.
+    final reprocess = reprocessMarker;
+    if (reprocess != null &&
+        reprocess.isNotEmpty &&
+        lastContent.contains(reprocess)) {
+      reprocessRequests++;
+      await _streamSse(req, [
+        jsonEncode({
+          for (final e in reprocessDeltas.entries) '${e.key}_delta': e.value,
+        }),
       ]);
       return;
     }

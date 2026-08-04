@@ -374,9 +374,15 @@ export function ChatPage() {
 
   // Director redo: reprocess a message's Needs deltas with a written critique
   // (throws on failure so the modal can surface the error), or revert.
-  const submitReprocess = async (critique: string) => {
+  const submitReprocess = async (critique: string, onlyNeeds: string[]) => {
     if (reprocessIndex === null) return;
-    await api.post('/api/chat/reprocess-needs', { index: reprocessIndex, critique });
+    // 'needs' omitted when nothing was selected — the server treats a missing
+    // key as "all needs", which is also what older builds send.
+    await api.post('/api/chat/reprocess-needs', {
+      index: reprocessIndex,
+      critique,
+      ...(onlyNeeds.length > 0 ? { needs: onlyNeeds } : {}),
+    });
     await refresh();
     setReprocessIndex(null);
   };

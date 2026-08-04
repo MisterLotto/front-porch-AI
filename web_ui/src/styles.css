@@ -456,6 +456,16 @@ button.ghost.small, .ghost.small { font-size: 0.72rem; padding: 4px 8px; backgro
 }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
+/* Reprocess-scope chips: which needs a Director redo is allowed to move. */
+.reprocess-scope-title { font-size: 0.8rem; font-weight: 600; margin: 12px 0 2px; }
+.reprocess-needs { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.need-chip {
+  font-size: 0.75rem; padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--muted);
+}
+.need-chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.need-chip:disabled { opacity: 0.5; }
+
 /* ── Settings: remote model picker (fetched dropdown) ───────────────────── */
 .model-picker { position: relative; }
 .model-picker-bar { display: flex; gap: 6px; align-items: stretch; }

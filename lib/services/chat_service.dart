@@ -76,6 +76,7 @@ part 'chat/chat_service_group_realism_helpers.dart';
 part 'chat/chat_service_history.dart';
 part 'chat/chat_service_group_membership.dart';
 part 'chat/chat_service_reprocess.dart';
+part 'chat/chat_service_needs_reprocess.dart';
 part 'chat/chat_service_chat_entry.dart';
 part 'chat/chat_service_group_entry.dart';
 part 'chat/chat_service_session_state.dart';
@@ -3187,7 +3188,6 @@ class ChatService extends ChangeNotifier {
   String get realismEvalStreamTextClean =>
       _stripThinkBlocks(_realismEvalStreamText);
   String get characterEmotion => _characterEmotion;
-
 
   String get emotionIntensity => _emotionIntensity;
 

@@ -480,13 +480,35 @@ class NeedsImpactEvaluator {
     return null;
   }
 
-  Future<bool> reprocessWithUserCritique(
+  /// Re-evaluate this scene's needs impact under a user critique and RETURN
+  /// the corrected deltas — the caller applies them.
+  ///
+  /// Returning instead of applying is load-bearing, not style: [onlyNeeds]
+  /// scopes a pass to the needs the user ticked, which means the corrected
+  /// deltas have to be MERGED over the message's existing ones before anything
+  /// touches the simulation. A method that applied its own result could only
+  /// ever replace the whole set.
+  ///
+  /// [onlyNeeds] empty = every need the model returns (the full-set pass).
+  /// Returns null when the model gave nothing usable; the caller then leaves
+  /// the message exactly as it found it.
+  Future<NeedsImpact?> reprocessWithUserCritique(
     String responseText,
     Map<String, int> oldDeltas,
-    String critique,
-  ) async {
+    String critique, {
+    Set<String> onlyNeeds = const <String>{},
+  }) async {
     // Use the injected evaluateNeedsImpactCall (now supports critique/oldDeltas for unified rich prompt + personality/stance/recent/full guidance + MUST + examples).
     final strength = getNeedsSimStrength();
+    // Name the scope in the prompt as well as filtering the reply: a model
+    // told to reconsider ONE need reasons about that need instead of re-rolling
+    // seven and having six of them thrown away.
+    if (onlyNeeds.isNotEmpty) {
+      critique =
+          '$critique\n\nScope: reconsider ONLY these needs — '
+          '${onlyNeeds.join(', ')}. Leave every other need out of your answer; '
+          'their existing values are correct and will be kept.';
+    }
 
     try {
       // No debugPrint here — the engine logs the same "Running manual
@@ -513,7 +535,7 @@ class NeedsImpactEvaluator {
         );
       }
 
-      if (text == null || text.trim().isEmpty) return false;
+      if (text == null || text.trim().isEmpty) return null;
 
       String effectiveText = text; // already stripped by evaluate path
 
@@ -546,12 +568,21 @@ class NeedsImpactEvaluator {
         }
       }
 
+      // Drop anything outside the requested scope. A model that ignores the
+      // scope line and answers with all seven keys must not be able to move a
+      // need the user did not tick — the prompt asks, this enforces.
+      if (onlyNeeds.isNotEmpty) {
+        deltas.removeWhere((k, _) => !onlyNeeds.contains(k));
+      }
+
       // C: if after strip/parse we got literally no delta keys at all, treat as failure (do not apply empty "correction")
       if (deltas.isEmpty) {
         debugPrint(
-          '[Realism:Needs] reprocess parsed no deltas; treating as failure',
+          '[Realism:Needs] reprocess parsed no deltas in scope '
+          '${onlyNeeds.isEmpty ? '(all needs)' : onlyNeeds.toList().toString()}'
+          '; treating as failure',
         );
-        return false;
+        return null;
       }
 
       for (final k in deltas.keys.toList()) {
@@ -595,7 +626,8 @@ class NeedsImpactEvaluator {
             : null,
       );
 
-      needsSimulation.applySceneImpact(impact);
+      // Deliberately NOT applied here — see the doc comment. The caller merges
+      // these over the message's existing deltas and applies once.
 
       // Store the metadata for the update
       final currentMeta =
@@ -607,10 +639,10 @@ class NeedsImpactEvaluator {
       };
       setPendingRealismMetadata?.call(currentMeta);
 
-      return true;
+      return impact;
     } catch (e) {
       debugPrint('[Realism:Needs] reprocessWithUserCritique error: $e');
-      return false;
+      return null;
     }
   }
 }

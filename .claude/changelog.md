@@ -9128,3 +9128,67 @@ rewriting a session's persona binding from global state is defensible (the
 binding means "the persona in use"), but it does mean switching personas while
 a chat is open can be re-stamped onto that chat by a pass the user never
 triggered. Worth a decision; deliberately left as-is.
+
+## 2026-08-04 — manual needs reprocess stacked deltas instead of replacing them
+
+**Files.** `lib/services/chat/chat_service_needs_reprocess.dart` (new — split out
+of `chat_service_reprocess.dart`), `lib/services/chat/chat_service_reprocess.dart`,
+`lib/services/chat/needs_impact_evaluator.dart`, `lib/services/chat_service.dart`
+(part directive), `lib/ui/dialogs/reprocess_needs_dialog.dart` (new — lifted out
+of `message_bubble.dart`), `lib/ui/chat_components/bubbles/message_bubble.dart`,
+`lib/ui/dialogs/dialogs.dart`, `lib/services/web/facade/chat_facade.dart`,
+`lib/services/web/routes/chat_routes.dart`,
+`web_ui/src/components/ReprocessNeedsModal.tsx`, `web_ui/src/pages/ChatPage.tsx`,
+`web_ui/src/styles.css`, `integration_test/needs_reprocess_test.dart` (new),
+`integration_test/support/fake_backend.dart`, `test/baselines/god_files.json`,
+`docs/design/e2e-coverage-map.md`, `docs/Rawhide.md`.
+
+**Report.** "Hygiene dropped -6 on the message. I told the reprocessor she should
+have gained energy from rest on the sofa, and hygiene dropped even more after the
+pass even though that had nothing to do with what I asked."
+
+**Cause — one field doing two jobs.** `realism_state['needs']['vector']` was both
+the baseline a reprocess rebuilt from AND the rewind target for swipe/regen. It
+was wrong twice: it is captured AFTER the turn's needs impact, so rebuilding from
+it re-applies the turn on top of itself; and each pass then overwrote it with the
+post-correction vector (deliberately — there is a comment saying so, to keep
+rewind honest). Either alone double-counts; together they compounded per pass.
+`revertNeedsReprocess` rebuilt from the same field and drifted identically.
+
+**Fix.** The baseline is now `needs_pre_turn_vector` — the pre-decay snapshot the
+realism dance already stamps per speaker, and the same one `needs_deltas` is
+measured against. Rebuilding from it and re-applying the message's own deltas
+reproduces the current state exactly, which is what makes N passes land where one
+does. Copied into `needs_pre_impact` on first use and never rewritten, so legacy
+messages without the dance stamp stabilise after one pass too. realism_state
+keeps its rewind role, untouched.
+
+**Feature (maintainer-designed).** Per-need scope. A full-set pass makes the model
+re-emit all seven needs against the same scene text, so correcting energy silently
+re-rolled hunger, hygiene and comfort. `manualReprocessNeeds` takes `onlyNeeds`;
+unticked needs keep the deltas they had. The scope is BOTH prompted and enforced
+(the parse drops out-of-scope keys, so a model that ignores the instruction still
+cannot move an untouched need). `reprocessWithUserCritique` now RETURNS the
+correction instead of applying it — the caller merges over the existing deltas and
+applies once, which is what makes scoping possible at all. Shipped on desktop
+(FilterChips) and web (`need-chip` buttons); the route parses `needs` defensively
+so an older PWA that omits it keeps all-needs behaviour.
+
+**Two extractions, forced by the god-file ratchet and worth it anyway.**
+`chat_service_reprocess.dart` (949 → would have been 1033) split at the seam its
+own doc comment described: the two needs flows moved to
+`chat_service_needs_reprocess.dart` (421), leaving the regenerate flows at 647.
+`message_bubble.dart` (1866 baseline → would have been 1931) gave up the reprocess
+dialog to `lib/ui/dialogs/reprocess_needs_dialog.dart` (196) and is now 1775 —
+baseline entry lowered to match, per ratchet rule 3. chat_service.dart gained a
+part directive and gave back a stray double blank line, so it stays exactly at
+4631.
+
+**The E2E found a second bug before it was written down.** First run of
+`needs_reprocess_test` failed `hunger: expected -8, actual -16` — an exact double
+— which is what proved realism_state's vector is post-impact rather than pre-.
+The first baseline attempt would have shipped still-broken without it.
+
+**Verification.** analyze clean on lib/ + integration_test/; web `npm run lint` +
+34 vitest tests green; `npm run build` run (the PWA bundle is what ships);
+god-file ratchet green; full local Linux E2E leg re-run.

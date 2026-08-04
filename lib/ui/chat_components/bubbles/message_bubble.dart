@@ -22,11 +22,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/models/models.dart';
-import 'package:front_porch_ai/services/chat/realism_verification.dart';
+import 'package:front_porch_ai/services/chat/chat.dart';
 import 'package:front_porch_ai/services/services.dart';
-import 'package:front_porch_ai/ui/dialogs/message_edit_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/dialogs.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 import '../widgets/inline_chat_image.dart';
 import 'styled_chat_message.dart';
@@ -1635,7 +1634,7 @@ class _MessageBubbleState extends State<MessageBubble> {
                 child: Material(
                   color: Colors.transparent,
                   child: InkWell(
-                    onTap: () => _showReprocessNeedsDialog(context, index),
+                    onTap: () => showReprocessNeedsDialog(context, index),
                     borderRadius: BorderRadius.circular(16),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -1758,96 +1757,6 @@ class _MessageBubbleState extends State<MessageBubble> {
               ),
             ],
           ],
-        ],
-      ),
-    );
-  }
-
-  void _showReprocessNeedsDialog(BuildContext context, int index) {
-    final chatService = Provider.of<ChatService>(context, listen: false);
-    final controller = TextEditingController();
-    // Capture for snack after dialog pop (A: user feedback on success/fail)
-    final messenger = ScaffoldMessenger.of(context);
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppColors.surfaceOf(context),
-        title: const Text('Reprocess Needs Deltas'),
-        content: SizedBox(
-          width: 500,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Enter your critique to correct the Needs Simulation deltas. The Realism Director will re-evaluate the scene based on this input.',
-                style: TextStyle(color: Colors.white70, fontSize: 13),
-              ),
-              const SizedBox(height: 12),
-              AppTextField(
-                controller: controller,
-                maxLines: 5,
-                minLines: 2,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText:
-                      'e.g., The character ate a granola bar and an energy drink. Hunger and energy should improve.',
-                  hintStyle: const TextStyle(color: Colors.white38),
-                  filled: true,
-                  fillColor: const Color(0xFF374151),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(
-              'Cancel',
-              style: TextStyle(color: AppColors.textTertiary(context)),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.resolve(
-                context,
-                Colors.teal,
-                const Color(0xFF0D9488),
-              ),
-            ),
-            onPressed: () async {
-              final text = controller.text.trim();
-              Navigator.of(context).pop();
-              if (text.isNotEmpty) {
-                bool success = false;
-                try {
-                  success = await chatService.manualReprocessNeeds(index, text);
-                } catch (e) {
-                  debugPrint('[Realism:Needs] reprocess error: $e');
-                }
-                if (mounted) {
-                  messenger.showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        success
-                            ? 'Needs deltas reprocessed with your critique.'
-                            : 'Reprocess received no response from the model. Original deltas preserved.',
-                      ),
-                      duration: const Duration(seconds: 3),
-                    ),
-                  );
-                }
-              }
-            },
-            child: const Text(
-              'Reprocess',
-              style: TextStyle(color: Colors.white),
-            ),
-          ),
         ],
       ),
     );

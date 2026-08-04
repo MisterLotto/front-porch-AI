@@ -21,6 +21,7 @@ by CI automatically.
 | 1:1 chat send → stream → bubble | `app_smoke` | request assembled, reply streams |
 | Realism evals (bond/trust/emotion/posture) | `app_smoke` | chip metadata deltas land |
 | Needs impact + chips | `app_smoke` | needs deltas as metadata |
+| Manual needs reprocess: scope + idempotence | `needs_reprocess` | ticked need moves, other six hold; two identical passes agree |
 | Chaos pressure / Chance Time wheel | `app_smoke` + driver | wheel spun like a user |
 | Objectives (proposal + task gen) | `app_smoke` | proposal accepted, tasks exist |
 | Journal pass + sidebar + Our Story dialog | `app_smoke` | memory op renders, tab resolves |

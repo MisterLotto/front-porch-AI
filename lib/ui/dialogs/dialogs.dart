@@ -30,6 +30,7 @@ export 'lorebook_entry_dialog.dart';
 export 'message_edit_dialog.dart';
 export 'model_settings_dialog.dart';
 export 'persona_picker_dialog.dart';
+export 'reprocess_needs_dialog.dart';
 export 'piper_import_voice_button.dart';
 export 'rocm_guidance_dialog.dart';
 export 'scene_guest_detected_dialog.dart';

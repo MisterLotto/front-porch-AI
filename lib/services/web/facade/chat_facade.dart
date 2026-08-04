@@ -433,8 +433,19 @@ class ChatFacade {
   /// outcome; the new deltas + a pre-reprocess stash land in the message's
   /// metadata, which the next state fetch surfaces as chips. Reuses the existing
   /// ChatService flow — no parallel logic.
-  Future<bool> reprocessNeeds(int index, String critique) async {
-    final ok = await _chat.manualReprocessNeeds(index, critique);
+  /// [onlyNeeds] scopes the pass to those needs; empty re-evaluates all of
+  /// them. Additive on the wire — an older PWA that omits it keeps the
+  /// all-needs behaviour it has always had.
+  Future<bool> reprocessNeeds(
+    int index,
+    String critique, {
+    Set<String> onlyNeeds = const <String>{},
+  }) async {
+    final ok = await _chat.manualReprocessNeeds(
+      index,
+      critique,
+      onlyNeeds: onlyNeeds,
+    );
     _notify();
     return ok;
   }
