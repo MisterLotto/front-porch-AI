@@ -146,6 +146,60 @@ class ChatDriver {
     return result.path.any((entry) => identical(entry.target, target));
   }
 
+  /// Tap [targets] in order, repeating the WHOLE sequence until [done] — the
+  /// generic delivery-confirmed tap.
+  ///
+  /// A single `tester.tap` is a coin flip anywhere the target sits in a
+  /// scrollable, a dialog, or a panel that rebuilds: it can land on a
+  /// barrier, on a clipped region, or on the widget's old position. With
+  /// `warnIfMissed: false` (needed everywhere else) that failure is SILENT,
+  /// and the suite dies minutes later at a wait naming a symptom rather than
+  /// the missed tap.
+  ///
+  /// [targets] is a LIST because the retry unit is often more than one tap:
+  /// ticking a checkbox and then pressing the button it enables only works
+  /// as a pair, and retrying just the button would hammer a still-disabled
+  /// control forever. Every finder must be UNWRAPPED — `.first`/`.last`
+  /// throw on an empty tree instead of reporting empty.
+  Future<void> tapUntilTrue(
+    List<Finder> targets,
+    bool Function() done,
+    String Function() describe, {
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    for (var attempt = 0; attempt < 8 && !done(); attempt++) {
+      await spinChanceTimeIfAsked();
+      for (final target in targets) {
+        if (target.evaluate().isEmpty) continue;
+        try {
+          await tester.ensureVisible(target.first);
+        } on StateError {
+          // Not inside a scrollable — nothing to scroll, tap where it is.
+        }
+        await tester.pump(const Duration(milliseconds: 200));
+        if (target.evaluate().isEmpty) continue;
+        await tester.tap(target.first, warnIfMissed: false);
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+      for (var i = 0; i < 6 && !done(); i++) {
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+    }
+    await waitFor(done, describe, timeout: timeout);
+  }
+
+  /// [tapUntilTrue] where the confirmation is simply a widget appearing.
+  Future<void> tapUntil(
+    List<Finder> targets,
+    Finder confirmation, {
+    Duration timeout = const Duration(seconds: 30),
+  }) => tapUntilTrue(
+    targets,
+    () => confirmation.evaluate().isNotEmpty,
+    () => '$confirmation to appear after tapping $targets',
+    timeout: timeout,
+  );
+
   /// Delivery-confirmed send. One tap is not enough: guards can flip in the
   /// gap between the sendable check and the tap, and the app deliberately
   /// swallows such sends (text preserved for retry). The live binding's fake

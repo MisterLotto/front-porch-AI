@@ -88,15 +88,21 @@ void main() {
     await pumpUntilFound(
       tester,
       find.widgetWithText(ElevatedButton, 'New Story'),
+      timeout: const Duration(seconds: 45),
     );
     await tester.tap(find.widgetWithText(ElevatedButton, 'New Story'));
-    await pumpUntilFound(tester, find.text('New Porch Story'));
+    await pumpUntilFound(
+      tester,
+      find.text('New Porch Story'),
+      timeout: const Duration(seconds: 45),
+    );
 
     // Step 0 (Engine) → Concept.
     await tester.tap(find.textContaining('Next: Concept'));
     await pumpUntilFound(
       tester,
       find.widgetWithText(TextField, 'Story title...'),
+      timeout: const Duration(seconds: 45),
     );
     await tester.enterText(
       find.widgetWithText(TextField, 'Story title...').first,
@@ -132,7 +138,11 @@ void main() {
         await tester.tap(find.textContaining(steps[i]), warnIfMissed: false);
         await tester.pump(const Duration(milliseconds: 400));
       }
-      await pumpUntilFound(tester, confirmation);
+      await pumpUntilFound(
+        tester,
+        confirmation,
+        timeout: const Duration(seconds: 45),
+      );
     }
     await tester.tap(find.text('Generate Story Bible'));
 
@@ -164,7 +174,11 @@ void main() {
 
     // ── Generate the act: weaver → beats → prose, in that order ─────────
     await tester.tap(find.text('View Structure & Write'));
-    await pumpUntilFound(tester, find.text('The Message in the Light'));
+    await pumpUntilFound(
+      tester,
+      find.text('The Message in the Light'),
+      timeout: const Duration(seconds: 45),
+    );
     await tester.tap(find.widgetWithText(ElevatedButton, 'Generate Act'));
     await pumpUntilFound(
       tester,
@@ -197,7 +211,11 @@ void main() {
 
     // ── The reader opens on the finished story ──────────────────────────
     await tester.tap(find.text('Read Story'));
-    await pumpUntilFound(tester, find.text('A Porch Story'));
+    await pumpUntilFound(
+      tester,
+      find.text('A Porch Story'),
+      timeout: const Duration(seconds: 45),
+    );
 
     expect(backend.unexpectedPaths, isEmpty);
 

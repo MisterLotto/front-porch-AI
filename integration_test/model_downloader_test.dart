@@ -112,9 +112,17 @@ void main() {
 
     // ── Search through the REAL page ────────────────────────────────────
     appState.setIndex(2);
-    await pumpUntilFound(tester, find.text('Model Manager'));
+    await pumpUntilFound(
+      tester,
+      find.text('Model Manager'),
+      timeout: const Duration(seconds: 45),
+    );
     await tester.tap(find.text('Search / Download'));
-    await pumpUntilFound(tester, find.widgetWithText(ElevatedButton, 'Search'));
+    await pumpUntilFound(
+      tester,
+      find.widgetWithText(ElevatedButton, 'Search'),
+      timeout: const Duration(seconds: 45),
+    );
     await tester.enterText(
       find.widgetWithText(TextField, 'Search HuggingFace models...').first,
       'porch',

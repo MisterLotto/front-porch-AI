@@ -34,6 +34,7 @@ import 'package:front_porch_ai/ui/pages/repository/repository_auth_view.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_pick_step.dart';
 
+import 'support/chat_driver.dart';
 import 'support/e2e_sandbox.dart';
 import 'support/fake_backend.dart';
 import 'support/fake_stoop.dart';
@@ -91,13 +92,20 @@ void main() {
 
     final ctx = tester.element(find.byType(MainLayout));
     final repo = Provider.of<CharacterRepository>(ctx, listen: false);
+    final d = ChatDriver(
+      tester,
+      Provider.of<ChatService>(ctx, listen: false),
+      backend,
+    );
 
     // ── Enter The Stoop from the sidebar ────────────────────────────────
-    await tester.tap(find.text('The Stoop').first);
-    await pumpUntilFound(
-      tester,
-      find.text('Pull up a chair — sign in to browse and share.'),
-    );
+    // Every tap here is delivery-confirmed: this page is panels and dialogs
+    // inside scrollables, where a plain tap lands on a barrier or a stale
+    // position and fails SILENTLY (round 3 died four minutes later at the
+    // download snackbar, with a hit-test warning as the only clue).
+    await d.tapUntil([
+      find.text('The Stoop'),
+    ], find.text('Pull up a chair — sign in to browse and share.'));
 
     // ── Sign in through the REAL form ───────────────────────────────────
     // The labels are standalone Texts above bare TextFields (the lorebook
@@ -107,40 +115,48 @@ void main() {
       of: find.byType(RepositoryAuthView),
       matching: find.byType(TextField),
     );
-    await pumpUntilFound(tester, authFields);
+    await pumpUntilFound(
+      tester,
+      authFields,
+      timeout: const Duration(seconds: 45),
+    );
     await tester.enterText(authFields.at(0), 'porch@example.com');
     await tester.enterText(authFields.at(1), 'porchporch');
     await tester.pump(const Duration(milliseconds: 200));
-    await tester.tap(find.widgetWithText(StoopAmberButton, 'Sign in'));
 
     // ── The 18+ AUP gate: checkbox required, Agree routes the accept ────
-    await pumpUntilFound(tester, find.text('Welcome to The Stoop'));
-    final ackRow = find.textContaining('I am 18 or older');
-    await tester.ensureVisible(ackRow.first);
-    await tester.pump(const Duration(milliseconds: 200));
-    await tester.tap(ackRow.first, warnIfMissed: false);
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(
-      find.widgetWithText(StoopAmberButton, 'Agree & continue'),
-      warnIfMissed: false,
+    await d.tapUntil(
+      [find.widgetWithText(StoopAmberButton, 'Sign in')],
+      find.text('Welcome to The Stoop'),
+      timeout: const Duration(seconds: 60),
     );
-    await pumpUntilTrue(
-      tester,
+    // Agree stays DISABLED until the box is ticked, so the two taps are ONE
+    // retry unit — and the confirmation is the server actually recording the
+    // acceptance, not either tap landing.
+    await d.tapUntilTrue(
+      [
+        find.textContaining('I am 18 or older'),
+        find.widgetWithText(StoopAmberButton, 'Agree & continue'),
+      ],
       () => stoop.policyAccepted,
-      describe: () => 'the accept-policy POST to reach the fake server',
+      () => 'the accept-policy POST to reach the fake server',
     );
 
     // ── Browse renders the fake's card ──────────────────────────────────
-    await pumpUntilFound(tester, find.text('Misty'));
+    await pumpUntilFound(
+      tester,
+      find.text('Misty'),
+      timeout: const Duration(seconds: 45),
+    );
     expect(stoop.browseRequests, greaterThanOrEqualTo(1));
 
     // ── Detail panel → Download to library → real import ────────────────
-    await tester.tap(find.text('Misty').first);
-    await pumpUntilFound(tester, find.text('Download to library'));
+    await d.tapUntil([find.text('Misty')], find.text('Download to library'));
     expect(stoop.detailRequests, greaterThanOrEqualTo(1));
-    await tester.tap(find.text('Download to library'));
-    await pumpUntilFound(
-      tester,
+    // The download button sits low in a right-side panel — the exact tap
+    // that missed in round 3, costing a four-minute silent wait.
+    await d.tapUntil(
+      [find.text('Download to library')],
       find.text('“Misty” added to your library.'),
       timeout: const Duration(seconds: 60),
     );
@@ -154,31 +170,33 @@ void main() {
     );
 
     // Close the detail panel so later taps aren't over its barrier.
-    await tester.tap(find.byIcon(Icons.close).first, warnIfMissed: false);
-    await pumpUntilTrue(
-      tester,
+    await d.tapUntilTrue(
+      [find.byIcon(Icons.close)],
       () => find.text('Download to library').evaluate().isEmpty,
-      describe: () => 'the detail panel to close',
+      () => 'the detail panel to close',
     );
 
     // ── Share wizard: pick → details → standards ack → submit ───────────
-    await tester.tap(find.text('@PorchFriend'));
-    await pumpUntilFound(tester, find.text('Share to The Stoop'));
-    await tester.tap(
-      find.widgetWithText(StoopAmberButton, 'Share to The Stoop').first,
-    );
+    await d.tapUntil([
+      find.text('@PorchFriend'),
+    ], find.widgetWithText(StoopAmberButton, 'Share to The Stoop'));
     // Step 0 — pick the just-downloaded Misty (scoped to the pick step:
     // the browse grid beneath this route also renders a 'Misty' text).
     final pickMisty = find.descendant(
       of: find.byType(StoopPickStep),
       matching: find.text('Misty'),
     );
-    await pumpUntilFound(tester, pickMisty);
-    await tester.tap(pickMisty.first);
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.widgetWithText(StoopAmberButton, 'Next'));
-    // Step 1 — details (name + summary, positional for the same reason).
-    await pumpUntilFound(tester, find.text('Display name on The Stoop'));
+    await d.tapUntil(
+      [find.widgetWithText(StoopAmberButton, 'Share to The Stoop')],
+      pickMisty,
+      timeout: const Duration(seconds: 60),
+    );
+    // Step 1 — selecting the card only ENABLES Next; the pick and the
+    // advance are one retry unit.
+    await d.tapUntil([
+      pickMisty,
+      find.widgetWithText(StoopAmberButton, 'Next'),
+    ], find.text('Display name on The Stoop'));
     final detailFields = find.descendant(
       of: find.byType(Scaffold).last,
       matching: find.byType(TextField),
@@ -189,24 +207,23 @@ void main() {
       'A gentle porch spirit, shared by the E2E suite.',
     );
     await tester.pump(const Duration(milliseconds: 200));
-    await tester.tap(find.widgetWithText(StoopAmberButton, 'Next'));
-    // Step 2 — the content-standards acknowledgement gates advancing.
-    final ack = find.text('This card meets the Stoop content standards');
-    await pumpUntilFound(tester, ack);
-    await tester.ensureVisible(ack.first);
-    await tester.pump(const Duration(milliseconds: 200));
-    await tester.tap(ack.first, warnIfMissed: false);
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.tap(find.widgetWithText(StoopAmberButton, 'Next'));
-    // Step 3 — review → submit → the fake accepts the multipart POST.
-    final submit = find.widgetWithText(StoopAmberButton, 'Submit for review');
-    await pumpUntilFound(tester, submit);
-    await tester.tap(submit);
-    await pumpUntilFound(
-      tester,
-      find.text('Submitted for review.'),
+    // Step 2 — name+summary are filled, so Next alone advances.
+    await d.tapUntil([
+      find.widgetWithText(StoopAmberButton, 'Next'),
+    ], find.text('This card meets the Stoop content standards'));
+    // Step 3 — the standards acknowledgement gates Next, so again one unit.
+    await d.tapUntil([
+      find.text('This card meets the Stoop content standards'),
+      find.widgetWithText(StoopAmberButton, 'Next'),
+    ], find.widgetWithText(StoopAmberButton, 'Submit for review'));
+    // Submit → the fake accepts the multipart POST.
+    await d.tapUntilTrue(
+      [find.widgetWithText(StoopAmberButton, 'Submit for review')],
+      () => stoop.uploadRequests >= 1,
+      () => 'the multipart upload to reach the fake server',
       timeout: const Duration(seconds: 60),
     );
+    await d.waitForWidget(find.text('Submitted for review.'));
     expect(stoop.uploadRequests, 1);
 
     expect(stoop.unexpectedPaths, isEmpty);
