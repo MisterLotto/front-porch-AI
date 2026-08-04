@@ -192,18 +192,50 @@ void main() {
     );
     await d.waitSendable();
 
+    /// Reveal [msg]'s bubble, tap the control [control] resolves inside it,
+    /// and require [confirmation] to appear — retrying the WHOLE
+    /// reveal→tap loop until it does. One reveal + one tap is not enough:
+    /// a background rebuild can re-virtualize the just-revealed bubble in
+    /// the gap between ensureVisible and the tap (the macOS round-2
+    /// failure), so delivery is confirmed the same way the driver
+    /// confirms sends.
+    Future<void> tapBubbleControl(
+      ChatMessage msg,
+      Finder Function(Finder bubble) control,
+      Finder confirmation,
+    ) async {
+      for (
+        var attempt = 0;
+        attempt < 6 && confirmation.evaluate().isEmpty;
+        attempt++
+      ) {
+        final bubble = await revealBubbleFor(msg);
+        final btn = control(bubble);
+        if (btn.evaluate().isEmpty) {
+          await tester.pump(const Duration(milliseconds: 250));
+          continue;
+        }
+        try {
+          await tester.ensureVisible(btn.first);
+        } on StateError {
+          continue; // re-virtualized mid-flight — reveal again
+        }
+        await tester.pump(const Duration(milliseconds: 200));
+        if (btn.evaluate().isEmpty) continue;
+        await tester.tap(btn.first, warnIfMissed: false);
+        for (var i = 0; i < 6 && confirmation.evaluate().isEmpty; i++) {
+          await tester.pump(const Duration(milliseconds: 250));
+        }
+      }
+      await d.waitForWidget(confirmation, timeout: const Duration(seconds: 15));
+    }
+
     // ── EDIT: greeting text changes through the dialog and sticks ───────
-    final greetingBubble = await revealBubbleFor(chatService.messages.first);
-    final editBtn = find.descendant(
-      of: greetingBubble,
-      matching: find.byTooltip('Edit message'),
-    );
-    await tester.ensureVisible(editBtn);
-    await tester.pump(const Duration(milliseconds: 200));
-    await tester.tap(editBtn);
-    await d.waitForWidget(
+    await tapBubbleControl(
+      chatService.messages.first,
+      (bubble) =>
+          find.descendant(of: bubble, matching: find.byTooltip('Edit message')),
       find.text('Save'),
-      timeout: const Duration(seconds: 15),
     );
 
     final dialogField = find.descendant(
@@ -283,17 +315,13 @@ void main() {
     );
     final countBeforeDelete = chatService.messages.length;
 
-    final targetBubble = await revealBubbleFor(target);
-    final deleteBtn = find.descendant(
-      of: targetBubble,
-      matching: find.byIcon(Icons.delete_outline),
-    );
-    await tester.ensureVisible(deleteBtn.first);
-    await tester.pump(const Duration(milliseconds: 200));
-    await tester.tap(deleteBtn.first);
-    await d.waitForWidget(
+    await tapBubbleControl(
+      target,
+      (bubble) => find.descendant(
+        of: bubble,
+        matching: find.byIcon(Icons.delete_outline),
+      ),
       find.text('Delete Message'),
-      timeout: const Duration(seconds: 15),
     );
     await tester.tap(find.text('Delete'));
     await d.waitFor(
@@ -308,10 +336,14 @@ void main() {
       isFalse,
       reason: 'the deleted message instance must leave the list',
     );
-    expect(
-      find.byKey(GlobalObjectKey(target)),
-      findsNothing,
-      reason: 'the deleted message\'s bubble must leave the tree',
+    // The bubble leaves the TREE one frame after it leaves the list — the
+    // round-2 Linux red asserted findsNothing in the same instant the list
+    // updated and caught the not-yet-rebuilt frame. Bounded wait: if the
+    // bubble genuinely lingers, this still fails — as it should.
+    await d.waitFor(
+      () => find.byKey(GlobalObjectKey(target)).evaluate().isEmpty,
+      () => 'the deleted message\'s bubble to leave the tree',
+      timeout: const Duration(seconds: 10),
     );
 
     // The refund contract (unit-pinned arithmetic; this asserts the JOURNEY

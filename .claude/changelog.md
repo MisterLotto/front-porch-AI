@@ -8874,3 +8874,17 @@ group_smoke. Two new-suite defects, both caught by CI exactly as designed:
    since an arbitrary earlier moment".
 
 **Verification.** analyze clean; formatted; pushed for CI round 2.
+
+## 2026-08-04 — CI round 2 → round 3: message_actions delivery-confirmed taps
+
+**Round 2 (6159e5e) verdict:** Linux 8/9 green — story_time fix HELD,
+settings/web/theme/groups all green. message_actions still red, differently
+per OS again: macOS tap raced a background rebuild that re-virtualized the
+just-revealed bubble between ensureVisible and tap; Linux asserted the
+deleted bubble out of the TREE in the same instant it left the LIST (the
+rebuild frame hadn't run). Fix: ONE `tapBubbleControl(msg, control,
+confirmation)` helper — reveal→tap retried until the confirmation UI
+actually appears (the driver's delivery-confirmed send pattern) — used by
+both edit and delete; and the tree assert became a bounded waitFor (a
+genuinely lingering bubble still fails). Files:
+`integration_test/message_actions_test.dart`. analyze clean; round 3 pushed.
