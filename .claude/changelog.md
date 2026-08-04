@@ -8888,3 +8888,24 @@ actually appears (the driver's delivery-confirmed send pattern) — used by
 both edit and delete; and the tree assert became a bounded waitFor (a
 genuinely lingering bubble still fails). Files:
 `integration_test/message_actions_test.dart`. analyze clean; round 3 pushed.
+
+## 2026-08-04 — REAL APP BUG from the E2E net: StyledTextController use-after-dispose
+
+**Files.** `lib/ui/widgets/styled_text_controller.dart`.
+
+**Round 3 verdict:** Linux E2E leg FULLY GREEN (all 9 files) — first time.
+macOS red on message_actions with a genuine APP defect, not a test defect:
+`_runSpellCheck` is async; dispose() cancelled the debounce timer but an
+already-in-flight fetch resumed after its await and called notifyListeners()
+on the disposed controller. The bare catch swallowed the first disposed
+assert, then threw from its OWN notifyListeners. The finally could even
+re-arm the debounce timer post-dispose. Any user typing in the message edit
+dialog (or any StyledTextController surface) and closing it before the
+spell fetch returns hits this; the E2E just types faster than a human.
+
+**Fix (app, not test):** `_disposed` flag set in dispose(); every async
+resume point (post-await, catch, finally re-arm, _trySpellCheck) bails when
+set. No test was weakened — message_actions is unchanged in this commit and
+remains the regression guard on all three OSes.
+
+**Verification.** analyze clean; test/ui/widgets suite green.

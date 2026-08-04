@@ -83,6 +83,13 @@ class StyledTextController extends TextEditingController
   bool _spellCheckInFlight = false;
   bool _ignoreTextChange = false;
 
+  /// dispose() cancels the debounce timer, but an ALREADY-IN-FLIGHT async
+  /// spell check resumes after its await and used to notifyListeners() on
+  /// the dead controller — "used after being disposed", surfaced by the
+  /// message-actions E2E typing into the edit dialog and saving before the
+  /// fetch returned. Every async resume point checks this flag.
+  bool _disposed = false;
+
   void applySpellResults(String checkedText, List<SuggestionSpan> spans) {
     _lastCheckedText = checkedText;
     _misspelledRanges
@@ -120,13 +127,13 @@ class StyledTextController extends TextEditingController
   }
 
   void _trySpellCheck() {
-    if (!_spellCheckInFlight) {
+    if (!_spellCheckInFlight && !_disposed) {
       _runSpellCheck();
     }
   }
 
   Future<void> _runSpellCheck() async {
-    if (_spellCheckInFlight) return;
+    if (_spellCheckInFlight || _disposed) return;
     _spellCheckInFlight = true;
     final text = this.text;
     _ignoreTextChange = true;
@@ -139,6 +146,7 @@ class StyledTextController extends TextEditingController
       final locale = PlatformDispatcher.instance.locale;
       final results =
           await _spellService.fetchSpellCheckSuggestions(locale, text);
+      if (_disposed) return; // resumed after dispose — never touch state
       if (text != this.text) return;
       if (results != null && results.isNotEmpty) {
         applySpellResults(text, results);
@@ -148,12 +156,13 @@ class StyledTextController extends TextEditingController
       notifyListeners();
     } catch (e) {
       debugPrint('Spell check error: $e');
+      if (_disposed) return; // the error may BE the disposed assert
       clearSpellResults();
       notifyListeners();
     } finally {
       _ignoreTextChange = false;
       _spellCheckInFlight = false;
-      if (text != this.text) {
+      if (!_disposed && text != this.text) {
         _spellDebounce?.cancel();
         _spellDebounce = Timer(
           const Duration(milliseconds: 300),
@@ -295,6 +304,7 @@ class StyledTextController extends TextEditingController
 
   @override
   void dispose() {
+    _disposed = true;
     _spellDebounce?.cancel();
     super.dispose();
   }
