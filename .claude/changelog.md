@@ -9249,3 +9249,26 @@ green; bundle rebuilt. New `persona_default_test` NEGATIVE-CHECKED: with
 `setActivePersona` temporarily restored to also move the default (the old merged
 behaviour) the suite fails; with the split it passes. Full local Linux E2E leg
 re-run. No god-file baseline moved (user_persona_page stayed exactly at 1477).
+
+## 2026-08-04 — CLAUDE.md: prove every new guard can fail
+
+**Files.** `CLAUDE.md` (Testing Expectations).
+
+**Maintainer directive.** "That is the exact correct way to check the tests,
+force them to fail to see if they even pay their dues" — plus the earlier
+clarification that tests MAY be changed when the underlying code makes them
+provably wrong, but never without maintainer input and a written rationale.
+
+**Added two rules.** (1) Every new guard must be negative-checked: break the
+thing it guards, confirm red, restore, confirm green, report both. A test that
+cannot be made to fail is decoration and the maintainer decides whether to keep
+it. Precedents recorded: persona_default_test (negative-checked by restoring the
+merged persona value) and needs_reprocess_test (failed FIRST run on an exact
+delta double, which is how a second baseline bug was caught pre-ship). Names the
+anti-pattern too — needs_impact_evaluator_test.dart's own comment says the
+reprocess ORCHESTRATION was "verified via source review", and that is precisely
+where the reported bug lived, green throughout. (2) Changing an existing test
+needs maintainer input + rationale (which behaviour changed, why the old
+assertion is now false rather than inconvenient, what replaces it) — and if the
+honest answer is "my change broke a correct test", fix the change instead, as in
+99859c8.

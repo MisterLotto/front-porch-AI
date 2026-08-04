@@ -617,6 +617,35 @@ and `database.dart` has no barrel anyway).
   (512e4803) shipped with pixel-identical goldens and a fully green suite because
   nothing in CI had ever pressed a button. Prefer a few BROAD hit-test sweeps over a
   guard per widget.
+- **Every new guard must be proven to fail (mandatory).** A test that has only ever
+  been green is not evidence of anything — it may be asserting something that
+  cannot break, or asserting it in a place the bug does not reach. After a new
+  test passes, BREAK the thing it guards (revert the fix, restore the old
+  behaviour, flip the constant), confirm it goes red, then put the code back and
+  confirm it goes green again. Report both results. If you cannot make it fail,
+  say so plainly — that guard is decoration, and the maintainer decides whether it
+  is worth keeping.
+  Two precedents from one day (2026-08-04): `persona_default_test` was
+  negative-checked by temporarily restoring the merged persona value, and only
+  then was it known to catch anything; `needs_reprocess_test` failed on its FIRST
+  run with `hunger: expected -8, actual -16` — an exact double — which is how a
+  second, deeper baseline bug was found before shipping. A test that goes red
+  before it goes green has already paid for itself.
+  The anti-pattern to watch for is a suite that admits its own gap in a comment.
+  `needs_impact_evaluator_test.dart` carried "God-level orchestration
+  (manualReprocessNeeds/revert, …) verified via source review" — and the needs
+  reprocess bug lived in exactly that orchestration, stayed green through every
+  run, and had to be reported by a user. "Verified via source review" means "no
+  guard"; write the guard or write down that there isn't one.
+- **Changing an existing test needs the maintainer's input and a written
+  rationale** (maintainer directive, 2026-08-04). A test whose subject genuinely
+  changed may be provably wrong and SHOULD then be updated — the rule is not
+  "never touch tests", it is "never quietly touch tests". Bring: which behaviour
+  changed, why the old assertion is now false rather than merely inconvenient, and
+  what the replacement asserts. If the honest answer is "my change broke it and
+  the test was right", fix the change instead — that is what happened when
+  `reprocessWithUserCritique`'s return type was altered for convenience and took
+  eight correct tests down with it (99859c8).
 - **Do not edit a test to make CI green.** `.github/workflows/test-integrity.yml` runs
   on `pull_request_target` (from the base branch, so a PR cannot weaken it) and FAILS
   any PR that modifies or deletes an existing test, golden, baseline,
