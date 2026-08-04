@@ -176,6 +176,29 @@ void main() {
     final sessionId = chatService.currentSessionId;
     expect(sessionId, isNotNull);
 
+    // Let the turn's BACKGROUND work finish before touching the persona.
+    // waitSendable() only covers the settling window; the journal maintenance
+    // pass and the objective-completion check outlive it, and both end in a
+    // _saveChat — which stamps whatever persona is active RIGHT THEN onto the
+    // session row (chat_service_session_state.dart). Flip first and one of
+    // those saves writes the DEFAULT persona over the session's binding, so
+    // the reload below faithfully restores the wrong persona. That is a real
+    // ordering race, not a slow runner: Linux happened to load before the
+    // journal pass landed and Windows after it, so the same commit was green
+    // on one and red on the other.
+    await d.waitFor(
+      () =>
+          backend.journalPassRequests >= 1 &&
+          !chatService.isSummaryGenerating &&
+          !chatService.isCheckingCompletion,
+      () =>
+          'the turn\'s background passes to finish before the persona flip '
+          '(journal=${backend.journalPassRequests} '
+          'running=${chatService.isSummaryGenerating} '
+          'objectiveCheck=${chatService.isCheckingCompletion})',
+      timeout: const Duration(seconds: 90),
+    );
+
     // Flip the active persona away, then reload the session: loading must
     // RE-activate the persona the session was chatted under — that is what
     // makes "chat as persona" stick across leaving and reopening a chat.

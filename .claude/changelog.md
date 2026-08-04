@@ -9090,3 +9090,41 @@ up in the coverage map so the next person doesn't re-derive it.
 **Verification.** `flutter analyze` clean on all changed files; full local Linux
 leg (one invocation per file) re-run after the streaming change, since it alters
 token timing for every suite.
+
+## 2026-08-04 — persona_folder: a background journal save was overwriting the session's persona binding
+
+**Files.** `integration_test/persona_folder_test.dart`.
+
+**Symptom.** CI round 10 (`c8c104b`): 9/10 jobs green, macOS + Linux E2E fully
+green — Windows red on `persona_folder_test.dart:185`,
+"waiting for: loading the session to re-activate its persona (active: User)".
+A suite that had been green on Windows the round before.
+
+**Cause — an ordering race, not a slow runner.** Every `_saveChat` stamps the
+CURRENTLY-ACTIVE persona onto the session row
+(`chat_service_session_state.dart:321`), and the journal maintenance pass ends
+in `onSaveChat`. The test flips the active persona away and then reloads the
+session to prove the reload re-activates the session's own persona. If the
+journal pass lands inside that window it writes the DEFAULT persona over the
+binding first, so the reload faithfully restores the wrong one. The logs show
+the two orderings directly: Linux `loadSession` … `[Journal] ✓`, Windows
+`[Journal] ✓` … `loadSession`. `waitSendable()` does not cover this — the
+journal pass and the objective-completion check both outlive the settling
+window.
+
+**Why now.** Making the fake actually stream (previous entry) changed when a
+turn's background work lands relative to the test's next step. The race was
+always there; the old non-streaming fake just happened to lose it on every OS.
+
+**Fix.** Wait for the turn's background passes to finish BEFORE the flip —
+`journalPassRequests >= 1 && !isSummaryGenerating && !isCheckingCompletion`.
+No assertion changed or weakened; this is the same "settle before you capture
+state" rule the coverage map already mandates for `waitSendable`. Verified
+locally in the ordering that used to fail: the journal pass now completes
+before `loadSession` and the suite is green.
+
+**Flagged for the maintainer, NOT changed:** a background maintenance pass
+rewriting a session's persona binding from global state is defensible (the
+binding means "the persona in use"), but it does mean switching personas while
+a chat is open can be re-stamped onto that chat by a pass the user never
+triggered. Worth a decision; deliberately left as-is.
