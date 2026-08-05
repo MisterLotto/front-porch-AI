@@ -90,8 +90,19 @@ std::string ExeDir() {
   return std::string(dir);
 }
 
-// Where distributions put hunspell/myspell dictionaries. Ordered most-specific
-// first so a user's own dictionary in $HOME wins over the system's.
+// Dictionaries we ship, inside the app bundle.
+std::string BundledDictDir() { return ExeDir() + "/data/dictionaries"; }
+
+// Everywhere a dictionary can come from, most-specific first.
+//
+// $HOME/.local/share/hunspell leads deliberately: it is both the standard
+// per-user hunspell location AND where the Settings "Load a dictionary file…"
+// option puts what the user picks, so a hand-added dictionary overrides both
+// the system's and ours without any extra plumbing.
+//
+// The bundle comes LAST. A dictionary the user installed themselves is more
+// likely to be the one they want — newer, or carrying words they added — and
+// ours is the floor that guarantees something is always there.
 std::vector<std::string> SystemDictDirs() {
   std::vector<std::string> dirs;
   const char* home = g_get_home_dir();
@@ -102,6 +113,7 @@ std::vector<std::string> SystemDictDirs() {
   dirs.push_back("/usr/share/hunspell");
   dirs.push_back("/usr/share/myspell/dicts");
   dirs.push_back("/usr/share/myspell");
+  dirs.push_back(BundledDictDir());
   return dirs;
 }
 
@@ -136,15 +148,12 @@ bool FindVariant(const std::string& dir, const std::string& base,
   return false;
 }
 
-// Resolution order, and the reasoning behind it:
-//   1. the exact tag the user's locale asks for (en_GB, de_DE)
-//   2. the bare language, for dictionaries named just "de"
-//   3. any installed variant of that language
-//   4. the dictionary we ship, for English only
-// System dictionaries come first so that a user's own installed language — and
-// any words they have added to it — keep working exactly as they did when this
-// went through Enchant. The bundled copy is a floor, not a replacement: it is
-// what guarantees the feature can never silently do nothing.
+// Resolution order:
+//   1. the exact tag asked for (en_GB, de_DE) — searching every directory,
+//      user dir first, bundle last
+//   2. the bare language, for dictionaries named just "fr"
+//   3. any installed variant of that language, so a machine carrying only
+//      hunspell-en-gb still answers a request for English
 bool ResolveDictPath(const std::string& tag, std::string* out) {
   std::string normalized = tag;
   for (char& c : normalized) {
@@ -174,18 +183,6 @@ bool ResolveDictPath(const std::string& tag, std::string* out) {
     if (FindVariant(dir, base, out)) {
       return true;
     }
-  }
-
-  if (base == "en") {
-    const std::string bundled = ExeDir() + "/data/dictionaries/en_US";
-    if (DictPairExists(bundled)) {
-      *out = bundled;
-      return true;
-    }
-    g_message(
-        "Spell check: the bundled en_US dictionary is missing from the app "
-        "bundle (looked in %s). The install is incomplete.",
-        bundled.c_str());
   }
   return false;
 }
@@ -242,10 +239,6 @@ FlValue* AvailableLanguages() {
       }
     }
   }
-  if (DictPairExists(ExeDir() + "/data/dictionaries/en_US")) {
-    add("en_US");
-  }
-
   std::sort(tags.begin(), tags.end());
   FlValue* out = fl_value_new_list();
   for (const std::string& tag : tags) {

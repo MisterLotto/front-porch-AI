@@ -80,6 +80,33 @@ void main() {
     return spans!;
   }
 
+  testWidgets('every bundled language is offered and actually works', (
+    tester,
+  ) async {
+    if (!Platform.isLinux) return;
+    // Guards the bundle contents, not the engine. These twelve ship inside the
+    // app so a Linux user needs no distribution packages at all; if one goes
+    // missing from the install rules, the picker silently stops offering it
+    // and non-English users are quietly back to "English or nothing".
+    const bundled = [
+      'de_DE', 'en_GB', 'en_US', 'es_ES', 'fr', 'it_IT',
+      'nl_NL', 'pl_PL', 'pt_BR', 'pt_PT', 'ru_RU', 'sv_SE',
+    ];
+    final offered = await DesktopSpellCheckService.availableLanguages();
+    for (final tag in bundled) {
+      expect(offered, contains(tag), reason: '$tag missing from the bundle');
+    }
+
+    // And one of them end-to-end, in the language of the user who reported
+    // this: German prose must come back clean, and a German typo flagged.
+    DesktopSpellCheckService.activeLanguage = 'de_DE';
+    addTearDown(() => DesktopSpellCheckService.activeLanguage = 'en_US');
+    expect(await check('Der Abend ist ruhig.'), isEmpty);
+    final typo = await check('Der Abend ist ruhigg.');
+    expect(typo, hasLength(1));
+    expect(typo.single.suggestions, contains('ruhig'));
+  });
+
   testWidgets('the bundled dictionary ships next to the executable', (
     tester,
   ) async {

@@ -1,4 +1,56 @@
+
 # Changelog
+
+## 2026-08-05 — feat(spellcheck): 12 bundled languages + user dictionaries; FIX a Windows regression
+- **Files changed:** `linux/dictionaries/**` (12 languages + licence notices),
+  `linux/runner/spell_check_plugin.cc`, `windows/runner/spell_check_plugin.cpp`,
+  `lib/ui/settings/widgets/spell_check_language_row.dart`,
+  `integration_test/spell_check_test.dart`, `docs/Rawhide.md`
+- **Why:** maintainer question — a Linux user whose interface is German but who has no
+  hunspell package installed could only pick English or Off, because the picker lists
+  what exists and only en_US was bundled. The "nothing to install" promise was
+  English-only.
+- **WINDOWS REGRESSION, introduced by the previous commit and fixed here.** The Windows
+  spell API is BCP-47 and wants a HYPHEN (`en-US`). Dart used to send
+  `locale.toLanguageTag()`, which produces exactly that. Switching to the stored setting
+  started sending `en_US`, so `ISpellCheckerFactory::IsSupported` rejected every tag and
+  **spell check would have been silently dead on Windows**. macOS was already safe — its
+  Swift plugin normalises `-`→`_` (line 72). Fixed by normalising `_`→`-` in the Windows
+  plugin, mirroring macOS: each platform converts to its own convention so Dart keeps one
+  canonical form. All three now accept either spelling, so this class of bug cannot
+  recur. Found by reading, not by CI — though the Windows CI leg WOULD have caught it,
+  since `expect(spans, isNotNull)` fails when IsSupported rejects the tag.
+- **Bundled set, and the size correction that shaped it.** The maintainer first chose
+  ~20 languages on my estimate of ~6 MB. Measured, 22 languages is **17.3 MB compressed
+  and 74.7 MB on disk** — my estimate extrapolated English and German (~300 KB each),
+  but Turkish (2.17 MB gz), Greek (2.02) and Ukrainian (1.41) are 4–7× that. Given the
+  real numbers the maintainer chose the European core: **12 languages, 6.8 MB
+  compressed, 27.5 MB on disk** — de_DE, en_GB, en_US, es_ES, fr, it_IT, nl_NL, pl_PL,
+  pt_BR, pt_PT, ru_RU, sv_SE.
+- **Licensing, audited per dictionary** (my first audit was wrong — a bad grep dumped
+  every licence in each file rather than the `Files: *` stanza): 10 are **MPL-2.0**
+  (explicitly AGPL-compatible via its secondary-licences clause), German is **GPL-2+**
+  (→GPL-3→AGPL-3), Dutch is **BSD or CC-BY-3.0** and additionally requires its
+  `README_nl_NL.txt` to travel with it — it does. Notices ship in
+  `linux/dictionaries/licenses/`, deduplicated (18 of them were byte-identical copies of
+  the shared libreoffice-dictionaries copyright, 3.7 MB → 260 KB).
+- **The bundle is no longer an English special case.** `SystemDictDirs()` now ends with
+  the bundle directory, so resolution and `availableLanguages` treat it as one more
+  source. Order is deliberate: `~/.local/share/hunspell` first, then system dirs, then
+  ours — a dictionary the user installed themselves is likelier to be the one they want
+  (newer, or carrying words they added), and ours is the floor.
+- **"Load a dictionary file…"** in the picker copies a chosen `.aff`/`.dic` pair into
+  `~/.local/share/hunspell` — already first in the search order, so it needs no plugin
+  change and overrides both system and bundled copies. Validates that BOTH halves exist
+  and says so plainly if not. Linux-only, and NOT a parity omission: NSSpellChecker and
+  ISpellChecker are closed and consume only their own installed dictionaries, so there
+  is nowhere to put such a file on macOS or Windows. Those users add a language through
+  the OS. Uses the `PickerPrefs` test seam, so it is drivable from E2E.
+- **Verified with every system dictionary purged from the machine** (`apt purge
+  'hunspell-*'`, `/usr/share/hunspell` gone): all 10 E2E tests pass, including a new one
+  that asserts each of the 12 bundled tags is offered AND checks German prose
+  end-to-end — clean sentence empty, `ruhigg` flagged with `ruhig` suggested. That is
+  the reported user's exact case working with nothing installed.
 
 ## 2026-08-05 — fix(spellcheck): the OS interface language was choosing the chat dictionary
 - **Files changed:** `lib/services/desktop_spell_check_service.dart`,

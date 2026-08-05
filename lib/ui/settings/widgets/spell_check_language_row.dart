@@ -1,7 +1,10 @@
 // Copyright (C) 2026 Front Porch AI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/services/services.dart'
@@ -9,6 +12,10 @@ import 'package:front_porch_ai/services/services.dart'
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart' show StyledDropdown;
 import 'package:front_porch_ai/utils/utils.dart';
+
+/// Sentinel dropdown value for the "Load a dictionary file…" entry. Not a
+/// language, so it is intercepted in onChanged and never stored.
+const String _kAddDictionary = '__add_dictionary__';
 
 /// Picks the language prose fields are spell checked against.
 ///
@@ -38,6 +45,61 @@ class _SpellCheckLanguageRowState extends State<SpellCheckLanguageRow> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  /// Copies a hunspell `.aff`/`.dic` pair the user picked into
+  /// `~/.local/share/hunspell`, which is the first directory the Linux plugin
+  /// searches — so the language appears in this menu, and wins over both the
+  /// system's copy and the ones we bundle.
+  ///
+  /// Linux only, and not an omission elsewhere: NSSpellChecker and
+  /// ISpellChecker are closed and consume only their own installed
+  /// dictionaries, so there is nowhere on macOS or Windows to put such a file.
+  /// Those users add a language through the OS instead.
+  Future<void> _addDictionaryFile() async {
+    final picked = await PickerPrefs.pickFiles(
+      category: 'dictionary',
+      dialogTitle: 'Choose a hunspell .dic or .aff file',
+      allowedExtensions: ['dic', 'aff'],
+      type: FileType.custom,
+    );
+    final files = picked?.files ?? const [];
+    final path = files.isEmpty ? null : files.first.path;
+    if (path == null) return;
+
+    // Either half identifies the pair; both must be present to be usable.
+    final stem = p.withoutExtension(path);
+    final aff = File('$stem.aff');
+    final dic = File('$stem.dic');
+    String? failure;
+    if (!aff.existsSync() || !dic.existsSync()) {
+      failure =
+          'A dictionary is two files — ${p.basename(stem)}.aff and '
+          '${p.basename(stem)}.dic. Only one of them is in that folder.';
+    } else {
+      try {
+        final target = Directory(
+          p.join(Platform.environment['HOME'] ?? '', '.local/share/hunspell'),
+        );
+        await target.create(recursive: true);
+        final name = p.basename(stem);
+        await aff.copy(p.join(target.path, '$name.aff'));
+        await dic.copy(p.join(target.path, '$name.dic'));
+        if (mounted) {
+          await context.read<StorageService>().setSpellCheckLanguage(name);
+        }
+      } catch (e) {
+        failure = 'Could not install that dictionary: $e';
+      }
+    }
+
+    if (!mounted) return;
+    if (failure != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(failure)));
+    }
+    await _load();
   }
 
   Future<void> _load() async {
@@ -109,9 +171,21 @@ class _SpellCheckLanguageRowState extends State<SpellCheckLanguageRow> {
                     value: tag,
                     child: Text(spellCheckLanguageLabel(tag)),
                   ),
+                // Linux only — see _addDictionaryFile for why this cannot
+                // exist on macOS or Windows.
+                if (Platform.isLinux)
+                  const DropdownMenuItem(
+                    value: _kAddDictionary,
+                    child: Text('Load a dictionary file…'),
+                  ),
               ],
               onChanged: (value) {
-                if (value != null) storage.setSpellCheckLanguage(value);
+                if (value == null) return;
+                if (value == _kAddDictionary) {
+                  _addDictionaryFile();
+                  return;
+                }
+                storage.setSpellCheckLanguage(value);
               },
             ),
         ],
