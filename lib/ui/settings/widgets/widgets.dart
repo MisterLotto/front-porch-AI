@@ -11,4 +11,5 @@ export 'legacy_cleanup_card.dart';
 export 'photo_understanding_card.dart';
 export 'section_header.dart';
 export 'slider_setting.dart';
+export 'spell_check_language_row.dart';
 export 'web_login_section.dart';

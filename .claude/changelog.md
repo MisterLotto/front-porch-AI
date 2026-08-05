@@ -1,5 +1,67 @@
 # Changelog
 
+## 2026-08-05 — fix(spellcheck): the OS interface language was choosing the chat dictionary
+- **Files changed:** `lib/services/desktop_spell_check_service.dart`,
+  `lib/services/storage_service.dart`, `lib/ui/widgets/styled_text_controller.dart`,
+  `lib/ui/widgets/app_text_field.dart`, `lib/ui/widgets/widgets.dart`,
+  `lib/ui/settings/widgets/spell_check_language_row.dart` (new),
+  `lib/ui/settings/widgets/widgets.dart`, `lib/ui/settings/tabs/general_tab.dart`,
+  `lib/utils/spell_check_languages.dart` (new), `lib/utils/utils.dart`,
+  `lib/services/web/facade/settings_facade.dart`,
+  `lib/services/web/routes/settings_routes.dart`,
+  `linux/runner/spell_check_plugin.cc`, `macos/Runner/SpellCheckPlugin.swift`,
+  `windows/runner/spell_check_plugin.cpp`, `web_ui/src/spellCheckLang.ts` (new),
+  `web_ui/src/spellCheckLabels.ts` (new), `web_ui/src/App.tsx`,
+  `web_ui/src/pages/SettingsPage.tsx`, `integration_test/spell_check_test.dart`,
+  `docs/Rawhide.md`
+- **Why:** maintainer report from a real user — "uses system lang _de but chats with
+  characters in english". Nothing in the app ever asked what language people write in;
+  it inferred it from the OS.
+- **The mechanism, measured rather than assumed.** It is the OS **interface language**,
+  not the region/format setting. Probed on Linux: changing region vars
+  (`LC_NUMERIC`/`LC_TIME`/`LC_MONETARY` = es_ES) leaves the reported locale untouched,
+  while `LANG=de_DE.UTF-8` makes `PlatformDispatcher.instance.locale` report `de_DE`.
+  This is why the maintainer's own "switched my locale to Spain, still English" test
+  showed nothing — that test changed the region. Their friend's German *interface* is
+  the case that breaks.
+- **CORRECTION to the previous commit's claim.** That entry said both code paths
+  resolved the OS locale on all three platforms. That is **wrong**, and measuring it
+  proved so: under `LANG=de_DE`, `PlatformDispatcher.instance.locale` = `de_DE` but
+  `Localizations.localeOf(context)` = `en_US`, because MaterialApp's default
+  `supportedLocales` is `[en_US]` and Flutter resolves unsupported system locales down
+  to it. So `AppTextField`'s plain prose fields were already English-only and fine. The
+  bug was confined to the `StyledTextController` path — which is nonetheless the chat
+  composer, both character editors, group settings, and the lorebook/message-edit
+  dialogs, i.e. the most-used text in the app.
+- **Fix:** the language is now an explicit setting, defaulting to `en_US`, stored as
+  `spell_check_language`. `DesktopSpellCheckService.fetchSpellCheckSuggestions` ignores
+  the caller-supplied locale entirely and uses it — one choke point that both paths
+  already funnel through, so it fixes the broken path and removes the two-paths split at
+  the same time. Default is English rather than the OS locale because the failure modes
+  are not symmetric: guessing wrong toward "wall of red" makes people switch the feature
+  off; guessing wrong the other way costs one trip to Settings.
+- **The picker.** New `availableLanguages` channel method on all three runners (Linux
+  scans the dictionary dirs + the bundle, macOS uses `NSSpellChecker.availableLanguages`,
+  Windows uses `ISpellCheckerFactory::get_SupportedLanguages`), so the menu can only
+  offer languages that will actually work. Tags are mapped to readable names
+  (`en_US` -> "English (United States)") by a table shared in spirit between
+  `lib/utils/spell_check_languages.dart` and `web_ui/src/spellCheckLabels.ts`. An "Off"
+  entry short-circuits `platformSpellCheck()` AND `StyledTextController._trySpellCheck`,
+  so off means no channel round trip per keystroke pause rather than a discarded answer.
+- **Web parity:** the browser does its own spell checking, so the web cannot reuse the
+  engine — but it obeys the same setting. `/api/settings` carries `spellCheckLanguage`
+  plus `spellCheckLanguages` (merged in by the route, since the list is async and
+  `read()` is sync; merged on POST too so saving cannot empty the picker). The PWA
+  applies it as `lang` on `<html>` rather than per-textarea, because `lang` is
+  inherited — one assignment covers the composer, the editor, character forms and
+  anything added later. Cached in localStorage and restored synchronously at boot so the
+  first keystrokes are already right.
+- **Verified.** Reproduced the real bug end-to-end: installed `hunspell-de-de`, reverted
+  the fix, and "I said helllo to her." came back with spans at **[2, 7, 14]** instead of
+  **[7]** — "said" and "to" flagged as misspellings, "her" surviving only because it is
+  a real German word. Restored the fix, back to [7]. Nine E2E tests pass, `flutter
+  analyze` clean, web `tsc` + 34 vitest tests pass, `npm run build` run.
+
 ## 2026-08-05 — refactor(linux): own the spell check engine — vendored hunspell + bundled dictionary, Enchant dropped
 - **Files changed:** `third_party/hunspell/**` (new — vendored engine + licences +
   `README.fpai.md` + `CMakeLists.txt`), `linux/dictionaries/**` (new — bundled en_US +

@@ -39,6 +39,7 @@ import 'storage/settings/realism_settings.dart';
 import 'storage/settings/memory_settings.dart';
 import 'storage/settings/lorebook_settings.dart';
 import 'storage/settings/preset_settings.dart';
+import 'desktop_spell_check_service.dart';
 
 class StorageService extends ChangeNotifier {
   final Completer<void> _initCompleter = Completer<void>();
@@ -718,6 +719,22 @@ class StorageService extends ChangeNotifier {
     }
   }
 
+  // God-level (not in a *Settings): spell check language.
+  //
+  // Stored as a dictionary tag ('en_US', 'de_DE') or kSpellCheckOff. Defaults
+  // to English, NOT the system locale — a German or Polish desktop says
+  // nothing about the language someone role-plays in, and checking English
+  // prose against a German dictionary underlines every word. See the doc on
+  // DesktopSpellCheckService.activeLanguage.
+  String get spellCheckLanguage => DesktopSpellCheckService.activeLanguage;
+
+  Future<void> setSpellCheckLanguage(String v) async {
+    if (DesktopSpellCheckService.activeLanguage == v) return;
+    DesktopSpellCheckService.activeLanguage = v;
+    await _prefs?.setString(_k('spell_check_language'), v);
+    notifyListeners();
+  }
+
   // God-level (not in a *Settings): custom models path
   // (narrower than setRootPath: no relocation dance needed; early return + beta _k + notify for parity with god pattern)
   Future<void> setCustomModelsPath(String? v) async {
@@ -853,6 +870,15 @@ class StorageService extends ChangeNotifier {
     _customModelsPath = (loadedCustom != null && loadedCustom.isNotEmpty)
         ? loadedCustom
         : null;
+
+    // Push the stored spell check language into the service before any text
+    // field can ask for a check. Absent (a fresh install, or an upgrade from
+    // before this setting existed) leaves the English default in place rather
+    // than adopting the OS locale.
+    final loadedSpell = _prefs?.getString(_k('spell_check_language'));
+    if (loadedSpell != null && loadedSpell.isNotEmpty) {
+      DesktopSpellCheckService.activeLanguage = loadedSpell;
+    }
 
     if (!_initCompleter.isCompleted) _initCompleter.complete();
     notifyListeners();

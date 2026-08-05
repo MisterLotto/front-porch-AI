@@ -82,6 +82,27 @@ class SpellCheckPluginImpl {
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue>& method_call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+    // Every language the OS can check, for the Settings picker. The chat
+    // language is a user choice — it is NOT the system locale, because plenty
+    // of people run a German or Polish desktop and role-play in English, and
+    // checking their English against a German dictionary underlines every
+    // single word.
+    if (method_call.method_name().compare("availableLanguages") == 0) {
+      flutter::EncodableList languages;
+      if (factory_) {
+        ComPtr<IEnumString> supported;
+        if (factory_->get_SupportedLanguages(&supported) == S_OK) {
+          LPOLESTR language;
+          while (supported->Next(1, &language, nullptr) == S_OK) {
+            languages.push_back(flutter::EncodableValue(Utf16ToUtf8(language)));
+            CoTaskMemFree(language);
+          }
+        }
+      }
+      result->Success(flutter::EncodableValue(languages));
+      return;
+    }
+
     if (method_call.method_name().compare("spellCheck") == 0) {
       if (!factory_) {
         result->Success(flutter::EncodableValue());

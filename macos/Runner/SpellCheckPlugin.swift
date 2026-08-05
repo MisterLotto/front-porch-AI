@@ -23,6 +23,16 @@ class SpellCheckPlugin: NSObject, FlutterPlugin {
     }
 
     func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+        // Every language the OS can check, for the Settings picker. The chat
+        // language is a user choice — it is NOT the system locale, because
+        // plenty of people run a German or Polish desktop and role-play in
+        // English, and checking their English against a German dictionary
+        // underlines every single word.
+        if call.method == "availableLanguages" {
+            result(NSSpellChecker.shared.availableLanguages)
+            return
+        }
+
         guard call.method == "spellCheck" else {
             result(FlutterMethodNotImplemented)
             return

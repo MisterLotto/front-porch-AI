@@ -260,6 +260,7 @@ class AppTextField extends StatelessWidget {
   static SpellCheckConfiguration? platformSpellCheck({
     bool showMisspellings = true,
   }) {
+    if (!DesktopSpellCheckService.isEnabled) return null;
     if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
       return SpellCheckConfiguration(
         spellCheckService: DesktopSpellCheckService(),

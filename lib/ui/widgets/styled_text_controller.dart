@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' show PlatformDispatcher;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show SpellCheckResults, SuggestionSpan;
 
@@ -128,7 +127,11 @@ class StyledTextController extends TextEditingController
   }
 
   void _trySpellCheck() {
-    if (!_spellCheckInFlight && !_disposed) {
+    // Skip entirely when the user turned spell check off, rather than making a
+    // channel round trip only to throw the answer away. This controller fires
+    // on a 300ms debounce after every keystroke pause in the chat composer and
+    // both character editors, so the wasted work is not hypothetical.
+    if (!_spellCheckInFlight && !_disposed && DesktopSpellCheckService.isEnabled) {
       _runSpellCheck();
     }
   }
@@ -144,9 +147,14 @@ class StyledTextController extends TextEditingController
         notifyListeners();
         return;
       }
-      final locale = PlatformDispatcher.instance.locale;
-      final results =
-          await _spellService.fetchSpellCheckSuggestions(locale, text);
+      // The locale is a formality — the service ignores it and uses the
+      // configured spell check language instead. Passing the OS locale here
+      // (as this used to, meaningfully) is what made a German desktop check
+      // English role-play against a German dictionary.
+      final results = await _spellService.fetchSpellCheckSuggestions(
+        const Locale('en', 'US'),
+        text,
+      );
       if (_disposed) return; // resumed after dispose — never touch state
       if (text != this.text) return;
       if (results != null && results.isNotEmpty) {

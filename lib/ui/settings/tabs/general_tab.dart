@@ -426,6 +426,8 @@ class GeneralTab extends StatelessWidget {
             onChanged: (val) => storageService.setTextScale(val),
             divisions: 13,
           ),
+          const SizedBox(height: 16),
+          const SpellCheckLanguageRow(),
           const SizedBox(height: 24),
           const SectionHeader('Chat Appearance'),
           const SizedBox(height: 8),

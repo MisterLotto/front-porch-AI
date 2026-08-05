@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Front Porch AI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { Layout } from './components/Layout';
@@ -25,9 +26,19 @@ import { StoryReaderPage } from './pages/StoryReaderPage';
 import { ModelsPage } from './pages/ModelsPage';
 import { AccountPage } from './pages/AccountPage';
 import { StoopSection } from './pages/stoop/StoopSection';
+import { restoreSpellCheckLang, syncSpellCheckLang } from './spellCheckLang';
+
+restoreSpellCheckLang();
 
 export function App() {
   const { loading, setupRequired, authenticated, unreachable } = useAuth();
+
+  // Pull the desktop's spell check language once we can actually reach it.
+  // The cached value from restoreSpellCheckLang() is already applied, so this
+  // only corrects a change made on the desktop since the last visit.
+  useEffect(() => {
+    if (authenticated) void syncSpellCheckLang();
+  }, [authenticated]);
 
   if (loading) {
     return (

@@ -53,7 +53,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
 import 'package:front_porch_ai/services/services.dart'
-    show DesktopSpellCheckService;
+    show DesktopSpellCheckService, kSpellCheckOff;
 import 'package:front_porch_ai/ui/widgets/widgets.dart' show AppTextField;
 
 const _kLocale = Locale('en', 'US');
@@ -207,6 +207,52 @@ void main() {
           .toList(),
       contains('helllo'),
     );
+  });
+
+  testWidgets('the OS locale does not decide the spell check language', (
+    tester,
+  ) async {
+    // The bug this guards, reported from a real user: their desktop's
+    // INTERFACE language is German, they role-play in English.
+    // StyledTextController — the chat composer, both character editors, group
+    // settings, the lorebook and message-edit dialogs — read
+    // PlatformDispatcher.instance.locale directly, which reports de_DE on such
+    // a machine. Their English was then checked against a German dictionary.
+    // Measured with hunspell-de-de installed and the fix reverted: "I said
+    // helllo to her." came back with three flagged words instead of one, since
+    // "said" and "to" are not German. Worse than no spell check at all.
+    //
+    // Note it is the interface language, not the region: switching the region
+    // to Spain leaves the reported locale unchanged, which is why that test
+    // looks like nothing is wrong.
+    //
+    // The fix is that the language is a setting, defaulting to English, and
+    // the locale argument is ignored. Passing a deliberately wrong locale here
+    // is the whole test: the answer must not change.
+    const text = 'I said helllo to her.';
+    final asGerman = await service.fetchSpellCheckSuggestions(
+      const Locale('de', 'DE'),
+      text,
+    );
+
+    expect(asGerman, isNotNull);
+    expect(
+      asGerman!.map((s) => s.range.start).toList(),
+      [text.indexOf('helllo')],
+      reason: 'the caller-supplied locale must be ignored entirely',
+    );
+    expect(asGerman.single.suggestions, contains('hello'));
+    expect(DesktopSpellCheckService.activeLanguage, 'en_US');
+  });
+
+  testWidgets('turning it off stops the checker answering at all', (
+    tester,
+  ) async {
+    DesktopSpellCheckService.activeLanguage = kSpellCheckOff;
+    addTearDown(() => DesktopSpellCheckService.activeLanguage = 'en_US');
+
+    expect(await service.fetchSpellCheckSuggestions(_kLocale, 'helllo'), isNull);
+    expect(AppTextField.platformSpellCheck(), isNull);
   });
 
   testWidgets('a typographic apostrophe is treated like a plain one', (

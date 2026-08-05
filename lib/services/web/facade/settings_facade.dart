@@ -82,8 +82,21 @@ class SettingsFacade {
         'journalEnabled': _storage.memorySettings.journalEnabled,
         'realismDefault': _storage.realismSettings.realismDefault,
       },
+      // Spell check language. The browser does its own spell checking, so the
+      // web cannot reuse the desktop's engine — but it must obey the same
+      // choice, or a German-desktop user gets English underlined on one
+      // surface and not the other. The PWA applies this as the `lang`
+      // attribute on its prose inputs, which is what Chrome and Safari read.
+      // Additive and nullable-safe: an older web client ignores the key.
+      'spellCheckLanguage': _storage.spellCheckLanguage,
     };
   }
+
+  /// Dictionary tags the host can actually check, for the web's picker.
+  /// Async because it asks the native side, so it cannot live in [read] —
+  /// the routes merge it in.
+  Future<List<String>> spellCheckLanguages() =>
+      DesktopSpellCheckService.availableLanguages();
 
   Future<void> update(Map<String, dynamic> body) async {
     final g = _storage.generationSettings;
@@ -97,6 +110,11 @@ class SettingsFacade {
       if (prom is bool) {
         await _storage.realismSettings.setPromiseLedgerEnabled(prom);
       }
+    }
+
+    final spellLanguage = body['spellCheckLanguage'];
+    if (spellLanguage is String && spellLanguage.isNotEmpty) {
+      await _storage.setSpellCheckLanguage(spellLanguage);
     }
 
     final backend = body['backend']?.toString();

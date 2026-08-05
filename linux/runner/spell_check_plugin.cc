@@ -6,6 +6,7 @@
 #include <limits.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <string>
@@ -212,6 +213,47 @@ Dictionary* GetDict(SpellState* state, const char* tag) {
   return raw;
 }
 
+// Every language tag with a usable dictionary on this machine, for the
+// Settings picker. Includes the one we bundle, which is always present.
+FlValue* AvailableLanguages() {
+  std::vector<std::string> tags;
+  auto add = [&tags](const std::string& tag) {
+    for (const std::string& seen : tags) {
+      if (seen == tag) {
+        return;
+      }
+    }
+    tags.push_back(tag);
+  };
+
+  for (const std::string& dir : SystemDictDirs()) {
+    g_autoptr(GDir) handle = g_dir_open(dir.c_str(), 0, nullptr);
+    if (handle == nullptr) {
+      continue;
+    }
+    const char* name = nullptr;
+    while ((name = g_dir_read_name(handle)) != nullptr) {
+      const std::string entry(name);
+      if (entry.size() > 4 && entry.compare(entry.size() - 4, 4, ".dic") == 0) {
+        const std::string stem = entry.substr(0, entry.size() - 4);
+        if (DictPairExists(dir + "/" + stem)) {
+          add(stem);
+        }
+      }
+    }
+  }
+  if (DictPairExists(ExeDir() + "/data/dictionaries/en_US")) {
+    add("en_US");
+  }
+
+  std::sort(tags.begin(), tags.end());
+  FlValue* out = fl_value_new_list();
+  for (const std::string& tag : tags) {
+    fl_value_append_take(out, fl_value_new_string(tag.c_str()));
+  }
+  return out;
+}
+
 int Utf16Len(gunichar c) { return c < 0x10000 ? 1 : 2; }
 
 bool IsApostrophe(gunichar c) {
@@ -359,6 +401,17 @@ void HandleMethodCall(FlMethodChannel* channel, FlMethodCall* method_call,
   (void)channel;
   SpellState* state = static_cast<SpellState*>(user_data);
   g_autoptr(FlMethodResponse) response = nullptr;
+
+  if (strcmp(fl_method_call_get_name(method_call), "availableLanguages") == 0) {
+    g_autoptr(FlValue) languages = AvailableLanguages();
+    response = FL_METHOD_RESPONSE(fl_method_success_response_new(languages));
+    g_autoptr(GError) list_error = nullptr;
+    if (!fl_method_call_respond(method_call, response, &list_error)) {
+      g_warning("Failed to respond to spell check call: %s",
+                list_error->message);
+    }
+    return;
+  }
 
   if (strcmp(fl_method_call_get_name(method_call), "spellCheck") != 0) {
     response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());

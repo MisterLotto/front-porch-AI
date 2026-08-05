@@ -48,18 +48,80 @@ import 'package:flutter/services.dart'
 /// user's system dictionaries preferred when they exist. Nothing is dlopen'd
 /// and no process is spawned. A language with no dictionary anywhere replies
 /// null, which lands in the same "no results" branch as any other empty answer.
+/// Sentinel [DesktopSpellCheckService.activeLanguage] value meaning "do not
+/// spell check at all".
+const String kSpellCheckOff = 'off';
+
 class DesktopSpellCheckService implements SpellCheckService {
   static const _channel = MethodChannel('front_porch_ai/spell_check');
 
+  /// The language every check runs against, as a dictionary tag (`en_US`), or
+  /// [kSpellCheckOff]. Owned by StorageService, which writes it on load and on
+  /// change; a static rather than an injected dependency because Flutter
+  /// constructs this service deep inside widget code with no access to a
+  /// Provider scope.
+  ///
+  /// **This is deliberately NOT the system locale, and that is the entire
+  /// point.** Plenty of people run a German or Polish desktop and role-play
+  /// with characters in English. Checking their English prose against a German
+  /// dictionary underlines *most of the words in every sentence* — far worse
+  /// than no spell check at all.
+  ///
+  /// The trigger is the OS **interface language**, not the region/format
+  /// setting. Measured, because the difference is easy to get backwards:
+  /// switching the region to Spain leaves the reported locale untouched, while
+  /// switching the interface language to German makes
+  /// `PlatformDispatcher.instance.locale` report `de_DE`. So "my locale is
+  /// Spain and spell check stayed English" is correct behaviour, and a German
+  /// or Polish *interface* is the case that breaks.
+  ///
+  /// Only one of the two paths was ever affected, and it is the one that
+  /// matters most: [StyledTextController] read `PlatformDispatcher` directly,
+  /// so the chat composer, both character editors, group settings and the
+  /// lorebook/message-edit dialogs all inherited the interface language.
+  /// [AppTextField]'s plain prose fields went through `Localizations.localeOf`,
+  /// which resolves against MaterialApp's default `supportedLocales` of
+  /// `[en_US]` and therefore already answered `en_US` on a German desktop.
+  /// Routing everything through this one value removes the split as well as
+  /// the bug.
+  ///
+  /// The default is English rather than the OS locale because the failure modes
+  /// are not symmetric: guessing the chat language wrong in the "wall of red"
+  /// direction makes users switch the feature off, while guessing it wrong the
+  /// other way costs one trip to Settings.
+  static String activeLanguage = 'en_US';
+
+  static bool get isEnabled => activeLanguage != kSpellCheckOff;
+
+  /// Language tags the platform can actually check, for the Settings picker.
+  /// Returns an empty list when the channel is unavailable, so callers can
+  /// fall back rather than present an empty menu.
+  static Future<List<String>> availableLanguages() async {
+    try {
+      final raw = await _channel.invokeMethod<List<dynamic>>(
+        'availableLanguages',
+      );
+      return raw?.cast<String>() ?? const <String>[];
+    } catch (_) {
+      return const <String>[];
+    }
+  }
+
+  /// The [locale] argument is **ignored**. Flutter passes the OS locale here
+  /// (EditableText resolves it from `Localizations`), which is the wrong
+  /// question — see [activeLanguage]. Every caller funnels through this one
+  /// method, so overriding here fixes both the AppTextField path and the
+  /// StyledTextController path at once.
   @override
   Future<List<SuggestionSpan>?> fetchSpellCheckSuggestions(
     Locale locale,
     String text,
   ) async {
+    if (!isEnabled) return null;
     try {
       final rawResults = await _channel.invokeMethod<List<dynamic>>(
         'spellCheck',
-        <String>[locale.toLanguageTag(), text],
+        <String>[activeLanguage, text],
       );
       if (rawResults == null) return null;
 

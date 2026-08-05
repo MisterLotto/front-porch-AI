@@ -6,6 +6,8 @@ import { api, ApiError } from '../api/client';
 import { PersonaManager } from '../components/PersonaManager';
 import { ModelPicker } from '../components/ModelPicker';
 import { ChatColorsSettings } from '../components/ChatColorsSettings';
+import { spellCheckLabel, sortedByLabel } from '../spellCheckLabels';
+import { applySpellCheckLang } from '../spellCheckLang';
 
 // A single backend picker (replacing the old Backend + Provider dropdowns,
 // which overlapped). Each entry maps to a real BackendType; the OpenAI-compatible
@@ -58,6 +60,10 @@ interface Settings {
   generation: Gen;
   /** Optional: an older desktop build does not send it. */
   realism?: RealismToggles;
+  /** Dictionary tag ('en_US') or 'off'. Optional for the same reason. */
+  spellCheckLanguage?: string;
+  /** Dictionary tags the host can check. Optional for the same reason. */
+  spellCheckLanguages?: string[];
 }
 
 /** Two engine features that work with the Realism Engine switched OFF. */
@@ -146,9 +152,14 @@ export function SettingsPage() {
           promiseLedgerEnabled: s.realism.promiseLedgerEnabled,
         };
       }
+      if (s.spellCheckLanguage !== undefined) {
+        body.spellCheckLanguage = s.spellCheckLanguage;
+      }
       if (apiKey.trim()) body.apiKey = apiKey.trim();
       const next = await api.post<Settings>('/api/settings', body);
       setS(next);
+      // Take effect on this device immediately rather than at next reload.
+      applySpellCheckLang(next.spellCheckLanguage);
       setApiKey('');
       setSaved(true);
       setTimeout(() => setSaved(false), 1800);
@@ -311,6 +322,30 @@ export function SettingsPage() {
             onChange={(e) => patchGen({ dynamicTempEnabled: e.target.checked })}
           />
         </label>
+        {s.spellCheckLanguage !== undefined && (
+          <label>
+            Spell check language
+            <select
+              value={s.spellCheckLanguage}
+              onChange={(e) => patch({ spellCheckLanguage: e.target.value })}
+            >
+              <option value="off">Off</option>
+              {sortedByLabel([
+                ...(s.spellCheckLanguages ?? []),
+                // Keep the saved value selectable even if the host no longer
+                // reports it, or the select would show a value not in its list.
+                ...(s.spellCheckLanguage !== 'off' ? [s.spellCheckLanguage] : []),
+              ]).map((tag) => (
+                <option key={tag} value={tag}>{spellCheckLabel(tag)}</option>
+              ))}
+            </select>
+            <p className="muted small">
+              The language you write in — not your device's language. If your phone or
+              computer is set to one language but you chat with characters in another,
+              set this to the one you chat in.
+            </p>
+          </label>
+        )}
         {s.realism && (
           <>
             <h3 className="section-label">Story features</h3>
