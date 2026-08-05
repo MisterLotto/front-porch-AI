@@ -9598,3 +9598,20 @@ swap the framework under it.
 - **Gates:** analyze clean; hub suites 5/5 green.
 - **Files:** `lib/services/web/streaming/stream_hub.dart`, comment touch-up in
   `test/services/web/stream_hub_coalescing_test.dart` (same-session new test, unpushed).
+
+## 2026-08-04 — style(context-viewer): full AppColors retheme (maintainer-directed)
+- **Why:** "no hard coded colors, change them" — the dialog shell kept its legacy
+  hardcoded dark chrome (0xFF0f172a bg, Colors.whiteXX text/borders) through the
+  refactor, and it ignored light mode entirely.
+- **Did:** every chrome color → AppColors helpers (surfaceOf/borderOf/textPrimary/
+  Secondary/Tertiary/iconSecondary/surfaceContainerOf; usage severity →
+  negativeAccentOf/porchAmberOf/bondHighOf). The section legend hues stay as
+  semantic data-viz identity colors (`// theme-keep`, shared verbatim with the web
+  modal). Goldens regenerated in the container (dark now warm-dark; LIGHT MODE
+  RENDERS LIGHT for the first time) and visually reviewed before commit.
+- **Known remaining debt (census, pre-existing):** ~8 older dialogs still carry
+  hardcoded whites/hexes — tts_settings_dialog (65 lines!), data_bank_dialog (20),
+  user_persona_dialog (19), background_settings_dialog (16), voice_browser_dialog
+  (14), database_cleanup_dialog (10), kobold_log_dialog (9), rocm_guidance_dialog
+  (9). Proposal: retheme each in the same visit as its Tranche-A god-file split.
+- **Files:** `lib/ui/dialogs/context_viewer_dialog.dart`, both context_viewer golden PNGs.

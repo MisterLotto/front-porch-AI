@@ -28,6 +28,9 @@ class ContextViewerDialog extends StatelessWidget {
 
   const ContextViewerDialog({super.key, required this.chatService});
 
+  // theme-keep: data-viz legend hues — every section needs a DISTINCT
+  // identity color for the stacked bar + rows (shared verbatim with the web
+  // ContextBudgetModal). Chrome around them is AppColors.
   static const _sectionColors = {
     'System Prompt': Color(0xFF3B82F6),
     'Lorebook': Color(0xFF8B5CF6),
@@ -50,15 +53,15 @@ class ContextViewerDialog extends StatelessWidget {
 
     Color usageColor;
     if (usage >= 0.9) {
-      usageColor = Colors.redAccent;
+      usageColor = AppColors.negativeAccentOf(context);
     } else if (usage >= 0.7) {
-      usageColor = Colors.amber;
+      usageColor = AppColors.porchAmberOf(context);
     } else {
-      usageColor = Colors.greenAccent;
+      usageColor = AppColors.bondHighOf(context);
     }
 
     return Dialog(
-      backgroundColor: const Color(0xFF0f172a),
+      backgroundColor: AppColors.surfaceOf(context),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
@@ -68,8 +71,10 @@ class ContextViewerDialog extends StatelessWidget {
             // Header
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: Colors.white12)),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: AppColors.borderOf(context)),
+                ),
               ),
               child: Row(
                 children: [
@@ -79,19 +84,19 @@ class ContextViewerDialog extends StatelessWidget {
                     size: 22,
                   ),
                   const SizedBox(width: 10),
-                  const Text(
+                  Text(
                     'Context Budget',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: AppColors.textPrimary(context),
                     ),
                   ),
                   const Spacer(),
                   IconButton(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.close,
-                      color: Colors.white54,
+                      color: AppColors.iconSecondary(context),
                       size: 20,
                     ),
                     onPressed: () => Navigator.of(context).pop(),
@@ -102,22 +107,35 @@ class ContextViewerDialog extends StatelessWidget {
 
             // Total usage bar
             if (budget.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 24,
+                ),
                 child: Column(
                   children: [
-                    Icon(Icons.info_outline, color: Colors.white24, size: 32),
-                    SizedBox(height: 10),
+                    Icon(
+                      Icons.info_outline,
+                      color: AppColors.iconSecondary(context),
+                      size: 32,
+                    ),
+                    const SizedBox(height: 10),
                     Text(
                       'Send a message to populate the context budget.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white38, fontSize: 13),
+                      style: TextStyle(
+                        color: AppColors.textSecondary(context),
+                        fontSize: 13,
+                      ),
                     ),
-                    SizedBox(height: 4),
+                    const SizedBox(height: 4),
                     Text(
                       'Budget is captured each time a prompt is assembled.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white24, fontSize: 11),
+                      style: TextStyle(
+                        color: AppColors.textTertiary(context),
+                        fontSize: 11,
+                      ),
                     ),
                   ],
                 ),
@@ -154,7 +172,7 @@ class ContextViewerDialog extends StatelessWidget {
                       child: LinearProgressIndicator(
                         value: usage.clamp(0.0, 1.0),
                         minHeight: 8,
-                        backgroundColor: Colors.white10,
+                        backgroundColor: AppColors.surfaceContainerOf(context),
                         valueColor: AlwaysStoppedAnimation<Color>(usageColor),
                       ),
                     ),
@@ -268,7 +286,10 @@ class _SectionRowState extends State<_SectionRow> {
                 Expanded(
                   child: Text(
                     widget.label,
-                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    style: TextStyle(
+                      color: AppColors.textPrimary(context),
+                      fontSize: 13,
+                    ),
                   ),
                 ),
                 Text(
@@ -284,14 +305,17 @@ class _SectionRowState extends State<_SectionRow> {
                   width: 48,
                   child: Text(
                     widget.percentage,
-                    style: const TextStyle(color: Colors.white38, fontSize: 12),
+                    style: TextStyle(
+                      color: AppColors.textTertiary(context),
+                      fontSize: 12,
+                    ),
                     textAlign: TextAlign.right,
                   ),
                 ),
                 const SizedBox(width: 4),
                 Icon(
                   _expanded ? Icons.expand_less : Icons.expand_more,
-                  color: Colors.white24,
+                  color: AppColors.iconSecondary(context),
                   size: 18,
                 ),
               ],
@@ -303,7 +327,7 @@ class _SectionRowState extends State<_SectionRow> {
             width: double.infinity,
             margin: const EdgeInsets.only(bottom: 8),
             decoration: BoxDecoration(
-              color: const Color(0xFF1e293b),
+              color: AppColors.surfaceContainerOf(context),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: widget.color.withValues(alpha: 0.3)),
             ),
@@ -315,10 +339,10 @@ class _SectionRowState extends State<_SectionRow> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 IconButton(
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.copy_outlined,
                     size: 14,
-                    color: Colors.white38,
+                    color: AppColors.iconSecondary(context),
                   ),
                   padding: const EdgeInsets.only(top: 6, right: 6),
                   constraints: const BoxConstraints(),
@@ -347,8 +371,8 @@ class _SectionRowState extends State<_SectionRow> {
                             ? '(This section was empty in the last prompt — '
                                   'send a message first.)'
                             : widget.rawText,
-                        style: const TextStyle(
-                          color: Colors.white60,
+                        style: TextStyle(
+                          color: AppColors.textSecondary(context),
                           fontSize: 11,
                           fontFamily: 'monospace',
                         ),
@@ -359,7 +383,7 @@ class _SectionRowState extends State<_SectionRow> {
               ],
             ),
           ),
-        const Divider(height: 1, color: Colors.white10),
+        Divider(height: 1, color: AppColors.borderOf(context)),
       ],
     );
   }
