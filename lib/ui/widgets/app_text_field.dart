@@ -58,7 +58,7 @@ abstract class SpellCheckResultsProvider {
 /// |----------|-------------------------------|
 /// | macOS    | `NSSpellChecker`              |
 /// | Windows  | Windows Spell Checking API    |
-/// | Linux    | Enchant (hunspell/aspell), loaded at runtime |
+/// | Linux    | hunspell, compiled into the app             |
 /// | iOS/Android | OS keyboard handles it (no override needed) |
 ///
 /// This widget only injects [SpellCheckConfiguration] on the three desktop
@@ -243,12 +243,14 @@ class AppTextField extends StatelessWidget {
   /// |----------|--------------------------------------------------|
   /// | macOS    | Native NSSpellChecker via FlutterTextInputPlugin |
   /// | Windows  | Native Windows Spell Checking API                |
-  /// | Linux    | Enchant, dlopen'd by the runner's spell_check_plugin |
+  /// | Linux    | Vendored hunspell + a bundled en_US dictionary   |
   /// | Others   | `null` — spell check disabled                   |
   ///
-  /// Linux degrades quietly: if the Enchant runtime or a dictionary for the
-  /// user's locale is absent, the channel replies null and the fields behave
-  /// as they did before the plugin existed — no underlines, no errors.
+  /// Linux needs nothing installed: the engine is compiled into the binary and
+  /// the dictionary ships in the app bundle. A user's own system dictionaries
+  /// are preferred when present, which is what keeps other languages working;
+  /// for a language with no dictionary anywhere the channel replies null and
+  /// the field simply shows no underlines.
   ///
   /// [showMisspellings] controls whether the red wavy underline style is
   /// applied. Set to false for fields with custom TextSpan styling (e.g. chat

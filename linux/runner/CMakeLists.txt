@@ -24,9 +24,10 @@ add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
 
-# dlopen/dlsym for spell_check_plugin.cc. Enchant itself is loaded at runtime
-# rather than linked, so there is deliberately no enchant-2 dependency here —
-# see the header comment in spell_check_plugin.cc for why.
-target_link_libraries(${BINARY_NAME} PRIVATE ${CMAKE_DL_LIBS})
+# The spell check engine, compiled into this binary from third_party/hunspell.
+# Not a system package and not dlopen'd: there is nothing for a user to install
+# and nothing for a distribution to get wrong. See third_party/hunspell/
+# README.fpai.md.
+target_link_libraries(${BINARY_NAME} PRIVATE hunspell)
 
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")

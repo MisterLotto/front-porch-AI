@@ -526,7 +526,6 @@ jobs:
           Priority: optional
           Architecture: amd64
           Maintainer: Front Porch AI Team
-          Recommends: libenchant-2-2, hunspell-en-us
           Description: A chilled out frontend for KoboldCPP.
           EOF
           
@@ -558,8 +557,6 @@ jobs:
           Requires:       gtk3
           Requires:       glib2
           Requires:       libsecret
-          Recommends:     enchant2
-          Recommends:     hunspell-en-US
           
           %description
           A chilled out frontend for KoboldCPP.

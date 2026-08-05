@@ -38,13 +38,14 @@
 //   4. Contractions, alphanumeric tokens and URLs are left alone. These are
 //      the false-positive sources; all three platforms suppress them.
 //
-// LINUX REQUIREMENT: the Enchant runtime and an en_US dictionary must be
-// installed (libenchant-2-2 + hunspell-en-us). Without them the plugin
-// correctly replies null and this suite fails — deliberately. A version that
-// skipped instead would be decoration, and would have stayed green through the
-// entire period Linux had no spell checker at all.
+// LINUX REQUIREMENT: none. That is the point. The hunspell engine is compiled
+// into the binary and an en_US dictionary ships in the bundle, so this suite
+// passes on a machine with no spell-check packages installed at all — verified
+// by purging libenchant-2-2 and hunspell-en-us and re-running. CI installs
+// neither, deliberately, so what it exercises is the out-of-the-box path every
+// user actually gets.
 
-import 'dart:io';
+import 'dart:io' show File, Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show SuggestionSpan;
@@ -72,12 +73,34 @@ void main() {
       isNotNull,
       reason:
           'The native spell checker returned null for "$text". On Linux this '
-          'means the Enchant runtime or the en_US dictionary is missing '
-          '(apt install libenchant-2-2 hunspell-en-us); on macOS/Windows it '
-          'means the platform channel is not registered.',
+          'means no dictionary resolved at all — including the one we bundle, '
+          'so the app bundle is incomplete. On macOS/Windows it means the '
+          'platform channel is not registered.',
     );
     return spans!;
   }
+
+  testWidgets('the bundled dictionary ships next to the executable', (
+    tester,
+  ) async {
+    if (!Platform.isLinux) return;
+    // Guards the CMake install rule, not the engine. Everything else in this
+    // file would still pass on a developer machine that happens to have
+    // hunspell-en-us installed, because the plugin prefers system dictionaries
+    // — so a broken packaging step would reach users invisibly. This is the
+    // only assertion here that fails specifically when the bundle is wrong.
+    final bundle = File(Platform.resolvedExecutable).parent.path;
+    for (final name in const ['en_US.aff', 'en_US.dic']) {
+      expect(
+        File('$bundle/data/dictionaries/$name').existsSync(),
+        isTrue,
+        reason:
+            '$name is missing from the app bundle. Spell check would then be '
+            'silently dead for any user without a system dictionary, which is '
+            'the exact failure this whole change exists to remove.',
+      );
+    }
+  });
 
   testWidgets('correctly spelled prose produces no spans', (tester) async {
     expect(await check('The porch is quiet this evening.'), isEmpty);

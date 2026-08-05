@@ -3,23 +3,34 @@
 
 #include "spell_check_plugin.h"
 
-#include <dlfcn.h>
-#include <sys/types.h>
+#include <limits.h>
+#include <unistd.h>
 
-#include <cstring>
+#include <map>
+#include <memory>
+#include <string>
+#include <vector>
 
-// Exposes the system spell checker to Flutter via the
-// `front_porch_ai/spell_check` method channel — the same channel, the same
-// arguments and the same reply shape as macOS (NSSpellChecker, see
-// macos/Runner/SpellCheckPlugin.swift) and Windows (ISpellChecker, see
-// windows/runner/spell_check_plugin.cpp).
+#include "hunspell.hxx"
+
+// Exposes a spell checker to Flutter via the `front_porch_ai/spell_check`
+// method channel — the same channel, the same arguments and the same reply
+// shape as macOS (NSSpellChecker, see macos/Runner/SpellCheckPlugin.swift) and
+// Windows (ISpellChecker, see windows/runner/spell_check_plugin.cpp).
 //
 //   Channel method: `spellCheck`
 //   Arguments:      [String languageTag, String text]
 //   Returns:        List<Map> of
 //                   { "startIndex": int, "endIndex": int,
 //                     "suggestions": List<String> }
-//                   or null when spell check is unavailable.
+//                   or null when no dictionary matches the language.
+//
+// The engine is hunspell, compiled into this binary from third_party/hunspell
+// (see its README.fpai.md). Nothing is dlopen'd, nothing is spawned, and there
+// is no runtime package to install: an en_US dictionary ships in the app
+// bundle, so spell check works out of the box on any distribution. The user's
+// own system dictionaries are still preferred when present, which is what
+// keeps other languages — and any words they have added themselves — working.
 //
 // Indices are **UTF-16 code units**, because that is what Dart's TextRange
 // counts. The macOS and Windows implementations get this for free (NSString
@@ -29,36 +40,6 @@
 // containing an emoji — which, in this app, is most of them.
 
 namespace {
-
-// ── Enchant, loaded lazily through dlopen ──────────────────────────────────
-//
-// Deliberately NOT linked at build time. Enchant is not present on every
-// desktop Linux install, and a DT_NEEDED entry would make the entire app fail
-// to start with "libenchant-2.so.2: cannot open shared object file" on those
-// machines — turning a missing optional feature into a dead application for
-// anyone running the tar.gz or AppImage. Loading it on demand keeps the app
-// launching and simply leaves spell check off, which is exactly the behaviour
-// Linux had before this plugin existed.
-//
-// It also means `flutter build linux` needs no new -dev package, so neither CI
-// nor a contributor's checkout has to change to build this.
-//
-// soname is pinned to the versioned file: libenchant-2.so (unversioned) only
-// exists when the -dev package is installed, which end users will not have.
-// The 2.x soname has been stable since Enchant 2.0 (2017).
-constexpr const char* kEnchantSoname = "libenchant-2.so.2";
-
-struct EnchantBroker;
-struct EnchantDict;
-
-using BrokerInitFn = EnchantBroker* (*)();
-using BrokerFreeFn = void (*)(EnchantBroker*);
-using BrokerRequestDictFn = EnchantDict* (*)(EnchantBroker*, const char*);
-using BrokerFreeDictFn = void (*)(EnchantBroker*, EnchantDict*);
-using BrokerDictExistsFn = int (*)(EnchantBroker*, const char*);
-using DictCheckFn = int (*)(EnchantDict*, const char*, ssize_t);
-using DictSuggestFn = char** (*)(EnchantDict*, const char*, ssize_t, size_t*);
-using DictFreeStringListFn = void (*)(EnchantDict*, char**);
 
 // Beyond a few hundred red squiggles the underlines stop conveying anything,
 // and every one of them costs an edit-distance search inside hunspell. Capping
@@ -75,160 +56,209 @@ constexpr size_t kMaxSuggestions = 5;
 // and are a common false-positive source.
 constexpr int kMinWordChars = 2;
 
-struct SpellState {
-  bool load_attempted = false;
-  void* handle = nullptr;
-  EnchantBroker* broker = nullptr;
-
-  // Requested language tag -> dict (or nullptr when the language has no
-  // dictionary installed). Requesting a dict parses the .dic file — ~50k
-  // entries for en_US — so it must happen once, not once per keystroke. The
-  // Windows plugin caches its ISpellChecker for the same reason, and its
-  // comment records the per-character typing lag that appeared without it.
-  GHashTable* dicts = nullptr;
-
-  BrokerFreeFn broker_free = nullptr;
-  BrokerRequestDictFn broker_request_dict = nullptr;
-  BrokerFreeDictFn broker_free_dict = nullptr;
-  BrokerDictExistsFn broker_dict_exists = nullptr;
-  DictCheckFn dict_check = nullptr;
-  DictSuggestFn dict_suggest = nullptr;
-  DictFreeStringListFn dict_free_string_list = nullptr;
+struct Dictionary {
+  std::unique_ptr<Hunspell> engine;
+  // Dictionaries are usually UTF-8, but plenty of older system ones are
+  // ISO8859-x. hunspell wants words in the dictionary's own encoding, so when
+  // it is not UTF-8 every word has to be converted on the way in and every
+  // suggestion converted back.
+  std::string encoding;
+  bool utf8 = true;
 };
 
-template <typename T>
-bool BindSymbol(void* handle, const char* name, T* out) {
-  void* sym = dlsym(handle, name);
-  if (sym == nullptr) {
+struct SpellState {
+  // Requested language tag -> dictionary, or a null entry when that language
+  // has none. Loading one parses the whole .dic (~50k entries for en_US), so
+  // it must happen once, not once per keystroke. The Windows plugin caches its
+  // ISpellChecker for the same reason, and its comment records the
+  // per-character typing lag that appeared without it.
+  std::map<std::string, std::unique_ptr<Dictionary>> dicts;
+};
+
+// Directory the running executable lives in. The dictionary we ship sits at
+// <exe dir>/data/dictionaries/, which is where linux/CMakeLists.txt installs
+// it inside the bundle, next to data/flutter_assets.
+std::string ExeDir() {
+  char buf[PATH_MAX];
+  const ssize_t len = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+  if (len <= 0) {
+    return std::string();
+  }
+  buf[len] = '\0';
+  g_autofree char* dir = g_path_get_dirname(buf);
+  return std::string(dir);
+}
+
+// Where distributions put hunspell/myspell dictionaries. Ordered most-specific
+// first so a user's own dictionary in $HOME wins over the system's.
+std::vector<std::string> SystemDictDirs() {
+  std::vector<std::string> dirs;
+  const char* home = g_get_home_dir();
+  if (home != nullptr) {
+    dirs.push_back(std::string(home) + "/.local/share/hunspell");
+  }
+  dirs.push_back("/usr/local/share/hunspell");
+  dirs.push_back("/usr/share/hunspell");
+  dirs.push_back("/usr/share/myspell/dicts");
+  dirs.push_back("/usr/share/myspell");
+  return dirs;
+}
+
+// A dictionary is an .aff/.dic pair sharing a basename. Returns the basename
+// path (no extension) when both halves exist.
+bool DictPairExists(const std::string& base) {
+  return g_file_test((base + ".aff").c_str(), G_FILE_TEST_IS_REGULAR) &&
+         g_file_test((base + ".dic").c_str(), G_FILE_TEST_IS_REGULAR);
+}
+
+// Finds any installed variant of a base language ("en" -> "en_GB"), so a
+// machine carrying only hunspell-en-gb still gets English.
+bool FindVariant(const std::string& dir, const std::string& base,
+                 std::string* out) {
+  g_autoptr(GDir) handle = g_dir_open(dir.c_str(), 0, nullptr);
+  if (handle == nullptr) {
     return false;
   }
-  *out = reinterpret_cast<T>(sym);
-  return true;
-}
-
-// Opens libenchant and binds every symbol we need. Runs at most once; on any
-// failure the state stays broker-less and every check returns null from then
-// on. Called on first use rather than at registration so that a machine
-// without Enchant pays nothing at startup.
-void EnsureLoaded(SpellState* state) {
-  if (state->load_attempted) {
-    return;
-  }
-  state->load_attempted = true;
-
-  state->handle = dlopen(kEnchantSoname, RTLD_LAZY | RTLD_LOCAL);
-  if (state->handle == nullptr) {
-    g_message(
-        "Spell check disabled: %s could not be loaded (%s). Install the "
-        "enchant 2 runtime and a hunspell dictionary to enable it.",
-        kEnchantSoname, dlerror());
-    return;
-  }
-
-  BrokerInitFn broker_init = nullptr;
-  const bool ok =
-      BindSymbol(state->handle, "enchant_broker_init", &broker_init) &&
-      BindSymbol(state->handle, "enchant_broker_free", &state->broker_free) &&
-      BindSymbol(state->handle, "enchant_broker_request_dict",
-                 &state->broker_request_dict) &&
-      BindSymbol(state->handle, "enchant_broker_free_dict",
-                 &state->broker_free_dict) &&
-      BindSymbol(state->handle, "enchant_broker_dict_exists",
-                 &state->broker_dict_exists) &&
-      BindSymbol(state->handle, "enchant_dict_check", &state->dict_check) &&
-      BindSymbol(state->handle, "enchant_dict_suggest", &state->dict_suggest) &&
-      BindSymbol(state->handle, "enchant_dict_free_string_list",
-                 &state->dict_free_string_list);
-
-  if (!ok) {
-    g_message("Spell check disabled: %s is missing expected symbols.",
-              kEnchantSoname);
-    dlclose(state->handle);
-    state->handle = nullptr;
-    return;
-  }
-
-  state->broker = broker_init();
-  if (state->broker == nullptr) {
-    g_message("Spell check disabled: enchant_broker_init() failed.");
-    return;
-  }
-  state->dicts = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, nullptr);
-}
-
-// Resolves a Dart language tag ("en-US") to an Enchant dictionary, falling
-// back to the bare language ("en") when the regional variant is not installed
-// — a machine with only `hunspell-en-gb` should still check English. Returns
-// nullptr, cached, when nothing matches.
-EnchantDict* GetDict(SpellState* state, const char* tag) {
-  gpointer cached = nullptr;
-  if (g_hash_table_lookup_extended(state->dicts, tag, nullptr, &cached)) {
-    return static_cast<EnchantDict*>(cached);
-  }
-
-  g_autofree char* normalized = g_strdup(tag);
-  for (char* c = normalized; *c != '\0'; ++c) {
-    if (*c == '-') {
-      *c = '_';
-    }
-  }
-
-  EnchantDict* dict = nullptr;
-  if (state->broker_dict_exists(state->broker, normalized) != 0) {
-    dict = state->broker_request_dict(state->broker, normalized);
-  } else {
-    char* region = strchr(normalized, '_');
-    if (region != nullptr) {
-      *region = '\0';
-      if (state->broker_dict_exists(state->broker, normalized) != 0) {
-        dict = state->broker_request_dict(state->broker, normalized);
+  const std::string prefix = base + "_";
+  const char* name = nullptr;
+  while ((name = g_dir_read_name(handle)) != nullptr) {
+    const std::string entry(name);
+    if (entry.size() > 4 && entry.compare(entry.size() - 4, 4, ".dic") == 0 &&
+        entry.compare(0, prefix.size(), prefix) == 0) {
+      const std::string candidate = dir + "/" + entry.substr(0, entry.size() - 4);
+      if (DictPairExists(candidate)) {
+        *out = candidate;
+        return true;
       }
     }
   }
+  return false;
+}
 
-  g_hash_table_insert(state->dicts, g_strdup(tag), dict);
-  return dict;
+// Resolution order, and the reasoning behind it:
+//   1. the exact tag the user's locale asks for (en_GB, de_DE)
+//   2. the bare language, for dictionaries named just "de"
+//   3. any installed variant of that language
+//   4. the dictionary we ship, for English only
+// System dictionaries come first so that a user's own installed language — and
+// any words they have added to it — keep working exactly as they did when this
+// went through Enchant. The bundled copy is a floor, not a replacement: it is
+// what guarantees the feature can never silently do nothing.
+bool ResolveDictPath(const std::string& tag, std::string* out) {
+  std::string normalized = tag;
+  for (char& c : normalized) {
+    if (c == '-') {
+      c = '_';
+    }
+  }
+  const size_t underscore = normalized.find('_');
+  const std::string base =
+      underscore == std::string::npos ? normalized : normalized.substr(0, underscore);
+
+  for (const std::string& dir : SystemDictDirs()) {
+    const std::string exact = dir + "/" + normalized;
+    if (DictPairExists(exact)) {
+      *out = exact;
+      return true;
+    }
+  }
+  for (const std::string& dir : SystemDictDirs()) {
+    const std::string bare = dir + "/" + base;
+    if (DictPairExists(bare)) {
+      *out = bare;
+      return true;
+    }
+  }
+  for (const std::string& dir : SystemDictDirs()) {
+    if (FindVariant(dir, base, out)) {
+      return true;
+    }
+  }
+
+  if (base == "en") {
+    const std::string bundled = ExeDir() + "/data/dictionaries/en_US";
+    if (DictPairExists(bundled)) {
+      *out = bundled;
+      return true;
+    }
+    g_message(
+        "Spell check: the bundled en_US dictionary is missing from the app "
+        "bundle (looked in %s). The install is incomplete.",
+        bundled.c_str());
+  }
+  return false;
+}
+
+Dictionary* GetDict(SpellState* state, const char* tag) {
+  auto cached = state->dicts.find(tag);
+  if (cached != state->dicts.end()) {
+    return cached->second.get();
+  }
+
+  std::string path;
+  std::unique_ptr<Dictionary> dict;
+  if (ResolveDictPath(tag, &path)) {
+    dict.reset(new Dictionary());
+    dict->engine.reset(new Hunspell((path + ".aff").c_str(),
+                                    (path + ".dic").c_str()));
+    const char* encoding = dict->engine->get_dic_encoding();
+    dict->encoding = encoding != nullptr ? encoding : "UTF-8";
+    dict->utf8 = g_ascii_strcasecmp(dict->encoding.c_str(), "UTF-8") == 0 ||
+                 g_ascii_strcasecmp(dict->encoding.c_str(), "UTF8") == 0;
+  }
+
+  Dictionary* raw = dict.get();
+  state->dicts.emplace(tag, std::move(dict));
+  return raw;
 }
 
 int Utf16Len(gunichar c) { return c < 0x10000 ? 1 : 2; }
 
 bool IsApostrophe(gunichar c) {
-  return c == 0x0027 || c == 0x2019;  // ' and '
+  return c == 0x0027 || c == 0x2019;  // ' and ’
 }
 
 // Checks one word and appends a span when it is misspelled.
-void CheckWord(SpellState* state, EnchantDict* dict, const char* start,
-               const char* end, int u16_start, int u16_end, FlValue* spans) {
+void CheckWord(Dictionary* dict, const char* start, const char* end,
+               int u16_start, int u16_end, FlValue* spans) {
   const size_t byte_len = static_cast<size_t>(end - start);
+  std::string word(start, byte_len);
 
   // hunspell dictionaries spell contractions with U+0027, so a typographic
   // apostrophe has to be folded down or every "don't" typed by a word
   // processor (or by this app's own smart-quote handling) reads as a typo.
-  g_autofree char* folded = nullptr;
-  const char* word = start;
-  if (g_strstr_len(start, static_cast<gssize>(byte_len), "\xE2\x80\x99") !=
-      nullptr) {
-    g_autofree char* copy = g_strndup(start, byte_len);
-    g_auto(GStrv) parts = g_strsplit(copy, "\xE2\x80\x99", -1);
-    folded = g_strjoinv("'", parts);
-    word = folded;
+  for (size_t at = word.find("\xE2\x80\x99"); at != std::string::npos;
+       at = word.find("\xE2\x80\x99", at + 1)) {
+    word.replace(at, 3, "'");
   }
-  const size_t check_len = folded != nullptr ? strlen(folded) : byte_len;
 
-  if (state->dict_check(dict, word, static_cast<ssize_t>(check_len)) <= 0) {
-    return;  // 0 == correctly spelled, negative == checker error
+  if (!dict->utf8) {
+    g_autofree gchar* converted =
+        g_convert(word.c_str(), -1, dict->encoding.c_str(), "UTF-8", nullptr,
+                  nullptr, nullptr);
+    if (converted == nullptr) {
+      return;  // not representable in this dictionary — cannot be judged
+    }
+    word.assign(converted);
+  }
+
+  if (dict->engine->spell(word)) {
+    return;
   }
 
   FlValue* suggestions = fl_value_new_list();
-  size_t count = 0;
-  char** raw = state->dict_suggest(dict, word, static_cast<ssize_t>(check_len),
-                                   &count);
-  if (raw != nullptr) {
-    const size_t limit = count < kMaxSuggestions ? count : kMaxSuggestions;
-    for (size_t i = 0; i < limit; ++i) {
-      fl_value_append_take(suggestions, fl_value_new_string(raw[i]));
+  const std::vector<std::string> raw = dict->engine->suggest(word);
+  for (size_t i = 0; i < raw.size() && i < kMaxSuggestions; ++i) {
+    if (dict->utf8) {
+      fl_value_append_take(suggestions, fl_value_new_string(raw[i].c_str()));
+      continue;
     }
-    state->dict_free_string_list(dict, raw);
+    g_autofree gchar* back = g_convert(raw[i].c_str(), -1, "UTF-8",
+                                       dict->encoding.c_str(), nullptr, nullptr,
+                                       nullptr);
+    if (back != nullptr) {
+      fl_value_append_take(suggestions, fl_value_new_string(back));
+    }
   }
 
   FlValue* span = fl_value_new_map();
@@ -240,8 +270,8 @@ void CheckWord(SpellState* state, EnchantDict* dict, const char* start,
 
 // Walks a whitespace-delimited chunk, spell-checking each word in it.
 // |u16| is the UTF-16 offset of |start| within the whole text.
-void ScanChunk(SpellState* state, EnchantDict* dict, const char* start,
-               const char* end, int u16, FlValue* spans) {
+void ScanChunk(Dictionary* dict, const char* start, const char* end, int u16,
+               FlValue* spans) {
   const char* p = start;
   while (p < end && fl_value_get_length(spans) < kMaxSpans) {
     gunichar c = g_utf8_get_char(p);
@@ -279,7 +309,7 @@ void ScanChunk(SpellState* state, EnchantDict* dict, const char* start,
     // Tokens carrying digits are identifiers, not prose — "x86", "3rd",
     // "v0.9.8". Both other platforms leave them alone.
     if (!has_digit && word_chars >= kMinWordChars) {
-      CheckWord(state, dict, word_start, p, word_u16_start, u16, spans);
+      CheckWord(dict, word_start, p, word_u16_start, u16, spans);
     }
   }
 }
@@ -287,7 +317,7 @@ void ScanChunk(SpellState* state, EnchantDict* dict, const char* start,
 // Splits the text into whitespace-delimited chunks so URLs and email
 // addresses can be skipped wholesale. Without this, "github.com" reads as the
 // two misspellings "github" and "com"; macOS and Windows both suppress them.
-FlValue* CheckText(SpellState* state, EnchantDict* dict, const char* text) {
+FlValue* CheckText(Dictionary* dict, const char* text) {
   FlValue* spans = fl_value_new_list();
   const char* p = text;
   int u16 = 0;
@@ -317,7 +347,7 @@ FlValue* CheckText(SpellState* state, EnchantDict* dict, const char* text) {
         g_strstr_len(chunk_start, chunk_len, "@") != nullptr ||
         g_str_has_prefix(chunk_start, "www.");
     if (!looks_like_a_link) {
-      ScanChunk(state, dict, chunk_start, p, chunk_u16, spans);
+      ScanChunk(dict, chunk_start, p, chunk_u16, spans);
     }
   }
 
@@ -332,9 +362,10 @@ void HandleMethodCall(FlMethodChannel* channel, FlMethodCall* method_call,
 
   if (strcmp(fl_method_call_get_name(method_call), "spellCheck") != 0) {
     response = FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());
-    g_autoptr(GError) error = nullptr;
-    if (!fl_method_call_respond(method_call, response, &error)) {
-      g_warning("Failed to respond to spell check call: %s", error->message);
+    g_autoptr(GError) not_impl_error = nullptr;
+    if (!fl_method_call_respond(method_call, response, &not_impl_error)) {
+      g_warning("Failed to respond to spell check call: %s",
+                not_impl_error->message);
     }
     return;
   }
@@ -359,15 +390,13 @@ void HandleMethodCall(FlMethodChannel* channel, FlMethodCall* method_call,
         fl_value_get_string(fl_value_get_list_value(args, 0));
     const char* text = fl_value_get_string(fl_value_get_list_value(args, 1));
 
-    EnsureLoaded(state);
-    EnchantDict* dict =
-        state->broker != nullptr ? GetDict(state, language_tag) : nullptr;
+    Dictionary* dict = GetDict(state, language_tag);
 
-    // No Enchant, or no dictionary for this language: reply null, exactly as
-    // the Windows plugin does when IsSupported() says no. DesktopSpellCheck-
-    // Service treats null as "no results" and clears the underlines.
+    // No dictionary for this language: reply null, exactly as the Windows
+    // plugin does when IsSupported() says no. DesktopSpellCheckService treats
+    // null as "no results" and clears the underlines.
     g_autoptr(FlValue) result =
-        dict != nullptr ? CheckText(state, dict, text) : fl_value_new_null();
+        dict != nullptr ? CheckText(dict, text) : fl_value_new_null();
     response = FL_METHOD_RESPONSE(fl_method_success_response_new(result));
   }
 
@@ -377,28 +406,7 @@ void HandleMethodCall(FlMethodChannel* channel, FlMethodCall* method_call,
   }
 }
 
-void FreeState(gpointer data) {
-  SpellState* state = static_cast<SpellState*>(data);
-  if (state->dicts != nullptr) {
-    GHashTableIter iter;
-    gpointer value = nullptr;
-    g_hash_table_iter_init(&iter, state->dicts);
-    while (g_hash_table_iter_next(&iter, nullptr, &value)) {
-      if (value != nullptr) {
-        state->broker_free_dict(state->broker,
-                                static_cast<EnchantDict*>(value));
-      }
-    }
-    g_hash_table_destroy(state->dicts);
-  }
-  if (state->broker != nullptr) {
-    state->broker_free(state->broker);
-  }
-  if (state->handle != nullptr) {
-    dlclose(state->handle);
-  }
-  delete state;
-}
+void FreeState(gpointer data) { delete static_cast<SpellState*>(data); }
 
 }  // namespace
 

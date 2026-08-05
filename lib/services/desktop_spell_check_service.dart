@@ -21,9 +21,9 @@ import 'dart:ui' show Locale, TextRange;
 import 'package:flutter/services.dart'
     show MethodChannel, SpellCheckService, SuggestionSpan;
 
-/// A [SpellCheckService] backed by the platform's own spell checker: macOS
-/// `NSSpellChecker`, Windows `ISpellChecker`, and Linux Enchant (which fronts
-/// whichever hunspell/aspell dictionaries the user has installed).
+/// A [SpellCheckService] backed by a native spell checker: macOS
+/// `NSSpellChecker`, Windows `ISpellChecker`, and on Linux a hunspell engine
+/// compiled into the app itself (`third_party/hunspell`).
 ///
 /// Communicates with `SpellCheckPlugin` (Swift / C++ / C++-GObject) over the
 /// `front_porch_ai/spell_check` method channel. All three runners implement
@@ -43,10 +43,11 @@ import 'package:flutter/services.dart'
 /// desktop. Calling the native APIs directly via a method channel
 /// bypasses both limitations.
 ///
-/// Linux is best-effort by nature: unlike macOS and Windows, the OS does not
-/// guarantee a spell checker exists. The runner loads Enchant with `dlopen`
-/// and replies null when it or the locale's dictionary is missing, which lands
-/// in the same "no results" branch as any other empty answer.
+/// Linux has no OS-guaranteed spell checker, so the app carries its own: the
+/// engine is compiled in and an en_US dictionary ships in the bundle, with the
+/// user's system dictionaries preferred when they exist. Nothing is dlopen'd
+/// and no process is spawned. A language with no dictionary anywhere replies
+/// null, which lands in the same "no results" branch as any other empty answer.
 class DesktopSpellCheckService implements SpellCheckService {
   static const _channel = MethodChannel('front_porch_ai/spell_check');
 
