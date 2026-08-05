@@ -44,8 +44,9 @@ class StreamHub {
   // Token coalescing: the generation loop pushes one event PER TOKEN, and
   // relaying each as its own WS frame melted iPad Safari during fast local
   // generation (a full client re-render per frame — the same failure the
-  // desktop's 33ms _notifyStreamListeners coalescer fixed). Buffer and flush
-  // at most every ~66ms, with a synchronous flush before done/error so no
+  // desktop's _notifyStreamListeners coalescer fixed). Buffer and flush at
+  // the SAME ~33ms cadence the desktop paints at (parity — web streaming
+  // must look identical), with a synchronous flush before done/error so no
   // tail is lost and ordering is preserved. Clients already concatenate
   // token frames, so batching is transparent to them.
   final StringBuffer _pendingTokens = StringBuffer();
@@ -98,7 +99,7 @@ class StreamHub {
     } else {
       _pendingTokens.write(token);
       _tokenFlushTimer ??= Timer(
-        const Duration(milliseconds: 66),
+        const Duration(milliseconds: 33),
         _flushPendingTokens,
       );
     }

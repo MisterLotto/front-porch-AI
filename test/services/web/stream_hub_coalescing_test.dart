@@ -89,7 +89,7 @@ void main() {
       final (events, client) = await connect();
 
       tokens.add('slow');
-      // Well within the 66ms flush window nothing should have arrived yet;
+      // Well within the flush window nothing should have arrived yet;
       // after it, exactly one frame.
       await Future<void>.delayed(const Duration(milliseconds: 200));
       final tokenFrames = events.where((e) => e['event'] == 'token').toList();

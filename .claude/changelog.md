@@ -9545,3 +9545,13 @@ it was paying got paid by rewording a doc comment in place instead.
 **Verification:** analyze 0 · full suite 2,746 · ci-local goldens green.
 E2E deferred — maintainer has a live `flutter run` and macOS builds would
 swap the framework under it.
+
+## 2026-08-04 — fix(web): web token stream flushes at the desktop's exact 33ms cadence
+- **Why:** maintainer read the 66ms web batching as "web doesn't stream like desktop".
+  The web UI always streamed; the batch window was just coarser than desktop's 33ms
+  `_kStreamNotifyInterval`. Parity says they match — with the React transcript memo
+  in place there is no reason for web to be conservative.
+- **Did:** StreamHub flush window 66ms → 33ms (~30 visual updates/s, same as desktop).
+- **Gates:** analyze clean; hub suites 5/5 green.
+- **Files:** `lib/services/web/streaming/stream_hub.dart`, comment touch-up in
+  `test/services/web/stream_hub_coalescing_test.dart` (same-session new test, unpushed).
