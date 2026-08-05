@@ -1,6 +1,6 @@
 # Changelog
 
-## 2026-08-04 — fix(web): three Discord-reported WebUI bugs — empty bubble after streaming, iPad stalls during evals, silent web-server start failure
+## 2026-08-04 — fix(web): three Discord-reported WebUI bugs — empty bubble after streaming, iPad stalls during evals, silent web-server start failure (73174373)
 - **Why:** three user reports (pnwpdr ×2, Demon Doctor ×1). Root-caused via a 14-agent
   investigation workflow (6 finders + 8 adversarial verifiers; 8/8 findings CONFIRMED,
   0 refuted) plus personal line-level verification of every mechanism before editing.
