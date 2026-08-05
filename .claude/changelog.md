@@ -9731,3 +9731,34 @@ swap the framework under it.
 - **Files:** story_reader_page.pagination.dart (probe removed),
   story_reader_page_interaction_test.dart (probe removed, comment corrected),
   docs/Rawhide.md, this file.
+
+## 2026-08-05 — refactor(campaign): round 2 — FOUR MORE god files eliminated (baseline 18 → 14)
+- **Why:** maintainer: "start on the next tranche." Same playbook as round 1 (mapper
+  workflow → provability nets where uncovered → worktree splits → personal multiset
+  audits → gates), with round-1 lessons pre-baked (main-fork drift check ran FIRST:
+  all four targets identical main-vs-Rawhide, zero replay needed).
+- **Splits:**
+  1. story_dashboard_page 1,446 → 173 shell + 5 parts (11 rebuildState sites; zero
+     retheme needed — already clean).
+  2. generation_options_tab 1,351 → 301 shell + 4 parts (7 rebuildState; the
+     _drawThingsSamplers const relocated to its only reader; ONE retheme site —
+     presetColors[6] teal track → formMasterAccent). Its pre-existing REAL
+     interaction net stayed green through the split.
+  3. model_settings_dialog 1,277 → 286 shell + 4 parts (11 rebuildState; 6 amber
+     chrome lines → formMasterAccent matching the oMLX banner pattern; duplicated
+     oMLX localhost URL hoisted to one const; 4 theme-keeps).
+  4. voice_media_tab 1,273 → 88 shell + 4 parts (stateless — no bridge needed; the
+     sttEnabled seam handled via a List<Widget> splice per the map; 11 banned
+     off-palette chrome sites warmed — 6 cool-blue userBubble misuses + 5 purple
+     presetColors[4] — plus 6 theme-keeps; byte-identical — escapes preserved).
+- **Provability:** TWO new interaction nets written and green BEFORE their splits,
+  then green AFTER: voice_media_tab (drives the real Enable-Voice-Input gate — the
+  call section appears when flipped) and model_settings_dialog (both backend modes).
+  story_dashboard was already E2E-covered (story_pipeline walk); generation_options
+  had its real net. Every net built on the golden fakes; new local stubs only.
+- **Audits:** all four ports line-multiset audited; every flagged line accounted for
+  (rewrap artifacts, sanctioned section signatures, the URL hoist).
+- **Campaign total for the night: EIGHT files eliminated, 22 → 14 (campaign start 26).**
+- **Gates:** analyze 0 at every step; ratchet green at 14; nets green vs splits; the
+  finale chain (goldens regen + container + full suite + story/settings E2E) ran
+  before commit.
