@@ -15,6 +15,7 @@ import { GroupSettings, type GroupBlock } from './GroupSettings';
 import { GrowthPanel } from './GrowthPanel';
 import { MilestonesPanel } from './MilestonesPanel';
 import { StoryCalendarModal } from './StoryCalendarModal';
+import { ContextBudgetModal } from './ContextBudgetModal';
 
 interface ObjectiveTask {
   description: string;
@@ -165,6 +166,7 @@ export function ChatTools({
   const [storyMsg, setStoryMsg] = useState<string | null>(null);
   const [goal, setGoal] = useState('');
   const [showCalendar, setShowCalendar] = useState(false);
+  const [showBudget, setShowBudget] = useState(false);
 
   // Scope every tools call to the focused cast participant so objectives/arousal
   // (and the snapshot returned by mutations) follow the focus.
@@ -200,6 +202,11 @@ export function ChatTools({
     <div className="chat-tools">
       <Toggle label="Realism engine" value={t.realismEnabled} onChange={(v) => toggle('realism', v)} />
       <Toggle label="Needs simulation" value={t.needsEnabled} onChange={(v) => toggle('needs', v)} />
+      <div className="tool-row">
+        <button className="link-btn" onClick={() => setShowBudget(true)}>
+          📊 Context budget — what the model was sent
+        </button>
+      </div>
 
       <details className="tool-section">
         <summary>Realism performance</summary>
@@ -551,6 +558,8 @@ export function ChatTools({
           onChanged={load}
         />
       )}
+
+      {showBudget && <ContextBudgetModal onClose={() => setShowBudget(false)} />}
     </div>
   );
 }

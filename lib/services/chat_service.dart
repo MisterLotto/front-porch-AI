@@ -2812,7 +2812,7 @@ class ChatService extends ChangeNotifier {
 
   // ── Context / Prompt Budget ──
   Map<String, int> _lastPromptBudget = {};
-  String _lastAssembledPrompt = '';
+  Map<String, String> _lastPromptSections = const {};
 
   // ── Session Metadata ──
   String? _sessionName;
@@ -3094,7 +3094,7 @@ class ChatService extends ChangeNotifier {
   int get authorNoteStrength => _authorNoteStrength;
 
   Map<String, int> get lastPromptBudget => _lastPromptBudget;
-  String get lastAssembledPrompt => _lastAssembledPrompt;
+  Map<String, String> get lastPromptSections => _lastPromptSections;
   int get contextSize =>
       _sessionGenSettings.resolveContextSize(_storageService);
 

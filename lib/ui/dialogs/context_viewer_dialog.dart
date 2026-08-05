@@ -17,6 +17,8 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
@@ -34,6 +36,9 @@ class ContextViewerDialog extends StatelessWidget {
     'Examples': Color(0xFFF59E0B),
     'Chat History': Color(0xFF6366F1),
     'Post-History': Color(0xFFEF4444),
+    'Journal': Color(0xFFF97316),
+    'Realism Mode': Color(0xFFEC4899),
+    'Memories': Color(0xFF14B8A6),
   };
 
   @override
@@ -201,7 +206,10 @@ class ContextViewerDialog extends StatelessWidget {
                     tokens: e.value,
                     percentage: pct,
                     color: color,
-                    rawText: _getRawTextForSection(e.key),
+                    // The REAL text this section contributed to the last
+                    // prompt, straight from the PromptPlan — replaces the
+                    // old dead "(Tap to view full prompt)" placeholder.
+                    rawText: chatService.lastPromptSections[e.key] ?? '',
                   );
                 }).toList(),
               ),
@@ -212,28 +220,6 @@ class ContextViewerDialog extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  String _getRawTextForSection(String section) {
-    // Provide a hint - we don't store individual sections, but we have the full prompt
-    final prompt = chatService.lastAssembledPrompt;
-    if (prompt.isEmpty) return '(No data — send a message first)';
-
-    switch (section) {
-      case 'System Prompt':
-        final idx = prompt.indexOf('\n');
-        if (idx > 0) return prompt.substring(0, idx);
-        return prompt;
-      case 'Chat History':
-        final startIdx = prompt.indexOf('<START>\n');
-        if (startIdx >= 0) {
-          final after = prompt.substring(startIdx + 8);
-          return after.length > 500 ? '${after.substring(0, 500)}...' : after;
-        }
-        return '';
-      default:
-        return '(Tap to view full prompt)';
-    }
   }
 }
 
@@ -316,19 +302,61 @@ class _SectionRowState extends State<_SectionRow> {
           Container(
             width: double.infinity,
             margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: const Color(0xFF1e293b),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: widget.color.withValues(alpha: 0.3)),
             ),
-            child: SelectableText(
-              widget.rawText,
-              style: const TextStyle(
-                color: Colors.white60,
-                fontSize: 11,
-                fontFamily: 'monospace',
-              ),
+            // Capped + scrollable: Chat History alone can be thousands of
+            // tokens, and inline-expanding it un-capped blew the dialog up.
+            constraints: const BoxConstraints(maxHeight: 240),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: const Icon(
+                    Icons.copy_outlined,
+                    size: 14,
+                    color: Colors.white38,
+                  ),
+                  padding: const EdgeInsets.only(top: 6, right: 6),
+                  constraints: const BoxConstraints(),
+                  tooltip: 'Copy section text',
+                  onPressed: widget.rawText.isEmpty
+                      ? null
+                      : () {
+                          Clipboard.setData(
+                            ClipboardData(text: widget.rawText),
+                          );
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Section text copied.'),
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                ),
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: SelectableText(
+                        widget.rawText.isEmpty
+                            ? '(This section was empty in the last prompt — '
+                                  'send a message first.)'
+                            : widget.rawText,
+                        style: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 11,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         const Divider(height: 1, color: Colors.white10),

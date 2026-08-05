@@ -6,6 +6,7 @@ import { useAuth } from './auth/AuthContext';
 import { Layout } from './components/Layout';
 import { SetupPage } from './pages/SetupPage';
 import { LoginPage } from './pages/LoginPage';
+import { UnreachablePage } from './pages/UnreachablePage';
 import { CharactersPage } from './pages/CharactersPage';
 import { ChatPage } from './pages/ChatPage';
 import { RemoteAccessPage } from './pages/RemoteAccessPage';
@@ -26,7 +27,7 @@ import { AccountPage } from './pages/AccountPage';
 import { StoopSection } from './pages/stoop/StoopSection';
 
 export function App() {
-  const { loading, setupRequired, authenticated } = useAuth();
+  const { loading, setupRequired, authenticated, unreachable } = useAuth();
 
   if (loading) {
     return (
@@ -35,6 +36,10 @@ export function App() {
       </div>
     );
   }
+  // Before the login branch: a dead server used to render as a working-looking
+  // login form (the service worker serves the shell from cache) — say so
+  // honestly instead.
+  if (unreachable) return <UnreachablePage />;
   if (setupRequired) return <SetupPage />;
   if (!authenticated) return <LoginPage />;
 

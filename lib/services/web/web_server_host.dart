@@ -128,6 +128,31 @@ class WebServerHost extends ChangeNotifier {
   /// undiagnosable). Null after a successful start.
   String? get lastStartError => _lastStartError;
   String? _lastStartError;
+
+  /// True when the last failure was a socket/bind problem — the class where
+  /// "use a different port" is the one-tap fix the failure dialog offers.
+  bool get lastStartPortConflict => _lastStartPortConflict;
+  bool _lastStartPortConflict = false;
+
+  /// Probe loopback for a free port near [port] so the failure dialog can
+  /// offer "Use port N instead" without the user knowing what a port is.
+  /// Best-effort: a later bind on all interfaces can still fail and will be
+  /// reported through the same dialog.
+  Future<int?> findFreePortNear(int port) async {
+    for (var candidate = port + 1; candidate <= port + 20; candidate++) {
+      try {
+        final probe = await ServerSocket.bind(
+          InternetAddress.loopbackIPv4,
+          candidate,
+        );
+        await probe.close();
+        return candidate;
+      } catch (_) {
+        // Taken or reserved — keep walking.
+      }
+    }
+    return null;
+  }
   bool get hasActiveClient => _hasActiveClient;
   String? get connectedClientIp => _connectedClientIp;
   String? get connectedClientInfo => _connectedClientInfo;
@@ -639,9 +664,11 @@ class WebServerHost extends ChangeNotifier {
       await start(port).timeout(const Duration(seconds: 25));
       await settings.setWebServerStarting(false);
       _lastStartError = null;
+      _lastStartPortConflict = false;
       return isRunning;
     } catch (e) {
       _lastStartError = describeStartFailure(e, port);
+      _lastStartPortConflict = e is SocketException;
       debugPrint('[WebServerHost] Web server start failed: $e — disabling.');
       await settings.setWebServerStarting(false);
       await settings.setWebServerEnabled(false);
@@ -658,9 +685,15 @@ class WebServerHost extends ChangeNotifier {
   /// Windows reserved-port ranges (Hyper-V/WSL exclusions make bind fail with
   /// access-denied on an apparently free port). Static + pure for testing.
   static String describeStartFailure(Object e, int port) {
+    // Copy is written for NON-technical users (maintainer directive
+    // 2026-08-04): say what happened and what to press, no networking
+    // knowledge assumed. Keep the anchor phrases the start-failure test
+    // asserts ('already in use', 'second running copy', 'refused access',
+    // 'timed out').
     if (e is TimeoutException) {
-      return 'The start attempt timed out after 25 seconds. Try again — and '
-          'if it keeps happening, change the port below.';
+      return 'Starting timed out (it took too long, so the app stopped '
+          'waiting to keep itself responsive). This is usually temporary — '
+          'try again.';
     }
     if (e is SocketException) {
       // EADDRINUSE: macOS 48, Linux 98, Windows 10048. The "shared flag"
@@ -674,14 +707,15 @@ class WebServerHost extends ChangeNotifier {
           code == 10048 ||
           msg.contains('already in use') ||
           msg.contains('shared flag')) {
-        return 'Port $port is already in use — another app (or a second '
-            'running copy of Front Porch AI) has it. Close that app or '
-            'change the port below.';
+        return 'Its "door number" (port $port) is already in use by another '
+            'program on this computer — usually a second running copy of '
+            'Front Porch AI. Close the other program, or let the app switch '
+            'to a free one.';
       }
       if (code == 13 || code == 10013 || msg.contains('access')) {
-        return 'The system refused access to port $port (it may be reserved '
-            'by the OS — common on Windows with Hyper-V/WSL). Change the '
-            'port below.';
+        return 'This computer refused access to door number (port) $port — '
+            'Windows sometimes reserves numbers for itself. Switching to a '
+            'different one fixes this.';
       }
       return 'Could not open port $port: ${e.osError?.message ?? e.message}';
     }

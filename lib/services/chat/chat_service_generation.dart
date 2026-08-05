@@ -1022,9 +1022,9 @@ extension ChatServiceGeneration on ChatService {
       final chatSystemPrompt = plan.systemText;
       final prompt = plan.userText;
 
-      // Context viewer: full prompt + per-section budget, straight from the
-      // plan (no third hand-built copy to drift).
-      _lastAssembledPrompt = plan.fullText;
+      // Context viewer: per-section text + budget, straight from the plan
+      // (no third hand-built copy to drift).
+      _lastPromptSections = plan.sectionTexts();
       _lastPromptBudget = {
         ...plan.budgetEstimates(),
         if (droppedMessages > 0) 'Dropped Messages': droppedMessages,

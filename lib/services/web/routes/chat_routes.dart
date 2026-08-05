@@ -27,6 +27,7 @@ import 'package:front_porch_ai/services/web/util/util.dart';
 class WebChatRoutes {
   WebChatRoutes(this._facade, Router router) {
     router.get('/api/chat/state', _state);
+    router.get('/api/chat/context-budget', _contextBudget);
     router.get('/api/chat/participant/<id>/realism', _participantRealism);
     router.get('/api/chat/sessions', _sessions);
     router.get('/api/personas', _personas);
@@ -65,6 +66,9 @@ class WebChatRoutes {
 
   shelf.Response _state(shelf.Request request) =>
       JsonResponse.ok(_facade.state());
+
+  shelf.Response _contextBudget(shelf.Request request) =>
+      JsonResponse.ok(_facade.contextBudget());
 
   /// Re-probe the current model's tool-calling support (web pill retest).
   Future<shelf.Response> _toolTest(shelf.Request request) async =>

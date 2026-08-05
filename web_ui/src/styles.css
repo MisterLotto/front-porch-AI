@@ -2177,3 +2177,40 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
   height: 100%;
   background: var(--accent);
 }
+
+/* ── Context Budget modal (desktop ContextViewerDialog parity) ──────────── */
+.ctxb-modal { max-height: 84vh; overflow-y: auto; width: min(500px, 94vw); }
+.ctxb-total {
+  display: flex; justify-content: space-between;
+  font-size: 0.9rem; font-weight: 600;
+}
+.ctxb-track {
+  height: 8px; border-radius: 6px; background: var(--surface-2);
+  overflow: hidden;
+}
+.ctxb-fill { height: 100%; border-radius: 6px; }
+.ctxb-stack {
+  display: flex; height: 22px; border-radius: 6px; overflow: hidden;
+  margin-bottom: 4px;
+}
+.ctxb-row {
+  display: flex; align-items: center; gap: 8px; padding: 8px 0;
+  cursor: pointer; border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+.ctxb-dot { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.ctxb-label { flex: 1; }
+.ctxb-tokens { font-weight: 600; }
+.ctxb-pct { color: var(--muted); font-size: 0.78rem; width: 48px; text-align: right; }
+.ctxb-text-wrap {
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface-2); margin: 4px 0 8px;
+  display: flex; flex-direction: column; align-items: flex-end;
+}
+.ctxb-copy { padding: 4px 8px 0; }
+.ctxb-text { max-height: 240px; overflow: auto; width: 100%; padding: 0 8px 8px; }
+.ctxb-text pre {
+  margin: 0; white-space: pre-wrap; word-break: break-word;
+  font-size: 11px; font-family: ui-monospace, SFMono-Regular, monospace;
+  color: var(--muted);
+}

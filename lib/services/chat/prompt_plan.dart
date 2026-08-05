@@ -162,4 +162,17 @@ class PromptPlan {
         if (e.value > 0) e.key: (e.value / 4).ceil(),
     };
   }
+
+  /// Per-label raw text — same grouping and skip rules as [budgetEstimates],
+  /// so the Context Viewer's counts and texts line up key-for-key. This is
+  /// what makes the viewer's per-section expansion show the REAL prompt
+  /// content instead of the old "(Tap to view full prompt)" dead end.
+  Map<String, String> sectionTexts() {
+    final byLabel = <String, String>{};
+    for (final s in _sections) {
+      if (s.label.isEmpty || s.text.isEmpty) continue;
+      byLabel[s.label] = '${byLabel[s.label] ?? ''}${s.text}';
+    }
+    return byLabel;
+  }
 }

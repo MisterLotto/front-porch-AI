@@ -93,6 +93,71 @@ extension _SettingsAdvancedTab on _SettingsPageState {
     );
   }
 
+  /// One shared start-attempt flow for the toggle and the failure dialog's
+  /// retry button. Failures show a warm, plain-English dialog (maintainer
+  /// directive 2026-08-04: most users are non-technical and a vanishing
+  /// toast left them stuck) with a one-tap "use a free port" fix whenever
+  /// the port is the problem — no networking knowledge needed.
+  Future<void> _attemptWebServerStart(
+    BuildContext context,
+    StorageService storage,
+    WebServerHost webServer,
+  ) async {
+    // startSafely reverts + disables on failure so a bad start can never
+    // leave the app in a launch crash loop.
+    final ok = await webServer.startSafely(storage.webServerPort);
+    if (!context.mounted) return;
+    if (ok) {
+      // Guide the user through how they'll reach it.
+      await WebAccessSetupDialog.show(context);
+      return;
+    }
+    final altPort = webServer.lastStartPortConflict
+        ? await webServer.findFreePortNear(storage.webServerPort)
+        : null;
+    if (!context.mounted) return;
+
+    Future<void> retry() async {
+      Navigator.of(context).pop();
+      if (altPort != null) await storage.setWebServerPort(altPort);
+      await storage.setWebServerEnabled(true);
+      if (!context.mounted) return;
+      await _attemptWebServerStart(context, storage, webServer);
+    }
+
+    await showWarmDialog<void>(
+      context,
+      title: 'Web server couldn’t start',
+      icon: Icons.wifi_tethering_off,
+      width: 380,
+      content: Text(
+        webServer.lastStartError ??
+            'Something unexpected stopped it. Try again in a moment.',
+        style: TextStyle(
+          color: AppColors.textSecondary(context),
+          fontSize: 13,
+          height: 1.4,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.porchAmberOf(context),
+            foregroundColor: AppColors.onChaosAccent,
+          ),
+          onPressed: () => retry(),
+          child: Text(
+            altPort != null ? 'Use port $altPort instead' : 'Try again',
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildWebServerSection(BuildContext context) {
     final theme = Theme.of(context);
     return Consumer2<StorageService, WebServerHost>(
@@ -133,32 +198,11 @@ extension _SettingsAdvancedTab on _SettingsPageState {
                     onChanged: (val) async {
                       await storage.setWebServerEnabled(val);
                       if (val) {
-                        // startSafely reverts + disables on failure so a
-                        // bad start can never leave the app in a launch
-                        // crash loop.
-                        final ok = await webServer.startSafely(
-                          storage.webServerPort,
+                        await _attemptWebServerStart(
+                          context,
+                          storage,
+                          webServer,
                         );
-                        if (!context.mounted) return;
-                        if (ok) {
-                          // Guide the user through how they'll reach it.
-                          await WebAccessSetupDialog.show(context);
-                        } else {
-                          // Include the classified reason (port in use,
-                          // reserved port, timeout…) — a bare "failed" is
-                          // undiagnosable from a release build.
-                          final reason = webServer.lastStartError;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              duration: const Duration(seconds: 8),
-                              content: Text(
-                                'Web server failed to start and was '
-                                'turned off.'
-                                '${reason == null ? '' : '\n$reason'}',
-                              ),
-                            ),
-                          );
-                        }
                       } else {
                         await webServer.stop();
                       }
@@ -180,6 +224,9 @@ extension _SettingsAdvancedTab on _SettingsPageState {
                           SizedBox(
                             width: 120,
                             child: TextFormField(
+                              // Keyed on the port so the one-tap "Use port N"
+                              // fix in the failure dialog refreshes the field.
+                              key: ValueKey(storage.webServerPort),
                               initialValue: storage.webServerPort.toString(),
                               keyboardType: TextInputType.number,
                               style: TextStyle(

@@ -1,5 +1,48 @@
 # Changelog
 
+## 2026-08-04 — feat(web+ux): honest offline page, idiot-proof server-start dialog, Context Budget real text + web parity
+- **Why:** three maintainer asks in one evening session. (1) With the web server off
+  (or the app closed) the PWA's service worker still serves the cached shell, so
+  Safari showed a normal-looking login form that silently did nothing; (2) the
+  server-start failure toast had to become "idiot proof" for non-technical users;
+  (3) the Context Budget dialog's "(Tap to view full prompt)" placeholders were
+  dead — and the maintainer chose real-text expansion + building the missing web
+  counterpart (parity).
+- **Honest offline page (web):** `AuthContext` now distinguishes "server answered
+  401" (ApiError) from "nothing answered" → new `unreachable` state renders
+  `UnreachablePage` (plain-English: open the app / turn the web server on / Try
+  Again) instead of the fake login form; `LoginPage` network failures say the same
+  instead of "Login failed." (which read as wrong-password). Maintainer explicitly
+  chose keeping the SW cache + honest page over removing the service worker.
+- **Idiot-proof start failure (desktop Settings):** the SnackBar became a warm
+  dialog (`showWarmDialog`) via one shared `_attemptWebServerStart` flow: plain
+  rewritten `describeStartFailure` copy ("door number" framing; anchor phrases
+  kept so the start-failure suite stayed green untouched), `lastStartPortConflict`
+  flag, `WebServerHost.findFreePortNear` loopback probe, and a one-tap
+  "Use port N instead" that sets the port, re-enables, and retries; port field
+  re-keys on the port so it refreshes. Server-toggle UI is desktop-only by
+  nature (the web client can't start the server that serves it) — no parity owed.
+- **Context Budget (both surfaces):** `PromptPlan.sectionTexts()` (same
+  grouping/skip rules as `budgetEstimates()`, guarded by a new key-alignment
+  test, negative-checked red→green); ChatService swaps `_lastAssembledPrompt`
+  (dead once sections are real — only the viewer read it) for
+  `_lastPromptSections` at net-zero ratchet cost (still exactly 4631);
+  desktop dialog: dead `_getRawTextForSection` deleted, expansion shows the real
+  section text in a 240px-capped scrollable selectable box with a copy button,
+  legend colors added for Journal/Realism Mode/Memories. Web parity built from
+  scratch: `ChatFacade.contextBudget()` + GET `/api/chat/context-budget`
+  (additive), `ContextBudgetModal.tsx` (same section colors, stacked bar, tap
+  rows, capped scroll + copy) launched from a ChatTools row, `.ctxb-*` CSS.
+- **Files:** `web_ui/src/auth/AuthContext.tsx`, `web_ui/src/pages/UnreachablePage.tsx` (new),
+  `web_ui/src/pages/LoginPage.tsx`, `web_ui/src/App.tsx`,
+  `lib/services/web/web_server_host.dart`, `lib/ui/pages/settings_page.advanced.dart`,
+  `lib/services/chat/prompt_plan.dart`, `lib/services/chat_service.dart`,
+  `lib/services/chat/chat_service_generation.dart`, `lib/ui/dialogs/context_viewer_dialog.dart`,
+  `lib/services/web/facade/chat_facade.dart`, `lib/services/web/routes/chat_routes.dart`,
+  `web_ui/src/components/ContextBudgetModal.tsx` (new), `web_ui/src/components/ChatTools.tsx`,
+  `web_ui/src/styles.css`, `test/services/chat/prompt_plan_section_texts_test.dart` (new),
+  `docs/Rawhide.md`.
+
 ## 2026-08-04 — fix(web): three Discord-reported WebUI bugs — empty bubble after streaming, iPad stalls during evals, silent web-server start failure (73174373)
 - **Why:** three user reports (pnwpdr ×2, Demon Doctor ×1). Root-caused via a 14-agent
   investigation workflow (6 finders + 8 adversarial verifiers; 8/8 findings CONFIRMED,

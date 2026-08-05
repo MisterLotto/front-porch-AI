@@ -54,6 +54,20 @@ class ChatFacade {
   /// reads of [ChatService]; co-located 1:1/group parity pair lives there.
   late final ChatRealismRead _realism = ChatRealismRead(_chat);
 
+  /// Context Budget payload (desktop ContextViewerDialog parity): per-section
+  /// token estimate + the REAL text each section contributed to the last
+  /// assembled prompt. Additive endpoint — old clients simply never call it.
+  Map<String, dynamic> contextBudget() {
+    final texts = _chat.lastPromptSections;
+    return {
+      'contextLimit': _chat.contextSize,
+      'sections': [
+        for (final e in _chat.lastPromptBudget.entries)
+          {'label': e.key, 'tokens': e.value, 'text': texts[e.key] ?? ''},
+      ],
+    };
+  }
+
   /// Full chat state payload (matches legacy `/api/chat/state`).
   Map<String, dynamic> state() {
     final activeChar = _chat.activeCharacter;
