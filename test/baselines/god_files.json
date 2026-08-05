@@ -10,7 +10,5 @@
   "lib/services/chat/realism_evals.dart": 1201,
   "lib/services/tts_service.dart": 1191,
   "lib/services/chat/relationship_service.dart": 1138,
-  "lib/ui/pages/edit_group_page.dart": 1129,
-  "lib/ui/dialogs/ui_settings_dialog.dart": 1116,
   "lib/ui/character_creator/creator_state_engine.dart": 1031
 }

@@ -9963,3 +9963,35 @@ swap the framework under it.
 - **Gates:** analyze 0 at every step; ratchet green at 14; nets green vs splits; the
   finale chain (goldens regen + container + full suite + story/settings E2E) ran
   before commit.
+
+## 2026-08-05 — refactor(campaign): TRANCHE A COMPLETE — edit_group_page + ui_settings_dialog split (baseline 14 → 12)
+- **Why:** maintainer: "do the last two files from tranche A."
+- **Provability first — both surfaces had NO interaction coverage:**
+  - test/ui/pages/edit_group_page_interaction_test.dart (new): walks all four real
+    tabs, renames the group, flips the inherit toggle, and asserts the full Save
+    round-trip (name + portable stableId + the flipped flag reach the repo).
+    Negative-checked by detaching a tab builder → red. Harness note: providing an
+    AppDatabase.forTesting is fine, but CLOSING it wall-hangs under testWidgets even
+    via runAsync — documented in-file, handle deliberately leaked.
+  - test/ui/dialogs/ui_settings_dialog_interaction_test.dart (new): section
+    landmarks + opens the color picker through the real row button, cancels out.
+    Negative-checked by severing the button → red.
+- **Splits (same worktree/audit pipeline):**
+  1. edit_group_page 1,129 → 401 shell + 3 parts (.details/.dialogue/.lore_worlds);
+     three build()-local CLOSURES rewrapped as extension methods; 7 rebuildState
+     sites; retheme: TabBar accents + section headers → formMasterAccent/porchAmberOf
+     per the edit_character precedent; the stale "1 private method" preamble comment
+     rewritten in place per the map. Flagged, NOT fixed (pre-existing): the line-470
+     per-build throwaway TextEditingController leak — separate follow-up.
+  2. ui_settings_dialog 1,116 → 326 shell + 3 parts (.theme/.controls/.updates);
+     static consts → top-level per the _omlxLocalhostUrl precedent; 2 rebuildState
+     sites; map-sanctioned hygiene: _themeAwareColor's two dead params removed
+     (6 call sites), duplicated hex-conversion consolidated onto _colorToHex.
+     Flagged for maintainer: Quick Select swatches duplicate 0xFF10B981 at
+     indices 1 and 10 (likely copy-paste slip; pixels left alone).
+- **TRANCHE A IS DONE: every UI page/dialog from the campaign census is under the
+  ratchet floor.** Baseline 12 = chat_service 4,583 + database (excluded) + main +
+  9 Tranche-B services. Night total: TEN files eliminated, 22 → 12.
+- **Gates:** analyze 0 throughout; ratchet green at 12; both nets green vs splits;
+  finale chain (golden container for ui_settings pixel identity + full suite +
+  group_smoke E2E) before commit.
