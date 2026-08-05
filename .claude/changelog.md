@@ -1,6 +1,38 @@
 
 # Changelog
 
+## 2026-08-05 — chore(deps): drop the two dead simple_spell_checker packages
+- **Files changed:** `pubspec.yaml`, `pubspec.lock`, `test/deps/dependency_floors.json`
+- **Why:** maintainer instruction. `simple_spell_checker` and
+  `simple_spell_checker_en_lan` had ZERO references anywhere in `lib/`, `test/`,
+  `integration_test/`, `tool/`, `web_ui/` or `docs/` — they were declared and never
+  used. `_en_lan` is also the package that printed "1 package is discontinued" on every
+  single `flutter pub get`. Investigated earlier in this session while looking for a
+  pure-Dart spell checker and confirmed unusable regardless: the package has **no
+  suggest API at all**, only detection, so it could never have driven the right-click
+  corrections the app actually needs.
+- **BOTH protected-file edits were required, and are removals not weakenings.** The two
+  packages were also entries in `test/deps/dependency_floors.json`, which
+  `test-integrity.yml` guards. Removing them from pubspec alone makes
+  `dependency_floor_test.dart` fail — its "no baseline dependency disappears from the
+  lock entirely" case. That guard's own failure message prescribes exactly this:
+  *"Confirm the removal is intended, then update the baseline."* The removal is
+  intended, so the baseline entries went with them.
+  This is the opposite of the PR #172 precedent the rule exists for: nothing was
+  loosened to make a red build green, and no floor was lowered. Two obsolete entries for
+  packages that no longer exist were deleted. **CI will still flag the floors edit and
+  needs the maintainer's `approved-test-change` label — an author cannot self-approve.**
+- **Proven the guard still works** (mandatory negative check, and doubly warranted for a
+  protected file): restoring just the two baseline entries — i.e. simulating someone
+  removing a dependency and NOT updating the baseline — turned the test red with
+  `Actual: ['simple_spell_checker', 'simple_spell_checker_en_lan']` and the "gone from
+  pubspec.lock" message. Removed again, green. The guard is intact and would still catch
+  a genuine silent disappearance.
+- **Verified:** `flutter pub get` drops both from `pubspec.lock`; the discontinued-package
+  warning is gone; `flutter analyze` clean; **2777 unit/widget tests pass**;
+  `flutter build linux` succeeds; the 10 spell check E2E tests still pass — spell check
+  never touched these packages, it uses the vendored hunspell engine.
+
 ## 2026-08-05 — feat(spellcheck): 12 bundled languages + user dictionaries; FIX a Windows regression
 - **Files changed:** `linux/dictionaries/**` (12 languages + licence notices),
   `linux/runner/spell_check_plugin.cc`, `windows/runner/spell_check_plugin.cpp`,
