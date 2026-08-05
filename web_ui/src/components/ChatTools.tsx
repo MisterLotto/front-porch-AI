@@ -14,6 +14,7 @@ import { api } from '../api/client';
 import { GroupSettings, type GroupBlock } from './GroupSettings';
 import { GrowthPanel } from './GrowthPanel';
 import { MilestonesPanel } from './MilestonesPanel';
+import { PromisesPanel } from './PromisesPanel';
 import { StoryCalendarModal } from './StoryCalendarModal';
 import { ContextBudgetModal } from './ContextBudgetModal';
 
@@ -325,6 +326,13 @@ export function ChatTools({
             </button>
           </div>
           {storyMsg && <p className="muted milestones-empty">{storyMsg}</p>}
+        </div>
+      </details>
+
+      <details className="tool-section">
+        <summary>Promises 🤝</summary>
+        <div className="tool-body">
+          <PromisesPanel focusedId={focusedId} reloadKey={reloadKey} />
         </div>
       </details>
 

@@ -9643,3 +9643,38 @@ swap the framework under it.
   `lib/services/chat/prompt_injection/promise_debt_injection.dart`,
   `lib/services/chat/chat_service_objectives.dart`, `lib/services/chat_service.dart`,
   `test/baselines/god_files.json` (lowered), new cadence test, `docs/Rawhide.md`.
+
+## 2026-08-05 — feat(promises): Journal "Promises" tab (desktop+web) + manual kept/broken + plant-dedup; live data repair
+- **Why:** maintainer: promises deserve their own Journal tab (cards were buried among
+  183 memories), and the user's stuck promise needed expunging. The live DB showed the
+  REAL defect: no stuck-open promise — 9 promise cards ALL kept, several re-plants of
+  the same pledge (4 in one evening) + 8 "kept my word" milestone twins saturating the
+  journal, which is what actually drove the promise-nagging and her confused denials.
+- **Did:**
+  1. `PromiseDebtService.resolveManually` — manual kept/broken through the SAME
+     `_resolve` applier (deltas, milestone, salience, cache). Guarded by
+     promise_manual_resolve_test incl. double-resolve idempotence; negative-checked.
+  2. `ChatService.resolvePromiseManually` (objectives part): turn-busy guard + the
+     group load→apply→save scalar dance so manual resolution from ANY member's diary
+     lands on THAT member (parity audit: the naive version would have hit whichever
+     scalars were loaded).
+  3. Desktop: Journal dialog gains a "Promises" tab (`journal_promises_tab.dart`, own
+     file per the timeline-tab precedent) — status chips, open-first, Mark kept/broken.
+  4. Web parity: `ChatToolsFacade.promises/resolvePromise` + GET
+     `/api/chat/tools/promises` + POST `/api/chat/tools/promise-resolve` (additive),
+     `PromisesPanel.tsx` in a "Promises 🤝" ChatTools section, `.promise-*` CSS.
+     (One structural slip — the new section initially swallowed the "Turn this chat
+     into a story" button — caught and repaired before commit.)
+  5. Plant-dedup: `isDuplicatePromise` token-overlap guard + the eval prompt now lists
+     up to 5 settled commitments ("do NOT report these as new"). Guarded by
+     promise_plant_dedup_test (incl. the exact field re-plant loop); negative-checked.
+  6. **Live data repair (user-approved, full expunge):** backed up front_porch.db
+     (1.3 GB → front_porch.pre-promise-expunge-20260804.db) then deleted exactly 17
+     rows from the affected session (9 promise + 8 milestone twins); 166 cards remain,
+     0 promise material. App was running — journal re-reads per turn, no restart needed.
+- **Gates:** analyze 0; chat dir 884 green; full suite 2,764 green (pre-dedup run);
+  goldens green (new tab); web tsc/vitest/build green.
+- **Files:** promise_debt_service.dart, chat_service_objectives.dart,
+  journal_promises_tab.dart (new), journal_dialog.dart, chat_tools_facade.dart,
+  chat_tools_routes.dart, PromisesPanel.tsx (new), ChatTools.tsx, styles.css,
+  two new test files, docs/Rawhide.md.

@@ -523,6 +523,43 @@ extension ChatServiceObjectives on ChatService {
     }
   }
 
+  /// Manual "Mark kept / broken" from the diary's Promises tab (desktop) and
+  /// the web Promises panel. Same applier as automatic detection — the
+  /// trust/bond effects apply too, restoring what a missed detection should
+  /// have done.
+  Future<bool> resolvePromiseManually({
+    required String characterId,
+    required String cardId,
+    required bool kept,
+  }) async {
+    final sessionId = _currentSessionId;
+    if (sessionId == null) return false;
+    // Never mid-turn: the scalar dance below would fight the active
+    // speaker's own load/save.
+    if (_isTurnBusy) return false;
+    // Group parity: the service's trust/bond callbacks land on whichever
+    // member's scalars are LOADED. Manual resolution can come from any
+    // member's diary at any time, so run the same load → apply → save
+    // dance the post-gen checks use, scoped to that member.
+    final isGroupMember =
+        _activeGroup != null &&
+        _groupCharacters.any(
+          (c) => _getCharacterIdFromCard(c) == characterId,
+        );
+    if (isGroupMember) _loadGroupRealismIntoScalars(characterId);
+    final ok = await _promiseDebtService.resolveManually(
+      sessionId: sessionId,
+      characterId: characterId,
+      cardId: cardId,
+      kept: kept,
+      storyDay: _timeService.dayCount,
+      storyClock: _timeService.storyClockIso,
+    );
+    if (isGroupMember) _saveScalarsIntoGroupRealism(characterId);
+    if (ok) await _saveChat();
+    return ok;
+  }
+
   /// Train B — promise/debt ledger pass (fire-and-forget). Detects new
   /// commitments or kept/broken resolutions for the current speaker's diary.
   /// (Moved verbatim from chat_service.dart — commitment tracking belongs

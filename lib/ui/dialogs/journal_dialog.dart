@@ -27,6 +27,7 @@ import 'package:front_porch_ai/services/chat/journal_physics.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'journal_card_editor.dart';
+import 'journal_promises_tab.dart';
 import 'journal_timeline_tab.dart';
 
 /// The Journal — the full diary reader (docs/design/journal-memory.md §8
@@ -177,7 +178,7 @@ class _JournalDialogState extends State<JournalDialog> {
             // is here so this dialog doesn't regrow.
             Expanded(
               child: DefaultTabController(
-                length: 2,
+                length: 3,
                 child: Column(
                   children: [
                     TabBar(
@@ -190,6 +191,7 @@ class _JournalDialogState extends State<JournalDialog> {
                       ),
                       tabs: const [
                         Tab(height: 34, text: 'Diary'),
+                        Tab(height: 34, text: 'Promises'),
                         Tab(height: 34, text: 'Our Story'),
                       ],
                     ),
@@ -205,6 +207,11 @@ class _JournalDialogState extends State<JournalDialog> {
                               : _cards.isEmpty
                               ? _emptyState(context)
                               : _cardList(context, userName),
+                          JournalPromisesTab(
+                            chat: _chat,
+                            ownerId: _ownerId,
+                            ownerName: widget.ownerName,
+                          ),
                           JournalTimelineTab(
                             chat: _chat,
                             ownerId: _ownerId,

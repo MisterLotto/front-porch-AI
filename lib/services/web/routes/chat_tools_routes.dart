@@ -32,6 +32,8 @@ class WebChatToolsRoutes {
     router.post('/api/chat/tools/time', _time);
     router.get('/api/chat/tools/calendar', _calendar);
     router.get('/api/chat/tools/timeline', _timeline);
+    router.get('/api/chat/tools/promises', _promises);
+    router.post('/api/chat/tools/promise-resolve', _promiseResolve);
     router.post('/api/chat/tools/to-story', _toStory);
     router.post('/api/chat/tools/summary', _summary);
     router.post('/api/chat/tools/objective', _objective);
@@ -132,6 +134,21 @@ class WebChatToolsRoutes {
   Future<shelf.Response> _calendar(shelf.Request request) async {
     final owner = request.url.queryParameters['owner'];
     return JsonResponse.ok(await _facade.calendar(owner));
+  }
+
+  Future<shelf.Response> _promises(shelf.Request request) async {
+    final owner = request.url.queryParameters['owner'];
+    return JsonResponse.ok(await _facade.promises(owner));
+  }
+
+  Future<shelf.Response> _promiseResolve(shelf.Request request) async {
+    final body = await RequestBody.readJsonMap(request);
+    final ok = await _facade.resolvePromise(
+      ownerId: body['owner'] as String? ?? '',
+      cardId: body['cardId'] as String? ?? '',
+      kept: body['kept'] == true,
+    );
+    return JsonResponse.ok({'ok': ok});
   }
 
   /// "Our Story" milestones timeline (Living Time §7) for one diary owner.

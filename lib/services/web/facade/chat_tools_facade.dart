@@ -524,6 +524,52 @@ class ChatToolsFacade {
     };
   }
 
+  /// Promise ledger read (web Promises panel — desktop Journal "Promises"
+  /// tab parity). Owner defaults to the first diary owner like [calendar].
+  /// Additive endpoint; old clients never call it.
+  Future<Map<String, dynamic>> promises(String? ownerId) async {
+    final sessionId = _chat.currentSessionId;
+    final owners = _chat.cast.where((p) => !p.isLite).toList();
+    final owner =
+        owners.where((p) => p.id == ownerId).firstOrNull ?? owners.firstOrNull;
+    final rows = <Map<String, dynamic>>[];
+    if (sessionId != null && owner != null) {
+      for (final card in await _chat.journalStore.cardsFor(
+        sessionId,
+        owner.id,
+      )) {
+        final meta = PromiseDebtService.metaOf(card.metadata);
+        if (meta['kind'] != 'promise') continue;
+        final desc = meta['description'];
+        rows.add({
+          'id': card.id,
+          'text': desc is String && desc.isNotEmpty ? desc : card.content,
+          'party': (meta['party'] as String?) == 'char' ? 'char' : 'user',
+          'status': (meta['status'] as String?) ?? 'open',
+        });
+      }
+      // Open commitments first, then the kept/broken history.
+      rows.sort(
+        (a, b) => (a['status'] == 'open' ? 0 : 1).compareTo(
+          b['status'] == 'open' ? 0 : 1,
+        ),
+      );
+    }
+    return {'owner': owner?.id, 'ownerName': owner?.name, 'promises': rows};
+  }
+
+  /// Manual kept/broken — the SAME applier as automatic detection
+  /// (trust/bond deltas, milestone card, cache refresh).
+  Future<bool> resolvePromise({
+    required String ownerId,
+    required String cardId,
+    required bool kept,
+  }) => _chat.resolvePromiseManually(
+    characterId: ownerId,
+    cardId: cardId,
+    kept: kept,
+  );
+
   /// "Our Story" milestones timeline (Living Time §7) — the same read-model
   /// the desktop journal dialog's timeline tab uses (ChatService.milestoneFeed),
   /// so the two surfaces cannot drift. Additive endpoint; owner defaults to
