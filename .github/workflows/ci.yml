@@ -285,7 +285,10 @@ jobs:
           cache-dependency-path: web_ui/package-lock.json
 
       - name: Install WebUI dependencies
-        run: npm ci
+          # --ignore-scripts: no package in this tree runs an install-time
+          # script today (verified 2026-08-05), so this changes nothing now
+          # and blocks the ChainDrop vector if one ever arrives.
+        run: npm ci --ignore-scripts
         working-directory: web_ui
 
       # Typecheck (tsc) + pure unit tests (vitest). The tests use synthetic

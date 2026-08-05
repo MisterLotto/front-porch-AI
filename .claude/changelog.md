@@ -9360,3 +9360,50 @@ invocation still dies at "loading"), the Linux retry-once-with-rebuild, the
 **Verification.** YAML parses; the partition was simulated against the real
 25-file glob — 25 assigned, no duplicates, no gaps, 5 per shard. The workflow
 validates itself on the next push, since push triggers use the branch's own copy.
+
+## 2026-08-05 — npm dependency freeze + --ignore-scripts (ChainDrop response)
+
+**Files.** `.github/dependabot.yml`, `.github/workflows/ci.yml`,
+`.github/workflows/nightly.yml`, `.github/workflows/release.yml`,
+`.github/workflows/beta-release.yml`,
+`docs/security/npm-freeze-2026-08.md` (new).
+
+**Trigger.** Maintainer asked whether we use npm at all, given an active supply
+chain attack. We do: `web_ui/` is 12 direct deps / 476 packages, and its build
+output ships INSIDE the desktop app.
+
+**Scan result: NOT AFFECTED.** None of the named packages (keyv, cacheable,
+flat-cache, file-entry-cache) present at any version; no setup.mjs or
+math_init.js; no npm-cache[.]com or Shai-Hulud strings; ZERO packages with
+preinstall/install/postinstall. The one `Math_Symbol.js` hit is the legitimate
+Unicode `Sm` data file in regenerate-unicode-properties — worth knowing because
+the payload uses that exact filename to blend in.
+
+**Correction to an earlier claim in this session.** I had told the maintainer
+`npm ci` protects us because it respects the lockfile. The version-pinning half
+is right, the implication was wrong: `npm ci` DOES run preinstall/install/
+postinstall for dependencies. What actually protects us is that the lockfile
+pins pre-campaign versions and the affected packages are not in the tree at all.
+
+**Maintainer pushback that changed the plan, and was right.** I had been about
+to recommend `npm audit fix` for 4 high-severity advisories. They asked whether
+we should be updating deps mid-attack at all. We should not: audit fix resolves
+fresh artifacts and rewrites the lockfile, discarding the exact thing keeping us
+safe, while the compromised list was still growing (868 packages / 1381
+versions, wider count 1300+). The advisories are all build/test-time with low
+practical exposure — react-router's is RSC-mode only and this is a Vite SPA.
+
+**Changes.** (1) Dependabot npm updates frozen for /web_ui
+(open-pull-requests-limit: 0); pub and github-actions untouched.
+(2) `--ignore-scripts` on all four `npm ci` calls — behaviour-neutral today
+(zero install scripts) and closes the vector for anything arriving later.
+(3) docs/security/npm-freeze-2026-08.md records the scan, the deferred
+advisories, and an ordered THAW checklist whose first rule is "do not run npm
+audit fix first".
+
+**Verification.** `rm -rf node_modules && npm ci --ignore-scripts` → tsc clean,
+34 vitest pass, `npm run build` produces a BYTE-IDENTICAL bundle (git reports no
+change under assets/web_app). All five YAML files parse.
+
+**Not done:** no token rotation — nothing could have executed the payload.
+Rotating the npm publish token is cheap insurance and left to the maintainer.
