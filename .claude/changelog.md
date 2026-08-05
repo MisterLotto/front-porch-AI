@@ -9615,3 +9615,31 @@ swap the framework under it.
   (14), database_cleanup_dialog (10), kobold_log_dialog (9), rocm_guidance_dialog
   (9). Proposal: retheme each in the same visit as its Tranche-A god-file split.
 - **Files:** `lib/ui/dialogs/context_viewer_dialog.dart`, both context_viewer golden PNGs.
+
+## 2026-08-05 — fix(promises): anti-nag injection cadence + fulfillment detection (maintainer report)
+- **Why:** "the promise system is super annoying — she brings promises up every turn,
+  and she already fulfilled one and keeps claiming she never did." Two defects:
+  (1) the open-commitments line rode EVERY prompt, so models treated it as
+  this-turn-relevant; (2) resolution had exactly one realistic shot — a strict
+  NONE-biased eval over the last 4 messages at the fulfillment moment — and a miss
+  left the promise open forever, at which point the every-turn injection made the
+  character DENY fulfilling it and the denial text convinced the next eval. Self-
+  reinforcing.
+- **Did:** (a) cadence gate `PromiseDebtService.shouldInjectNow` — ledger activity
+  injects for the next 2 builds, then quiet with a reminder every 5th build
+  (guarded by promise_injection_cadence_test, negative-checked red→green);
+  (b) eval prompt now says a listed commitment being carried out in the exchange
+  counts as KEPT even without the word "promise"; (c) eval window 4 → 6 messages;
+  (d) injected line adds "only spoken about when the moment genuinely calls for it".
+- **Ratchet bonus:** `_maybeRunPromiseDebtPass` moved verbatim to
+  chat_service_objectives.dart — chat_service.dart 4631 → 4583, baseline lowered.
+- **Speaker-id audit (group parity):** verified the pass reads
+  `_getCurrentSpeakerIdForRealism()` while `_turnSpeakerIdForRealism` is still
+  pinned (cleared later at generation.dart:1953) — right diary in groups.
+- **Existing stuck promise:** old fulfillments can't be re-detected (moment left
+  the window); workaround today is deleting the promise card in the diary; a
+  proper "Mark kept / broken" affordance proposed as follow-up (both surfaces).
+- **Files:** `lib/services/chat/promise_debt_service.dart`,
+  `lib/services/chat/prompt_injection/promise_debt_injection.dart`,
+  `lib/services/chat/chat_service_objectives.dart`, `lib/services/chat_service.dart`,
+  `test/baselines/god_files.json` (lowered), new cadence test, `docs/Rawhide.md`.

@@ -4272,56 +4272,8 @@ class ChatService extends ChangeNotifier {
     await _journalMaintenance.runMaintenancePass(force: true);
   }
 
-  /// Train B — promise/debt ledger pass (fire-and-forget). Detects new
-  /// commitments or kept/broken resolutions for the current speaker's diary.
-  ///
-  /// Gated on the Journal and its own switch, NOT on the Realism Engine. It
-  /// used to require realism, but nothing here consumes realism state: the pass
-  /// reads the recent exchange text and writes a journal card. The story day
-  /// and clock it stamps are nullable and nothing reads them back, so a frozen
-  /// clock costs nothing. The Journal genuinely is required — a commitment IS a
-  /// journal card — and the separate switch exists because this is one extra
-  /// model call per reply, which a user who turned realism off to save calls
-  /// deserves to opt into rather than inherit.
-  void _maybeRunPromiseDebtPass() {
-    if (!_storageService.realismSettings.promiseLedgerEnabled) return;
-    if (!_storageService.memorySettings.journalEnabled) return;
-    final sessionId = _currentSessionId;
-    if (sessionId == null) return;
-    final charId = _getCurrentSpeakerIdForRealism();
-    if (charId.isEmpty) return;
-
-    String characterName = _activeCharacter?.name ?? 'the character';
-    if (_activeGroup != null && !_observerMode) {
-      final card = _groupCharacters
-          .where((c) => _getCharacterIdFromCard(c) == charId)
-          .firstOrNull;
-      if (card != null) characterName = card.name;
-    }
-
-    final recent = _messages.length < 2
-        ? (_messages.isEmpty ? '' : _messages.last.displayText)
-        : _messages.reversed
-              .take(4)
-              .toList()
-              .reversed
-              .map((m) => '${m.sender}: ${m.displayText}')
-              .join('\n');
-    if (recent.trim().isEmpty) return;
-
-    unawaited(
-      _promiseDebtService.evaluateTurn(
-        sessionId: sessionId,
-        characterId: charId,
-        characterName: characterName,
-        userName: _userPersonaService.persona.name,
-        recentExchange: recent,
-        receiptPosition: _messages.isEmpty ? null : _messages.length - 1,
-        storyDay: _timeService.dayCount,
-        storyClock: _timeService.storyClockIso,
-      ),
-    );
-  }
+  // _maybeRunPromiseDebtPass lives in chat_service_objectives.dart (the
+  // commitment-tracking part).
 
   /// Check if a Journal maintenance pass is due and trigger it non-blockingly.
   /// Cadence (design §4.2): user messages since the _summaryLastIndex cursor

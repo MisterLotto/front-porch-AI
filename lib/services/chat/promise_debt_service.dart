@@ -114,6 +114,34 @@ class PromiseDebtService {
   final Map<String, List<OpenPromise>> _openCache = {};
   final Set<String> _warming = {};
 
+  /// Anti-nag injection cadence (maintainer report 2026-08-04: with any open
+  /// promise the injection line rode EVERY prompt, so characters brought
+  /// promises up every single turn — and a stuck-open promise made them
+  /// DENY ever keeping it, which the next eval then read as confirmation).
+  /// Ledger activity (plant/resolve) injects for the next [kFreshBuilds]
+  /// prompt builds so it colors the immediate scene; after that the line
+  /// goes quiet and resurfaces every [kReminderEvery]th build as background
+  /// weight, not a nag.
+  static const int kFreshBuilds = 2;
+  static const int kReminderEvery = 5;
+  final Map<String, int> _injectCountdown = {};
+
+  /// Called once per prompt build by the injection builder. Mutating —
+  /// advances this diary's cadence counter.
+  bool shouldInjectNow(String sessionId, String characterId) {
+    final key = '$sessionId|$characterId';
+    final c = _injectCountdown[key] ?? 0;
+    if (c <= 0) {
+      _injectCountdown[key] = c < 0 ? c + 1 : kReminderEvery - 1;
+      return true;
+    }
+    _injectCountdown[key] = c - 1;
+    return false;
+  }
+
+  void _markLedgerActivity(String sessionId, String characterId) =>
+      _injectCountdown['$sessionId|$characterId'] = -(kFreshBuilds - 1);
+
   List<OpenPromise>? cachedOpen(String sessionId, String characterId) =>
       _openCache['$sessionId|$characterId'];
 
@@ -261,6 +289,9 @@ class PromiseDebtService {
         'Recent exchange:\n$recentExchange\n\n'
         'Did this exchange create ONE clear new commitment, or clearly keep/'
         'break ONE open commitment above?\n'
+        'A listed commitment being carried out IN this exchange — the '
+        'promised thing actually happening or being delivered — counts as '
+        'KEPT even if nobody says the word "promise".\n'
         'Strict: most turns do NOTHING. Vague plans, flirting, "maybe later", '
         'and ordinary politeness are NONE.\n'
         'Answer with EXACTLY one line, nothing else:\n'
@@ -349,6 +380,7 @@ class PromiseDebtService {
       }
     }
     await listOpen(sessionId, characterId); // refresh cache
+    _markLedgerActivity(sessionId, characterId);
     onCacheWarmed?.call();
     debugPrint('[PromiseDebt] NEW $party: $text');
   }
@@ -426,6 +458,7 @@ class PromiseDebtService {
     }
 
     await listOpen(sessionId, characterId);
+    _markLedgerActivity(sessionId, characterId);
     onSalienceKick?.call();
     onCacheWarmed?.call();
     debugPrint('[PromiseDebt] $status (${item.party}): ${item.text}');

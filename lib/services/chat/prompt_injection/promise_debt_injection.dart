@@ -62,6 +62,9 @@ class PromiseDebtInjection {
     final open =
         promiseDebtService.cachedOpen(sessionId, charId) ?? const [];
     if (open.isEmpty) return '';
+    // Anti-nag cadence: riding EVERY prompt made characters bring promises
+    // up every turn — see PromiseDebtService.shouldInjectNow.
+    if (!promiseDebtService.shouldInjectNow(sessionId, charId)) return '';
 
     final user = getUserName();
     final parts = <String>[];
@@ -75,6 +78,7 @@ class PromiseDebtInjection {
     if (parts.isEmpty) return '';
     return 'Open commitments: ${parts.join('; ')} — let these color trust, '
         'willingness, and quiet tension when relevant; never as a quest log '
-        'or checklist.';
+        'or checklist, and only spoken about when the moment genuinely '
+        'calls for it.';
   }
 }
