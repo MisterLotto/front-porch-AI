@@ -130,10 +130,11 @@ void main() {
         ),
       ),
     );
-    // Bounded pumps ONLY — never pumpAndSettle here: the reader re-paginates
-    // with TextPainter on every build, and an animation keeps frames dirty,
-    // so settling fake-advances through thousands of full-book paginations
-    // (minutes of wall clock). Three frames render everything asserted.
+    // Bounded pumps for speed + determinism. (Measured 2026-08-05: the
+    // reader's pagination is cached — ONE TextPainter pass per constraint
+    // change for this whole test — and the tree settles instantly, so
+    // pumpAndSettle would also work; an earlier hang here was the drift
+    // database under fake time, nothing in the reader.)
     Future<void> frames() async {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 350));

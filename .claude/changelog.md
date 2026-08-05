@@ -9707,10 +9707,27 @@ swap the framework under it.
     ElevenLabs model — isExpanded added, ~12px overflow painted-over in release).
   - test/ui/pages/story_reader_page_interaction_test.dart: real page-turn chevrons + TOC
     jump. Harness findings: drift wall-hangs under testWidgets even in runAsync (fake
-    repo instead); pumpAndSettle is unusable on the reader because it RE-PAGINATES THE
-    WHOLE BOOK with TextPainter on every frame — logged as a real perf follow-up
-    (per-frame pagination is the reader's sluggishness ceiling).
+    repo instead); an earlier hang was misattributed to
+    per-frame re-pagination — CORRECTED same night, see the next entry: the
+    hang was drift-under-testWidgets; pagination is cached and healthy.
 - **Goldens:** user_persona (empty state indigo→amber) + tts_settings (dialog chrome)
   regenerated in the container — deliberate retheme fallout, visually reviewed.
 - **Gates:** analyze 0 across every port; ratchet green at 18; both nets green against
   split code; full suite + ci-local + persona/worlds E2E in the finale run.
+
+## 2026-08-05 — perf(story-reader): follow-up MEASURED — no defect; false claim corrected
+- **Why:** maintainer asked for the reader perf follow-up. Measured before fixing:
+  instrumented `_buildPages` with a counter + a settle stopwatch and ran the
+  interaction net (initial render + page flip + TOC jump).
+- **Result:** exactly ONE full TextPainter pagination for the whole run — the
+  existing `_lastConstraints` guard caches correctly (regen invalidates it
+  explicitly) — and pumpAndSettle settles in 0ms: no repeating animation keeps
+  frames dirty. The reader is healthy; my earlier "re-paginates every frame"
+  diagnosis was reasoning past the evidence (the real hang was drift I/O under
+  testWidgets fake time). No code fix warranted; instrumentation removed; the
+  net's comment, the previous changelog entry, and the Rawhide bullet corrected.
+  The pushed commit message for da3efc5b retains the stale claim (history not
+  rewritten) — this entry is its correction.
+- **Files:** story_reader_page.pagination.dart (probe removed),
+  story_reader_page_interaction_test.dart (probe removed, comment corrected),
+  docs/Rawhide.md, this file.
