@@ -22,7 +22,8 @@ import 'dart:ui' show BoxHeightStyle, BoxWidthStyle;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:front_porch_ai/services/desktop_spell_check_service.dart';
+import 'package:front_porch_ai/services/services.dart'
+    show DesktopSpellCheckService;
 
 // Re-export so callers can reference SpellCheckConfiguration without an extra
 // import when they need to explicitly opt out on a technical input field.
@@ -57,11 +58,11 @@ abstract class SpellCheckResultsProvider {
 /// |----------|-------------------------------|
 /// | macOS    | `NSSpellChecker`              |
 /// | Windows  | Windows Spell Checking API    |
+/// | Linux    | Enchant (hunspell/aspell), loaded at runtime |
 /// | iOS/Android | OS keyboard handles it (no override needed) |
-/// | Linux    | Not yet supported by Flutter  |
 ///
-/// This widget only injects [SpellCheckConfiguration] on macOS and Windows.
-/// All other platforms fall through to Flutter's native defaults.
+/// This widget only injects [SpellCheckConfiguration] on the three desktop
+/// platforms. All others fall through to Flutter's native defaults.
 ///
 /// ## Opting out or customizing visuals (technical or stylized inputs)
 ///
@@ -218,12 +219,12 @@ class AppTextField extends StatelessWidget {
   final TapRegionUpCallback? onTapUpOutside;
 
   /// Returns the correct [SpellCheckConfiguration] for the current platform,
-  /// or `null` on unsupported platforms (Linux, web, etc.).
+  /// or `null` on unsupported platforms (web, mobile).
   ///
   /// Exposed as a static so other widgets that cannot use [AppTextField]
   /// (e.g. [TextFormField] with a `validator`) can reuse the same logic.
   ///
-  /// ## macOS / Windows
+  /// ## macOS / Windows / Linux
   ///
   /// No explicit [SpellCheckService] is provided. On macOS, Flutter's material
   /// [TextField.build] routes the config through
@@ -242,7 +243,12 @@ class AppTextField extends StatelessWidget {
   /// |----------|--------------------------------------------------|
   /// | macOS    | Native NSSpellChecker via FlutterTextInputPlugin |
   /// | Windows  | Native Windows Spell Checking API                |
+  /// | Linux    | Enchant, dlopen'd by the runner's spell_check_plugin |
   /// | Others   | `null` — spell check disabled                   |
+  ///
+  /// Linux degrades quietly: if the Enchant runtime or a dictionary for the
+  /// user's locale is absent, the channel replies null and the fields behave
+  /// as they did before the plugin existed — no underlines, no errors.
   ///
   /// [showMisspellings] controls whether the red wavy underline style is
   /// applied. Set to false for fields with custom TextSpan styling (e.g. chat
@@ -252,7 +258,7 @@ class AppTextField extends StatelessWidget {
   static SpellCheckConfiguration? platformSpellCheck({
     bool showMisspellings = true,
   }) {
-    if (Platform.isMacOS || Platform.isWindows) {
+    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
       return SpellCheckConfiguration(
         spellCheckService: DesktopSpellCheckService(),
         misspelledTextStyle: showMisspellings

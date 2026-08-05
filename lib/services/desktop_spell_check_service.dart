@@ -21,18 +21,32 @@ import 'dart:ui' show Locale, TextRange;
 import 'package:flutter/services.dart'
     show MethodChannel, SpellCheckService, SuggestionSpan;
 
-/// A [SpellCheckService] backed by the native macOS `NSSpellChecker` and Windows `ISpellChecker` APIs.
+/// A [SpellCheckService] backed by the platform's own spell checker: macOS
+/// `NSSpellChecker`, Windows `ISpellChecker`, and Linux Enchant (which fronts
+/// whichever hunspell/aspell dictionaries the user has installed).
 ///
-/// Communicates with `SpellCheckPlugin` (Swift/C++) over the
-/// `front_porch_ai/spell_check` method channel.
+/// Communicates with `SpellCheckPlugin` (Swift / C++ / C++-GObject) over the
+/// `front_porch_ai/spell_check` method channel. All three runners implement
+/// the identical contract:
 ///
-/// This is the correct spell-check approach for macOS and Windows desktop Flutter apps.
+///   send    `spellCheck` with `[languageTag, text]`
+///   receive `List<Map>` of `{startIndex, endIndex, suggestions}`, or null
+///
+/// Indices are UTF-16 code units so they can be used as [TextRange] bounds
+/// directly.
+///
+/// This is the correct spell-check approach for desktop Flutter apps.
 /// Flutter's built-in [DefaultSpellCheckService] is documented as
 /// "currently only supported by Android and iOS" and returns empty results
 /// on desktop. Flutter's `nativeSpellCheckServiceDefined` path requires the
 /// Flutter engine to register a native handler, which is unreliable on
 /// desktop. Calling the native APIs directly via a method channel
 /// bypasses both limitations.
+///
+/// Linux is best-effort by nature: unlike macOS and Windows, the OS does not
+/// guarantee a spell checker exists. The runner loads Enchant with `dlopen`
+/// and replies null when it or the locale's dictionary is missing, which lands
+/// in the same "no results" branch as any other empty answer.
 class DesktopSpellCheckService implements SpellCheckService {
   static const _channel = MethodChannel('front_porch_ai/spell_check');
 
@@ -59,7 +73,7 @@ class DesktopSpellCheckService implements SpellCheckService {
         );
       }).toList();
     } catch (_) {
-      // Channel not registered (non-macOS build) or NSSpellChecker error.
+      // Channel not registered (mobile/web build) or a native checker error.
       return null;
     }
   }

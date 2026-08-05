@@ -1,5 +1,79 @@
 # Changelog
 
+## 2026-08-05 — feat(linux): spell check finally exists on Linux (Enchant via dlopen)
+- **Files changed:** `linux/runner/spell_check_plugin.cc` (new), `linux/runner/spell_check_plugin.h`
+  (new), `linux/runner/my_application.cc`, `linux/runner/CMakeLists.txt`,
+  `lib/ui/widgets/app_text_field.dart`, `lib/ui/widgets/styled_text_controller.dart`,
+  `lib/services/desktop_spell_check_service.dart`, `lib/services/services.dart`,
+  `integration_test/spell_check_test.dart` (new), `docs/design/e2e-coverage-map.md`,
+  `docs/Rawhide.md`, `.github/workflows/ci.yml`, `.github/workflows/release.yml`
+- **Why:** the maintainer asked whether spell check, which works on macOS and Windows,
+  worked on Linux. It did not, and had never been wired at all. There is a
+  `front_porch_ai/spell_check` method channel with a Swift plugin (NSSpellChecker,
+  registered in AppDelegate.swift:8) and a C++/COM plugin (ISpellChecker, registered in
+  flutter_window.cpp:30) — and nothing whatsoever on Linux.
+- **What that actually cost, in two different ways.** `AppTextField.platformSpellCheck()`
+  gated on `Platform.isMacOS || Platform.isWindows`, so plain prose fields were a clean
+  no-op. But `StyledTextController` (35 construction sites across 13 files — the chat
+  composer, both character editors, group settings, lorebook and message-edit dialogs)
+  has NO platform gate: it fired `DesktopSpellCheckService` on a 300ms debounce after
+  every text change, the unregistered channel threw `MissingPluginException`, the bare
+  `catch (_)` swallowed it, and the controller called `notifyListeners()` on the result.
+  Every Linux user paid a doomed platform round-trip plus a field rebuild on every
+  typing pause, forever, for a feature that could never produce output. Nothing noticed,
+  because the only consumer of a failure is a `catch (_)` that returns null.
+- **Enchant, and specifically dlopen not linking.** Enchant is the GTK/GNOME standard
+  front end over hunspell/aspell, so it reuses the dictionaries the user already has.
+  It is loaded with `dlopen("libenchant-2.so.2")` on first use rather than linked. The
+  reason is not convenience: a DT_NEEDED entry would make the ENTIRE APP fail to launch
+  with "cannot open shared object file" on any machine without Enchant — turning a
+  missing optional feature into a dead application for tar.gz/AppImage users. This
+  sandbox had no Enchant installed, which is how likely that case is. It also means
+  `flutter build linux` needs no new -dev package, so no CI job and no contributor
+  checkout had to change to build it.
+- **UTF-16 is the whole ballgame.** Dart's `TextRange` counts UTF-16 code units. macOS
+  (NSString) and Windows (std::wstring) get that free; the Linux plugin receives UTF-8
+  and tracks a UTF-16 offset alongside the byte pointer. A 4-byte emoji is 2 UTF-16
+  units, so a byte-offset bug shifts every later underline by exactly 2 — invisible in
+  ASCII, wrong in most messages this app sends. The E2E pins it (see below).
+- **Parity details ported from the other two platforms:** per-language dict cache (the
+  Windows plugin's comment records the per-keystroke typing lag that appeared without
+  one — requesting a dict parses ~50k entries); regional fallback so `en-US` finds a
+  bare `en` dictionary; tokens containing digits skipped ("x86", "3rd"); whole
+  whitespace chunks containing `://`/`@`/`www.` skipped so a URL is not three typos;
+  U+2019 folded to U+0027 because hunspell spells contractions with the plain
+  apostrophe; suggestions capped at 5 (the context menu shows 5) and spans at 512 so a
+  pasted wall of foreign text cannot stall the platform thread on edit-distance
+  searches.
+- **`platformSpellCheck()` now includes `Platform.isLinux`** — without it the plain
+  prose fields would still have been dead even with the plugin present.
+- **The guard, and both proofs that it is one.** `integration_test/spell_check_test.dart`
+  talks to the real channel in the real runner — no fake. Proven to fail twice, as the
+  test-integrity rule requires: (1) making the plugin count bytes instead of UTF-16
+  units failed ONLY the emoji test, `Expected: <3> Actual: <5>`, with the ASCII cases
+  still green — so that assertion is specifically load-bearing; (2) pointing the loader
+  at a missing soname failed all five with the actionable "Enchant runtime or en_US
+  dictionary is missing" message AND confirmed the app still launched, which is the
+  graceful-degradation design working. Reverted, green again.
+- **Deliberate scope in that suite:** the three contract assertions run everywhere; the
+  false-positive-suppression cases are Linux-only, because those rules live in this
+  plugin's own tokenizer while macOS/Windows suppress inside code this project neither
+  owns nor calls directly. Asserting Apple's and Microsoft's heuristics would be
+  testing someone else's product, and could not be verified before pushing.
+- **Workflow edits (flagged, small, revertible):** `ci.yml` gains `libenchant-2-2
+  hunspell-en-us` on the Linux E2E leg — runtime packages, not -dev, since the build
+  does not need them and the new suite does. `release.yml` gains `Recommends:` (not
+  `Depends:`/`Requires:`) on the .deb and .rpm: apt and dnf install weak deps by
+  default so package users get spell check automatically, while the app remains
+  installable and functional without them, matching the dlopen behaviour.
+- **NOT done, needs a maintainer call:** `pubspec.yaml` still declares
+  `simple_spell_checker` and `simple_spell_checker_en_lan` (the latter discontinued,
+  and the source of the "1 package is discontinued" line on every `flutter pub get`).
+  Both have ZERO references anywhere in `lib/`, `test/`, `integration_test/` or
+  `tool/` — they are dead weight, and this change makes them permanently pointless.
+  Left in place only because CLAUDE.md says not to edit pubspec.yaml unless directly
+  instructed.
+
 ## 2026-08-04 — feat(web+ux): honest offline page, idiot-proof server-start dialog, Context Budget real text + web parity
 - **Why:** three maintainer asks in one evening session. (1) With the web server off
   (or the app closed) the PWA's service worker still serves the cached shell, so

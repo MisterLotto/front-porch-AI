@@ -3,7 +3,8 @@ import 'dart:ui' show PlatformDispatcher;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show SpellCheckResults, SuggestionSpan;
 
-import 'package:front_porch_ai/services/desktop_spell_check_service.dart';
+import 'package:front_porch_ai/services/services.dart'
+    show DesktopSpellCheckService;
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
 

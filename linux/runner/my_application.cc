@@ -6,6 +6,7 @@
 #endif
 
 #include "flutter/generated_plugin_registrant.h"
+#include "spell_check_plugin.h"
 
 struct _MyApplication {
   GtkApplication parent_instance;
@@ -74,6 +75,13 @@ static void my_application_activate(GApplication *application) {
   gtk_widget_realize(GTK_WIDGET(view));
 
   fl_register_plugins(FL_PLUGIN_REGISTRY(view));
+
+  // Registered by hand because generated_plugin_registrant.cc is a generated
+  // file. The Windows runner registers its SpellCheckPlugin the same way.
+  g_autoptr(FlPluginRegistrar) spell_check_registrar =
+      fl_plugin_registry_get_registrar_for_plugin(FL_PLUGIN_REGISTRY(view),
+                                                  "SpellCheckPlugin");
+  spell_check_plugin_register_with_registrar(spell_check_registrar);
 
   gtk_widget_grab_focus(GTK_WIDGET(view));
 }

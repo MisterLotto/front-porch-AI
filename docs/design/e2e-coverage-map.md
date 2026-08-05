@@ -59,6 +59,7 @@ by CI automatically.
 | The Stoop: sign-in → AUP gate → browse → download | `stoop` | BackporchApi.overrideBaseUrl seam + fake backporch server; downloaded V2 card lands in CharacterRepository |
 | The Stoop: share wizard upload | `stoop` | pick → details → standards ack → Submit for review posts the multipart upload |
 | Story pipeline: concept → bible → acts → prose | `story_pipeline` | real wizard + dashboard + structure page; fake's 5 story-stage branches; stage ORDER asserted; reader opens on finished prose |
+| Native spell check answers on all 3 desktops | `spell_check` | real `front_porch_ai/spell_check` channel, no fake; exact UTF-16 span bounds (emoji case is the point); Linux-scoped false-positive rules. Requires `libenchant-2-2` + `hunspell-en-us` on Linux — it fails rather than skips when they are absent |
 
 Widget-level interaction tests (in `test/ui/`, not full-app):
 `create_group_chat_page`, `edit_character_page`, folder drag/drop, expanded
