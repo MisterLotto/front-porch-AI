@@ -9678,3 +9678,39 @@ swap the framework under it.
   journal_promises_tab.dart (new), journal_dialog.dart, chat_tools_facade.dart,
   chat_tools_routes.dart, PromisesPanel.tsx (new), ChatTools.tsx, styles.css,
   two new test files, docs/Rawhide.md.
+
+## 2026-08-05 — refactor(campaign): FOUR god files eliminated in one session — Tranche A accelerated
+- **Why:** maintainer: "we really need to do that god file refactor." Executed within the
+  agreed A→B→C order. Baseline: 22 → 18 entries (campaign start was 26).
+- **Method:** 4 read-only mapper agents produced split plans (sections, hazards, coverage,
+  retheme census); 4 worktree-isolated dart-expert agents executed; every diff personally
+  reviewed via line-multiset audit (only sanctioned deviation classes may appear) +
+  hazard spot-checks; all gates run in the main tree. NOTE the worktrees fork from `main`
+  (repo default), not Rawhide — caught because user_persona_page had drifted 23 lines
+  (per-chat persona rename); replayed by hand onto the split. Other 3 files identical.
+- **Splits (verbatim moves + `part of`/extension precedent, all parts <500):**
+  1. user_persona_page 1,477 → 404 shell + 4 parts; indigo 0xFF6366F1 chrome (×14) →
+     porch amber + onChaosAccent ink.
+  2. world_management_page 1,577 → 168 shell + 5 parts; the 1,094-line _showWorldDialog
+     METHOD's nine closure locals became the _WorldDraft holder (sanctioned seam);
+     new ui/pages/worlds/ barrel; DRY retheme of duplicated AppColors hexes.
+  3. tts_settings_dialog 1,474 → 498 shell + 5 parts; ~100-line retheme (worst offender),
+     13 documented theme-keeps; rebuildState bridge (6 sites).
+  4. story_reader_page 1,617 → 434 shell + 5 parts; 2 field relocations; the DUPLICATED
+     load-bearing prose TextStyle hoisted to one _kProseStyle const (pagination-metric
+     hazard closed); ~30-line chrome retheme; book-prop + status hues kept per
+     maintainer ruling with theme-keep markers.
+- **Provability rule honored — two NEW interaction nets, green BEFORE and AFTER their splits:**
+  - test/ui/dialogs/tts_settings_dialog_interaction_test.dart: drives the REAL 4-engine
+    selector. Found before splitting: the only prior "coverage" rendered engine=disabled
+    (~925 lines never rendered anywhere), and TWO real dropdown overflows (Piper voice,
+    ElevenLabs model — isExpanded added, ~12px overflow painted-over in release).
+  - test/ui/pages/story_reader_page_interaction_test.dart: real page-turn chevrons + TOC
+    jump. Harness findings: drift wall-hangs under testWidgets even in runAsync (fake
+    repo instead); pumpAndSettle is unusable on the reader because it RE-PAGINATES THE
+    WHOLE BOOK with TextPainter on every frame — logged as a real perf follow-up
+    (per-frame pagination is the reader's sluggishness ceiling).
+- **Goldens:** user_persona (empty state indigo→amber) + tts_settings (dialog chrome)
+  regenerated in the container — deliberate retheme fallout, visually reviewed.
+- **Gates:** analyze 0 across every port; ratchet green at 18; both nets green against
+  split code; full suite + ci-local + persona/worlds E2E in the finale run.
