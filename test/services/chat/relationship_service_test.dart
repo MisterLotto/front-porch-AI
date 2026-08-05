@@ -132,7 +132,12 @@ void main() {
         svc.applyScoreDelta(10);
         expect(svc.affectionScore, 10);
         expect(svc.relationshipTier, 1);
-        expect(svc.shortTermTierName, 'Neutral'); // at 10 still low
+        // Tier 1 was renamed 'Cordial' (2026-08-03, maintainer-approved):
+        // it used to return 'Neutral', identical to tier 0, so the first real
+        // warming of a bond displayed no change. The tier INDEX assertion
+        // above is the behavioural one and is unchanged; this line tracks the
+        // deliberate label rename only.
+        expect(svc.shortTermTierName, 'Cordial'); // at 10 still low
         svc.applyScoreDelta(20);
         expect(svc.affectionScore, 30);
         expect(svc.relationshipTier, 3); // 30 >=30 <50 -> 3 per verbatim calc

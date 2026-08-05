@@ -331,7 +331,7 @@ class RelationshipService {
       case 2:
         return 'Receptive';
       case 1:
-        return 'Neutral';
+        return 'Cordial'; // was 'Neutral' — collided with tier 0 (see 2026-08-03)
       case 0:
         return 'Neutral';
       case -1:
@@ -383,7 +383,7 @@ class RelationshipService {
       case 2:
         return 'Receptive';
       case 1:
-        return 'Neutral';
+        return 'Cordial'; // was 'Neutral' — collided with tier 0 (see 2026-08-03)
       case 0:
         return 'Neutral';
       case -1:
@@ -905,8 +905,8 @@ class RelationshipService {
 
   String get _decaySpeakerId => getCurrentSpeakerIdForRealism();
 
-  /// Snapshot the two out-of-band registers in the form
-  /// [restoreFromMessageState] reads back. Spread into `realism_state`.
+  /// Snapshot the two out-of-band registers for `realism_state`; pairs with
+  /// [restoreFromMessageState]. TURN PATH ONLY (else _decaySpeakerId guesses).
   Map<String, dynamic> captureCadenceAndFeelings() {
     final id = _decaySpeakerId;
     return <String, dynamic>{

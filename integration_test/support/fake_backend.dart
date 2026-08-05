@@ -440,6 +440,16 @@ class FakeBackendServer {
       eval['social_delta'] = 5;
       eval['bladder_delta'] = -3;
       eval['comfort_delta'] = 2;
+      // Climax verdict (maintainer-approved addition, 2026-08-03). The field
+      // is REQUIRED in the tool schema since the is_climax fix, so the fake
+      // must answer it like a compliant model. TRUE only when the scene the
+      // eval quotes contains the marker phrase 'the wave crests' — which only
+      // climax_refractory_test.dart ever sends — so every pre-existing suite
+      // keeps byte-identical behavior (an explicit false where an implicit
+      // false-by-omission used to be).
+      final climax = lastContent.contains('the wave crests');
+      eval['is_climax'] = climax;
+      eval['refractory_turns'] = climax ? 6 : 0;
     }
     if (lastContent.contains('emotion_intensity')) {
       eval['emotion'] = 'happy';

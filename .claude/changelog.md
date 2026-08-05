@@ -9407,3 +9407,52 @@ change under assets/web_app). All five YAML files parse.
 
 **Not done:** no token rotation — nothing could have executed the payload.
 Rotating the npm publish token is cheap insurance and left to the maintainer.
+---
+
+## 2026-08-03 — Grok backfill findings applied + Tranche A #4 (create_character_page)
+
+**Grok worktree review of the four unreviewed fixes (#19) — findings taken:**
+1. **`e6b22e70` claimed a consolidation that did not happen.** The manual
+   needs-reprocess path (`needs_impact_evaluator.dart` ~569) still ran the OLD
+   inline climax parse — so it got neither the missing-key text fallback nor
+   any future fix. My `replace_all` matched one copy; the other differed by a
+   blank line. Now genuinely one `_readClimax`. The suite was green throughout
+   — the commit message was simply wrong.
+2. **Three of four time-travel doors never rewound the new registers.** Only
+   the regen REVERT passed `groupSpeakerId`; the regen MERGE, swipe navigation
+   and delete rollback restored bond/trust/emotion and silently left the
+   hidden feelings + decay cadence where the discarded turn pushed them.
+   `_restoreRealismStateFromMessage` now takes the id and
+   `_restoreRealismStateForSpeaker` passes its resolved sid — one shared door,
+   all four paths fixed.
+3. **`captureCadenceAndFeelings` speaker hazard** — documented as a turn-path
+   contract rather than adding a `speakerId` parameter no caller passes
+   (speculative generality; the anti-accumulation rules win).
+4. **Stale comment** in `realism_progress_row.dart` claiming group cards omit
+   `progress` — untrue since 8d113811. Corrected.
+5. **Accepted correction to my own claim:** "maxed bar showed empty" is true
+   for TRUST at ±100 (base==target → zero divisor) but NOT for bond at 300
+   (top band 250→300 divides fine). The guard fix is right; the description
+   oversold it.
+
+**Tier naming (#18 part):** tier 1 was 'Neutral', identical to tier 0 — a bond
+0→14 displayed no change. Now 'Cordial', in both the bond and long-term
+ladders (trust already had distinct names). Pinning test updated.
+
+**Tranche A #4:** `create_character_page.dart` 1,999 → **464** across 6 parts
+(steps_core 369, step_lorebook 321, step_realism 171, step_review 413,
+step_portrait 124, save 309). Verbatim moves + boundary asserts + rebuildState
+bridge. One part came out at 511 post-format, so the Portrait step was carved
+into its own part BEFORE gates rather than shipped over the 500 cap. Baseline
+entry deleted — **22 of 26 remain**.
+
+**Callback sweep (#20): audit complete, deletion deferred with data.** 23
+verified-dead constructor callbacks listed in the task; removing them means
+editing ~300 lines across ~15 protected test files (onSaveChat alone: 9 sites
+for RelationshipService, 52 across all services). Attempted the cheapest one
+end-to-end, measured the real blast radius, and reverted it — the ratchet debt
+it was paying got paid by rewording a doc comment in place instead.
+
+**Verification:** analyze 0 · full suite 2,746 · ci-local goldens green.
+E2E deferred — maintainer has a live `flutter run` and macOS builds would
+swap the framework under it.

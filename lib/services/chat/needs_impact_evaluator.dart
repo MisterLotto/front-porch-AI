@@ -597,29 +597,14 @@ class NeedsImpactEvaluator {
       ).firstMatch(effectiveText);
       final reason = reasonMatch?.group(1)?.trim();
 
-      bool isClimax = false;
-      int crashTurns = 5;
-      if (parsed.isNotEmpty) {
-        final c = parsed['is_climax'];
-        if (c is bool) {
-          isClimax = c;
-        } else if (c is String) {
-          isClimax = c.toLowerCase() == 'true';
-        }
-        final t = parsed['crashTurns'] ?? parsed['refractory_turns'];
-        if (t is num) crashTurns = t.toInt();
-      } else {
-        final re = RegExp(r'"is_climax"\s*:\s*(true|false)');
-        final m = re.firstMatch(effectiveText);
-        if (m != null) isClimax = m.group(1) == 'true';
-        crashTurns =
-            _extractInt(effectiveText, 'crashTurns') ??
-            _extractInt(effectiveText, 'refractory_turns') ??
-            5;
-      }
-
-      if (isClimax) {
-        onClimax?.call(crashTurns.clamp(1, 10));
+      // Same reader as the main path. This copy was MISSED when _readClimax
+      // was extracted — the commit claimed both paths were consolidated and
+      // one still ran the old inline parse, so a manual needs-reprocess got
+      // neither the missing-key text fallback nor any future fix. Caught by
+      // an independent review of that commit, not by the suite.
+      final climax = _readClimax(parsed, effectiveText);
+      if (climax.isClimax) {
+        onClimax?.call(climax.crashTurns.clamp(1, 10));
       }
 
       final impact = NeedsImpact(

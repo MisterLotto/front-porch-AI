@@ -222,7 +222,7 @@ extension ChatServiceSpeakerObjectives on ChatService {
     final state = msg.activeMetadata?['realism_state'];
     final stampHasNeeds = state is Map && state['needs'] is Map;
     _loadGroupRealismIntoScalars(sid);
-    _restoreRealismStateFromMessage(msg);
+    _restoreRealismStateFromMessage(msg, groupSpeakerId: sid);
     if (!hadStoredNeeds && !stampHasNeeds) {
       // The load's initializeFresh() filled the scalar vector for a member
       // with no needs history, and the stamp carries none either — clear it
@@ -232,7 +232,21 @@ extension ChatServiceSpeakerObjectives on ChatService {
     _saveScalarsIntoGroupRealism(sid);
   }
 
-  void _restoreRealismStateFromMessage(ChatMessage? msg) {
+  /// [groupSpeakerId] names the member being rewound so the two registers
+  /// that ride the group map — the hidden inter-character feelings and the
+  /// decay cadence — are rewound with everything else. Only
+  /// [_restoreRealismStateForSpeaker] knows it, and it passes it; the 1:1
+  /// callers leave it null and the cadence rides the scalar instead.
+  ///
+  /// Before this, ONLY the regen REVERT rewound those two. Every other
+  /// time-travel door — the regen merge, swipe navigation, delete rollback —
+  /// restored bond/trust/emotion faithfully and silently left the feelings
+  /// and cadence where the discarded turn had pushed them (independent review
+  /// of 848309c4 found the gap; the original fix closed one doorway of four).
+  void _restoreRealismStateFromMessage(
+    ChatMessage? msg, {
+    String? groupSpeakerId,
+  }) {
     if (msg == null) return;
 
     // Check if the current visible node has an active swipe metadata array or just the base metadata
@@ -245,7 +259,10 @@ extension ChatServiceSpeakerObjectives on ChatService {
     }
 
     final state = meta['realism_state'] as Map<String, dynamic>;
-    _relationshipService.restoreFromMessageState(state);
+    _relationshipService.restoreFromMessageState(
+      state,
+      groupSpeakerId: groupSpeakerId,
+    );
     _characterEmotion =
         state['characterEmotion'] as String? ?? _characterEmotion;
     _emotionIntensity =
