@@ -18,11 +18,6 @@
 
 part of '../chat_service.dart';
 
-// Sentence/clause boundary regexes for TTS sentence streaming — hoisted:
-// these used to be constructed (and recompiled) inside the per-token loop.
-final RegExp _sentenceEndRe = RegExp(r'[.!?]\s|[.!?]$|\n');
-final RegExp _clauseEndRe = RegExp(r',\s|;\s|\s[—–-]\s');
-
 /// Absolute ceiling on the RAG memories block, applied on top of the
 /// percentage budget (1:1's 10% / the group's configurable %). The block is
 /// verbatim old transcript injected AFTER the history; past ~2,500 tokens
@@ -1349,67 +1344,59 @@ extension ChatServiceGeneration on ChatService {
             ? (_tokensGenerated / _maxTokens).clamp(0.0, 1.0)
             : 0.0;
 
-        // Sentence streaming: accumulate tokens and emit complete sentences
-        _sentenceBuffer += token;
+        // Sentence streaming: emit complete sentences for live TTS (split
+        // logic extracted verbatim to sentence_stream.dart).
+        _sentenceBuffer = drainCompleteSentences(
+          _sentenceBuffer + token,
+          _sentenceBroadcast.add,
+        );
 
-        // Split strategy:
-        // 1. Always split at sentence boundaries: . ! ? followed by space, or \n
-        // 2. For long buffers (>80 chars / ~15 words), also split at clause
-        //    boundaries: ", " "; " " — " " - " to keep TTS chunks short (~1-3s)
-        bool emitted = true;
-        while (emitted) {
-          emitted = false;
-
-          // First try sentence boundaries
-          if (_sentenceEndRe.hasMatch(_sentenceBuffer)) {
-            final match = _sentenceEndRe.firstMatch(_sentenceBuffer)!;
-            final sentence = _sentenceBuffer.substring(0, match.end).trim();
-            _sentenceBuffer = _sentenceBuffer.substring(match.end);
-            if (sentence.isNotEmpty) {
-              _sentenceBroadcast.add(sentence);
-              emitted = true;
-            }
-            continue;
-          }
-
-          // For long buffers, split at clause boundaries to keep TTS fast
-          if (_sentenceBuffer.length > 80) {
-            if (_clauseEndRe.hasMatch(_sentenceBuffer)) {
-              // Find the LAST clause boundary to maximize chunk size
-              Match? lastMatch;
-              for (final m in _clauseEndRe.allMatches(_sentenceBuffer)) {
-                if (m.start > 30) lastMatch = m; // at least 30 chars per chunk
-              }
-              if (lastMatch != null) {
-                final chunk = _sentenceBuffer
-                    .substring(0, lastMatch.end)
-                    .trim();
-                _sentenceBuffer = _sentenceBuffer.substring(lastMatch.end);
-                if (chunk.isNotEmpty) {
-                  _sentenceBroadcast.add(chunk);
-                  emitted = true;
-                }
-              }
-            }
-          }
+        // Track think timing (tail-window scans, same reasoning as above).
+        // Runs BEFORE the stop-sequence scan so the scan knows the model is
+        // inside an open <think> block for this very chunk. Case-INSENSITIVE
+        // like ChatMessage.displayText's strip (<THINK> is valid there) — a
+        // case-sensitive tracker here would leave uppercase think blocks
+        // unprotected from the trim below.
+        final tailLower = accumulatedResponse
+            .substring(tailStart)
+            .toLowerCase();
+        if (!_thinkStarted && tailLower.contains('<think>')) {
+          _thinkStarted = true;
+          _thinkStartTime = DateTime.now();
+          _generationPhase = GenerationPhase.thinking;
+          streamTarget.thinkingStartTime =
+              _thinkStartTime.millisecondsSinceEpoch;
         }
+        final closeIdxInTail = (_thinkStarted && !_thinkEnded)
+            ? tailLower.indexOf('</think>')
+            : -1;
+        final thinkClosedThisChunk = closeIdxInTail != -1;
 
         // Client-side safety trim check (mid-stream). Tail-window scan: a
         // match ending before this token was already caught last iteration.
-        for (final stop in stopList) {
-          final index = accumulatedResponse.indexOf(stop, tailStart);
-          if (index != -1) {
-            final trimmedTotal = accumulatedResponse.substring(0, index);
-            final previousTotal = _tokenBuffer.join();
-            final lastTokenContribution = trimmedTotal.substring(
-              previousTotal.length.clamp(0, trimmedTotal.length),
-            );
-            if (lastTokenContribution.isNotEmpty) {
-              _tokenBuffer.add(lastTokenContribution);
+        // SKIPPED inside an open <think> block (and scanning only AFTER a
+        // close seen this chunk): models draft dialogue ("Name: …") while
+        // thinking, and trimming there strands an unclosed <think> whose
+        // displayText strips to an empty bubble (Discord report 2026-08-04).
+        if (!_thinkStarted || _thinkEnded || thinkClosedThisChunk) {
+          final scanFrom = thinkClosedThisChunk
+              ? tailStart + closeIdxInTail + '</think>'.length
+              : tailStart;
+          for (final stop in stopList) {
+            final index = accumulatedResponse.indexOf(stop, scanFrom);
+            if (index != -1) {
+              final trimmedTotal = accumulatedResponse.substring(0, index);
+              final previousTotal = _tokenBuffer.join();
+              final lastTokenContribution = trimmedTotal.substring(
+                previousTotal.length.clamp(0, trimmedTotal.length),
+              );
+              if (lastTokenContribution.isNotEmpty) {
+                _tokenBuffer.add(lastTokenContribution);
+              }
+              accumulatedResponse = trimmedTotal;
+              stopFound = true;
+              break;
             }
-            accumulatedResponse = trimmedTotal;
-            stopFound = true;
-            break;
           }
         }
 
@@ -1417,18 +1404,9 @@ extension ChatServiceGeneration on ChatService {
           _tokenBuffer.add(token);
         }
 
-        // Track think timing (tail-window scans, same reasoning as above)
-        if (!_thinkStarted &&
-            accumulatedResponse.indexOf('<think>', tailStart) != -1) {
-          _thinkStarted = true;
-          _thinkStartTime = DateTime.now();
-          _generationPhase = GenerationPhase.thinking;
-          streamTarget.thinkingStartTime =
-              _thinkStartTime.millisecondsSinceEpoch;
-        }
-        if (_thinkStarted &&
-            !_thinkEnded &&
-            accumulatedResponse.indexOf('</think>', tailStart) != -1) {
+        // The trim can only cut AFTER the closing tag, so a close seen this
+        // chunk always survives it.
+        if (thinkClosedThisChunk) {
           _thinkEnded = true;
           // Transition out of thinking to buffering/generating
           _generationPhase = bufferEnabled
@@ -1634,6 +1612,18 @@ extension ChatServiceGeneration on ChatService {
           finalResponse = _stripThinkBlocks(finalResponse);
         }
 
+        // Salvage a reply stranded inside an unclosed <think> block (the
+        // BACKEND's own stop sequences can cut inside one even with the
+        // client-side scan think-aware): close it, so the thoughts survive
+        // as the collapsible instead of displayText stripping the whole
+        // message to an empty bubble that persists across refreshes.
+        final lowerFinal = finalResponse.toLowerCase();
+        if (lowerFinal.lastIndexOf('<think>') >
+            lowerFinal.lastIndexOf('</think>')) {
+          finalResponse = '$finalResponse\n</think>';
+          streamTarget.text = finalResponse;
+        }
+
         // ── Output Sanitizer ──────────────────────────────────────────────
         // NOTE: This runs BEFORE _lorebookScanner.scanLatest() below, so
         // lorebook keyword triggers operate on the sanitized text. If a rule
@@ -1642,8 +1632,18 @@ extension ChatServiceGeneration on ChatService {
         // "final" text that enters history and is scanned for lore.
         if (g2.resolveOutputSanitizerEnabled(_storageService)) {
           final rules = g2.resolveOutputSanitizerRules(_storageService);
-          finalResponse = sanitizeOutput(finalResponse, rules);
-          streamTarget.text = finalResponse;
+          final sanitized = sanitizeOutput(finalResponse, rules);
+          if (sanitized.trim().isEmpty && finalResponse.trim().isNotEmpty) {
+            // A runaway rule ate the entire reply — keep the original text
+            // rather than persisting an empty message the user can't recover.
+            debugPrint(
+              '[Sanitizer] rules reduced the whole reply to empty — '
+              'keeping the unsanitized text.',
+            );
+          } else {
+            finalResponse = sanitized;
+            streamTarget.text = finalResponse;
+          }
         }
 
         // Snapshot which entries were already triggered before scanning the AI response.

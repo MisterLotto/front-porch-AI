@@ -41,6 +41,16 @@ class StreamHub {
   final Set<WebSocketChannel> _clients = {};
   StreamSubscription<String>? _tokenSub;
 
+  // Token coalescing: the generation loop pushes one event PER TOKEN, and
+  // relaying each as its own WS frame melted iPad Safari during fast local
+  // generation (a full client re-render per frame — the same failure the
+  // desktop's 33ms _notifyStreamListeners coalescer fixed). Buffer and flush
+  // at most every ~66ms, with a synchronous flush before done/error so no
+  // tail is lost and ordering is preserved. Clients already concatenate
+  // token frames, so batching is transparent to them.
+  final StringBuffer _pendingTokens = StringBuffer();
+  Timer? _tokenFlushTimer;
+
   int get clientCount => _clients.length;
 
   /// Register a freshly-upgraded socket. The auth middleware has already
@@ -80,12 +90,27 @@ class StreamHub {
 
   void _onToken(String token) {
     if (token == '__DONE__') {
+      _flushPendingTokens();
       broadcast({'event': 'done'});
     } else if (token == '__ERROR__') {
+      _flushPendingTokens();
       broadcast({'event': 'error'});
     } else {
-      broadcast({'event': 'token', 'data': token});
+      _pendingTokens.write(token);
+      _tokenFlushTimer ??= Timer(
+        const Duration(milliseconds: 66),
+        _flushPendingTokens,
+      );
     }
+  }
+
+  void _flushPendingTokens() {
+    _tokenFlushTimer?.cancel();
+    _tokenFlushTimer = null;
+    if (_pendingTokens.isEmpty) return;
+    final data = _pendingTokens.toString();
+    _pendingTokens.clear();
+    broadcast({'event': 'token', 'data': data});
   }
 
   void _onClientMessage(WebSocketChannel channel, dynamic raw) {
@@ -111,6 +136,9 @@ class StreamHub {
   Future<void> dispose() async {
     await _tokenSub?.cancel();
     _tokenSub = null;
+    // Flush (not drop) any buffered tail so a server stop mid-generation
+    // still delivers everything the clients were owed (Grok review finding).
+    _flushPendingTokens();
     // Copy first: closing a sink fires its onDone, which mutates _clients.
     for (final c in _clients.toList()) {
       try {

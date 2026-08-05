@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Front Porch AI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import { ChatSocket } from '../api/ws';
@@ -195,34 +195,56 @@ export function ChatPage() {
       } else if (e.event === 'gen_status') {
         // Truthful generation status (desktop status-bar parity): live
         // prompt-reading progress + which background pass holds the slot.
-        setGenStatus(
-          e.active
-            ? {
-                phase: e.phase ?? '',
-                busyWith: e.busyWith ?? null,
-                queued: e.queued ?? 0,
-                promptCur: e.promptCur ?? null,
-                promptTotal: e.promptTotal ?? null,
-                promptDone: !!e.promptDone,
-                estFraction: e.estFraction ?? null,
-                genCur: e.genCur ?? null,
-                genTotal: e.genTotal ?? null,
-              }
-            : null,
-        );
+        // Returning the previous object when nothing changed lets React bail
+        // out of the re-render — these frames arrive ~2.5/s for whole turns.
+        setGenStatus((prev) => {
+          if (!e.active) return null;
+          const next = {
+            phase: e.phase ?? '',
+            busyWith: e.busyWith ?? null,
+            queued: e.queued ?? 0,
+            promptCur: e.promptCur ?? null,
+            promptTotal: e.promptTotal ?? null,
+            promptDone: !!e.promptDone,
+            estFraction: e.estFraction ?? null,
+            genCur: e.genCur ?? null,
+            genTotal: e.genTotal ?? null,
+          };
+          return prev &&
+            prev.phase === next.phase &&
+            prev.busyWith === next.busyWith &&
+            prev.queued === next.queued &&
+            prev.promptCur === next.promptCur &&
+            prev.promptTotal === next.promptTotal &&
+            prev.promptDone === next.promptDone &&
+            prev.estFraction === next.estFraction &&
+            prev.genCur === next.genCur &&
+            prev.genTotal === next.genTotal
+            ? prev
+            : next;
+        });
       } else if (e.event === 'processing') {
-        setProcessing(
-          e.active
-            ? {
-                active: true,
-                realism: !!e.realism,
-                objective: !!e.objective,
-                greeting: !!e.greeting,
-                verifying: !!e.verifying,
-                text: e.text ?? '',
-              }
-            : NO_PROCESSING,
-        );
+        // Same bail-out treatment: the server already throttles these, but a
+        // reconnect or an old server can still deliver identical payloads.
+        setProcessing((prev) => {
+          if (!e.active) return NO_PROCESSING;
+          const next = {
+            active: true,
+            realism: !!e.realism,
+            objective: !!e.objective,
+            greeting: !!e.greeting,
+            verifying: !!e.verifying,
+            text: (e.text ?? '') as string,
+          };
+          return prev.active === next.active &&
+            prev.realism === next.realism &&
+            prev.objective === next.objective &&
+            prev.greeting === next.greeting &&
+            prev.verifying === next.verifying &&
+            prev.text === next.text
+            ? prev
+            : next;
+        });
       } else if (e.event === 'chance_time') {
         // Chaos parked the send waiting for "accept your fate". Pop the reveal
         // modal instantly (desktop shows its own wheel); `pending:false` closes
@@ -338,25 +360,28 @@ export function ChatPage() {
     setProcessing(NO_PROCESSING);
     void api.post('/api/chat/cancel-realism').catch(() => {});
   };
-  const regenerate = async () => {
+  // The transcript handlers are useCallback-stable so token/processing WS
+  // frames (which re-render this page many times a second during a turn)
+  // never invalidate the memoized transcript rows — see TranscriptRows.
+  const regenerate = useCallback(async () => {
     await api.post('/api/chat/regenerate');
     await refresh();
-  };
-  const continueGen = async () => {
+  }, [refresh]);
+  const continueGen = useCallback(async () => {
     await api.post('/api/chat/continue');
     await refresh();
-  };
-  const swipe = async (messageIndex: number, direction: number) => {
+  }, [refresh]);
+  const swipe = useCallback(async (messageIndex: number, direction: number) => {
     await api.post('/api/chat/swipe', { messageIndex, direction });
     await refresh();
-  };
-  const del = async (index: number) => {
+  }, [refresh]);
+  const del = useCallback(async (index: number) => {
     await api.post('/api/chat/delete', { index });
     await refresh();
-  };
-  const beginEdit = (m: Message) => {
+  }, [refresh]);
+  const beginEdit = useCallback((m: Message) => {
     setEditTarget({ index: m.index, text: m.text });
-  };
+  }, []);
   const saveEdit = async (text: string) => {
     if (!editTarget) return;
     const index = editTarget.index;
@@ -388,10 +413,10 @@ export function ChatPage() {
     await refresh();
     setReprocessIndex(null);
   };
-  const revertNeeds = async (index: number) => {
+  const revertNeeds = useCallback(async (index: number) => {
     await api.post('/api/chat/revert-needs-reprocess', { index });
     await refresh();
-  };
+  }, [refresh]);
 
   // ── Conversations drawer ────────────────────────────────────────
   const openSessions = async () => {
@@ -416,6 +441,16 @@ export function ChatPage() {
     await api.post('/api/chat/session', { action: 'new' });
     await refresh();
   };
+
+  // Speaker lookup for per-message avatars/names. Memoized on the cast array
+  // (which only changes identity when state refetches) so its stability
+  // carries into the memoized TranscriptRows — a fresh Map every render was
+  // enough to defeat that memo entirely. Hook, so it must sit above the
+  // early returns.
+  const castById = useMemo(
+    () => new Map((state?.cast ?? []).map((c) => [c.id, c])),
+    [state?.cast],
+  );
 
   if (!state) return <div className="centered"><div className="spinner" /></div>;
 
@@ -442,8 +477,6 @@ export function ChatPage() {
   // Editing targets a real library character — the 1:1 host or a scene guest,
   // never a group member (denormalized copies aren't web-editable).
   const editId = !state.isGroupMode ? focused?.dbId ?? state.character?.id : undefined;
-  // Speaker lookup for per-message avatars/names in a multi-character scene.
-  const castById = new Map(cast.map((c) => [c.id, c]));
   // A lite scene guest has no realism of its own. Falling through to
   // `state.realism` here showed the HOST's bond/trust/needs under the
   // guest's name; desktop shows a 'Lite NPC' banner instead.

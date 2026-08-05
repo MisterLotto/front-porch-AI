@@ -28,6 +28,7 @@ import 'package:front_porch_ai/ui/dialogs/dialogs.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 import '../widgets/inline_chat_image.dart';
+import 'live_thinking_timer.dart';
 import 'styled_chat_message.dart';
 import 'theme_border_resolver.dart';
 
@@ -599,57 +600,41 @@ class _MessageBubbleState extends State<MessageBubble> {
                             ],
                           ),
                         ),
-                      // Live thinking timer
+                      // Live thinking timer (extracted widget)
                       if (!message.isUser &&
                           message.thinkingStartTime != null &&
                           message.thinkingDurationMs == 0)
-                        Consumer<ChatService>(
-                          builder: (context, chatService, _) {
-                            if (!chatService.isGenerating) {
-                              return const SizedBox.shrink();
-                            }
-                            final elapsed =
-                                DateTime.now().millisecondsSinceEpoch -
-                                message.thinkingStartTime!;
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 4),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const SizedBox(
-                                    width: 10,
-                                    height: 10,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 1.5,
-                                      color: Colors.tealAccent,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Thinking ${(elapsed / 1000).toStringAsFixed(0)}s...',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.textTertiary(context),
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
+                        LiveThinkingTimer(startMs: message.thinkingStartTime!),
+                      // Thought-only reply: the whole message was reasoning,
+                      // so displayText is empty — say so instead of rendering
+                      // a bare empty bubble (web has the same hint).
+                      if (!message.isUser &&
+                          message.sender != 'System' &&
+                          message.displayText.isEmpty &&
+                          (message.thinkingContent?.isNotEmpty ?? false) &&
+                          !(widget.chatService?.isGenerating ?? false))
+                        Text(
+                          '💭 Only thoughts this turn — Continue or '
+                          'Regenerate for a spoken reply.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                            color: AppColors.textTertiary(context),
+                          ),
+                        )
+                      else
+                        StyledChatMessage(
+                          text: message.displayText,
+                          isUser: message.isUser,
+                          externalImagesAllowed: widget.externalImagesAllowed,
+                          onRequestImagePermission:
+                              widget.onRequestImagePermission,
+                          character:
+                              widget.character ??
+                              widget.chatService?.activeCharacter,
+                          themePreset: theme.preset,
+                          themeOverrides: theme.overrides,
                         ),
-                      StyledChatMessage(
-                        text: message.displayText,
-                        isUser: message.isUser,
-                        externalImagesAllowed: widget.externalImagesAllowed,
-                        onRequestImagePermission:
-                            widget.onRequestImagePermission,
-                        character:
-                            widget.character ??
-                            widget.chatService?.activeCharacter,
-                        themePreset: theme.preset,
-                        themeOverrides: theme.overrides,
-                      ),
                       // Locally generated image (from /image or the Image Studio's
                       // "Send to chat") — click to zoom, right-click to save.
                       if (message.activeMetadata?['image_path'] is String)

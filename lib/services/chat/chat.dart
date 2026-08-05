@@ -58,6 +58,7 @@ export 'relationship_service.dart';
 export 'scenario_fade.dart';
 export 'scene_guest_director.dart';
 export 'scene_guest_factory.dart';
+export 'sentence_stream.dart';
 export 'stop_sequences.dart';
 export 'story_clock.dart';
 export 'time_service.dart';

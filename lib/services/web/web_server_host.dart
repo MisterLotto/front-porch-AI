@@ -75,6 +75,15 @@ class WebServerHost extends ChangeNotifier {
   bool _wasEvaluatingRealism = false;
   bool _wasAwaitingChanceTime = false;
   bool _wasPendingImageReview = false;
+  // Throttle/dedupe state for the processing broadcast: during evals every
+  // ChatService notify (≤150ms apart) used to re-send the FULL accumulated
+  // eval text — O(n²) bytes over the socket and a client re-render per frame,
+  // which is a big part of the reported iPad stalls. Transitions always send;
+  // text growth is rate-limited and unchanged payloads are skipped.
+  DateTime _lastProcessingSent = DateTime.fromMillisecondsSinceEpoch(0);
+  int _lastProcessingTextLen = -1;
+  bool _lastProcessingVerifying = false;
+  bool _lastProcessingObjective = false;
 
   // Image-gen progress relay (see the imageGen listener in start()).
   VoidCallback? _imageProgressListener;
@@ -112,6 +121,13 @@ class WebServerHost extends ChangeNotifier {
   bool get isRunning => _server != null;
   int get port => _server?.port ?? _storage.webServerSettings.webServerPort;
   String? get lanIp => _lanIp;
+
+  /// Human-readable reason the last [startSafely] attempt failed, so the
+  /// Settings toggle can tell the user WHY instead of a bare "failed" toast
+  /// (release builds have no visible logs, which made these reports
+  /// undiagnosable). Null after a successful start.
+  String? get lastStartError => _lastStartError;
+  String? _lastStartError;
   bool get hasActiveClient => _hasActiveClient;
   String? get connectedClientIp => _connectedClientIp;
   String? get connectedClientInfo => _connectedClientInfo;
@@ -220,16 +236,37 @@ class WebServerHost extends ChangeNotifier {
         final objective = chatService.isCheckingCompletion;
         final active = realism || objective;
         if (active) {
-          streamHub.broadcast({
-            'event': 'processing',
-            'active': true,
-            'realism': realism,
-            'objective': objective,
-            'greeting': chatService.isProcessingGreeting,
-            'verifying': chatService.isVerifyingRealism,
-            'text': chatService.realismEvalStreamTextClean,
-          });
+          final verifying = chatService.isVerifyingRealism;
+          final text = chatService.realismEvalStreamTextClean;
+          final now = DateTime.now();
+          // A phase transition (eval started, verifier flipped, objective
+          // phase joined) always sends; otherwise only send when the eval
+          // text actually grew AND the 300ms window elapsed. This turns the
+          // ~6.6 full-payload frames/s of a long local eval into ≤3 delta-
+          // worthy ones and drops the identical re-broadcasts entirely.
+          final transition = !_wasEvaluatingRealism ||
+              verifying != _lastProcessingVerifying ||
+              objective != _lastProcessingObjective;
+          final textChanged = text.length != _lastProcessingTextLen;
+          if (transition ||
+              (textChanged &&
+                  now.difference(_lastProcessingSent).inMilliseconds >= 300)) {
+            _lastProcessingSent = now;
+            _lastProcessingTextLen = text.length;
+            _lastProcessingVerifying = verifying;
+            _lastProcessingObjective = objective;
+            streamHub.broadcast({
+              'event': 'processing',
+              'active': true,
+              'realism': realism,
+              'objective': objective,
+              'greeting': chatService.isProcessingGreeting,
+              'verifying': verifying,
+              'text': text,
+            });
+          }
         } else if (_wasEvaluatingRealism) {
+          _lastProcessingTextLen = -1;
           streamHub.broadcast({'event': 'processing', 'active': false});
         }
         _wasEvaluatingRealism = active;
@@ -601,8 +638,10 @@ class WebServerHost extends ChangeNotifier {
       await settings.setWebServerStarting(true);
       await start(port).timeout(const Duration(seconds: 25));
       await settings.setWebServerStarting(false);
+      _lastStartError = null;
       return isRunning;
     } catch (e) {
+      _lastStartError = describeStartFailure(e, port);
       debugPrint('[WebServerHost] Web server start failed: $e — disabling.');
       await settings.setWebServerStarting(false);
       await settings.setWebServerEnabled(false);
@@ -611,6 +650,42 @@ class WebServerHost extends ChangeNotifier {
       } catch (_) {}
       return false;
     }
+  }
+
+  /// Turn a [startSafely] failure into an actionable one-liner. The two big
+  /// prod classes are port conflicts (another app — or a second running copy
+  /// of Front Porch AI, e.g. stable + nightly — camping the fixed port) and
+  /// Windows reserved-port ranges (Hyper-V/WSL exclusions make bind fail with
+  /// access-denied on an apparently free port). Static + pure for testing.
+  static String describeStartFailure(Object e, int port) {
+    if (e is TimeoutException) {
+      return 'The start attempt timed out after 25 seconds. Try again — and '
+          'if it keeps happening, change the port below.';
+    }
+    if (e is SocketException) {
+      // EADDRINUSE: macOS 48, Linux 98, Windows 10048. The "shared flag"
+      // message is Dart's in-process flavor of the same collision (two binds
+      // from one process — e.g. overlapping start() calls).
+      // EACCES: 13 (Unix), 10013 (Windows reserved port ranges).
+      final code = e.osError?.errorCode;
+      final msg = '${e.message} ${e.osError?.message ?? ''}'.toLowerCase();
+      if (code == 48 ||
+          code == 98 ||
+          code == 10048 ||
+          msg.contains('already in use') ||
+          msg.contains('shared flag')) {
+        return 'Port $port is already in use — another app (or a second '
+            'running copy of Front Porch AI) has it. Close that app or '
+            'change the port below.';
+      }
+      if (code == 13 || code == 10013 || msg.contains('access')) {
+        return 'The system refused access to port $port (it may be reserved '
+            'by the OS — common on Windows with Hyper-V/WSL). Change the '
+            'port below.';
+      }
+      return 'Could not open port $port: ${e.osError?.message ?? e.message}';
+    }
+    return 'Start failed: $e';
   }
 
   Future<void> stop() async {

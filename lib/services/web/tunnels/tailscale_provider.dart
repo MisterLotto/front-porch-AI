@@ -98,7 +98,14 @@ class TailscaleProvider {
     try {
       // `tailscale status --json` still emits BackendState (e.g. NeedsLogin)
       // with a non-zero exit when logged out, so parse stdout regardless.
-      final result = await Process.run(_exe, ['status', '--json']);
+      // Time-boxed: the CLI blocks on the tailscaled IPC socket, and a wedged
+      // daemon otherwise eats WebServerHost.startSafely's whole start budget.
+      // On timeout the orphaned CLI process is left to die on its own —
+      // Process.run gives us no handle to kill it, and it is harmless.
+      final result = await Process.run(
+        _exe,
+        ['status', '--json'],
+      ).timeout(const Duration(seconds: 5));
       final out = result.stdout.toString();
       if (out.trim().isEmpty) return TailscaleStatus.unavailable;
       return parseStatus(out);
@@ -121,12 +128,13 @@ class TailscaleProvider {
       return const TailscaleServeResult(TailscaleServeOutcome.notReady);
     }
     try {
+      // Time-boxed like status(): a wedged daemon must not hang server start.
       final result = await Process.run(_exe, [
         'serve',
         '--bg',
         '--https=443',
         'http://127.0.0.1:$port',
-      ]);
+      ]).timeout(const Duration(seconds: 10));
       if (result.exitCode != 0) {
         final outcome =
             classifyServeFailure('${result.stderr}${result.stdout}');
@@ -149,7 +157,11 @@ class TailscaleProvider {
   Future<void> serveOff() async {
     if (!isInstalled) return;
     try {
-      await Process.run(_exe, ['serve', '--https=443', 'off']);
+      await Process.run(_exe, [
+        'serve',
+        '--https=443',
+        'off',
+      ]).timeout(const Duration(seconds: 5));
     } catch (_) {}
   }
 
@@ -245,7 +257,14 @@ class TailscaleProvider {
     }
   }
 
+  // The PATH probe spawns a process synchronously, which can take seconds on
+  // Windows under antivirus — cached so the cost is paid once per app run, not
+  // on every server start/toggle.
+  static String? _cachedExe;
+
   static String _findExe() {
+    final cached = _cachedExe;
+    if (cached != null) return cached;
     const candidates = [
       'tailscale',
       '/usr/bin/tailscale',
@@ -257,12 +276,12 @@ class TailscaleProvider {
       if (c == 'tailscale') {
         try {
           final r = Process.runSync(c, ['version']);
-          if (r.exitCode == 0) return c;
+          if (r.exitCode == 0) return _cachedExe = c;
         } catch (_) {}
       } else if (File(c).existsSync()) {
-        return c;
+        return _cachedExe = c;
       }
     }
-    return '';
+    return _cachedExe = '';
   }
 }

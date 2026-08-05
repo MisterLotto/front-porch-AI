@@ -1,5 +1,94 @@
 # Changelog
 
+## 2026-08-04 — fix(web): three Discord-reported WebUI bugs — empty bubble after streaming, iPad stalls during evals, silent web-server start failure
+- **Why:** three user reports (pnwpdr ×2, Demon Doctor ×1). Root-caused via a 14-agent
+  investigation workflow (6 finders + 8 adversarial verifiers; 8/8 findings CONFIRMED,
+  0 refuted) plus personal line-level verification of every mechanism before editing.
+- **Bug 1 — empty bubble that survives refresh (~14k-token chat).** Converging think-block
+  mechanisms, all fixed:
+  1. The mid-stream stop-sequence trim (`chat_service_generation.dart`) was think-blind:
+     reasoning models draft dialogue ("Name: …") inside `<think>`, a stop matched there,
+     truncation stranded an UNCLOSED `<think>`, and `ChatMessage.displayText` strips an
+     unclosed block to `''` → persisted empty bubble on desktop AND web (facade serves
+     `displayText`). Fix: think tracking now runs BEFORE the stop scan, and the scan is
+     skipped while inside an open think block.
+  2. Finalize salvage: if the final text still ends inside an unclosed `<think>` (the
+     BACKEND's own stops can cut there too), it is closed so the thoughts survive as the
+     collapsible instead of the whole message stripping to empty.
+  3. Output Sanitizer guard: a runaway user rule that reduced the entire reply to empty
+     now keeps the original text (with a debug log) instead of persisting the wipe.
+  4. Thought-only affordance (desktop `message_bubble.dart` + web `ChatMessageList.tsx`,
+     parity): a reply that is ONLY reasoning now says "💭 Only thoughts this turn —
+     Continue or Regenerate for a spoken reply" instead of a bare empty bubble.
+  5. Web streaming think split was case-SENSITIVE while the Dart strip is
+     case-insensitive — an uppercase `<THINK>` streamed as visible reply text then
+     vanished at done. Now case-insensitive on web too.
+- **Bug 2 — iPad web UI unresponsive during objective/realism engine activity.**
+  Compounding flood, all layers addressed:
+  1. `StreamHub` now coalesces token broadcasts (~66ms flush window, synchronous flush
+     before done/error) instead of one WS frame PER TOKEN — the same lesson the desktop's
+     33ms `_notifyStreamListeners` coalescer already recorded. Client-transparent.
+  2. The `processing` broadcast (WebServerHost.onProcessing) re-sent the FULL accumulated
+     eval text on EVERY ChatService notify (~6.6/s, O(n²) bytes). Now: transitions always
+     send; text growth is throttled to ≥300ms; identical payloads are skipped.
+  3. `ChatService.realismEvalStreamTextClean` memoized on string identity (was re-running
+     the think-strip regex over the whole eval buffer per read; desktop overlay + web
+     broadcast both pay it).
+  4. `web_ui`: transcript rows split into a memoized `TranscriptRows` (token/processing
+     frames no longer reconcile every message row — ChatPage handlers made
+     useCallback-stable to support it); `processing`/`gen_status` setState now bails out
+     on identical payloads; GET requests get a 30s AbortSignal timeout so a busy engine
+     reads as an error, not a frozen app (POSTs deliberately unbounded — journal/growth/
+     objective actions legitimately run minutes on local backends).
+- **Bug 3 — "Web server failed to start and was turned off" with no reason.**
+  `startSafely` swallowed the exception; release builds have no logs, so reports were
+  undiagnosable. Now: `WebServerHost.lastStartError` + `describeStartFailure()` classify
+  port-in-use (48/98/10048 + in-process "shared flag" double-bind), Windows reserved-port
+  EACCES (10013), and the 25s timeout into actionable messages the Settings toast shows.
+  Tailscale/ngrok `Process.run` calls are time-boxed (5–10s) so a wedged daemon can't eat
+  the start budget, and both providers' sync `_findExe` PATH probes are cached per app run.
+  Why the E2E never caught it: `web_server_test.dart` binds an EPHEMERAL port on loopback,
+  pins autoRemote off, and calls `start(0)` directly — the fixed-port/tunnel/`startSafely`
+  failure surface never executes. The new suite covers exactly that surface.
+- **Deliberately NOT done (needs maintainer decision):** the send/regenerate/etc. routes
+  still return `{'status':'ok'}` when ChatService silently refuses during the settling
+  window (confirmed finding) — making them honest 409s + disabling the web composer during
+  pre-gen evals is a protocol/UX change; also NOT extending sendMessage's busy guard (the
+  in-code comment records that extension was tried twice and CI rejected it both times).
+- **Grok hostile review (topic `review`):** cleared every area except two real residuals
+  in my own stop-trim fix, both then fixed: (a) the Dart think tracker was
+  case-SENSITIVE while displayText's strip is not — the token loop now lowercases the
+  tail window, so `<THINK>` blocks are protected too; (b) when `</think>` closed in the
+  same chunk, a stop BEFORE the close tag could still trim mid-think — the scan now
+  starts after the closing tag. Plus its nit: `StreamHub.dispose` now flushes (not
+  drops) the buffered token tail.
+- **God-file ratchet compliance (the full-suite run caught the growth):**
+  sentence-boundary splitting extracted verbatim to `lib/services/chat/sentence_stream.dart`
+  (pure `drainCompleteSentences`, barrel-exported); the live "Thinking Ns…" spinner
+  extracted to `lib/ui/chat_components/bubbles/live_thinking_timer.dart`; the private
+  `_hasRealismBaseline` getter moved to the realism-dance part. `chat_service.dart` back
+  to exactly 4631 (baseline unchanged), `chat_service_generation.dart` exactly 1959
+  (unchanged), `message_bubble.dart` 1775 → 1760 with its baseline entry lowered to 1760
+  as the ratchet test itself instructs (test-integrity will flag the baseline edit —
+  it is the ratchet's own sanctioned shrink flow, not a weakening).
+  NOTE: `realismEvalStreamTextClean` deliberately stays a CLASS member (compact memo) —
+  `FakeChatService` overrides it in goldens and extension members cannot be overridden
+  (same reason `getActiveObjectivesFor` documents).
+- **Tests:** `test/services/web/web_server_start_failure_test.dart` (6 tests) and
+  `test/services/web/stream_hub_coalescing_test.dart` (3 tests) — BOTH negative-checked
+  (fix reverted → red, restored → green). No ChatService-level harness exists for the
+  stop-trim path, so that fix ships guarded by analyze + the verified mechanism only —
+  an E2E with a think-trap scripted reply via `fake_backend` is the right follow-up.
+- **Gates:** `flutter analyze` 0 issues; `dart fix --dry-run` nothing; web `tsc` clean;
+  vitest 34/34; `npm run build` → assets/web_app rebuilt; test/services/web 113/113 +
+  9 new green; full non-golden suite run separately.
+- **Files:** `lib/services/chat/chat_service_generation.dart`, `lib/services/chat_service.dart`,
+  `lib/services/web/streaming/stream_hub.dart`, `lib/services/web/web_server_host.dart`,
+  `lib/services/web/tunnels/tailscale_provider.dart`, `lib/services/web/tunnels/ngrok_provider.dart`,
+  `lib/ui/pages/settings_page.advanced.dart`, `lib/ui/chat_components/bubbles/message_bubble.dart`,
+  `web_ui/src/pages/ChatPage.tsx`, `web_ui/src/components/ChatMessageList.tsx`,
+  `web_ui/src/api/client.ts`, new tests as above, `docs/Rawhide.md`.
+
 ## 2026-08-04 — fix(home): Porch Stories was unreachable on an empty library (maintainer-approved)
 - **Why:** the story_pipeline E2E suite, on its first ever execution, failed with `Found 0 widgets with text "Porch Stories"`. Root cause was in the app, not the test — and it was TWO defects stacked:
   1. `home_page.dart` returned early when `repo.characters.isEmpty && groupRepo.groups.isEmpty`, rendering a "Get started by creating a new character!" panel that did **not** include the Chats/Porch Stories mode toggle. On a fresh install the toggle did not exist.

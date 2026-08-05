@@ -52,7 +52,11 @@ class NgrokProvider {
     if (isRunning) return _publicUrl;
     try {
       if (authToken != null && authToken.isNotEmpty) {
-        await Process.run(_exe, ['config', 'add-authtoken', authToken]);
+        await Process.run(_exe, [
+          'config',
+          'add-authtoken',
+          authToken,
+        ]).timeout(const Duration(seconds: 10));
       }
       _process = await Process.start(
         _exe,
@@ -125,7 +129,14 @@ class NgrokProvider {
     }
   }
 
+  // Cached for the same reason as TailscaleProvider: the sync PATH probe can
+  // take seconds on Windows under antivirus, and this ctor runs on every
+  // server start (via TunnelManager).
+  static String? _cachedExe;
+
   static String _findExe() {
+    final cached = _cachedExe;
+    if (cached != null) return cached;
     const candidates = [
       'ngrok',
       '/usr/local/bin/ngrok',
@@ -137,12 +148,12 @@ class NgrokProvider {
       if (c == 'ngrok') {
         try {
           final r = Process.runSync(c, ['version']);
-          if (r.exitCode == 0) return c;
+          if (r.exitCode == 0) return _cachedExe = c;
         } catch (_) {}
       } else if (File(c).existsSync()) {
-        return c;
+        return _cachedExe = c;
       }
     }
-    return '';
+    return _cachedExe = '';
   }
 }

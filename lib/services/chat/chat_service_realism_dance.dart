@@ -23,6 +23,16 @@ part of '../chat_service.dart';
 /// (_evaluateRealismForUpcomingSpeaker / _loadGroupRealismIntoScalars /
 /// _saveScalarsIntoGroupRealism). Extracted verbatim (zero behaviour change).
 extension ChatServiceRealismDance on ChatService {
+  /// True if the realism engine has already captured a meaningful baseline
+  /// (emotion or bond score). Used to avoid redundant retroactive scans.
+  /// (Private — moved from the class body; fakes cannot override privates,
+  /// so extension dispatch is safe here.)
+  bool get _hasRealismBaseline =>
+      _characterEmotion.isNotEmpty ||
+      _relationshipService.affectionScore != 0 ||
+      _nsfwService.arousalLevel != 0 ||
+      _relationshipService.activeFixation.isNotEmpty;
+
   /// Runs targeted realism evaluation for the specific character who is about
   /// to speak next in a group chat. This is the core of making realism work
   /// on a per-character, turn-timed basis.

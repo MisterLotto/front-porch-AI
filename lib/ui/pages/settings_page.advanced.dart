@@ -144,11 +144,17 @@ extension _SettingsAdvancedTab on _SettingsPageState {
                           // Guide the user through how they'll reach it.
                           await WebAccessSetupDialog.show(context);
                         } else {
+                          // Include the classified reason (port in use,
+                          // reserved port, timeout…) — a bare "failed" is
+                          // undiagnosable from a release build.
+                          final reason = webServer.lastStartError;
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
+                            SnackBar(
+                              duration: const Duration(seconds: 8),
                               content: Text(
                                 'Web server failed to start and was '
-                                'turned off.',
+                                'turned off.'
+                                '${reason == null ? '' : '\n$reason'}',
                               ),
                             ),
                           );

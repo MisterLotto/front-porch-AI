@@ -3184,20 +3184,20 @@ class ChatService extends ChangeNotifier {
   int get verificationPass => _verificationPass;
   int get verificationMaxPasses => _verificationMaxPasses;
 
-  /// Stream text with any  blocks stripped (for display).
+  /// Stream text with think blocks stripped (for display) — memoized on
+  /// string identity (the overlay + web broadcast read it every notify).
+  /// Class member, not extension: FakeChatService overrides it in goldens.
+  String? _evalCleanSrc, _evalCleanOut;
   String get realismEvalStreamTextClean =>
-      _stripThinkBlocks(_realismEvalStreamText);
+      identical(_realismEvalStreamText, _evalCleanSrc)
+      ? _evalCleanOut!
+      : _evalCleanOut = _stripThinkBlocks(
+          _evalCleanSrc = _realismEvalStreamText,
+        );
   String get characterEmotion => _characterEmotion;
 
   String get emotionIntensity => _emotionIntensity;
 
-  /// True if the realism engine has already captured a meaningful baseline
-  /// (emotion or bond score). Used to avoid redundant retroactive scans.
-  bool get _hasRealismBaseline =>
-      _characterEmotion.isNotEmpty ||
-      _relationshipService.affectionScore != 0 ||
-      _nsfwService.arousalLevel != 0 ||
-      _relationshipService.activeFixation.isNotEmpty;
 
   /// Whether the per-session Needs (Sims-style) simulation is active.
   /// When true and `enjoysLowHygiene` is also true, low hygiene becomes desirable.
