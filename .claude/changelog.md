@@ -9325,3 +9325,38 @@ reporting empty — the exact thing ChatDriver's own doc warns about.
 
 **Verification.** analyze clean; each suite run individually then the full local
 Linux leg (25 files); no lib behaviour changed beyond the picker seam.
+
+## 2026-08-05 — CI: shard the E2E matrix (25 min -> ~9 on the slowest leg)
+
+**Files.** `.github/workflows/ci.yml`.
+
+Maintainer asked for a faster CI (2026-08-05), noting cost is a non-issue on a
+public repo.
+
+**Where the time actually went.** Not slow machines — CI's Linux runner is
+faster PER SUITE than the dev sandbox. It was 25 independent suites walked
+sequentially, three times over, with the whole run gated by the slowest leg.
+Measured on 08f000f: macOS 25m01s, Windows 23m27s, Linux 15m35s.
+
+**Change.** `device` x `shard` matrix, 3 x 5 = 15 jobs. Files are assigned
+round-robin (`index % shards`), not in contiguous blocks — suite durations vary
+enough that blocks would leave one shard long. The `include` entries match on
+`device`, so they ADD `os`/`experimental` to each of that device's five
+combinations rather than spawning extra jobs.
+
+**Why five and not fifty.** Every shard re-pays the app build, which is the
+fixed cost: macOS is roughly a 5 min build plus ~48s per suite. Five shards puts
+macOS at build + 5 suites ~= 9 min instead of 25. Wider mostly buys more builds.
+
+**Guard against the obvious failure mode.** A shard whose glob matched nothing
+would report GREEN having run nothing — the same class of silent hole the glob
+itself was introduced to close. Both loops now count what they ran, print it,
+and hard-fail on zero.
+
+**Unchanged on purpose:** one `flutter test` per file (a second app boot in one
+invocation still dies at "loading"), the Linux retry-once-with-rebuild, the
+60-minute timeout, and fail-fast: false.
+
+**Verification.** YAML parses; the partition was simulated against the real
+25-file glob — 25 assigned, no duplicates, no gaps, 5 per shard. The workflow
+validates itself on the next push, since push triggers use the branch's own copy.

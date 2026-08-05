@@ -119,31 +119,49 @@ jobs:
   # proposal + task-gen, and a real journal maintenance pass. See
   # integration_test/app_smoke_test.dart for the isolation contract.
   # Runner notes: no human mouse and no real KoboldCpp exist here, so the two
-  # local-run hazards (hover-wedge, zombie-kill) don't apply. Build time
-  # dominates (~6-10 min); the test itself is ~7s.
+  # local-run hazards (hover-wedge, zombie-kill) don't apply.
+  #
+  # SHARDED (2026-08-05, maintainer request "make it faster"). The suites are
+  # independent, so each OS fans out over E2E_SHARDS parallel jobs instead of
+  # walking all of them in one. Round-robin (index % shards), not contiguous
+  # blocks, because suite durations vary and blocks would leave one shard long.
+  #
+  # Why the shard count is modest: every shard re-pays the app build, which is
+  # the fixed cost here. Measured on the 25-suite run 08f000f — macOS 25m01s,
+  # Windows 23m27s, Linux 15m35s — that is roughly a 5 min build plus ~48s per
+  # suite on macOS. Five shards puts macOS at build + 5 suites ~= 9 min rather
+  # than 25. Going wider mostly buys more builds, not less wall clock.
   # Every platform joins this matrix the same way: experimental
   # (continue-on-error) until it has two consecutive green runs on record —
   # so a new platform's shakedown can never red a contributor's PR — then it
   # graduates to blocking. Windows and Linux both graduated on 2026-07-28,
   # each having passed from its very first execution.
   e2e-smoke:
-    name: E2E smoke (${{ matrix.device }})
+    name: E2E smoke (${{ matrix.device }} ${{ matrix.shard }}/5)
     needs: analyze
     strategy:
       fail-fast: false
       matrix:
+        device: [macos, windows, linux]
+        shard: [1, 2, 3, 4, 5]
+        # These `include` entries match on `device`, so each one ADDS its keys
+        # to all five of that device's shard combinations rather than creating
+        # new jobs. 3 devices x 5 shards = 15 jobs.
         include:
-          - os: macos-latest
-            device: macos
+          - device: macos
+            os: macos-latest
             experimental: false
-          - os: windows-latest
-            device: windows
+          - device: windows
+            os: windows-latest
             experimental: false
-          - os: ubuntu-latest
-            device: linux
+          - device: linux
+            os: ubuntu-latest
             experimental: false
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
+    env:
+      E2E_SHARDS: 5
+      E2E_SHARD: ${{ matrix.shard }}
     # 20 suites per OS, each failing suite retried once with a full rebuild.
     # Sizing history: 30 truncated a Linux round mid-list (hid four verdicts);
     # 45 then ran out on the first 20-suite round, because a FAILING suite is
@@ -188,11 +206,25 @@ jobs:
         shell: bash
         run: |
           set -e
+          i=0
+          ran=0
           for f in integration_test/*_test.dart; do
+            if [ $(( i % E2E_SHARDS )) -ne $(( E2E_SHARD - 1 )) ]; then
+              i=$((i + 1)); continue
+            fi
+            i=$((i + 1)); ran=$((ran + 1))
             echo "::group::$f"
             flutter test "$f" -d ${{ matrix.device }}
             echo "::endgroup::"
           done
+          # A shard that silently matched nothing would report green having
+          # tested nothing at all — the exact failure mode the glob was
+          # introduced to kill. Only legal once suites < shards.
+          echo "shard $E2E_SHARD/$E2E_SHARDS ran $ran suite(s)"
+          if [ "$ran" -eq 0 ]; then
+            echo "::error::shard $E2E_SHARD matched no suites"
+            exit 1
+          fi
 
       # Linux under xvfb has been observed to drop the device mid-boot and
       # report "No tests were found" (exit 79) with no Dart stack — a true
@@ -203,7 +235,13 @@ jobs:
         run: |
           set +e
           overall=0
+          i=0
+          ran=0
           for f in integration_test/*_test.dart; do
+            if [ $(( i % E2E_SHARDS )) -ne $(( E2E_SHARD - 1 )) ]; then
+              i=$((i + 1)); continue
+            fi
+            i=$((i + 1)); ran=$((ran + 1))
             status=0
             for attempt in 1 2; do
               echo "::group::$f (attempt $attempt)"
@@ -225,6 +263,11 @@ jobs:
               overall="$status"
             fi
           done
+          echo "shard $E2E_SHARD/$E2E_SHARDS ran $ran suite(s)"
+          if [ "$ran" -eq 0 ]; then
+            echo "::error::shard $E2E_SHARD matched no suites"
+            exit 1
+          fi
           exit "$overall"
 
   web-tests:
