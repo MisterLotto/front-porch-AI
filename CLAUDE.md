@@ -72,10 +72,13 @@ flutter build windows                # Windows
 
 ```
 lib/
-├── main.dart                    # Entry point; initializes all services, window config, SIGINT handling
+├── main.dart                    # Entry point — a 5-phase shell (signal handlers → prefs heal →
+│                                #   guarded DB open → window → runApp); phase bodies live in
+│                                #   main.{startup,providers,lifecycle,recovery,migration,reunification}.dart parts
 ├── app_version.dart             # Version constant + isPreRelease flag
 ├── database/
-│   ├── database.dart            # Drift schema (characters, chats, messages, lorebooks, worlds, etc.)
+│   ├── database.dart            # Drift library SHELL (annotation, ctor, schemaVersion, migration stub).
+│   │                            #   Tables/ladder/queries live in database.*.dart parts — see "Database" below
 │   ├── database.g.dart          # Generated Drift code
 │   ├── database_cleanup.dart    # Database cleanup helpers
 │   └── data_migration_service.dart # Data migrations between schemas
@@ -105,8 +108,12 @@ lib/
 │   │   ├── prompt_injection/    # prompt-injection builders (author_note, relationship, emotion,
 │   │                            #   behavioral, time, nsfw, chaos, needs, realism_state, journal)
 │   ├── grpc/                    # gRPC-generated code and services (e.g. Draw Things)
-│   ├── chat_service.dart        # Core chat orchestration: context building, streaming, Realism
-│   │                            #   orchestration, _groupRealism map, post-gen wiring (see notes below)
+│   ├── story/                   # Porch Stories pure leaves (StoryJson/Archetypes/Prompts/Context + story.dart barrel)
+│   ├── image/                   # Image-gen pure leaves (types, model_family, edit profiles + image.dart barrel)
+│   ├── chat_service.dart        # The hub SHELL (<1,000 lines): state fields, fake-pinned members,
+│   │                            #   _groupRealism map. Behavior lives in ~46 chat/chat_service_*.dart
+│   │                            #   parts (wiring_*, generation phases, send/turn_flow/message_ops/
+│   │                            #   guest_flow, accessors, defaults) — see notes below
 │   ├── kobold_service.dart      # KoboldCpp API client
 │   ├── llm_provider.dart        # Abstraction over Kobold/OpenRouter/external APIs
 │   ├── character_repository.dart # Character CRUD via Drift
@@ -155,7 +162,7 @@ lib/
 
 ### Critical Services
 
-- **ChatService** (`lib/services/chat_service.dart`): The orchestration hub. **It is a `part`-file library**: 36 `part 'chat/chat_service_*.dart';` directives (re-count with `grep -c "^part 'chat/" lib/services/chat_service.dart` rather than trusting this number — it drifts every split round) mean a great deal of "ChatService" code lives in `chat/` files that can touch its privates directly — when hunting a method, grep `lib/services/chat/` too, not just this file. Builds context windows, handles message streaming, coordinates Realism Engine evaluations and post-generation needs/climax/sexual/daily checks, owns the `_groupRealism` map and load/save scalars for per-character group state, attaches chip deltas to messages, and wires all cross-service callbacks. The domain logic lives in the `chat/` leaf services below; ChatService stays the thin coordinator. **It is still large — do not grow it. Extract cohesive logic into new `chat/` leaves instead.**
+- **ChatService** (`lib/services/chat_service.dart`): The orchestration hub. **It is a `part`-file library**: 36 `part 'chat/chat_service_*.dart';` directives (re-count with `grep -c "^part 'chat/" lib/services/chat_service.dart` rather than trusting this number — it drifts every split round) mean a great deal of "ChatService" code lives in `chat/` files that can touch its privates directly — when hunting a method, grep `lib/services/chat/` too, not just this file. Builds context windows, handles message streaming, coordinates Realism Engine evaluations and post-generation needs/climax/sexual/daily checks, owns the `_groupRealism` map and load/save scalars for per-character group state, attaches chip deltas to messages, and wires all cross-service callbacks. The domain logic lives in the `chat/` leaf services below; ChatService stays the thin coordinator. **Post-campaign (2026-08-07) the shell is under 1,000 lines and the ratchet forbids ANY lib/ file from reaching 1,000 — extract cohesive logic into new `chat/` leaves/parts instead of growing it.** Conventions that keep it small: giant `late final` constructions live as `_buildX()` builders in the four `chat_service_wiring_*.dart` parts; fake-pinned members stay on the class as 1-line forwarders to `_xImpl` extension bodies (the golden fakes override the class member — moving it outright breaks their dispatch); the default prompts/thresholds are top-level consts in `chat_service_defaults.dart`.
 - **NeedsSimulation** (`lib/services/chat/needs_simulation.dart`): Sims-style needs (hunger, bladder, energy, social, fun, hygiene, comfort) — decay, post-climax arousal suppression/afterglow buffers, catastrophe narrative triggers, `applyNeedsDeltas`, `applySceneImpact`, `computeNeedsDeltasWithReasons`, and context helpers. Pure class; all cross-state (group, time, arousal) via callbacks.
 - **NeedsImpactEvaluator** (`lib/services/chat/needs_impact_evaluator.dart`): Post-gen needs impact layer (LLM "needs_impact" JSON + declarative activity table + ordered modifiers pipeline for romance/stance/enjoys). Produces a `NeedsImpact` and applies it via the simulation.
 - **ChaosModeService** (`lib/services/chat/chaos_mode_service.dart`): Chaos Mode pressure growth, Chance Time random event selection, custom event prompt injection.
@@ -176,7 +183,7 @@ Every sidecar was retired in 2026-07 (docs/design/sidecar-retirement.md — read
 
 ### Database
 
-Drift ORM with SQLite. Schema in `lib/database/database.dart`. Run `dart run build_runner build` after schema changes to regenerate `database.g.dart`.
+Drift ORM with SQLite. The schema library is `lib/database/database.dart` (shell: @DriftDatabase annotation with the `tables:` list, constructor/singleton, `schemaVersion`, migration stub) plus `part` files: `database.tables.core.dart` + `database.tables.features.dart` (table classes — DECLARATION ORDER IS LOAD-BEARING for codegen), `database.migrations.dart` (the v2→v44 onUpgrade ladder — byte-verbatim discipline; a mistake here corrupts user data silently), `database.migrations.data.dart`, `database.repair.dart`, and five `database.queries.*.dart` parts. Run `dart run build_runner build` after schema changes to regenerate `database.g.dart` — and after any LAYOUT change to the database library, verify the regenerated `database.g.dart` is BYTE-IDENTICAL (`git diff` empty); a non-empty diff from a pure file-move means declaration order or the tables: list changed and must be fixed, not committed.
 
 Key tables (REAL SQL names — verify against `database.g.dart`, not memory): `characters`, `sessions`, `messages`, `groups`, `group_members`, `folders`, `personas`, `worlds`, `chat_worlds`, `chat_biome_spans`, `message_embeddings`, `objectives`, `data_bank_entries`, `avatar_images`, `journal_memories`, `sync_meta`. 21 tables in total. UUID primary keys for merge compatibility.
 
@@ -397,7 +404,7 @@ To prevent "God files" (historically some `.dart` files exceeded 9,000 lines):
 - **Do One Thing and Do It Well**: Every class, widget, or service has exactly one primary purpose. Extract complex sub-domains into distinct, focused files rather than piling them into existing god files.
 - **Strict File Size Cap**: Every Dart source file (excluding generated `.g.dart` and third-party code) **must be kept under 500 lines**.
 - **Action on Existing Files**: If modifying a file that already exceeds 500 lines (such as `chat_service.dart`), do not grow it. Extract cohesive chunks into new, focused classes under 500 lines.
-- **The 1,000-line ratchet is CI-enforced** (maintainer-set 2026-08-02, elimination campaign: `docs/design/god-file-elimination.md`): `test/hygiene/god_file_ratchet_test.dart` + `test/baselines/god_files.json` make the god-file count monotonically decreasing. No file outside the baseline may ever reach 1,000 lines; baseline files may only shrink; a shrink must lower its baseline entry in the same change; below 1,000 the entry is deleted forever. The baseline **only ever loses entries** — adding one requires the maintainer's `approved-test-change` label. The 500 cap above remains the target for new and extracted files; the ratchet sits at 1,000 so routine fixes to mid-size files never fight CI.
+- **The 1,000-line ratchet is CI-enforced** (maintainer-set 2026-08-02, elimination campaign: `docs/design/god-file-elimination.md`): `test/hygiene/god_file_ratchet_test.dart` + `test/baselines/god_files.json` make the god-file count monotonically decreasing. **The campaign COMPLETED 2026-08-07: the baseline is `{}` and stays empty — NO lib/ file may ever reach 1,000 lines.** Adding a baseline entry requires the maintainer's `approved-test-change` label and should never happen. The 500 cap above remains the target for new and extracted files; the ratchet sits at 1,000 so routine fixes to mid-size files never fight CI.
 
 ### Reuse Existing Code
 - **Prefer existing variables and scaffolds** — do not add complexity when unnecessary.

@@ -10448,3 +10448,13 @@ cancelled = const values byte-identical).
 suite 2,854 · golden container 94/94 (the dispatch-preservation proof) ·
 E2E app_smoke + group_smoke centrally (+ both in the 4b worktree).
 Commit: 4992b625
+
+## 2026-08-07 — docs(claude): update the map for the post-campaign layout
+
+**Files:** CLAUDE.md. Maintainer-requested after campaign completion: tree
+entries for main.dart (5-phase parts), database.dart (shell + parts, with
+the byte-identical-regen rule for layout changes stated as law), the
+chat_service hub shell (+ the forwarder/wiring/defaults conventions), new
+services/story/ + services/image/ dirs; ratchet section now states the
+baseline is {} permanently.
+Commit: (fill next)
