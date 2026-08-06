@@ -89,6 +89,12 @@ part 'chat/chat_service_speaker_objectives.dart';
 part 'chat/chat_service_impersonate.dart';
 part 'chat/chat_service_session_manage.dart';
 part 'chat/chat_service_generation.dart';
+part 'chat/chat_service_generation_blocks.dart';
+part 'chat/chat_service_generation_plan.dart';
+part 'chat/chat_service_generation_rag.dart';
+part 'chat/chat_service_generation_request.dart';
+part 'chat/chat_service_generation_stream.dart';
+part 'chat/chat_service_generation_postgen.dart';
 part 'chat/chat_service_cast.dart';
 part 'chat/chat_service_images.dart';
 part 'chat/chat_service_photo.dart';
@@ -4441,48 +4447,6 @@ class ChatService extends ChangeNotifier {
   /// getters are statically dispatched and cannot be overridden via
   /// `implements`.
   bool get isGrowthPassRunning => _isGrowthPassRunning;
-
-  /// Get the list of character IDs to search for RAG memory retrieval.
-  /// Reads the current character's `memorySources` from the DB and includes
-  /// those characters' embedding IDs alongside the current character.
-  /// Resolve the RAG source character ids for retrieval.
-  ///
-  /// Normally keyed on the active character (or the group bucket). When a
-  /// [guest] is supplied (Scene Guests Phase 4), retrieval is keyed on the
-  /// guest's OWN id instead — the same id the guest embeds under via
-  /// [_maybeEmbedMessages] — plus that guest's cross-character memory sources.
-  /// This keeps the guest's episodic memory isolated from the host's: the
-  /// host's memories are never injected on a guest turn, and vice versa.
-  Future<List<String>> _getMemorySourceIds({CharacterCard? guest}) async {
-    final currentId = guest != null
-        ? _getCharacterIdFromCard(guest)
-        : _getCharacterId();
-    final sourceIds = <String>[currentId]; // always include self
-
-    // Look up cross-character sources from DB (for the guest, or the active char)
-    final sourceCard = guest ?? _activeCharacter;
-    if (sourceCard != null && sourceCard.dbId != null) {
-      try {
-        final dbChar = await _db.getCharacterById(sourceCard.dbId!);
-        final ms = dbChar.memorySources;
-        if (ms.isNotEmpty && ms != '[]') {
-          final decoded = List<String>.from(
-            (jsonDecode(ms) as List).map((e) => e.toString()),
-          );
-          for (final id in decoded) {
-            if (!sourceIds.contains(id)) sourceIds.add(id);
-          }
-          if (decoded.isNotEmpty) {
-            debugPrint('[RAG:Chat] Cross-character sources: $decoded');
-          }
-        }
-      } catch (e) {
-        debugPrint('[RAG:Chat] Failed to read memorySources: $e');
-      }
-    }
-
-    return sourceIds;
-  }
 
   /// Cancel an in-progress Realism evaluation stream (if any).
   ///

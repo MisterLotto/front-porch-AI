@@ -1,0 +1,335 @@
+// Copyright (C) 2026 Front Porch AI
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of Front Porch AI.
+//
+// Front Porch AI is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Front Porch AI is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
+
+part of '../chat_service.dart';
+
+/// Phase 6 (final) of `_generateResponse` (see chat_service_generation.dart):
+/// normal-completion state reset + `__DONE__` broadcasts, epoch-guarded
+/// finalization (think-block salvage, the Output Sanitizer, lorebook
+/// scan/decrement, `_saveChat`), the Scene-Guest parity guard wrapping the
+/// whole Realism/Needs post-gen block (inter-character feelings, the
+/// impersonation dance, `_saveScalarsIntoGroupRealism`, the chip attach),
+/// the Journal/Growth/promise/embed/periodic passes, TTS auto-play, director
+/// auto-play, and the call-mode model restore. Extracted verbatim
+/// (mechanical `x` → `t.x` carrier rename only — see `_GenTurn`) from the
+/// single ~1.9k-line `_generateResponse` method during the god-file split
+/// (docs/design/god-file-elimination.md). Zero behaviour change.
+///
+/// **This is the parity-critical file** — see CLAUDE.md "Tracing
+/// Realism/Needs/Group Post-Generation, Chips, Sidebar & Climax Checks",
+/// which now names this file for the post-gen finalization step.
+extension ChatServiceGenerationPostGen on ChatService {
+  Future<void> _finalizeGenerationTurn(_GenTurn t) async {
+    _isGenerating = false;
+    // Settling starts the instant the last token lands — the finalization
+    // below (sanitizer, lorebook, _saveChat, post-gen checks, chip attach)
+    // is still the turn; the old late raise let a new turn interleave
+    // (message_actions Windows CI). Restored in the outer finally.
+    _isPostGenerating = true;
+    _cancelRequested = false;
+    _generationProgress = 0.0;
+    _generationPhase = GenerationPhase.idle;
+    _prefillStartTime = null;
+    _prefillPromptTokens = 0;
+    _generationStartTime = null;
+    t.perfPoller?.cancel();
+    t.perfPoller = null;
+
+    // Fetch final perf stats from KoboldCPP for post-generation display
+    if (t.isLocalBackend) {
+      _koboldService.fetchPerf().then((perf) {
+        if (perf != null) _lastPerfData = perf;
+      });
+    }
+
+    // Signal generation complete to SSE listeners
+    _tokenBroadcast.add('__DONE__');
+
+    // Flush remaining sentence buffer and signal done to sentence listeners
+    if (_sentenceBuffer.trim().isNotEmpty) {
+      _sentenceBroadcast.add(_sentenceBuffer.trim());
+      _sentenceBuffer = '';
+    }
+    _sentenceBroadcast.add('__DONE__');
+
+    notifyListeners();
+
+    // Only finalize if this generation is still current
+    if (t.epoch == _generationEpoch) {
+      String finalResponse = t.accumulatedResponse.trim();
+
+      // SillyTavern-like safety net for Continue (and call mode): even after requesting
+      // enabled:false + max_tokens:0 + exclude:true on the provider, some thinking models
+      // (Kimi 2.6:thinking etc.) can still emit stray <think> or reasoning text.
+      // Strip it from the final text before it becomes part of the character's message.
+      // This matches ST's "Strip Reasoning Tags" behavior as a client-side backstop.
+      if (t.mode == GenerationMode.continue_ || _callMode) {
+        finalResponse = _stripThinkBlocks(finalResponse);
+      }
+
+      // Salvage a reply stranded inside an unclosed <think> block (the
+      // BACKEND's own stop sequences can cut inside one even with the
+      // client-side scan think-aware): close it, so the thoughts survive
+      // as the collapsible instead of displayText stripping the whole
+      // message to an empty bubble that persists across refreshes.
+      final lowerFinal = finalResponse.toLowerCase();
+      if (lowerFinal.lastIndexOf('<think>') >
+          lowerFinal.lastIndexOf('</think>')) {
+        finalResponse = '$finalResponse\n</think>';
+        t.streamTarget.text = finalResponse;
+      }
+
+      // ── Output Sanitizer ──────────────────────────────────────────────
+      // NOTE: This runs BEFORE _lorebookScanner.scanLatest() below, so
+      // lorebook keyword triggers operate on the sanitized text. If a rule
+      // replaces text that a lorebook keyword was matching, the trigger
+      // would stop matching. This is intentional — sanitized output is the
+      // "final" text that enters history and is scanned for lore.
+      if (t.g2.resolveOutputSanitizerEnabled(_storageService)) {
+        final rules = t.g2.resolveOutputSanitizerRules(_storageService);
+        final sanitized = sanitizeOutput(finalResponse, rules);
+        if (sanitized.trim().isEmpty && finalResponse.trim().isNotEmpty) {
+          // A runaway rule ate the entire reply — keep the original text
+          // rather than persisting an empty message the user can't recover.
+          debugPrint(
+            '[Sanitizer] rules reduced the whole reply to empty — '
+            'keeping the unsanitized text.',
+          );
+        } else {
+          finalResponse = sanitized;
+          t.streamTarget.text = finalResponse;
+        }
+      }
+
+      // Snapshot which entries were already triggered before scanning the AI response.
+      // We will only decrement those — newly AI-triggered entries must keep their
+      // full depth budget so they are visible on the next user turn.
+      // Covers the full scanned universe (incl. group book + group worlds).
+      final preAiTriggered = <LorebookEntry>{
+        for (final ref in _collectLoreRefs(inheritOverride: true))
+          if (ref.entry.isTriggered && !ref.entry.constant) ref.entry,
+      };
+
+      if (finalResponse.isNotEmpty &&
+          _messages.isNotEmpty &&
+          identical(_messages.last, t.streamTarget)) {
+        // scanLatest reads the LAST message — only valid while the streamed
+        // message still holds that position (a mid-turn insert/delete can
+        // shift it; scanning someone else's text would trigger wrong lore).
+        _lorebookScanner.scanLatest();
+      }
+
+      // Decrement only entries that were active before the AI response.
+      // This preserves full depth for lore discovered in the AI's own words.
+      // Thin delegation (preAi set computed in god for snapshot; scanner owns decrement).
+      _lorebookScanner.decrementLoreDepthForEntries(preAiTriggered);
+
+      // Save session after AI message is complete
+      await _saveChat();
+
+      // ── Scene Guest (Lite NPC) parity guard ──────────────────────────
+      // A guest turn must NOT touch the active character's Realism Engine,
+      // Needs simulation, inter-character feelings, time, chips, or the
+      // periodic (facts/evolution/summary/RAG) evaluators. The guest carries
+      // no such state. Everything from here through the periodic evals is
+      // gated so guest presence/turns leave the primary's state untouched.
+      // (Lorebook scan + _saveChat above still ran for the guest.)
+      if (t.guestSpeaker == null) {
+        // Phase 2: Update hidden inter-character feelings for the speaker who
+        // just responded, based on what was said in the recent exchange.
+        // This makes the invisible tracking react to actual dialogue.
+        if (_activeGroup != null &&
+            !_observerMode &&
+            finalResponse.isNotEmpty &&
+            // Same one-exchange rule as the two gates around it. This is a
+            // keyword heuristic over the recent text, and after a Continue
+            // the first half of the reply is still in that text — so the
+            // same phrases scored the same feelings a second time.
+            t.mode != GenerationMode.continue_) {
+          // Use the ACTUAL speaker of this turn, not a by-name lookup with a
+          // first-member fallback — duplicate display names would otherwise
+          // route this member's inter-character feelings to the wrong card.
+          final speakerId = _getCharacterIdFromCard(t.speakingCharacter);
+          if (speakerId.isNotEmpty) {
+            _relationshipService
+                .updateInterCharacterFeelingsFromRecentExchange(speakerId);
+            // (old checkpoint call removed in v30) // persist the hidden relationship changes
+          }
+        }
+
+        // For group non-observer turns, temporarily re-impersonate the speaker of the *just generated*
+        // response so the post-gen needs checks (now _runPostGenNeedsChecks thin to
+        // _needsImpactEvaluator) use the correct _activeCharacter (for name, personality/stance
+        // in the consolidated needs impact prompt). The pre-speaker-eval left the *scalars*
+        // (incl. needs vector) loaded for this speaker but restored the _activeCharacter pointer
+        // to the prior speaker; the thin delegate relies on the pointer for cbs. We restore the
+        // pointer after the checks (scalars remain correct for the persist below).
+        CharacterCard? prePostActiveChar;
+        // The awaited post-gen critical section: mutates _activeCharacter,
+        // the needs scalars and _groupRealism across two awaits
+        // (_isPostGenerating has been up since the last token landed).
+        // The try/finally is not decoration: if _runPostGenNeedsChecks
+        // throws, the inline restore below is skipped and the next turn's
+        // save would write to the wrong member.
+        try {
+          if (_activeGroup != null && !_observerMode) {
+            prePostActiveChar = _activeCharacter;
+            _activeCharacter = t.speakingCharacter;
+            final sid = _getCharacterIdFromCard(t.speakingCharacter);
+            if (sid.isNotEmpty) {
+              _loadGroupRealismIntoScalars(sid);
+            }
+          }
+
+          // Skipped on Continue for the same reason: this applies THIS
+          // exchange's scene impact (needs deltas, climax/sexual/daily
+          // checks), and the exchange already had it applied when the reply
+          // was first generated. Running it again applied a second set of
+          // deltas in both 1:1 and group — invisible to the user, because
+          // the chips are not re-attached on a continuation.
+          if (t.mode != GenerationMode.continue_) {
+            await _runPostGenNeedsChecks(finalResponse);
+          }
+
+          // Keep this message's realism_state snapshot TRUTHFUL now that the
+          // post-gen checks have run — needs vector AND the NSFW scalars a
+          // climax just changed. See the helper for the two bugs this
+          // prevents (hygiene snap-back; climax erased by the regen merge).
+          _restampRealismSnapshotPostGen(t.streamTarget);
+
+          if (prePostActiveChar != null) {
+            _activeCharacter = prePostActiveChar;
+          }
+
+          // For group non-observer, persist the post-scene + long-gen-decay needs changes (and any
+          // other scalars mutated by the checks) back into _groupRealism for this speaker. This is
+          // what makes sidebar member cards + getNeedsForGroupCharacter() + future loads see the
+          // effects of the just-generated response. (Pre-eval saved the pre-turn state for bond/etc;
+          // this captures the *response* effects on needs.)
+          if (_activeGroup != null &&
+              !_observerMode &&
+              finalResponse.isNotEmpty &&
+              _messages.isNotEmpty) {
+            // The ACTUAL speaker of this turn — not a by-name lookup with a
+            // first-member fallback (duplicate display names would persist the
+            // critical scalar save to the wrong member's _groupRealism entry).
+            final sid = _getCharacterIdFromCard(t.speakingCharacter);
+            if (sid.isNotEmpty) {
+              _saveScalarsIntoGroupRealism(sid);
+            }
+          }
+
+          // Per-message needs chips for whoever just spoke. Lives here so
+          // EVERY speaker gets them (group auto-advance, /speak, chime-ins)
+          // — and regens too: a regen replays the turn in normal mode, and
+          // the swipe-merge copies these chips onto the accepted swipe.
+          // The ONE chip source. Continue never re-attaches.
+          if (t.mode == GenerationMode.normal) {
+            await _attachNeedsDeltaChipToLastMessage();
+          }
+        } finally {
+          // Unconditional pointer restore on a throw. The settling flag is
+          // cleared in the OUTER finally so guest turns, stale epochs and
+          // earlier errors are covered too.
+          if (prePostActiveChar != null) {
+            _activeCharacter = prePostActiveChar;
+          }
+        }
+
+        // Journal maintenance pass if due (fire-and-forget): memory cards +
+        // recap in one call. Card ownership is derived from the window's
+        // message characterIds (immune to the prePostActiveChar restore
+        // dance above); only the recap voice is best-effort at trigger time
+        // in group non-obs (same caveat the old summary had).
+        _maybeRunJournalPass();
+
+        // Growth pass if due (fire-and-forget): ring ops per owner —
+        // members AND 1:1 scene guests who spoke in the window (guest
+        // growth rides this shared pass; there is no per-guest trigger).
+        // Cursor-based like the journal, so it is naturally regen-safe.
+        _maybeRunGrowthPass();
+
+        // Promise/debt ledger (Train B) — fire-and-forget on new turns only.
+        // Keyword gate + open-list gate live inside the service so most
+        // turns cost nothing. Regen/continue never invent commitments.
+        if (t.mode == GenerationMode.normal) {
+          _maybeRunPromiseDebtPass();
+        }
+
+        // Embed messages for RAG memory (fire-and-forget)
+        _maybeEmbedMessages();
+
+        // Periodic evaluations coordinator (Scene Guest cast detection).
+        // NEW-TURN work — only on a normal generation, never on
+        // regen/continue (which replay or extend an existing turn).
+        if (t.mode == GenerationMode.normal) {
+          _maybeRunPeriodicEvals();
+        }
+      } // end Scene Guest parity guard (guestSpeaker == null)
+
+      // (Task completion check now runs pre-generation in sendMessage)
+
+      // TTS auto-play: speak the new character message automatically
+      if (_ttsService != null &&
+          _storageService.ttsSettings.ttsEnabled &&
+          _storageService.ttsSettings.ttsAutoPlay &&
+          !t.streamTarget.isUser &&
+          _messages.contains(t.streamTarget)) {
+        final lastMsg = t.streamTarget;
+        final msgId = 'msg_${_messages.indexOf(t.streamTarget)}';
+        // Resolve per-character voice, falling back to global default
+        String? voiceKey;
+        if (_activeGroup != null) {
+          final charMatch = _groupCharacters
+              .where((c) => c.name == lastMsg.sender)
+              .firstOrNull;
+          voiceKey = charMatch?.ttsVoice;
+        } else {
+          voiceKey = _activeCharacter?.ttsVoice;
+        }
+        _ttsService!.speak(
+          lastMsg.displayText,
+          voiceKey: voiceKey,
+          messageId: msgId,
+        );
+      }
+
+      // Auto-play: if director mode is active, queue the next character
+      if (_autoPlayActive && _observerMode && _activeGroup != null) {
+        // If TTS is active, wait for it to finish before starting the delay
+        if (_ttsService != null && _ttsService!.isSpeaking) {
+          _waitForTtsThenContinue();
+        } else {
+          final delayMs = (directorDelaySec * 1000).round();
+          Future.delayed(Duration(milliseconds: delayMs), () {
+            if (_autoPlayActive && !_isGenerating) {
+              _autoPlayNext();
+            }
+          });
+        }
+      }
+    }
+
+    // Restore original model if swapped for call mode
+    if (t.originalModelName != null && _llmProvider != null) {
+      _llmProvider!.openRouterService.configure(
+        modelName: t.originalModelName,
+      );
+    }
+  }
+}

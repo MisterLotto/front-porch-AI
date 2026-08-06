@@ -16,6 +16,7 @@ export 'chat_command_handler.dart';
 export 'context_viewer_snapshot.dart';
 export 'dream_service.dart';
 export 'expression_classifier.dart';
+export 'generation_error_messages.dart';
 export 'growth_ops.dart';
 export 'growth_physics.dart';
 export 'growth_prompt.dart';

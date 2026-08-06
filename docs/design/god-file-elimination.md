@@ -101,6 +101,38 @@ The two splits that predated this rule got their nets retroactively:
   (816f915d), edit-group/ui-settings (927959f7, "TRANCHE A COMPLETE" — the
   message_bubble straggler remained). `create_character` split rode the
   realism time-travel fix (730eff3d). Baseline 22 → 12.
+- 2026-08-06 — Tranche B round 3, the Realism-touching file: `chat_service_generation`
+  1,956 → 324-line shell + `_GenTurn` per-turn carrier class + 6 sibling
+  `chat_service_generation_{blocks,plan,rag,request,stream,postgen}.dart`
+  parts (all < 500 lines) + a pure `generation_error_messages.dart` leaf
+  (barrel-exported, with a proven-to-fail unit test). The file was a single
+  ~1,886-line `_generateResponse` method with no member-level seams, so the
+  split is a phase decomposition rather than a member move: every moved block
+  is byte-verbatim except the mechanical `x` → `t.x` carrier rename for the
+  ~36 locals crossing phase boundaries. The stream phase's user-cancel
+  `return;` became a `Future<bool>` protocol (`true` = aborted; the shell does
+  `if (await _consumeGenerationStream(t)) return;`) since a phase method can
+  no longer exit `_generateResponse` directly. `_getMemorySourceIds`
+  (RAG-only caller) relocated verbatim from `chat_service.dart` into the new
+  RAG part to offset the added `part` directives against the ratchet — net
+  chat_service.dart 4,583 → 4,547. All 30 1:1-vs-group branches landed whole
+  in one destination file per the split map's §4 table; none straddle a seam.
+  CLAUDE.md's "Tracing Realism/Needs" section now names
+  `chat_service_generation_postgen.dart` for post-gen finalization.
+  `image_gen_service` shipped in the same round: 2,011 → 498-line shell +
+  5 parts + `image/image_gen_types.dart` leaf with a new `image/image.dart`
+  barrel; the 19 fake-pinned interface members stay real class members (the
+  9 big ones as one-line forwarders to `_xImpl` extension bodies); the map's
+  dead-code candidates were correctly KEPT after re-grep found the new
+  801-line provability net now pins them. **TRANCHE B COMPLETE.** Baseline
+  5 → 3: only Tranche C remains (`chat_service.dart` 4,547, `main.dart`
+  2,105, and the re-scoped `database.dart` 3,716). **Gates:** analyze 0 · `dart fix --dry-run` clean · ratchet green
+  at 4 · targeted (`prompt_plan`, `prompt_plan_section_texts`,
+  `regen_chip_attach`, `generation_stream_behavior`,
+  `generation_error_messages` [new, proven-to-fail], `turn_speaker_resolver`,
+  `stop_sequences`, `output_sanitizer_regex`, `llm_unreachable`) all green ·
+  E2E `app_smoke` + `swipe_fork_cancel` (the H2 cancel path) +
+  `group_smoke` (parity) on macOS, all green.
 - 2026-08-06 — Tranche B round 1 + the Tranche A straggler, from
   workflow-generated split maps audited by hand (line-multiset audit per
   file): `message_bubble` 1,760 → 249 shell + 6 parts; `realism_evals`

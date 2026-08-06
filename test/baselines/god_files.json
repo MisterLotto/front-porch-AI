@@ -1,7 +1,5 @@
 {
-  "lib/services/chat_service.dart": 4583,
+  "lib/services/chat_service.dart": 4547,
   "lib/database/database.dart": 3716,
-  "lib/main.dart": 2105,
-  "lib/services/image_gen_service.dart": 2011,
-  "lib/services/chat/chat_service_generation.dart": 1956
+  "lib/main.dart": 2105
 }

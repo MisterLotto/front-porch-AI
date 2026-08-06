@@ -10318,3 +10318,28 @@ baseline. Spike verdict recorded in the campaign doc: Drift codegen is
 file-layout-insensitive (byte-identical .g.dart after moving 3 tables to a
 part, MD5-verified incl. after build_runner clean).
 Commit: 474af47d
+
+## 2026-08-06 — refactor(campaign): TRANCHE B COMPLETE — image_gen_service + chat_service_generation (baseline 5 → 3)
+
+**Files:** image_gen_service 2,011 → 498 shell + 5 parts +
+image/image_gen_types.dart leaf + new image/image.dart barrel (19 fake-pinned
+members stay class members; 9 big ones as forwarders to _xImpl extension
+bodies; map dead-code candidates KEPT after re-grep — the new net pins them).
+chat_service_generation 1,956 → 324 shell + _GenTurn carrier + 6 phase parts +
+generation_error_messages.dart leaf (+ its proven-to-fail test). The single
+1,886-line _generateResponse became a six-phase pipeline; every moved block
+byte-verbatim except the mechanical x→t.x carrier renames; cancel-finalize
+became the Future<bool> protocol; all 30 parity branches landed whole.
+_getMemorySourceIds relocated from chat_service.dart as the ratchet offset —
+chat_service.dart 4,583 → 4,547. CLAUDE.md tracing section updated
+(postgen part named; part-count now says re-count, don't trust).
+
+**Audits:** image_gen residue = forwarder stubs + _notify + barrel
+consolidation + the qualified static, all sanctioned; gen audited with
+carrier-normalized multiset (t.-strip) — residue = _GenTurn glue + phase
+skeleton + interpolation braces, all enumerated.
+
+**Gates:** analyze 0 · ratchet green at 3 · 84 targeted · full suite 2,854 ·
+golden container 94/94 · E2E app_smoke + swipe_fork_cancel centrally, plus
+app_smoke + swipe_fork_cancel + group_smoke in the gen worktree.
+Commit: (fill next)
