@@ -300,15 +300,21 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
             ),
           ),
         ),
-        child: _loading
-            ? const StoopLamp()
-            : _error != null || _detail == null
-            ? stoopEmpty(
-                context,
-                glyph: '🌙',
-                title: _error ?? 'Not found',
-              )
-            : _content(_detail!),
+        // Transparent Material so the expander ListTiles inside paint their
+        // ink splashes ON this panel rather than on the Material behind the
+        // colored box (where they were invisible — debug builds assert).
+        child: Material(
+          type: MaterialType.transparency,
+          child: _loading
+              ? const StoopLamp()
+              : _error != null || _detail == null
+              ? stoopEmpty(
+                  context,
+                  glyph: '🌙',
+                  title: _error ?? 'Not found',
+                )
+              : _content(_detail!),
+        ),
       ),
     );
   }

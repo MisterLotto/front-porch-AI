@@ -10399,3 +10399,16 @@ deliberately left for a maintainer-morning ruling.
 2,854 · goldens 94/94 · E2E app_smoke + group_smoke + group_realism_wiring +
 message_actions in-worktree, app_smoke + group_realism_wiring centrally.
 Commit: 5d8b73fc
+
+## 2026-08-07 — fix(stoop): card-detail panel swallowed tap ripples (debug assertion spam)
+
+**Files:** lib/ui/pages/repository/stoop_card_detail_page.dart (+7).
+**Why:** maintainer saw "ListTile background color or ink splashes may be
+invisible" spamming a flutter run terminal. The Stoop detail slide-in panel
+(ships 2026-06-30 with the original hub — pre-existing, unrelated to the
+split campaign) is a colored DecoratedBox with no Material above it, so its
+expander ListTiles painted ink on the Material BEHIND the panel color —
+invisible ripples in release, assertion spam in debug. Fix: transparent
+Material inside the decorated box (pixel-identical; ripples now land on the
+panel). Verified: analyze 0, stoop E2E green.
+Commit: (fill next)
