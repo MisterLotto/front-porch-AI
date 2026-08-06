@@ -10424,4 +10424,4 @@ maintainer-directed last mile).
 **Gates (worktree):** analyze 0 · 8 targeted parity suites · full suite
 (2,851, sole red = the ratchet's own lower-the-baseline demand, resolved
 here) · E2E app_smoke + group_smoke + message_actions.
-Commit: (fill next)
+Commit: ede5e5ff
