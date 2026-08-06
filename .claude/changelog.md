@@ -10317,4 +10317,4 @@ the coming split's byte-identical-regen gate diffs against a truthful
 baseline. Spike verdict recorded in the campaign doc: Drift codegen is
 file-layout-insensitive (byte-identical .g.dart after moving 3 tables to a
 part, MD5-verified incl. after build_runner clean).
-Commit: (fill next)
+Commit: 474af47d
