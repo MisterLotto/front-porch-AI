@@ -10496,4 +10496,4 @@ Verified before designing: ambitions do not guide objectives — objectives
 tick ambition progress on completion; currentTask only seeds one objective
 at chat entry; an ambitions editor already exists but is buried (the
 maintainer had never seen it).
-Commit: (fill next)
+Commit: 3d21e296
