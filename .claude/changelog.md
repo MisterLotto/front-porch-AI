@@ -10509,3 +10509,14 @@ sees ambitions + progress and proposes the next small believable step
 direction (completion → strict progress judge) unchanged. Task generation
 untouched (transitively serves).
 Commit: 7d97b89f
+
+## 2026-08-07 — docs(design): Pockets items carry free-text condition + transformations
+
+**Files:** docs/design/pockets-and-preferences.md Part 1; mockup republished.
+Maintainer asked for half-eaten candy bars → wrappers, dirty/ripped clothes,
+notched swords. Design: optional free-text `state` per item (~60 chars) +
+two new ops (`update` state-in-place, `transform` item-becomes-other) through
+the same single applier — deliberately narrative, no durability bars or
+damage math (RPG stat system = explicit non-goal). Still zero extra LLM
+calls.
+Commit: (fill next)

@@ -31,11 +31,23 @@ record, inject it every turn, apply deltas.
   (`[<char> is wearing: …. Carrying: ….]`), capped (8 worn / 8 carried),
   built by a new `prompt_injection/inventory_injection.dart` leaf.
 - **Detection**: the post-generation needs-impact eval gains one JSON field
-  (`inventory_ops: [{op: wear|remove|pickup|drop|give, item, to?}]`) — same
-  transport, same forgiving parse, ZERO extra calls. Ops apply to the record
-  through ONE applier with dedup (token-overlap, the promise-dedup precedent).
-  When Needs is disabled, the ops ride whatever post-turn pass the
-  independence work keeps alive (open decision — see that doc).
+  (`inventory_ops: [{op: wear|remove|pickup|drop|give|update|transform, item,
+  to?, state?}]`) — same transport, same forgiving parse, ZERO extra calls.
+  Ops apply to the record through ONE applier with dedup (token-overlap, the
+  promise-dedup precedent). When Needs is disabled, the ops ride whatever
+  post-turn pass the independence work keeps alive (open decision — see that
+  doc).
+- **Item state & transformations (maintainer-requested 2026-08-07)**: every
+  item carries an optional FREE-TEXT condition (`state`, capped ~60 chars) —
+  "half-eaten", "rain-soaked, muddy hem", "notched, needs sharpening".
+  `update` changes an item's state in place; `transform` replaces the item
+  with what it became (candy bar → wrapper). Deliberately narrative, NOT
+  numeric: no durability bars, no damage math, no per-category schemas —
+  the model narrates transformations anyway, and a phrase is exactly as
+  expressive as the story needs. Injection renders state as a suffix
+  ("Carrying: iron sword (notched)"); chips show it quietly; the panel edits
+  name + state together. This is the fantasy-RP equipment sheet by
+  narrative means — an RPG stat system is an explicit NON-GOAL.
 - **Chips + receipts**: item changes attach to the message like needs chips
   ("+ picked up: car keys"); tap shows the before/after.
 - **Sidebar panel**: "Pockets" accordion under the character state section —
