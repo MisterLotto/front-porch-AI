@@ -10519,4 +10519,4 @@ two new ops (`update` state-in-place, `transform` item-becomes-other) through
 the same single applier — deliberately narrative, no durability bars or
 damage math (RPG stat system = explicit non-goal). Still zero extra LLM
 calls.
-Commit: (fill next)
+Commit: 4d31e447
