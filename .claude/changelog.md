@@ -5,7 +5,7 @@
 - **Files changed**: `lib/services/chat/context_viewer_snapshot.dart`, `lib/services/chat/chat_service_context_budget.dart`, `lib/database/context_budget_db.dart`, `lib/database/database.dart`, `lib/services/chat_service.dart`, `lib/services/chat/chat_service_generation.dart`, `lib/services/chat/chat_service_session_*.dart`, `lib/ui/dialogs/context_viewer_dialog.dart`, `lib/services/web/facade/chat_facade.dart`, `lib/services/web/routes/chat_routes.dart`, `web_ui/src/components/ContextBudgetModal.tsx`, tests + god-file baseline
 - **Branch**: `Rawhide`
 - **Reason**: Context Viewer was blank when reopening an existing chat — budget only lived in RAM after a send.
-- **Commit**: 
+- **Commit**: `96945aab`
 - **Effect**: Last real send is saved on the session (schema v44 `context_budget_json`), restored on open; Refresh builds a live estimate; desktop + web show source label; god-file ratchet held.
 
 
@@ -2290,7 +2290,7 @@ Brought the web library to desktop parity for the audit's "Character Library & F
 - **web_ui**: new `hooks/useLibrary.ts`; new `components/library/{CardMenu,LibraryCards,LibraryToolbar,LibraryDialogs}.tsx`; rewrote `pages/CharactersPage.tsx` as a thin shell; `styles.css` gained kebab/context-menu, multi-select, grid-size slider and move-picker styles (tokens only). Delivers: folder + subfolder create/rename/delete, per-card kebab/right-click menu (Edit, Duplicate, Export PNG, Export JSON, Move to folder, Remove from folder, Delete), multi-select bulk Move + Delete, drag-and-drop characters onto folders + the Home breadcrumb, folder-scoped search (this folder / +subfolders / everywhere), Import-Date sort, a card-size slider (localStorage), Import-a-folder + AI Character Cards / Chub.ai links, and group-card Export PNG + Extract characters.
 - **Note**: the character-library *backend* (`character_library_facade.dart` + its routes + DI wiring, plus `character_facade.list()` `importDate`/`scope`) was already present from concurrent work in the same tree; I built the frontend against that contract and deleted my own now-redundant `library_facade.dart` / `library_routes.dart` drafts rather than ship a parallel implementation.
 - **Verification**: `cd web_ui && npm run build` clean (regenerated `assets/web_app`); full `flutter analyze --no-fatal-warnings --no-fatal-infos` clean; `dart format` applied to changed Dart files.
-- **Commit**: (pending)
+- **Commit**: `96945aab`
 
 ## 2026-06-26 (chore: legacy web server cutover + deletion — Phase 6 final)
 The new server (lib/services/web) reached full parity, so the legacy server is now the default AND deleted — ending the sanctioned temporary parallelism. ~24k lines removed (the 5,677-line `web_server_service.dart` god file + the whole `lib/services/web_server/` tree + `web_chat_bridge.dart` + the old vanilla-JS `assets/web/` UI).
