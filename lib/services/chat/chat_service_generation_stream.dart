@@ -439,11 +439,11 @@ extension ChatServiceGenerationStream on ChatService {
   void _notifyStreamListeners() {
     if (_streamNotifyTimer != null) return; // trailing notify already queued
     final elapsed = DateTime.now().difference(_lastStreamNotify);
-    if (elapsed >= ChatService._kStreamNotifyInterval) {
+    if (elapsed >= _kStreamNotifyInterval) {
       _lastStreamNotify = DateTime.now();
       notifyListeners();
     } else {
-      _streamNotifyTimer = Timer(ChatService._kStreamNotifyInterval - elapsed, () {
+      _streamNotifyTimer = Timer(_kStreamNotifyInterval - elapsed, () {
         _streamNotifyTimer = null;
         _lastStreamNotify = DateTime.now();
         notifyListeners();
@@ -476,4 +476,24 @@ extension ChatServiceGenerationStream on ChatService {
   /// Exposed so tests can assert the window opens and — more importantly —
   /// always closes. See [_isPostGenerating].
   bool get isSettlingTurn => _isPostGenerating;
+
+  // ── Round-4b forwarder body (see chat_service_accessors.dart's banner
+  // comment for why this stays a one-line forwarder on the class body) ──
+  double get _tokensPerSecondImpl {
+    if (_tokenTimestamps.length < 2) return 0.0;
+    // Use rolling window: tokens in the last 3 seconds
+    final now = DateTime.now();
+    final cutoff = now.subtract(const Duration(seconds: 3));
+    final recent = _tokenTimestamps.where((t) => t.isAfter(cutoff)).length;
+    if (recent < 2) {
+      // Fallback to overall average
+      if (_generationStartTime == null || _tokensGenerated == 0) return 0.0;
+      final elapsed =
+          now.difference(_generationStartTime!).inMilliseconds / 1000.0;
+      return elapsed > 0 ? _tokensGenerated / elapsed : 0.0;
+    }
+    final windowStart = _tokenTimestamps.where((t) => t.isAfter(cutoff)).first;
+    final windowElapsed = now.difference(windowStart).inMilliseconds / 1000.0;
+    return windowElapsed > 0 ? recent / windowElapsed : 0.0;
+  }
 }

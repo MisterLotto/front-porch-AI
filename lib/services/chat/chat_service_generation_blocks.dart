@@ -35,8 +35,8 @@ extension ChatServiceGenerationBlocks on ChatService {
       t.systemPrompt = _activeGroup!.systemPrompt;
     } else if (_activeGroup != null) {
       t.systemPrompt = _observerMode
-          ? ChatService.observerModeSystemPrompt
-          : ChatService.defaultGroupSystemPrompt;
+          ? observerModeSystemPrompt
+          : defaultGroupSystemPrompt;
     } else if (t.speakingCharacter.systemPrompt.isNotEmpty) {
       t.systemPrompt = t.speakingCharacter.systemPrompt;
     } else if (_storageService.generationSettings.systemPrompt.isNotEmpty) {
@@ -45,7 +45,7 @@ extension ChatServiceGenerationBlocks on ChatService {
       // Every backend now speaks the OpenAI chat protocol (local KoboldCpp
       // via its /v1/chat/completions door), so the server applies the model's
       // instruct template — use the chat-style default system prompt.
-      t.systemPrompt = ChatService.defaultApiSystemPrompt;
+      t.systemPrompt = defaultApiSystemPrompt;
     }
 
     // Path B: When in a group, always attempt to layer the per-character group override

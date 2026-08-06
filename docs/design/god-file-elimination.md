@@ -195,3 +195,22 @@ The two splits that predated this rule got their nets retroactively:
   baseline. **Campaign state: 21 files fully eliminated + the hub at 38% of
   its size; the baseline holds ONE entry.** Round 4 is a maintainer-morning
   decision, not an overnight one.
+- 2026-08-07 — **CAMPAIGN COMPLETE. The baseline is `{}`.** Round 4, in three
+  maintainer-directed steps ("do the last mile... no god files remaining at
+  all"): 4a moved every un-pinned member out (1,720 → 1,300); 4b moved the
+  five prompt/threshold statics to top-level in a new
+  `chat_service_defaults.dart` part (zero test refs, lib-only call-site fixes)
+  and applied the image_gen forwarder pattern to all 11 fake-pinned
+  multi-line members — the class keeps a 1-line member so every fake override
+  and every golden's virtual dispatch is preserved BY CONSTRUCTION, zero test
+  edits — plus the constructor/dispose bodies to `_initImpl`/
+  `_disposeCleanupImpl` (tear-off listener identity verified: Dart
+  canonicalizes same-receiver method tear-offs) (1,300 → 1,025); a final
+  by-hand documentation-condense pass (duplicative wiring commentary only —
+  the settling-window and send-button-narrowness lessons kept) landed the
+  shell at **994**. The ratchet now runs green on an empty baseline and
+  permanently forbids ANY file from reaching 1,000 again. Campaign totals:
+  26 census files → 0, five overnight/morning sessions, every split behind
+  provability nets, personal line-multiset audits, and the full gate chain;
+  the database layer additionally behind a five-times byte-identical
+  generated-schema proof.

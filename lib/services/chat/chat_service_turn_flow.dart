@@ -289,7 +289,7 @@ extension ChatServiceTurnFlow on ChatService {
     if (_pendingGuestDetection != null) return; // one offer at a time
 
     _userMessagesSinceLastCastScan++;
-    if (_userMessagesSinceLastCastScan < ChatService._castScanInterval) return;
+    if (_userMessagesSinceLastCastScan < _castScanInterval) return;
     _userMessagesSinceLastCastScan = 0;
 
     // Fire-and-forget: never block the turn on the eval.

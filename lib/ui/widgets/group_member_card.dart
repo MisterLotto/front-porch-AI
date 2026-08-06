@@ -620,7 +620,7 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
   }
 
   Widget _miniNeed(String name, int val) {
-    final isCrit = val <= ChatService.needCriticalThreshold;
+    final isCrit = val <= needCriticalThreshold;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
       decoration: BoxDecoration(

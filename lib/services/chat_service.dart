@@ -113,16 +113,11 @@ part 'chat/chat_service_turn_flow.dart';
 part 'chat/chat_service_message_ops.dart';
 part 'chat/chat_service_guest_flow.dart';
 part 'chat/chat_service_accessors.dart';
+part 'chat/chat_service_defaults.dart';
 
-// Internal flag to signal a cancellation request for realism evaluation.
-// This is a file-scope flag to avoid needing to thread state through the
-// entire class in this patch, and is reset once the interruption is surfaced
-// to the UI.
-bool _realismEvalCancelled = false;
-
-// GBNF grammar support for Realism Engine evals (incl. Needs simulation) removed
-// in the 0.9.8 clean port. All JSON outputs now rely on regex extraction + stop
-// sequences inside _fireLLMEval (no _buildKoboldGrammar, no _kGbnf* consts).
+// (_realismEvalCancelled — the file-scope realism-eval cancel flag — and the
+// GBNF grammar-removal historical note both moved to chat_service_defaults.dart;
+// both are library top-level, so every part file's access is unaffected.)
 
 class ChatService extends ChangeNotifier {
   final KoboldService _koboldService;
@@ -290,34 +285,14 @@ class ChatService extends ChangeNotifier {
   String? _pendingImagePromptReview;
   Completer<String?>? _imageReviewCompleter;
 
-  /// Append an already-saved generated image to the conversation as a
-  /// character message (empty text; the bubble renders the image from
-  /// metadata). Shared by the /image slash command, the Image Studio's
-  /// "Send to chat", and the web insert-image endpoint. Lives in the class
-  /// (not the images extension) so web-facade fakes can override it.
+  /// Web-facade fakes override this; body in chat_service_accessors.dart.
   Future<void> addGeneratedImageMessage(
     String path,
     String prompt, {
     String? senderName,
     String? characterId,
-  }) async {
-    if (_activeCharacter == null && _activeGroup == null) return;
-    _messages.add(
-      ChatMessage(
-        text: '',
-        sender: senderName ?? _activeCharacter?.name ?? 'Narrator',
-        isUser: false,
-        characterId: characterId,
-        metadata: {
-          'is_generated_image': true,
-          'image_path': path,
-          'image_prompt': prompt,
-        },
-      ),
-    );
-    await _saveChat();
-    notifyListeners();
-  }
+  }) => _addGeneratedImageMessageImpl(path, prompt,
+      senderName: senderName, characterId: characterId);
 
   /// Whether Scene Guests automatically chime in after the primary's turn.
   /// Phase 1 keeps this in-memory (default ON) rather than persisted — there is
@@ -336,9 +311,8 @@ class ChatService extends ChangeNotifier {
   /// mirroring [autoChimeEnabled].
   bool sceneDetectionEnabled = true;
 
-  /// Run a detection scan every this-many primary (user) turns. Small and
-  /// constant so the eval is infrequent and turns stay cheap.
-  static const int _castScanInterval = 4;
+  // (_castScanInterval moved to chat_service_defaults.dart as a
+  // library-top-level const)
 
   /// Primary turns since the last cast-detection scan (zeroed at the same
   /// Scene Guest reset sites alongside `_pendingGuestDeparture = null`).
@@ -421,18 +395,14 @@ class ChatService extends ChangeNotifier {
       []; // Rolling window for TPS measurement
 
   // ── Streaming rebuild throttle ──
-  // The token loop used to fire notifyListeners() up to twice PER TOKEN
-  // (~55-80 full chat-page rebuilds/sec at local speeds), which was the
-  // single largest source of "the app feels sluggy while generating".
-  // _notifyStreamListeners coalesces those into at most one notify per
-  // ~33 ms (≈30 fps — above the eye's text-reading rate) with a guaranteed
-  // trailing notify so the final token batch always paints. End-of-turn
-  // paths still call plain notifyListeners() directly, so terminal state
-  // (isGenerating=false, chips, perf) is never throttled away.
+  // _notifyStreamListeners coalesces per-token notifies into at most one per
+  // ~33 ms with a guaranteed trailing notify (the final token batch always
+  // paints). End-of-turn paths still call plain notifyListeners() directly,
+  // so terminal state (isGenerating=false, chips, perf) is never throttled.
   DateTime _lastStreamNotify = DateTime.fromMillisecondsSinceEpoch(0);
   Timer? _streamNotifyTimer;
-  static const Duration _kStreamNotifyInterval = Duration(milliseconds: 33);
-  // (_notifyStreamListeners / _cancelStreamNotifyThrottle moved to
+  // (_kStreamNotifyInterval moved to chat_service_defaults.dart;
+  // _notifyStreamListeners / _cancelStreamNotifyThrottle moved to
   // chat_service_generation_stream.dart)
 
   // ── Web token broadcast ──
@@ -501,13 +471,9 @@ class ChatService extends ChangeNotifier {
   /// (consistent with other per-char group data like realism/needs).
   Map<String, List<Objective>> _groupObjectives = {};
 
-  /// Returns the personal objectives for a specific character when in group mode.
-  /// Falls back to the global list for 1:1 or when no per-char data exists yet.
-  List<Objective> getObjectivesForGroupCharacter(CharacterCard character) {
-    if (_activeGroup == null) return _activeObjectives;
-    final id = _getCharacterIdFromCard(character);
-    return _groupObjectives[id] ?? const <Objective>[];
-  }
+  /// Body in chat_service_objectives.dart.
+  List<Objective> getObjectivesForGroupCharacter(CharacterCard character) =>
+      _getObjectivesForGroupCharacterImpl(character);
 
   // RAG settings for the active group (stored in the hidden checkpoint, no DB schema change)
   bool _groupRagEnabled = true;
@@ -604,8 +570,8 @@ class ChatService extends ChangeNotifier {
   // load/save + fallback bridge for pre-per-member groups (see session state).
   Map<String, int> _groupDecayRates = {};
 
-  // Forwarding for critical threshold (moved to NeedsSimulation after buffer removal; UI + cards still reference the old ChatService surface)
-  static int get needCriticalThreshold => NeedsSimulation.needCriticalThreshold;
+  // (needCriticalThreshold moved to chat_service_defaults.dart as a
+  // library-top-level getter)
 
   // ── Passage of time / Chaos Mode / NSFW cooldown (builders in
   // chat_service_wiring_realism.dart) ──
@@ -662,9 +628,8 @@ class ChatService extends ChangeNotifier {
   /// after a restart (the macro passes through untouched then).
   DateTime? _lastUserMessageAt;
 
-  /// Regex matching any `{{macro}}` or `{{macro::args}}` pattern.
-  /// Used to detect stray unresolved macros in chat history.
-  static final _macroPattern = RegExp(r'\{\{(\w+)(?:::(.+?))?\}\}');
+  // (_macroPattern moved to chat_service_defaults.dart as a library-top-level
+  // final)
 
   late final _needsSimulation = _buildNeedsSimulation();
   late final _relationshipService = _buildRelationshipService();
@@ -681,60 +646,14 @@ class ChatService extends ChangeNotifier {
 
   // (absencePhrase / absenceBannerPhrase moved to chat_service_accessors.dart)
 
-  /// Today's story weather, or null when off (living-time-features.md §3).
-  /// Pure recompute from existing state — nothing stored, so save/load and
-  /// group re-entry agree for free. Gate: realism + passage-of-time + the
-  /// global toggle. Consumed by the injection leaf, the needs decay
-  /// modifiers, the sidebar TimeStrip, and the web facade — one source.
-  DailyWeather? get currentWeather {
-    if (!_realismEnabled ||
-        !_timeService.passageOfTimeEnabled ||
-        !_storageService.weatherEnabled) {
-      return null;
-    }
-    final seed = _currentSessionId;
-    if (seed == null) return null;
-    return WeatherEngine.weatherFor(
-      sessionSeed: seed,
-      dayCount: _timeService.dayCount,
-      date: _timeService.clock,
-      biomeAtDay: _biomeAtDay,
-    );
-  }
+  /// Today's story weather, or null when off. Body in chat_service_accessors.dart.
+  DailyWeather? get currentWeather => _currentWeatherImpl;
 
-  /// Tomorrow's story weather under the same gate as [currentWeather].
-  /// Because the engine is a prefix-stable deterministic walk, this forecast
-  /// is exactly what day dayCount+1 will be when the story clock reaches it
-  /// (dayCount is derived from the calendar date, so +1 day ⇔ +1 dayCount) —
-  /// foreshadowed fronts always arrive (except the first day of a mid-chat
-  /// climate switch — see [WeatherInjection.suppressForeshadow]).
-  /// Recompute is O(dayCount) integer math, called once per turn by the
-  /// injection and once per facade read.
-  DailyWeather? get upcomingWeather {
-    if (currentWeather == null) return null;
-    return WeatherEngine.weatherFor(
-      sessionSeed: _currentSessionId!,
-      dayCount: _timeService.dayCount + 1,
-      date: _timeService.clock.add(const Duration(days: 1)),
-      biomeAtDay: _biomeAtDay,
-    );
-  }
+  /// Tomorrow's forecast under the same gate. Body in chat_service_accessors.dart.
+  DailyWeather? get upcomingWeather => _upcomingWeatherImpl;
 
-  /// The current DAY-PART's weather (Living Time §3 v3): the day script's
-  /// condition for the story-clock hour plus the deterministic °C. Same gate
-  /// and recompute contract as [currentWeather] — nothing stored. Consumed
-  /// by the injection, the needs decay view below, the sidebar chip, and the
-  /// web facade.
-  SegmentWeather? get currentSegmentWeather {
-    if (currentWeather == null) return null;
-    return WeatherSegments.segmentWeatherFor(
-      sessionSeed: _currentSessionId!,
-      dayCount: _timeService.dayCount,
-      date: _timeService.clock,
-      hour: _timeService.clock.hour,
-      biomeAtDay: _biomeAtDay,
-    );
-  }
+  /// The current DAY-PART's weather. Body in chat_service_accessors.dart.
+  SegmentWeather? get currentSegmentWeather => _currentSegmentWeatherImpl;
 
   late final _weatherInjection = _buildWeatherInjection();
 
@@ -744,21 +663,9 @@ class ChatService extends ChangeNotifier {
   // ── Ambitions (Living Time §6) — builder in chat_service_wiring_memory.dart ──
   late final _ambitionService = _buildAmbitionService();
 
-  /// Sidebar/web read surface (Living Time §6): [card]'s ambitions with
-  /// live progress — triggers the lazy cache warm, so first render may show
-  /// "just beginning" and correct itself one notify later. The ONE merge of
-  /// card-authored definitions + per-chat progress; desktop and web both
-  /// read through it so they can't drift.
-  List<({String text, int progress})> ambitionsFor(CharacterCard card) {
-    final sessionId = _currentSessionId;
-    final list = card.frontPorchExtensions?.ambitions ?? const [];
-    if (sessionId == null || list.isEmpty) return const [];
-    final cid = _getCharacterIdFromCard(card);
-    _ambitionService.ensureCacheWarm(sessionId, cid);
-    final progress =
-        _ambitionService.cachedProgress(sessionId, cid) ?? const {};
-    return [for (final a in list) (text: a, progress: progress[a] ?? 0)];
-  }
+  /// Sidebar/web read surface (Living Time §6). Body in chat_service_accessors.dart.
+  List<({String text, int progress})> ambitionsFor(CharacterCard card) =>
+      _ambitionsForImpl(card);
 
   late final _ambitionInjection = _buildAmbitionInjection();
 
@@ -780,16 +687,9 @@ class ChatService extends ChangeNotifier {
   /// Builder in chat_service_wiring_injection.dart.
   late final _realismStateInjection = _buildRealismStateInjection();
 
-  // ── LLM Eval Engine (chat_service_wiring_evals.dart builds it) ──
-  // Plain class (not ChangeNotifier): central eval firing (streaming/retry/
-  // cancel, 4000 tokens/0.1 temp/no-reasoning), think-block stripping, JSON
-  // extraction, and evaluateNeedsImpactCall. The 5 realism eval prompt
-  // builders/calls live in the sibling leaf realism_evals.dart; objective
-  // proposal handling lives in objective_proposal.dart — both consume this
-  // engine's fire/strip/extract callbacks. Stateless/prompt-only: no reset
-  // calls needed. 1:1 vs group + one-shot vs normal dispatch/parity preserved
-  // via callbacks + the impersonation temp re-load (see the class doc above
-  // on the eval-timing rule this all serves).
+  // ── LLM Eval Engine (built in chat_service_wiring_evals.dart; the engine's
+  // own contract is documented in llm_eval_engine.dart). Stateless — no reset
+  // calls needed; 1:1/group + one-shot/normal parity ride the callbacks. ──
   late final _llmEvalEngine = _buildLlmEvalEngine();
   late final _realismVerifier = _buildRealismVerifier();
   late final _needsImpactEvaluator = _buildNeedsImpactEvaluator();
@@ -832,13 +732,9 @@ class ChatService extends ChangeNotifier {
   /// override it via `implements` (see isGrowthPassRunning precedent).
   JournalStore get journalStore => _journalStore;
 
-  /// "Our Story" timeline read-model (Living Time §7) — pure aggregation
-  /// over data already persisted; the journal dialog's timeline tab and the
-  /// web facade both read through this one instance.
-  late final MilestoneFeed milestoneFeed = MilestoneFeed(
-    getDb: () => _db,
-    getMessages: () => _messages,
-  );
+  /// "Our Story" timeline read-model (Living Time §7). Builder in
+  /// chat_service_wiring_memory.dart.
+  late final MilestoneFeed milestoneFeed = _buildMilestoneFeed();
 
   late final _journalInjection = _buildJournalInjection();
 
@@ -883,113 +779,20 @@ class ChatService extends ChangeNotifier {
   String? _parentSessionId;
   int? _forkIndex;
 
-  /// Default system prompt for group chats, designed to prevent characters
-  /// from speaking for each other and maintain turn discipline.
-  static const String defaultGroupSystemPrompt =
-      'You are roleplaying in a multi-character group conversation. '
-      'CRITICAL RULES:\n'
-      '1. You MUST only write dialogue and actions for the character whose turn it is (indicated after <START>). '
-      'NEVER write dialogue, thoughts, or actions for other characters or {{user}}.\n'
-      '2. Stay fully in character \u2014 use the speaking character\'s unique voice, mannerisms, personality, and speech patterns.\n'
-      '3. Keep your response focused on ONE character\'s contribution. Do not narrate what other characters do or say.\n'
-      '4. React naturally to what other characters and {{user}} have said. Reference their words, but do not put words in their mouths.\n'
-      '5. Write in the style of collaborative roleplay: use *asterisks* for actions/narration and regular text for dialogue.\n'
-      '6. Keep responses concise and punchy \u2014 leave room for the next character to respond.\n'
-      '7. Never break character or reference the fact that you are an AI.';
-
-  /// System prompt for Observer Mode — characters interact with each other, user is not present.
-  static const String observerModeSystemPrompt =
-      'You are roleplaying in a multi-character group conversation. '
-      'The user is NOT a participant in this story — they are an invisible observer/director. '
-      'CRITICAL RULES:\n'
-      '1. You MUST only write dialogue and actions for the character whose turn it is. '
-      'NEVER write for other characters.\n'
-      '2. Characters should interact naturally WITH EACH OTHER — address other characters by name, '
-      'respond to what they said, react to their actions. Build on the conversation organically.\n'
-      '3. Stay fully in character — use the speaking character\'s unique voice and personality.\n'
-      '4. If a [Director] note appears, follow its guidance to steer the scene (introduce new topics, '
-      'create conflict, have a character enter/leave, etc.) but do NOT acknowledge the director directly.\n'
-      '5. Write in collaborative roleplay style: *asterisks* for actions, regular text for dialogue.\n'
-      '6. Keep responses concise — leave room for the next character to respond.\n'
-      '7. Never break character or reference being an AI.\n'
-      '8. Characters may naturally address each other, start side conversations, argue, agree, '
-      'tell stories, ask questions, or react emotionally — make the conversation feel alive and dynamic.';
-
-  /// Default system prompt for local KoboldCPP backends (smaller models).
-  /// Kept concise so it doesn't eat too much of the limited context window.
-  static const String defaultKoboldSystemPrompt =
-      'Write {{char}}\'s next reply in this roleplay with {{user}}. '
-      'Stay in character as {{char}} at all times. '
-      'Use *asterisks* for actions and narration, regular text for dialogue. '
-      'Be creative, descriptive, and drive the scene forward. '
-      'Never write actions or dialogue for {{user}}. '
-      'Never break character or mention being an AI.';
-
-  /// Default system prompt for remote API backends (large cloud models).
-  /// Highly detailed to leverage the model's full capabilities.
-  static const String defaultApiSystemPrompt =
-      'You are an expert collaborative fiction writer and immersive roleplay partner. '
-      'You write as {{char}} in an ongoing interactive story with {{user}}.\n\n'
-      'CORE IDENTITY:\n'
-      '- Embody {{char}} completely. Every response must reflect their unique personality, speech patterns, '
-      'vocabulary level, emotional state, and worldview as defined in their character description.\n'
-      '- {{char}} is a living, breathing character with their own desires, fears, opinions, and agency \u2014 '
-      'not a servant of {{user}}. They can disagree, have bad days, make mistakes, and act according to their own motivations.\n\n'
-      'WRITING CRAFT:\n'
-      '- Write in a natural, literary style. Vary sentence length and structure. Avoid repetitive sentence openings.\n'
-      '- Show emotions through body language, micro-expressions, vocal tone, and subtle actions rather than stating '
-      'feelings directly ("she clenched her jaw" not "she felt angry").\n'
-      '- Use all five senses \u2014 sight, sound, smell, touch, taste \u2014 to create vivid, immersive scenes.\n'
-      '- Dialogue should feel natural and conversational. Characters can interrupt, trail off, use contractions, '
-      'stumble over words, or speak in fragments when emotionally charged.\n'
-      '- Weave internal thoughts, environmental details, and physical sensations into responses to create depth.\n'
-      '- Match the tone and pacing to the scene: tense moments get short, punchy prose; reflective moments get '
-      'slower, more lyrical writing.\n\n'
-      'ANTI-SLOP RULES \u2014 AVOID THESE CLICH\u00c9S:\n'
-      '- Do NOT use: "a symphony of", "a dance of", "sent shivers down", "electricity coursed through", '
-      '"breath hitched", "pupils dilated", "orbs" (for eyes), "ministrations", "mewled", '
-      '"the air crackled with", "a masterpiece of", "elicited a moan".\n'
-      '- Do NOT start responses with: "I", a sigh, a chuckle, or raising an eyebrow.\n'
-      '- Do NOT use purple prose or melodramatic narration. Keep descriptions grounded and specific.\n'
-      '- Vary your emotional vocabulary \u2014 don\'t repeat the same descriptors across responses.\n\n'
-      'RESPONSE GUIDELINES:\n'
-      '- Write 2-5 paragraphs per response unless the scene calls for shorter exchanges.\n'
-      '- Always advance the scene meaningfully. Each response should move the story forward through action, '
-      'revelation, or emotional development.\n'
-      '- End responses at natural pause points that invite {{user}} to react \u2014 don\'t resolve conflicts or '
-      'answer your own questions.\n'
-      '- Never narrate {{user}}\'s actions, thoughts, dialogue, or emotional reactions. Their agency is sacred.\n'
-      '- Never break the fourth wall, mention being an AI, or reference the roleplay as fiction.\n'
-      '- Maintain continuity with all previously established facts, character history, and world details.\n\n'
-      'DIALOGUE FORMAT:\n'
-      '- Use regular text for speech: "Like this," she said.\n'
-      '- Use *asterisks* for actions and narration: *She leaned against the doorframe, arms crossed.*\n'
-      '- Internal thoughts can be written in italics or described through narration.';
-
-  /// Inter-call delay used when staggering the multi-call realism evaluations.
-  /// Kept in the class body (not the realism-evals extension) because the
-  /// periodic-eval coordinator in this file references it directly; extension
-  /// statics aren't visible unqualified to the host type.
-  static const _kEvalDispatchStagger = Duration(milliseconds: 50);
+  // (defaultGroupSystemPrompt / observerModeSystemPrompt /
+  // defaultKoboldSystemPrompt / defaultApiSystemPrompt / _kEvalDispatchStagger
+  // moved to chat_service_defaults.dart as library-top-level consts — see
+  // that file's header doc for why.)
 
   CharacterCard? get activeCharacter => _activeCharacter;
   List<ChatMessage> get messages => List.unmodifiable(_messages);
-  /// Token streaming — deliberately the NARROW sense.
-  ///
-  /// This drives the send button's enabled state, and widening it to include
-  /// post-generation was tried and reverted: background work (post-gen evals,
-  /// objective completion checks) then held the composer disabled for most of
-  /// a turn on a slow machine. CI caught it — the E2E driver could not find a
-  /// tappable send button across eight retries on the macOS and Windows
-  /// runners, which is exactly what a user on a slow local backend would have
-  /// experienced.
-  ///
-  /// The data-loss hazard that widening was meant to solve is real but belongs
-  /// at the composer, not here: what matters is that a composer's own guard
-  /// uses the SAME predicate as [sendMessage]. If the composer's check is
-  /// narrower than the service's, the composer clears the field for a send the
-  /// service then refuses. See [isSettlingTurn] and the mirror in
-  /// `_sendCurrentMessage`.
+  /// Token streaming — deliberately the NARROW sense. It drives the send
+  /// button, and widening it to cover post-generation was tried and REVERTED:
+  /// background evals then held the composer disabled for most of a turn on
+  /// slow machines (caught by E2E on the CI runners). The real constraint
+  /// lives at the composer instead: its guard must use the SAME predicate as
+  /// [sendMessage], or it clears the field for a send the service refuses.
+  /// See [isSettlingTurn] and the mirror in `_sendCurrentMessage`.
   bool get isGenerating => _isGenerating;
 
   // (isSettlingTurn moved to chat_service_generation_stream.dart;
@@ -1026,64 +829,26 @@ class ChatService extends ChangeNotifier {
       _groupManager?.characters ?? const <CharacterCard>[];
   // (autoPlayActive / nextCharacter moved to chat_service_group_read.dart)
 
-  /// The unified ordered cast of speakers for the active chat, regardless of
-  /// mode. This is the single roster the UI reads instead of branching on
-  /// `isGroupMode` between `activeCharacter`, `groupCharacters`, and
-  /// `sceneGuestCards`:
-  ///   - Group chat → each group member, in turn order (no distinct host).
-  ///   - 1:1 / NPC chat → the host (`cast[0]`, realism-bearing) followed by any
-  ///     present Scene Guests (lite NPCs, realism off).
-  /// Empty only when no chat is loaded.
-  List<ChatParticipant> get cast {
-    if (isGroupMode) {
-      return [
-        for (final c in groupCharacters)
-          ChatParticipant(card: c, isHost: false),
-      ];
-    }
-    final host = _activeCharacter;
-    return [
-      if (host != null) ChatParticipant(card: host, isHost: true),
-      for (final g in _sceneGuestCards) ChatParticipant(card: g, isHost: false),
-    ];
-  }
+  /// Ordered cast of speakers, group or 1:1+guests. Body in chat_service_accessors.dart.
+  List<ChatParticipant> get cast => _castImpl;
 
   // (isGroupRealismActive / _shouldTrackInterCharacterRelationships moved to
   // chat_service_group_read.dart)
 
-  double get tokensPerSecond {
-    if (_tokenTimestamps.length < 2) return 0.0;
-    // Use rolling window: tokens in the last 3 seconds
-    final now = DateTime.now();
-    final cutoff = now.subtract(const Duration(seconds: 3));
-    final recent = _tokenTimestamps.where((t) => t.isAfter(cutoff)).length;
-    if (recent < 2) {
-      // Fallback to overall average
-      if (_generationStartTime == null || _tokensGenerated == 0) return 0.0;
-      final elapsed =
-          now.difference(_generationStartTime!).inMilliseconds / 1000.0;
-      return elapsed > 0 ? _tokensGenerated / elapsed : 0.0;
-    }
-    final windowStart = _tokenTimestamps.where((t) => t.isAfter(cutoff)).first;
-    final windowElapsed = now.difference(windowStart).inMilliseconds / 1000.0;
-    return windowElapsed > 0 ? recent / windowElapsed : 0.0;
-  }
+  /// Body in chat_service_generation_stream.dart.
+  double get tokensPerSecond => _tokensPerSecondImpl;
 
   int _greetingIndex = 0;
   int get greetingIndex => _greetingIndex;
 
+  /// Listener wiring lives in [_initImpl] (chat_service_accessors.dart).
   ChatService(
     this._koboldService,
     this._userPersonaService,
     this._storageService,
     this._worldRepository,
   ) {
-    // Probe verdicts land from background passes and the manual test alike —
-    // rebroadcast so the sidebar's tool-calling pill repaints live.
-    _toolProbe.addListener(notifyListeners);
-    // Local model path / remote model name changes alter the eval identity —
-    // retest tool support for the new model (sidebar pill contract).
-    _storageService.addListener(_onBackendIdentityMaybeChanged);
+    _initImpl();
   }
 
   // (_onBackendIdentityMaybeChanged / setDatabase moved to
@@ -1102,25 +867,13 @@ class ChatService extends ChangeNotifier {
 
   /// Per-session generation parameter overrides. The dialog reads/writes this.
   ChatGenerationSettings get sessionGenSettings => _sessionGenSettings;
-  set sessionGenSettings(ChatGenerationSettings value) {
-    _sessionGenSettings = value;
-    _saveChat();
-    notifyListeners();
-  }
+  set sessionGenSettings(ChatGenerationSettings value) =>
+      _setSessionGenSettingsImpl(value);
 
   /// Per-chat theme overrides (preset + customized colors/font/background/border).
   ChatThemeOverrides get sessionThemeOverrides => _sessionThemeOverrides;
-  set sessionThemeOverrides(ChatThemeOverrides value) {
-    _sessionThemeOverrides = value;
-    // Persist only when a chat is actually open. The web facade already guards
-    // this, but a bare `_currentSessionId!` would crash any other caller that
-    // sets the theme with no active session (session close mid-save, tests).
-    final sid = _currentSessionId;
-    if (sid != null) {
-      _db.setThemeOverrides(sid, value.toJsonString());
-    }
-    notifyListeners();
-  }
+  set sessionThemeOverrides(ChatThemeOverrides value) =>
+      _setSessionThemeOverridesImpl(value);
 
   // (parentSessionId / forkIndex / sessionName / sessionDescription /
   // isLoadingSession / selectedLookFor / setLookForCharacter moved to
@@ -1129,16 +882,10 @@ class ChatService extends ChangeNotifier {
   bool get summaryPaused => _summaryPaused;
   int get summaryLastIndex => _summaryLastIndex;
   bool get isSummaryGenerating => _isSummaryGenerating;
-  // Public access to extracted domain services (final shim migration + cleanup).
-  // Callers (UI sidebars, tests, chance overlay, group settings, etc.) now use direct:
-  //   chat.relationshipService.affectionScore / .trustLevel / shortTermTierName etc.
-  //   chat.timeService.timeOfDay / .dayCount / .setPassageOfTimeEnabled(...)
-  //   chat.nsfwService.nsfwCooldownEnabled / .arousalLevel / .setNsfwCooldownEnabled
-  //   chat.chaosModeService.chaosModeEnabled / .chaosPressure / .hasPendingChaosEvent
-  //   chat.needsSimulation.vector / .pendingCatastrophe
-  //   chat.expressionService.currentExpressionLabel / .resolveExpressionAvatar / .setManualExpression
-  // God owns the late finals (for 1:1+group dispatch, _groupRealism load/save, cbs, notify, reset hygiene).
-  // Barrel not updated (internal; <3 public cross locations precedent).
+  // Domain services are read directly by callers (chat.relationshipService /
+  // timeService / nsfwService / etc.); the god keeps ONLY the late finals —
+  // for 1:1+group dispatch, _groupRealism load/save, callbacks, notify and
+  // reset hygiene. Barrel not updated (internal; <3 public cross locations).
   RelationshipService get relationshipService => _relationshipService;
   TimeService get timeService => _timeService;
   NsfwService get nsfwService => _nsfwService;
@@ -1164,13 +911,10 @@ class ChatService extends ChangeNotifier {
   /// Stream text with think blocks stripped (for display) — memoized on
   /// string identity (the overlay + web broadcast read it every notify).
   /// Class member, not extension: FakeChatService overrides it in goldens.
+  /// The memo fields stay here; the getter body is in
+  /// chat_service_accessors.dart.
   String? _evalCleanSrc, _evalCleanOut;
-  String get realismEvalStreamTextClean =>
-      identical(_realismEvalStreamText, _evalCleanSrc)
-      ? _evalCleanOut!
-      : _evalCleanOut = _stripThinkBlocks(
-          _evalCleanSrc = _realismEvalStreamText,
-        );
+  String get realismEvalStreamTextClean => _realismEvalStreamTextCleanImpl;
   String get characterEmotion => _characterEmotion;
 
   String get emotionIntensity => _emotionIntensity;
@@ -1191,50 +935,20 @@ class ChatService extends ChangeNotifier {
 
   // (nsfw/relationship long list of @Dep shims excised in final cleanup; use nsfwService / relationshipService)
 
-  // (moodLabel / enjoysLowHygiene / refreshEnjoysLowHygieneFromActiveCharacter /
-  // setCharacterRepository / _onCharacterLibraryChanged / setGroupChatRepository /
-  // setLLMProvider / setTtsService / setMemoryService / setImageGenService /
-  // setExpressionClassifierService / _getCharacterIdFromCard / _getCharacterId /
-  // _getCharacterIdForCard / _tryParseJsonMap moved to chat_service_accessors.dart.
-  // Historical note preserved there: currentExpressionLabel, resolveExpressionAvatar,
-  // setManualExpression and setExpressionClassifierService are all still live —
-  // a prior comment claiming them "excised" was wrong and nearly caused a bad cleanup.)
+  // (Misc accessors, id helpers and the service setters live in
+  // chat_service_accessors.dart, which also carries the still-live warning
+  // about the expression members a prior comment wrongly called "excised".)
 
-  /// Index of the most recent host (main character) message that is buried only
-  /// under Scene Guest (Lite NPC) chime-in replies — i.e. the tail of the chat
-  /// is one or more guest messages sitting directly on top of it. Returns null
-  /// when the last message is already the host's (use the normal last-message
-  /// regen), when a user/System message breaks the guest tail, or outside a 1:1
-  /// scene. The UI uses this to offer "regenerate the main character" on a host
-  /// bubble that the last-message-only regen button can no longer reach.
-  int? get regenerableHostBelowGuestsIndex {
-    if (_activeGroup != null || _messages.isEmpty) return null;
-    if (!_isGuestAuthoredMessage(_messages.last)) return null;
-    for (int i = _messages.length - 1; i >= 0; i--) {
-      final m = _messages[i];
-      if (m.isUser || m.sender == 'System') return null;
-      if (!_isGuestAuthoredMessage(m)) return i;
-    }
-    return null;
-  }
+  /// Regenerable host index under Scene Guest chime-ins; body in chat_service_accessors.dart.
+  int? get regenerableHostBelowGuestsIndex =>
+      _regenerableHostBelowGuestsIndexImpl;
 
   // ensureInterCharacterRelationshipsSeeded / updateInterCharacterFeelingsFromRecentExchange
   // moved verbatim to RelationshipService (with callbacks for group/messages). Old bodies deleted.
 
-  void editMessage(int index, String newText) async {
-    if (index >= 0 && index < _messages.length) {
-      final msg = _messages[index];
-      // Use the text setter so we only update the current swipe's text
-      // while preserving all realism metadata, swipes, swipeMetadata, durations, etc.
-      // This prevents chips (needs_deltas, bond/trust deltas, emotion, etc.) from disappearing on edit.
-      msg.text = newText;
-      // Timeline integrity: an edit at a journaled position rewrites what
-      // the diary already read (smoke-test bug 2026-07-21).
-      _invalidateJournalFrom(index);
-      await _saveChat();
-      notifyListeners();
-    }
-  }
+  /// Body in chat_service_accessors.dart.
+  void editMessage(int index, String newText) =>
+      _editMessageImpl(index, newText);
 
   // ── Growth Rings runtime state (full feature in growth_service.dart leaf
   // + chat_service_growth.dart part; docs/design/growth-rings.md) ──
@@ -1260,24 +974,9 @@ class ChatService extends ChangeNotifier {
   // The sub-builders themselves are still instantiated and passed to the composer.
   // Chance Time remains separate (it is not part of the per-turn realism state bundle).
 
-  /// Loads the active objectives for the given character in the current session.
-  /// Safe to call from group objective UIs — does not mutate global _activeObjectives.
-  ///
-  /// Kept in the class body (not an extension) because [FakeChatService]
-  /// overrides it in golden tests — extension members are statically dispatched
-  /// and cannot be overridden.
-  Future<List<Objective>> getActiveObjectivesFor(
-    CharacterCard character,
-  ) async {
-    if (_currentSessionId == null) return const [];
-    final charId = _getCharacterIdFromCard(character);
-    try {
-      return await _db.getActiveObjectives(charId, chatId: _currentSessionId!);
-    } catch (e) {
-      debugPrint('[Objective] Failed to load for ${character.name}: $e');
-      return const [];
-    }
-  }
+  /// Active objectives for [character] in the current session; body in chat_service_objectives.dart.
+  Future<List<Objective>> getActiveObjectivesFor(CharacterCard character) =>
+      _getActiveObjectivesForImpl(character);
 
   @override
   void notifyListeners() {
@@ -1285,16 +984,11 @@ class ChatService extends ChangeNotifier {
     super.notifyListeners();
   }
 
+  /// Cleanup body (everything but the mandatory `super.dispose()` call,
+  /// which must stay in the class) lives in chat_service_accessors.dart.
   @override
   void dispose() {
-    _disposed = true;
-    _cancelIdleTimer();
-    _cancelStreamNotifyThrottle();
-    _guestStatusClearTimer?.cancel();
-    _characterRepository?.removeListener(_onCharacterLibraryChanged);
-    _storageService.removeListener(_onBackendIdentityMaybeChanged);
-    _llmProvider?.removeListener(_onBackendIdentityMaybeChanged);
-    _toolProbe.removeListener(notifyListeners);
+    _disposeCleanupImpl();
     super.dispose();
   }
 }

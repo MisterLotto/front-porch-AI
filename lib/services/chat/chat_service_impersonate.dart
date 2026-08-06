@@ -53,8 +53,8 @@ extension ChatServiceImpersonate on ChatService {
         systemPrompt = _activeGroup!.systemPrompt;
       } else if (_activeGroup != null) {
         systemPrompt = _observerMode
-            ? ChatService.observerModeSystemPrompt
-            : ChatService.defaultGroupSystemPrompt;
+            ? observerModeSystemPrompt
+            : defaultGroupSystemPrompt;
       } else if (speakingCharacter.systemPrompt.isNotEmpty) {
         systemPrompt = speakingCharacter.systemPrompt;
       } else if (_storageService.generationSettings.systemPrompt.isNotEmpty) {
@@ -62,7 +62,7 @@ extension ChatServiceImpersonate on ChatService {
       } else {
         // All backends speak the OpenAI chat protocol now (KoboldCpp via its
         // /v1/chat/completions door), so use the chat-style default prompt.
-        systemPrompt = ChatService.defaultApiSystemPrompt;
+        systemPrompt = defaultApiSystemPrompt;
       }
 
       if (_activeGroup != null) {

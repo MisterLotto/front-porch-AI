@@ -10425,3 +10425,26 @@ maintainer-directed last mile).
 (2,851, sole red = the ratchet's own lower-the-baseline demand, resolved
 here) · E2E app_smoke + group_smoke + message_actions.
 Commit: ede5e5ff
+
+## 2026-08-07 — refactor(campaign): CAMPAIGN COMPLETE — chat_service.dart 994, baseline {}
+
+**Files:** shell 1,300 → 994; new chat/chat_service_defaults.dart part
+(the 4 system-prompt consts + needCriticalThreshold + 4 private statics as
+top-level, byte-identical values, lib-only call-site fixes in general_tab /
+needs_bar / group_member_card / impersonate / generation_blocks / history /
+turn_flow / realism_evals / greeting); the image_gen forwarder pattern on
+all 11 fake-pinned multi-line members (class keeps 1-line members — every
+fake override + golden virtual dispatch preserved by construction, ZERO
+test edits); constructor/dispose bodies → _initImpl/_disposeCleanupImpl
+(same-receiver tear-off identity verified); final by-hand doc-condense of
+duplicative wiring commentary (~30 lines; the settling-window and
+send-button lessons kept). test/baselines/god_files.json = {}.
+
+**Audits:** full-library multiset (residue = static-decl transforms +
+qualification drops + forwarder/glue lines only; prompt-string bodies
+cancelled = const values byte-identical).
+
+**Gates:** analyze 0 · ratchet GREEN ON `{}` · 39 parity/targeted · full
+suite 2,854 · golden container 94/94 (the dispatch-preservation proof) ·
+E2E app_smoke + group_smoke centrally (+ both in the 4b worktree).
+Commit: (fill next)

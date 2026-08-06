@@ -38,7 +38,7 @@ extension ChatServiceGreeting on ChatService {
         // delegates to _llmEvalEngine (step 9 thins; full bodies excised)
         _evaluateEmotionalStateCall(),
         Future.delayed(
-          ChatService._kEvalDispatchStagger,
+          _kEvalDispatchStagger,
           () => _evaluateRelationshipCall(),
         ),
       ]);
@@ -104,15 +104,15 @@ extension ChatServiceGreeting on ChatService {
         await Future.wait([
           _evaluateRelationshipCall(),
           Future.delayed(
-            ChatService._kEvalDispatchStagger,
+            _kEvalDispatchStagger,
             () => _evaluateEmotionalStateCall(),
           ),
           Future.delayed(
-            ChatService._kEvalDispatchStagger * 2,
+            _kEvalDispatchStagger * 2,
             () => _evaluatePhysicalStateCall(),
           ),
           Future.delayed(
-            ChatService._kEvalDispatchStagger * 3,
+            _kEvalDispatchStagger * 3,
             () => _evaluateNarrativeCall(),
           ),
         ]);

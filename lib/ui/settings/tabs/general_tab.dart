@@ -608,19 +608,19 @@ class GeneralTab extends StatelessWidget {
               ActionChip(
                 label: const Text('📡 API Default'),
                 onPressed: () => storageService.setSystemPrompt(
-                  ChatService.defaultApiSystemPrompt,
+                  defaultApiSystemPrompt,
                 ),
               ),
               ActionChip(
                 label: const Text('🖥️ KoboldCPP'),
                 onPressed: () => storageService.setSystemPrompt(
-                  ChatService.defaultKoboldSystemPrompt,
+                  defaultKoboldSystemPrompt,
                 ),
               ),
               ActionChip(
                 label: const Text('👥 Group Chat'),
                 onPressed: () => storageService.setSystemPrompt(
-                  ChatService.defaultGroupSystemPrompt,
+                  defaultGroupSystemPrompt,
                 ),
               ),
             ],

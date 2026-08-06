@@ -67,7 +67,7 @@ extension ChatServiceHistory on ChatService {
 
   String _buildChatHistory({List<LoreDepthEntry> depthLore = const []}) {
     final lines = _messages.map(_formatHistoryLine).toList();
-    if (lines.any((l) => ChatService._macroPattern.hasMatch(l))) {
+    if (lines.any((l) => _macroPattern.hasMatch(l))) {
       debugPrint('[MacroResolver] ⚠ Unresolved macro detected in chat history');
     }
     return _spliceDepthLore(lines, depthLore).join("\n");
@@ -110,7 +110,7 @@ extension ChatServiceHistory on ChatService {
 
     // Format all messages, skipping hidden group realism checkpoints
     final formatted = _messages.map(_formatHistoryLine).toList();
-    if (formatted.any((l) => ChatService._macroPattern.hasMatch(l))) {
+    if (formatted.any((l) => _macroPattern.hasMatch(l))) {
       debugPrint('[MacroResolver] ⚠ Unresolved macro detected in chat history');
     }
 

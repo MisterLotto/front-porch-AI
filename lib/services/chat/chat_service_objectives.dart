@@ -630,4 +630,32 @@ extension ChatServiceObjectives on ChatService {
       ),
     );
   }
+
+  // ── Round-4b forwarder bodies (see chat_service_accessors.dart's banner
+  // comment for why these stay one-line forwarders on the class body) ──
+
+  /// Returns the personal objectives for a specific character when in group mode.
+  /// Falls back to the global list for 1:1 or when no per-char data exists yet.
+  List<Objective> _getObjectivesForGroupCharacterImpl(
+    CharacterCard character,
+  ) {
+    if (_activeGroup == null) return _activeObjectives;
+    final id = _getCharacterIdFromCard(character);
+    return _groupObjectives[id] ?? const <Objective>[];
+  }
+
+  /// Loads the active objectives for the given character in the current session.
+  /// Safe to call from group objective UIs — does not mutate global _activeObjectives.
+  Future<List<Objective>> _getActiveObjectivesForImpl(
+    CharacterCard character,
+  ) async {
+    if (_currentSessionId == null) return const [];
+    final charId = _getCharacterIdFromCard(character);
+    try {
+      return await _db.getActiveObjectives(charId, chatId: _currentSessionId!);
+    } catch (e) {
+      debugPrint('[Objective] Failed to load for ${character.name}: $e');
+      return const [];
+    }
+  }
 }

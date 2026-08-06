@@ -56,7 +56,7 @@ extension ChatServiceRealismEvals on ChatService {
   // internally) processes evals in our intended order rather than
   // reverse or interleaved. Zero wall time added — KoboldCpp serializes
   // anyway, so the stagger just ensures already-in-flight ordering.
-  // (_kEvalDispatchStagger lives on the ChatService class body; see note there.)
+  // (_kEvalDispatchStagger is a library-top-level const in chat_service_defaults.dart.)
 
   Future<void> _evaluateRelationshipCall({void Function(String)? onChunk}) =>
       _realismEvals.evaluateRelationshipCall(onChunk: onChunk);
@@ -228,15 +228,15 @@ extension ChatServiceRealismEvals on ChatService {
     await Future.wait([
       _evaluateRelationshipCall(onChunk: onChunk),
       Future.delayed(
-        ChatService._kEvalDispatchStagger,
+        _kEvalDispatchStagger,
         () => _evaluateEmotionalStateCall(onChunk: onChunk),
       ),
       Future.delayed(
-        ChatService._kEvalDispatchStagger * 2,
+        _kEvalDispatchStagger * 2,
         () => _evaluatePhysicalStateCall(onChunk: onChunk),
       ),
       Future.delayed(
-        ChatService._kEvalDispatchStagger * 3,
+        _kEvalDispatchStagger * 3,
         () => _evaluateNarrativeCall(onChunk: onChunk),
       ),
     ]);

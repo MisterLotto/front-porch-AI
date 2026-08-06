@@ -269,4 +269,223 @@ extension ChatServiceAccessors on ChatService {
     } catch (_) {}
     return {};
   }
+
+  // ── Round-4b forwarder bodies ──────────────────────────────────────────
+  // These back one-line `class` forwarders left in chat_service.dart because
+  // FakeChatService (test/golden/support/fakes.dart) — or a fake that extends
+  // it, e.g. _RecordingChatService in chat_insert_image_test.dart —
+  // `@override`s them, and extension members are statically dispatched and
+  // cannot be overridden via `implements`/`extends`. Verbatim bodies, moved
+  // as part of the round-4b god-file shrink (docs/design/god-file-elimination.md).
+
+  /// Append an already-saved generated image to the conversation as a
+  /// character message (empty text; the bubble renders the image from
+  /// metadata). Shared by the /image slash command, the Image Studio's
+  /// "Send to chat", and the web insert-image endpoint.
+  Future<void> _addGeneratedImageMessageImpl(
+    String path,
+    String prompt, {
+    String? senderName,
+    String? characterId,
+  }) async {
+    if (_activeCharacter == null && _activeGroup == null) return;
+    _messages.add(
+      ChatMessage(
+        text: '',
+        sender: senderName ?? _activeCharacter?.name ?? 'Narrator',
+        isUser: false,
+        characterId: characterId,
+        metadata: {
+          'is_generated_image': true,
+          'image_path': path,
+          'image_prompt': prompt,
+        },
+      ),
+    );
+    await _saveChat();
+    notifyListeners();
+  }
+
+  /// Today's story weather, or null when off (living-time-features.md §3).
+  /// Pure recompute from existing state — nothing stored, so save/load and
+  /// group re-entry agree for free. Gate: realism + passage-of-time + the
+  /// global toggle. Consumed by the injection leaf, the needs decay
+  /// modifiers, the sidebar TimeStrip, and the web facade — one source.
+  DailyWeather? get _currentWeatherImpl {
+    if (!_realismEnabled ||
+        !_timeService.passageOfTimeEnabled ||
+        !_storageService.weatherEnabled) {
+      return null;
+    }
+    final seed = _currentSessionId;
+    if (seed == null) return null;
+    return WeatherEngine.weatherFor(
+      sessionSeed: seed,
+      dayCount: _timeService.dayCount,
+      date: _timeService.clock,
+      biomeAtDay: _biomeAtDay,
+    );
+  }
+
+  /// Tomorrow's story weather under the same gate as [currentWeather].
+  /// Because the engine is a prefix-stable deterministic walk, this forecast
+  /// is exactly what day dayCount+1 will be when the story clock reaches it
+  /// (dayCount is derived from the calendar date, so +1 day ⇔ +1 dayCount) —
+  /// foreshadowed fronts always arrive (except the first day of a mid-chat
+  /// climate switch — see [WeatherInjection.suppressForeshadow]).
+  /// Recompute is O(dayCount) integer math, called once per turn by the
+  /// injection and once per facade read.
+  DailyWeather? get _upcomingWeatherImpl {
+    if (currentWeather == null) return null;
+    return WeatherEngine.weatherFor(
+      sessionSeed: _currentSessionId!,
+      dayCount: _timeService.dayCount + 1,
+      date: _timeService.clock.add(const Duration(days: 1)),
+      biomeAtDay: _biomeAtDay,
+    );
+  }
+
+  /// The current DAY-PART's weather (Living Time §3 v3): the day script's
+  /// condition for the story-clock hour plus the deterministic °C. Same gate
+  /// and recompute contract as [currentWeather] — nothing stored. Consumed
+  /// by the injection, the needs decay view below, the sidebar chip, and the
+  /// web facade.
+  SegmentWeather? get _currentSegmentWeatherImpl {
+    if (currentWeather == null) return null;
+    return WeatherSegments.segmentWeatherFor(
+      sessionSeed: _currentSessionId!,
+      dayCount: _timeService.dayCount,
+      date: _timeService.clock,
+      hour: _timeService.clock.hour,
+      biomeAtDay: _biomeAtDay,
+    );
+  }
+
+  /// Sidebar/web read surface (Living Time §6): [card]'s ambitions with
+  /// live progress — triggers the lazy cache warm, so first render may show
+  /// "just beginning" and correct itself one notify later. The ONE merge of
+  /// card-authored definitions + per-chat progress; desktop and web both
+  /// read through it so they can't drift.
+  List<({String text, int progress})> _ambitionsForImpl(CharacterCard card) {
+    final sessionId = _currentSessionId;
+    final list = card.frontPorchExtensions?.ambitions ?? const [];
+    if (sessionId == null || list.isEmpty) return const [];
+    final cid = _getCharacterIdFromCard(card);
+    _ambitionService.ensureCacheWarm(sessionId, cid);
+    final progress =
+        _ambitionService.cachedProgress(sessionId, cid) ?? const {};
+    return [for (final a in list) (text: a, progress: progress[a] ?? 0)];
+  }
+
+  /// The unified ordered cast of speakers for the active chat, regardless of
+  /// mode. This is the single roster the UI reads instead of branching on
+  /// `isGroupMode` between `activeCharacter`, `groupCharacters`, and
+  /// `sceneGuestCards`:
+  ///   - Group chat → each group member, in turn order (no distinct host).
+  ///   - 1:1 / NPC chat → the host (`cast[0]`, realism-bearing) followed by any
+  ///     present Scene Guests (lite NPCs, realism off).
+  /// Empty only when no chat is loaded.
+  List<ChatParticipant> get _castImpl {
+    if (isGroupMode) {
+      return [
+        for (final c in groupCharacters)
+          ChatParticipant(card: c, isHost: false),
+      ];
+    }
+    final host = _activeCharacter;
+    return [
+      if (host != null) ChatParticipant(card: host, isHost: true),
+      for (final g in _sceneGuestCards) ChatParticipant(card: g, isHost: false),
+    ];
+  }
+
+  /// Index of the most recent host (main character) message that is buried only
+  /// under Scene Guest (Lite NPC) chime-in replies — i.e. the tail of the chat
+  /// is one or more guest messages sitting directly on top of it. Returns null
+  /// when the last message is already the host's (use the normal last-message
+  /// regen), when a user/System message breaks the guest tail, or outside a 1:1
+  /// scene. The UI uses this to offer "regenerate the main character" on a host
+  /// bubble that the last-message-only regen button can no longer reach.
+  int? get _regenerableHostBelowGuestsIndexImpl {
+    if (_activeGroup != null || _messages.isEmpty) return null;
+    if (!_isGuestAuthoredMessage(_messages.last)) return null;
+    for (int i = _messages.length - 1; i >= 0; i--) {
+      final m = _messages[i];
+      if (m.isUser || m.sender == 'System') return null;
+      if (!_isGuestAuthoredMessage(m)) return i;
+    }
+    return null;
+  }
+
+  void _editMessageImpl(int index, String newText) async {
+    if (index >= 0 && index < _messages.length) {
+      final msg = _messages[index];
+      // Use the text setter so we only update the current swipe's text
+      // while preserving all realism metadata, swipes, swipeMetadata, durations, etc.
+      // This prevents chips (needs_deltas, bond/trust deltas, emotion, etc.) from disappearing on edit.
+      msg.text = newText;
+      // Timeline integrity: an edit at a journaled position rewrites what
+      // the diary already read (smoke-test bug 2026-07-21).
+      _invalidateJournalFrom(index);
+      await _saveChat();
+      notifyListeners();
+    }
+  }
+
+  void _setSessionGenSettingsImpl(ChatGenerationSettings value) {
+    _sessionGenSettings = value;
+    _saveChat();
+    notifyListeners();
+  }
+
+  void _setSessionThemeOverridesImpl(ChatThemeOverrides value) {
+    _sessionThemeOverrides = value;
+    // Persist only when a chat is actually open. The web facade already guards
+    // this, but a bare `_currentSessionId!` would crash any other caller that
+    // sets the theme with no active session (session close mid-save, tests).
+    final sid = _currentSessionId;
+    if (sid != null) {
+      _db.setThemeOverrides(sid, value.toJsonString());
+    }
+    notifyListeners();
+  }
+
+  /// Stream text with think blocks stripped (for display) — memoized on
+  /// string identity (the overlay + web broadcast read it every notify).
+  /// The `_evalCleanSrc`/`_evalCleanOut` memo fields stay on the class body.
+  String get _realismEvalStreamTextCleanImpl =>
+      identical(_realismEvalStreamText, _evalCleanSrc)
+      ? _evalCleanOut!
+      : _evalCleanOut = _stripThinkBlocks(
+          _evalCleanSrc = _realismEvalStreamText,
+        );
+
+  /// Everything [ChatService.dispose] does except the mandatory
+  /// `super.dispose()` call, which only the class body can make.
+  void _disposeCleanupImpl() {
+    _disposed = true;
+    _cancelIdleTimer();
+    _cancelStreamNotifyThrottle();
+    _guestStatusClearTimer?.cancel();
+    _characterRepository?.removeListener(_onCharacterLibraryChanged);
+    _storageService.removeListener(_onBackendIdentityMaybeChanged);
+    _llmProvider?.removeListener(_onBackendIdentityMaybeChanged);
+    _toolProbe.removeListener(notifyListeners);
+  }
+
+  /// Everything the [ChatService] constructor does. Called as the
+  /// constructor's single statement (round-4b shrink) — safe because the
+  /// listener tear-offs registered here (`notifyListeners`,
+  /// `_onBackendIdentityMaybeChanged`) are instance-method tear-offs on
+  /// `this`; Dart canonicalizes those, so they stay `==`-equal to the
+  /// tear-offs [_disposeCleanupImpl] later passes to `removeListener`
+  /// regardless of which method body took the tear-off.
+  void _initImpl() {
+    // Probe verdicts land from background passes and the manual test alike —
+    // rebroadcast so the sidebar's tool-calling pill repaints live.
+    _toolProbe.addListener(notifyListeners);
+    // Local model path / remote model name changes alter the eval identity —
+    // retest tool support for the new model (sidebar pill contract).
+    _storageService.addListener(_onBackendIdentityMaybeChanged);
+  }
 }

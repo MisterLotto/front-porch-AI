@@ -415,4 +415,10 @@ extension ChatServiceWiringMemory on ChatService {
       getOfferedOrIgnoredNames: () => _offeredOrIgnoredGuestNames,
     );
   }
+
+  /// "Our Story" timeline read-model (Living Time §7) — pure aggregation
+  /// over data already persisted; the journal dialog's timeline tab and the
+  /// web facade both read through this one instance.
+  MilestoneFeed _buildMilestoneFeed() =>
+      MilestoneFeed(getDb: () => _db, getMessages: () => _messages);
 }
