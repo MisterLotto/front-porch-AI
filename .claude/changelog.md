@@ -10287,4 +10287,4 @@ LlmEvalEngine JSON extraction (cross-service consolidation is its own change).
 golden container 94/94 (incl. the creator behavioral golden) · E2E app_smoke +
 story_pipeline on the merged tree (story agent also ran story_pipeline +
 story_autowrite in-worktree, proving the byte-identical prompt-opener routing).
-Commit: (filled below)
+Commit: 6875419b
