@@ -10483,4 +10483,4 @@ realism-off dedicated eval is rejected along with the picker. Dreams
 simplifies: story nights pass on the fallback clock, no separate night-source
 decision. Engineering costs unchanged; protected-test amendment still gates
 implementation.
-Commit: (fill next)
+Commit: 1b92ab24
