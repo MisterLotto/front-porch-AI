@@ -10226,3 +10226,15 @@ its contract doc.
 2,783 · golden container 94/94 byte-identical · E2E message_actions +
 group_realism_wiring green.
 Commit: (filled below)
+
+## 2026-08-06 — fix(tts): markdown links were spoken as "dollar one"
+
+**Files:** lib/services/tts_service.dart (one line, 1-for-1 so the ratchet
+baseline holds at 1,191); docs/Rawhide.md bullet.
+**Why:** _sanitizeText used replaceAll(RegExp, r'$1') — Dart's replaceAll has
+no backreferences (only replaceAllMapped does), so every "[label](url)" became
+the literal text "$1" in the spoken string. Found by the TTS provability net's
+authoring pass (standalone repro verified); fixed BEFORE the net landed so the
+net ships pinning the correct behavior. Pin negative-checked personally:
+buggy call restored -> red (Expected: false / Actual: <true>), fix back -> 9/9.
+Commit: (filled below)

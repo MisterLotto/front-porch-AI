@@ -1155,7 +1155,7 @@ class TtsService extends ChangeNotifier {
     result = result.replaceAll(RegExp(r'\*'), '');
     result = result.replaceAll(RegExp(r'#{1,6}\s'), '');
     result = result.replaceAll(RegExp(r'[_~`]'), '');
-    result = result.replaceAll(RegExp(r'\[([^\]]+)\]\([^\)]+\)'), r'$1');
+    result = result.replaceAllMapped(RegExp(r'\[([^\]]+)\]\([^\)]+\)'), (m) => m[1]!);
     result = result.replaceAll(RegExp(r'!\[.*?\]\(.*?\)'), '');
     result = result.replaceAll(RegExp(r':[a-zA-Z0-9_]+:'), '');
     // Remove emojis (fpai-feature-004)
