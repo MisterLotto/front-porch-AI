@@ -48,13 +48,23 @@ dead-code audit, the works.
   stays; no behavior change.
 - **`main.dart` 2105** — service init order is delicate. Split into ordered
   startup builders that make the order *explicit* rather than positional.
-- **`database.dart` 3717 — OUT OF SCOPE (maintainer decision 2026-08-03).**
-  It keeps a permanent baseline entry; the campaign's finish line is a
-  baseline containing exactly this one file. Do not propose splitting it
-  again without a new maintainer decision.
+- **`database.dart` 3716 — RE-SCOPED INTO THE CAMPAIGN (maintainer decision
+  2026-08-06, superseding the 2026-08-03 exclusion).** The blocker was drift
+  risk to user data; a feasibility spike answered it empirically: Drift's
+  codegen is file-layout-insensitive — moving table classes to `part` files
+  with declaration order preserved and the `@DriftDatabase(tables:[...])`
+  list untouched regenerates `database.g.dart` BYTE-IDENTICAL (MD5-verified,
+  including after `build_runner clean`). The split therefore carries a hard
+  gate no other file had: **the regenerated `database.g.dart` must be
+  byte-identical, or the split does not ship.** Additional gates: verbatim
+  multiset audit of the `onUpgrade` ladder, full suite, goldens, and the
+  backup/restore E2E. The campaign's finish line is now a baseline of `{}`.
 
 **Decisions log (2026-08-03):** database.dart excluded; main.dart confirmed in
 scope; execution order confirmed A → B → C, starting with `chat_page.dart`.
+**Decisions log (2026-08-06):** database.dart re-scoped (spike-proven, hard
+byte-identical-regen gate); Tranche C authorized to proceed without per-file
+sign-off ("go ahead and do Tranche C on your own"), standard gates unchanged.
 
 ## The provability rule (added 2026-08-03, maintainer-prompted)
 
