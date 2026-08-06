@@ -21,14 +21,17 @@ import 'stoop_message.dart';
 
 /// Thrown on any non-2xx response. [code] is the server's machine-readable
 /// `error` field (e.g. `invalid_credentials`, `email_taken`, `underage`) so the
-/// UI can show a friendly, specific message.
+/// UI can show a friendly, specific message. [detail] is an optional human
+/// sentence from the server (e.g. incomplete_card missing fields list).
 class BackporchApiException implements Exception {
   final int statusCode;
   final String code;
-  const BackporchApiException(this.statusCode, this.code);
+  final String? detail;
+  const BackporchApiException(this.statusCode, this.code, [this.detail]);
 
   @override
-  String toString() => 'BackporchApiException($statusCode, $code)';
+  String toString() =>
+      'BackporchApiException($statusCode, $code${detail != null ? ', $detail' : ''})';
 }
 
 /// A successful authentication: the account, its session tokens, and the live
@@ -611,6 +614,9 @@ class BackporchApi {
     throw BackporchApiException(
       res.statusCode,
       (json['error'] as String?) ?? 'http_${res.statusCode}',
+      (json['detail'] as String?)?.trim().isNotEmpty == true
+          ? (json['detail'] as String).trim()
+          : null,
     );
   }
 }

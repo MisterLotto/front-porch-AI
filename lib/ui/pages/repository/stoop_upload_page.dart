@@ -19,6 +19,7 @@ import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
 import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_completeness_panel.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_verify_banner.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_pick_step.dart';
@@ -191,7 +192,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     _tags = pool.take(_maxTags).toList();
   }
 
-  String _mapError(String code) {
+  String _mapError(String code, {String? detail}) {
     switch (code) {
       case 'policy_not_accepted':
         return 'Please accept the Acceptable Use Policy before sharing.';
@@ -206,9 +207,54 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
         return 'The Stoop’s storage is unavailable right now. Try again later.';
       case 'avatar_required':
         return 'This character needs an avatar image to be shared.';
+      case 'incomplete_card':
+        return (detail != null && detail.isNotEmpty)
+            ? detail
+            : 'This card is missing required fields (first message, '
+                'description/personality, or scenario). Fill them in the '
+                'editor and try again.';
       default:
         return 'Couldn’t share that character. Check your connection and retry.';
     }
+  }
+
+  /// Live checklist for the currently selected card/group/world (sync for
+  /// solo; worlds use the repo envelope when available).
+  StoopCompleteness? _selectedCompleteness() {
+    final card = _selected;
+    if (card != null) {
+      return StoopCardCompleteness.assess(card.toJson(), 'SOLO');
+    }
+    final group = _selectedGroup;
+    if (group != null) {
+      // Group-level fields only here. Member substance is validated in
+      // _publishGroup after GroupCardExporter builds the portable payload
+      // (membership lives in group_members, not on GroupChat).
+      return StoopCardCompleteness.assess({
+        'name': group.name,
+        'first_message': group.firstMessage,
+        'scenario': group.scenario,
+        'system_prompt': group.systemPrompt,
+        'members': const [
+          {'name': '_', 'description': '_'},
+        ],
+      }, 'GROUP');
+    }
+    final world = _selectedWorld;
+    if (world != null) {
+      // Prefer the same .fpworld envelope the publish path sends.
+      try {
+        final repo = context.read<WorldRepository>();
+        final envelope = repo.fpWorldJson(world);
+        return StoopCardCompleteness.assess(envelope, 'WORLD');
+      } catch (_) {
+        return StoopCardCompleteness.assess({
+          'name': world.name,
+          'biome': const <String, dynamic>{},
+        }, 'WORLD');
+      }
+    }
+    return null;
   }
 
   // Pre-fills the wizard from a chosen place. Mirrors the character/group
@@ -243,6 +289,11 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     final cover = context.read<CharacterRepository>().coverImageFileFor(card);
     if (cover == null || !cover.existsSync()) {
       setState(() => _error = 'This character has no avatar to upload.');
+      return;
+    }
+    final completeness = StoopCardCompleteness.assess(card.toJson(), 'SOLO');
+    if (completeness.incomplete) {
+      setState(() => _error = completeness.message);
       return;
     }
     setState(() {
@@ -285,7 +336,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       }
       if (mounted) Navigator.pop(context, true);
     } on BackporchApiException catch (e) {
-      if (mounted) setState(() => _error = _mapError(e.code));
+      if (mounted) setState(() => _error = _mapError(e.code, detail: e.detail));
     } catch (_) {
       if (mounted) {
         setState(() => _error = 'Couldn’t share that character. Try again.');
@@ -312,6 +363,12 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
         if (mounted) {
           setState(() => _error = 'This group has no members to share.');
         }
+        return;
+      }
+      final completeness =
+          StoopCardCompleteness.assess(groupCard.toJson(), 'GROUP');
+      if (completeness.incomplete) {
+        if (mounted) setState(() => _error = completeness.message);
         return;
       }
       // A member-avatar collage is the Stoop cover; full member avatars still
@@ -363,7 +420,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       }
       if (mounted) Navigator.pop(context, true);
     } on BackporchApiException catch (e) {
-      if (mounted) setState(() => _error = _mapError(e.code));
+      if (mounted) setState(() => _error = _mapError(e.code, detail: e.detail));
     } catch (_) {
       if (mounted) {
         setState(() => _error = 'Couldn’t share that group. Try again.');
@@ -400,7 +457,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       }
       if (mounted) Navigator.pop(context, true);
     } on BackporchApiException catch (e) {
-      if (mounted) setState(() => _error = _mapError(e.code));
+      if (mounted) setState(() => _error = _mapError(e.code, detail: e.detail));
     } catch (_) {
       if (mounted) {
         setState(() => _error = 'Couldn’t share that place. Try again.');
@@ -419,7 +476,12 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       case 1:
         return _name.text.trim().isNotEmpty && _summary.text.trim().isNotEmpty;
       case 2:
-        return _standardsAck;
+        // Standards ack + definition completeness (no empty first_mes shells).
+        final comp = _selectedCompleteness();
+        return _standardsAck && !(comp?.incomplete ?? false);
+      case 3:
+        final comp = _selectedCompleteness();
+        return !(comp?.incomplete ?? false);
       default:
         return true;
     }
@@ -690,12 +752,17 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     );
   }
 
-  // Step 2 — NSFW flag + the character-agency acknowledgement.
+  // Step 2 — NSFW flag + the character-agency acknowledgement + completeness.
   Widget _contentStep() {
+    final completeness = _selectedCompleteness();
     return ListView(
       key: const ValueKey('content'),
       padding: const EdgeInsets.all(24),
       children: [
+        if (completeness != null) ...[
+          StoopCompletenessPanel(completeness: completeness),
+          const SizedBox(height: 16),
+        ],
         Container(
           decoration: BoxDecoration(
             gradient: stoopCardGradient(context),
@@ -785,6 +852,10 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       key: const ValueKey('review'),
       padding: const EdgeInsets.all(24),
       children: [
+        if (_selectedCompleteness() != null) ...[
+          StoopCompletenessPanel(completeness: _selectedCompleteness()!),
+          const SizedBox(height: 16),
+        ],
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

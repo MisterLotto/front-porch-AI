@@ -62,6 +62,11 @@ Future<String?> publishStoopWorld({
   meta['sourceId'] = world.sourceId ?? world.id;
   card['meta'] = meta;
 
+  final completeness = StoopCardCompleteness.assess(card, 'WORLD');
+  if (completeness.incomplete) {
+    return completeness.message;
+  }
+
   await api.uploadCharacter(
     accessToken: accessToken,
     payload: {
