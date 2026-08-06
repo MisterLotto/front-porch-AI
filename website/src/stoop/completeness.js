@@ -156,20 +156,21 @@
     var climatePresent = present(biome.displayName) || present(biome.description) || present(biome.feel);
     var fields = [
       field('biome', 'Biome / climate', climatePresent ? 'ok' : '', true),
-      field('lorebook', 'Lorebook content', book.totalChars > 0 ? 'ok' : '', true),
+      // Lore is useful but optional — worlds can ship climate first.
+      field('lorebook', 'Lorebook content', book.totalChars > 0 ? 'ok' : '', false),
     ];
     var missingCritical = [];
     if (!climatePresent) missingCritical.push('Biome / climate');
-    if (book.entries === 0 || book.filled === 0) missingCritical.push('Lorebook entries with content');
     return {
       incomplete: missingCritical.length > 0,
       missingCritical: missingCritical,
-      missingOptional: [],
+      missingOptional: fields.filter(function (f) { return !f.critical && !f.present; }).map(function (f) { return f.label; }),
       fields: fields,
       cardName: str(card.name).trim() || null,
       notes: [
         'Lorebook: ' + book.filled + '/' + book.entries + ' filled' +
-        (book.placeholder ? ' · ' + book.placeholder + ' empty/placeholder' : ''),
+        (book.placeholder ? ' · ' + book.placeholder + ' empty/placeholder' : '') +
+        (book.entries === 0 ? ' (optional)' : ''),
       ],
     };
   }

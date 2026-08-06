@@ -465,7 +465,7 @@
         el('p', { class: 'hub-dim' }, [
           'Start from a ',
           el('code', null, '.fpworld'),
-          ' file exported from Front Porch AI (Worlds → the place’s Export button). It carries the cover art, lore, custom climate, and place traits — everything a downloader needs. Empty shells without climate/lore are rejected. Reviewed before it goes public — the ',
+          ' file exported from Front Porch AI (Worlds → the place’s Export button). It carries the cover art, lore, custom climate, and place traits — everything a downloader needs. Empty shells without a climate are rejected (lorebook is optional). Reviewed before it goes public — the ',
           el('a', { href: '#', onclick: function (e) { e.preventDefault(); S.viewsAuth.showPolicyDialog(); } }, 'content standards'),
           ' apply.',
         ]),
