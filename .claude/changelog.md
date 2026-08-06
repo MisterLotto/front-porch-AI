@@ -10305,3 +10305,16 @@ All 32 negative-checked in worktrees (break lib -> red -> restore -> green).
 disproportionate fakes; buffered-display drain-timer branch unreachable under
 the test harness (bufferEnabled false) — named, not papered over.
 Commit: e83ed7e6
+
+## 2026-08-06 — chore(db): regenerate stale database.g.dart (comment-only drift)
+
+**Files:** lib/database/database.g.dart (-3 lines).
+**Why:** the database-split feasibility spike discovered the committed
+generated file predates the trim of contextBudgetJson's doc comment in
+database.dart — a fresh build_runner regen removes 3 doc-comment lines and
+nothing else (verified: comment-only diff, zero behavior). Committed now so
+the coming split's byte-identical-regen gate diffs against a truthful
+baseline. Spike verdict recorded in the campaign doc: Drift codegen is
+file-layout-insensitive (byte-identical .g.dart after moving 3 tables to a
+part, MD5-verified incl. after build_runner clean).
+Commit: (fill next)

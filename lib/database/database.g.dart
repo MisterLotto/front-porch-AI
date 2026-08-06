@@ -2839,9 +2839,6 @@ class Session extends DataClass implements Insertable<Session> {
   /// createAll() DBs (unit tests) lacked it. No schemaVersion bump: live DBs
   /// get it from the always-on repair before open() returns. Raw-SQL access.
   final String? themeOverrides;
-
-  /// Last Context Budget snapshot (token bars + section text) for this chat.
-  /// Schema v44; also guaranteed by columnsToEnsure repair for older files.
   final String? contextBudgetJson;
 
   /// Live per-character realism/needs state for group sessions.
