@@ -10458,3 +10458,17 @@ chat_service hub shell (+ the forwarder/wiring/defaults conventions), new
 services/story/ + services/image/ dirs; ratchet section now states the
 baseline is {} permanently.
 Commit: 01ee0d5f
+
+## 2026-08-07 — docs(design): feature-independence audit + Porch Life tab plan + Pockets/Preferences plan
+
+**Files:** docs/design/feature-independence.md (new — grep-verified dependency
+matrix from a 3-agent audit incl. the re-verification that all four
+2026-08-02 time-decoupling constraints still hold; phased plan for the
+"Porch Life" settings tab), docs/design/pockets-and-preferences.md (new —
+inventory + likes/dislikes feature plan). Mockup artifact published for
+approval. Headline audit findings: Chaos/recap/Promises/Growth/Journal/
+Objectives/Ambitions already run realism-free TODAY; recap + weather toggles
+are invisible to realism-off users (nested in the realism settings block);
+absence-notes are silently dead realism-off; weather's engine is pure — only
+the clock binds it; NSFW cooldown + fixation/stance confirmed inseparable.
+Commit: (fill next)
