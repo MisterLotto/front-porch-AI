@@ -3,9 +3,5 @@
   "lib/database/database.dart": 3716,
   "lib/main.dart": 2105,
   "lib/services/image_gen_service.dart": 2011,
-  "lib/services/story_pipeline_service.dart": 1977,
-  "lib/services/chat/chat_service_generation.dart": 1956,
-  "lib/services/character_repository.dart": 1351,
-  "lib/services/tts_service.dart": 1191,
-  "lib/ui/character_creator/creator_state_engine.dart": 1031
+  "lib/services/chat/chat_service_generation.dart": 1956
 }

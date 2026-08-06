@@ -10254,3 +10254,37 @@ runChatDistiller/runAutopilot unpinned; creator expandNarrative/randomize left
 to the shared machinery already pinned. These are recorded so "verified via
 source review" never quietly stands in for a guard.
 Commit: dd284c48
+
+## 2026-08-06 — refactor(campaign): Tranche B round 2 — four more god files eliminated (baseline 9 → 5)
+
+**Files:** tts_service 1,191 → 244 shell + speak/streaming/support parts;
+character_repository 1,351 → 410 shell + crud/import/media parts;
+creator_state_engine 1,031 → 243 shell + tools/modes/core parts +
+chargen_json.dart leaf; story_pipeline_service 1,977 → 183 shell + 4 parts +
+services/story/{story_json,story_archetypes,story_prompts,story_context}.dart
+pure leaves + story.dart barrel. god_files.json 9 → 5.
+
+**Dead code deleted (all grep-verified 0 refs):** TtsService.concatenateWavFiles
+(97-line byte-duplicate of WavUtils.concatenateWavFiles), removeCharacter,
+setTtsVoice, StoryPipelineService.cleanJson's class-surface static (logic lives
+on in StoryJson.cleanJson).
+
+**Map corrections, now settled convention for remaining splits:** (1) private
+extension names don't resolve for cross-library callers — public names
+(TtsServiceSpeak, CharacterRepositoryCrud, StoryPipelineLlm, …) are the
+default for any part whose members are called from outside the library;
+(2) split parts call a `_notify()` shell forwarder, not @protected
+notifyListeners directly (TTS's bare public override was normalized to the
+forwarder during port so all three services share one idiom); (3) story's
+parseJson keeps a static shell forwarder because the committed provability net
+pins it — the map's "zero callers" predates the net.
+
+**Flagged, NOT fixed (pre-existing):** _clearCache never resets _cachedSpeed
+(harmless — messageId gate); creator's extractChargenValue overlaps
+LlmEvalEngine JSON extraction (cross-service consolidation is its own change).
+
+**Gates:** analyze 0 · ratchet green at 5 · 82 targeted · full suite 2,816 ·
+golden container 94/94 (incl. the creator behavioral golden) · E2E app_smoke +
+story_pipeline on the merged tree (story agent also ran story_pipeline +
+story_autowrite in-worktree, proving the byte-identical prompt-opener routing).
+Commit: (filled below)

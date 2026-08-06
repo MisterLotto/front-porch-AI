@@ -3,6 +3,7 @@
 //
 // Barrel for the AI character-creator flow: its state, engine, and options.
 
+export 'chargen_json.dart';
 export 'creator_options.dart';
 export 'creator_state.dart';
 export 'creator_state_engine.dart';

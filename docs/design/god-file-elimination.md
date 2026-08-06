@@ -100,3 +100,18 @@ The two splits that predated this rule got their nets retroactively:
   `buildRelationshipStateSnapshot` deleted; `loadScalars` kept on the class
   body so callers reaching the service through `ChatService` still resolve
   it without importing the library). Baseline 12 → 9.
+- 2026-08-06 — Tranche B round 2, nets-first (33 provability tests landed
+  green on the unsplit code in dd284c48, every pin negative-checked; the TTS
+  net's authoring pass found and 2908ba9a fixed the "dollar one" markdown-link
+  bug): `tts_service` 1,191 → 244 shell + 3 parts (dead 97-line
+  `concatenateWavFiles` duplicate of WavUtils deleted); `character_repository`
+  1,351 → 410 shell + 3 parts (dead `removeCharacter`/`setTtsVoice` deleted;
+  the six fake-pinned members stay real class members); `creator_state_engine`
+  1,031 → 243 shell + 3 parts + `chargen_json.dart` leaf; `story_pipeline_service`
+  1,977 → 183 shell + 4 parts + four pure leaves under `services/story/` with a
+  new `story.dart` barrel (prompts moved byte-identical — fake_backend's
+  prompt-opener routing E2E-verified). Two map corrections now settled
+  convention: cross-library callers force PUBLIC extension names, and split
+  parts call a `_notify()` shell forwarder instead of @protected
+  notifyListeners. Baseline 9 → 5; only chat_service, main, image_gen_service,
+  chat_service_generation (+ the excluded database.dart) remain.
