@@ -27,10 +27,16 @@ import 'package:front_porch_ai/services/services.dart';
 /// Deliberately a focused slice of the huge desktop settings page: backend,
 /// model/API, and the most-used sampler values.
 class SettingsFacade {
-  SettingsFacade(this._storage, this._llm);
+  SettingsFacade(this._storage, this._llm, {ChatService? chat}) : _chat = chat;
 
   final StorageService _storage;
   final LLMProvider _llm;
+
+  /// Optional: present whenever a chat is open, so the three engine-coupled
+  /// Porch Life toggles reach the LIVE conversation the same way the desktop
+  /// tab's onChanged does. Null-safe — with no chat bound, the write still
+  /// lands in storage and applies to the next one.
+  final ChatService? _chat;
 
   static const List<String> backends = ['kobold', 'openRouter', 'omlx'];
 
@@ -76,6 +82,19 @@ class SettingsFacade {
       'realism': {
         'ambitionsEnabled': _storage.realismSettings.ambitionsEnabled,
         'promiseLedgerEnabled': _storage.realismSettings.promiseLedgerEnabled,
+        // The rest of the Porch Life tab (2026-08-07). Additive keys only —
+        // an older PWA simply ignores what it does not know.
+        'realismDefaultWritable': true,
+        'nsfwCooldownDefault': _storage.realismSettings.nsfwCooldownDefault,
+        'needsSimDefault': _storage.realismSettings.needsSimDefault,
+        'passageOfTimeDefault': _storage.realismSettings.passageOfTimeDefault,
+        'weatherEnabled': _storage.realismSettings.weatherEnabled,
+        'weatherFahrenheit': _storage.realismSettings.weatherFahrenheit,
+        'dreamsEnabled': _storage.realismSettings.dreamsEnabled,
+        'absenceBannerEnabled': _storage.realismSettings.absenceBannerEnabled,
+        'absenceAckEnabled': _storage.realismSettings.absenceAckEnabled,
+        'absenceThresholdHours':
+            _storage.realismSettings.absenceThresholdHours,
         // Read-only context so the web can show the same honest warnings the
         // desktop does: the promise pass needs the Journal, and with realism
         // off there is no passage of time.
@@ -110,6 +129,42 @@ class SettingsFacade {
       if (prom is bool) {
         await _storage.realismSettings.setPromiseLedgerEnabled(prom);
       }
+      // Porch Life tab parity (2026-08-07). Each write mirrors the desktop
+      // row: the three engine-coupled ones also push into the live chat the
+      // way the Flutter tab's onChanged does, so a web toggle takes effect on
+      // the open conversation instead of only on the next one.
+      final rd = realism['realismDefault'];
+      if (rd is bool) {
+        await _storage.setRealismDefault(rd);
+        _chat?.setRealismEnabled(rd);
+      }
+      final nsfw = realism['nsfwCooldownDefault'];
+      if (nsfw is bool) {
+        await _storage.setNsfwCooldownDefault(nsfw);
+        _chat?.setNsfwCooldownEnabled(nsfw);
+      }
+      final needs = realism['needsSimDefault'];
+      if (needs is bool) {
+        await _storage.realismSettings.setNeedsSimDefault(needs);
+        await _chat?.setNeedsSimEnabled(needs);
+      }
+      final pot = realism['passageOfTimeDefault'];
+      if (pot is bool) {
+        await _storage.setPassageOfTimeDefault(pot);
+        _chat?.setPassageOfTimeEnabled(pot);
+      }
+      final wx = realism['weatherEnabled'];
+      if (wx is bool) await _storage.setWeatherEnabled(wx);
+      final wf = realism['weatherFahrenheit'];
+      if (wf is bool) await _storage.setWeatherFahrenheit(wf);
+      final dre = realism['dreamsEnabled'];
+      if (dre is bool) await _storage.setDreamsEnabled(dre);
+      final ab = realism['absenceBannerEnabled'];
+      if (ab is bool) await _storage.setAbsenceBannerEnabled(ab);
+      final aa = realism['absenceAckEnabled'];
+      if (aa is bool) await _storage.setAbsenceAckEnabled(aa);
+      final ath = realism['absenceThresholdHours'];
+      if (ath is int) await _storage.setAbsenceThresholdHours(ath);
     }
 
     final spellLanguage = body['spellCheckLanguage'];

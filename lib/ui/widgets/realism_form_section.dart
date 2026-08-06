@@ -595,7 +595,7 @@ class RealismFormSection extends StatelessWidget {
                 if (showNsfwCooldownToggle) ...[
                   buildToggleRow(
                     icon: Icons.thermostat,
-                    label: 'NSFW Cooldown System',
+                    label: 'Afterglow (intimacy pacing)',
                     subtitle: 'Realistic arousal/refractory mechanics',
                     value: nsfwCooldownEnabled,
                     onChanged: onNsfwCooldownChanged,

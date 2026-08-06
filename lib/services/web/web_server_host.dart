@@ -528,7 +528,7 @@ class WebServerHost extends ChangeNotifier {
         : null;
 
     final settingsFacade = _llmProvider != null
-        ? SettingsFacade(_storage, _llmProvider!)
+        ? SettingsFacade(_storage, _llmProvider!, chat: _chatService)
         : null;
 
     // The Stoop relay. The web client keeps its own Stoop session (tokens in

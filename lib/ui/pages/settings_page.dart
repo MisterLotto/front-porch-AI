@@ -35,11 +35,7 @@ import 'package:front_porch_ai/services/web/web_server_host.dart';
 import 'package:front_porch_ai/ui/dialogs/dialogs.dart';
 
 import 'package:front_porch_ai/ui/settings/widgets/widgets.dart';
-import 'package:front_porch_ai/ui/settings/tabs/general_tab.dart';
-import 'package:front_porch_ai/ui/settings/tabs/generation_tab.dart';
-import 'package:front_porch_ai/ui/settings/tabs/backend_tab.dart';
-
-import 'package:front_porch_ai/ui/settings/tabs/voice_media_tab.dart';
+import 'package:front_porch_ai/ui/settings/tabs/tabs.dart';
 import 'package:front_porch_ai/utils/utils.dart';
 // Note: Image Generation *config* options (backend / model / LoRAs) live in a first-class
 // tab-like panel inside the Image Studio (see generation_options_tab.dart + studio integration).
@@ -238,7 +234,7 @@ class _SettingsPageState extends State<SettingsPage> {
     return Stack(
       children: [
         DefaultTabController(
-          length: 5,
+          length: 6,
           child: Scaffold(
             backgroundColor: AppColors.backgroundOf(
               context,
@@ -261,6 +257,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 splashFactory: NoSplash.splashFactory,
                 tabs: const [
                   Tab(text: 'General'),
+                  Tab(text: 'Porch Life'),
                   Tab(text: 'Generation'),
                   Tab(text: 'Voice & Media'),
                   Tab(text: 'Backend'),
@@ -271,6 +268,7 @@ class _SettingsPageState extends State<SettingsPage> {
             body: TabBarView(
               children: [
                 GeneralTab(systemPromptController: _systemPromptController),
+                const PorchLifeTab(),
                 GenerationTab(
                   bannedPhrasesController: _bannedPhrasesController,
                 ),

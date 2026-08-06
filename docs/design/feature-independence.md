@@ -20,10 +20,10 @@ Mockup (approved layout pending): the "Porch Life" tab sketch artifact.
 | **Objectives** | manual quests fully work | none for manual | zero; AUTONOMOUS proposals piggyback the narrative eval → standalone = +1 periodic call |
 | **Ambitions** | injection works (copy is honest) | none | two cheap fixes: the 1:1 sidebar row hides inside the realism-on block; the accrual eval ignores ambitionsEnabled |
 | **Notices your absence** | silently dead (note rides the realism-gated time fragment) | its own flag + last-message timestamp | small: lift `getAbsenceNote` into its own injection fragment, own gate |
-| **Passage of Time** | clock fully frozen (E2E-pinned) | the scene-time EVAL is realism machinery | see below — the one real decision |
-| **Story Weather / °F** | vanishes (explicit `_realismEnabled` read + frozen clock) | the CLOCK, not realism — engine is pure/deterministic | 1-line un-gate once time is independent |
-| **Dreams** | inert (no story nights pass) | Journal + a night source | rides the time decision, or redefine to wall-clock nights |
-| **Needs** | frozen (not zeroed) | none for a NEW call (its eval is its own) — but medium code change incl. group per-speaker orchestration | maintainer leaning: keep PAIRED with realism ("would it feel right without it — no") |
+| **Passage of Time** | clock fully frozen (E2E-pinned) | the engine — RULED a hard dependency 2026-08-07 | none: not decoupling; deterministic drift stays an emergency fallback |
+| **Story Weather / °F** | vanishes | the CLOCK (which needs the engine) — RULED to keep this gate | none: not decoupling |
+| **Dreams** | inert (no story nights pass) | Journal + a moving clock | none: follows the time ruling |
+| **Needs** | frozen (not zeroed) | the engine — RULED a hard dependency 2026-08-07 ("leave the gate, fix the wording") | none: gate stays; NEW global `needsSimDefault` added so the tab can show it |
 | **NSFW Cooldown** | inert, values preserved | arousal deltas ride the emotional-state eval; climax rides needs-impact | "rebuilding a slice of the realism engine" — stays realism-bound |
 | **Fixation / spatial stance** | fossilized | narrative + posture evals (posture is FUSED with the time eval) | confirmed inseparable — stays realism-bound |
 
@@ -36,8 +36,19 @@ with posture; one-shot fuses time into the realism JSON; the clock persists
 through `realism_state`. The maintainer reopening this changes what we OFFER,
 not what is true.
 
-**DECIDED (maintainer, 2026-08-07): the deterministic clock is an INTERNAL
-FALLBACK, never a user-selectable mode.** There is no "clock accuracy"
+**DECIDED (maintainer, 2026-08-07, refined the same day): Passage of Time
+REQUIRES the engine, full stop.** "Passage of time requires the model usage,
+the fallback is just that a fallback… fallback deterministic passage of time
+is not usable as is but an emergency 'oh shit'." So the deterministic drift
+stays exactly what it is today — a failure cushion when an eval doesn't come
+back — and is never surfaced, never a mode, never a reason to claim the clock
+works without the engine. **Weather keeps its Passage of Time requirement**
+(it is a function of story days; a frozen clock means frozen weather).
+Consequences: Phase 3 below is CANCELLED except its documentation half;
+the Porch Life tab chips Passage of Time as "requires the Realism Engine";
+Dreams keeps needing the Journal + a moving clock.
+
+Superseded proposal, kept for the record: There is no "clock accuracy"
 control and no "Steady" branding anywhere in the UI. Users see exactly one
 toggle — Passage of Time — and it simply works:
 
@@ -77,11 +88,10 @@ engine is off."
 - **Phase 2 — cheap truths.** Chaos relabeled independent; Ambitions' two
   fixes; absence-note fragment lift; Promises' optional purity gate
   (maintainer call); Objectives cadence copy.
-- **Phase 3 — the time fallback + weather un-gate + Dreams.** Implements the
-  decided block above (internal fallback, no user-facing mode). With the
-  fallback clock moving, story nights pass again realism-off — so Dreams
-  simply rides the clock and needs no separate night-source decision.
-  Includes the protected-test amendment sign-off at implementation time.
+- **Phase 3 — CANCELLED (maintainer, 2026-08-07).** Time, weather, dreams and
+  needs keep their engine dependency; the honest UI (chips + copy) is the
+  whole deliverable, and it ships in Phase 1. No protected-test amendment is
+  needed, and the 2026-08-02 CLAUDE.md ruling stands UNCHANGED.
 - **Phase 4 — deliberately NOT doing:** Needs unbundling (kept paired by
   maintainer instinct — revisit only on user demand), NSFW cooldown and
   fixation/stance independence (would rebuild realism piecewise).

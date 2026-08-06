@@ -6,6 +6,7 @@
 
 export 'api_preset_chip.dart';
 export 'color_row.dart';
+export 'feature_row.dart';
 export 'image_gen_enable_section.dart';
 export 'legacy_cleanup_card.dart';
 export 'photo_understanding_card.dart';

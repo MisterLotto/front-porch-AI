@@ -59,274 +59,37 @@ class GeneralTab extends StatelessWidget {
     ('Fira Code', 'Fira Code'),
   ];
 
-  /// The global Realism defaults block: master toggle + (when on) the NSFW
-  /// cooldown and passage-of-time sub-toggles. Each writes the per-app default
-  /// AND applies to the live chat immediately (chatService). The realism/NSFW
-  /// defaults are OR-overrides on new chats (force the feature ON for imported
-  /// cards with no realism setup — see chat_service_chat_entry seed); passage
-  /// of time is a gate (default on, turn off to disable globally). Restored
-  /// after a refactor left a placeholder.
-  Widget _buildRealismModeSection(
-    BuildContext context,
-    StorageService storageService,
-    ThemeData theme,
-  ) {
-    final chatService = Provider.of<ChatService>(context, listen: false);
-
-    Widget subToggle({
-      required IconData icon,
-      required String label,
-      required String blurb,
-      required bool value,
-      required ValueChanged<bool> onChanged,
-    }) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(icon, size: 16, color: AppColors.iconSecondary(context)),
-                  const SizedBox(width: 8),
-                  Text(label, style: theme.textTheme.bodyLarge),
-                ],
-              ),
-              Switch(value: value, onChanged: onChanged),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            blurb,
-            style: TextStyle(
-              fontSize: 11,
-              color: AppColors.textTertiary(context),
-            ),
-          ),
-          const SizedBox(height: 16),
-        ],
-      );
-    }
-
+  /// The Realism/feature toggles moved to the Porch Life tab (2026-08-07):
+  /// nesting them under the master realism switch meant turning the engine OFF
+  /// also HID the switches for features that work without it. This pointer is
+  /// all that remains here — see lib/ui/settings/tabs/porch_life_tab.dart.
+  Widget _buildPorchLifePointer(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.cardOf(context),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    Icons.theater_comedy,
-                    size: 18,
-                    color: AppColors.iconSecondary(context),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Enable Realism Mode',
-                    style: theme.textTheme.titleMedium,
-                  ),
-                ],
-              ),
-              Switch(
-                value: storageService.realismDefault,
-                onChanged: (val) {
-                  storageService.setRealismDefault(val);
-                  chatService.setRealismEnabled(val);
-                },
-              ),
-            ],
+          Icon(
+            Icons.cottage_outlined,
+            size: 18,
+            color: AppColors.porchAmberOf(context),
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Adds relationship tracking, emotional state, and physical realism '
-            'to roleplay.',
-            style: TextStyle(
-              fontSize: 12,
-              color: AppColors.textTertiary(context),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'The Realism Engine, passage of time, weather, the Journal, '
+              'dreams, promises, ambitions and the welcome-back recap all live '
+              'in the Porch Life tab now — each one saying plainly what it '
+              'needs.',
+              style: TextStyle(
+                fontSize: 12.5,
+                color: AppColors.textSecondary(context),
+              ),
             ),
           ),
-          if (storageService.realismDefault) ...[
-            const SizedBox(height: 16),
-            Divider(height: 1, color: AppColors.borderOf(context)),
-            const SizedBox(height: 12),
-            subToggle(
-              icon: Icons.local_fire_department,
-              label: 'NSFW Cooldown',
-              blurb:
-                  'Tracks arousal level and enforces refractory periods '
-                  'after intimate scenes.',
-              value: storageService.nsfwCooldownDefault,
-              onChanged: (val) {
-                storageService.setNsfwCooldownDefault(val);
-                chatService.setNsfwCooldownEnabled(val);
-              },
-            ),
-            subToggle(
-              icon: Icons.access_time,
-              label: 'Automatic Passage of Time',
-              blurb:
-                  'Time automatically advances '
-                  '(dawn→morning→afternoon→evening→night) as you chat.',
-              value: storageService.passageOfTimeDefault,
-              onChanged: (val) {
-                storageService.setPassageOfTimeDefault(val);
-                chatService.setPassageOfTimeEnabled(val);
-              },
-            ),
-            subToggle(
-              icon: Icons.wb_cloudy_outlined,
-              label: 'Story Weather',
-              blurb:
-                  'Deterministic weather rolls through the story\'s days — '
-                  'felt in the character\'s mood, comfort, and the scene. '
-                  'Characters can see fronts coming ("looks like rain '
-                  'tomorrow"). Needs Passage of Time.',
-              value: storageService.weatherEnabled,
-              onChanged: (val) => storageService.setWeatherEnabled(val),
-            ),
-            if (storageService.weatherEnabled)
-              subToggle(
-                icon: Icons.thermostat_outlined,
-                label: 'Temperatures in °F',
-                blurb:
-                    'Show story-weather temperatures in Fahrenheit instead '
-                    'of Celsius. Display only — characters always experience '
-                    'the weather in words ("coat-and-gloves cold"), never '
-                    'numbers.',
-                value: storageService.weatherFahrenheit,
-                onChanged: (val) => storageService.setWeatherFahrenheit(val),
-              ),
-            subToggle(
-              icon: Icons.nightlight_outlined,
-              label: 'Dreams',
-              blurb:
-                  'When a story night passes, the character dreams — a short, '
-                  'hazy scene woven from their Journal memories, mood, and '
-                  'the weather. Needs the Journal and Passage of Time.',
-              value: storageService.dreamsEnabled,
-              onChanged: (val) => storageService.setDreamsEnabled(val),
-            ),
-            subToggle(
-              icon: Icons.history,
-              label: 'Welcome-back recap',
-              blurb:
-                  'After you\'ve been away a while, opening a chat shows a '
-                  'small "where we left off" banner. Uses the time of your '
-                  'last message — already saved with your chat. Nothing new '
-                  'is collected and nothing leaves your device.',
-              value: storageService.absenceBannerEnabled,
-              onChanged: (val) => storageService.setAbsenceBannerEnabled(val),
-            ),
-            subToggle(
-              icon: Icons.waving_hand_outlined,
-              label: 'Character notices your absence',
-              blurb:
-                  'Off by default. When on, the character briefly acknowledges '
-                  'a long gap ("it\'s been a few days") — once, in coarse '
-                  'words, never guessing what you were doing. Same local-only '
-                  'timestamp as the recap banner; nothing leaves your device.',
-              value: storageService.absenceAckEnabled,
-              onChanged: (val) => storageService.setAbsenceAckEnabled(val),
-            ),
-            if (storageService.absenceBannerEnabled ||
-                storageService.absenceAckEnabled)
-              Padding(
-                padding: const EdgeInsets.only(left: 24, top: 4),
-                child: Row(
-                  children: [
-                    Text(
-                      'Away for at least',
-                      style: TextStyle(
-                        color: AppColors.textSecondary(context),
-                        fontSize: 12,
-                      ),
-                    ),
-                    const Spacer(),
-                    DropdownButton<int>(
-                      // Clamp to a known item so a manual pref edit can't
-                      // assert the dropdown.
-                      value:
-                          const [12, 24, 72, 168].contains(
-                            storageService.absenceThresholdHours,
-                          )
-                          ? storageService.absenceThresholdHours
-                          : 24,
-                      dropdownColor: AppColors.cardOf(context),
-                      style: TextStyle(
-                        color: AppColors.textPrimary(context),
-                        fontSize: 12,
-                      ),
-                      items: const [
-                        DropdownMenuItem(value: 12, child: Text('12 hours')),
-                        DropdownMenuItem(value: 24, child: Text('a day')),
-                        DropdownMenuItem(value: 72, child: Text('3 days')),
-                        DropdownMenuItem(value: 168, child: Text('a week')),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) {
-                          storageService.setAbsenceThresholdHours(v);
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ),
-          ],
-
-          // OUTSIDE the realism block on purpose. Both work without the
-          // Realism Engine, so hiding them when it is off would hide them
-          // exactly when a user needs to find them.
-          subToggle(
-            icon: Icons.flag_outlined,
-            label: 'Ambitions',
-            blurb:
-                'Characters carry long-term goals written on their card, and '
-                'those goals colour how they steer a scene. Works with or '
-                'without the Realism Engine, and costs nothing extra — the '
-                'goals are already on the card. With Realism off you still see '
-                'the goals; only their progress stops updating.',
-            value: storageService.realismSettings.ambitionsEnabled,
-            onChanged: (val) =>
-                storageService.realismSettings.setAmbitionsEnabled(val),
-          ),
-          subToggle(
-            icon: Icons.handshake_outlined,
-            label: 'Promises',
-            blurb:
-                'Commitments either of you make are remembered, and kept or '
-                'broken ones come back later. USES ONE EXTRA AI REQUEST PER '
-                'REPLY to spot them, so it is slower and costs more on a paid '
-                'API. Needs the Journal switched on — a promise is stored as a '
-                'journal entry, so with the Journal off this does nothing.',
-            value: storageService.realismSettings.promiseLedgerEnabled,
-            onChanged: (val) =>
-                storageService.realismSettings.setPromiseLedgerEnabled(val),
-          ),
-          if (!storageService.realismDefault)
-            Padding(
-              padding: const EdgeInsets.only(left: 24, top: 8, bottom: 4),
-              child: Text(
-                'Heads up: with the Realism Engine off there is no passage of '
-                'time — the story clock stops, and weather, needs and mood '
-                'stop with it. Ambitions and promises still work, but scenes '
-                'will not move through the day. Working out how long a scene '
-                'took is part of the Realism Engine and cannot be separated '
-                'from it.',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: AppColors.textTertiary(context),
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -538,9 +301,9 @@ class GeneralTab extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 24),
-          const SectionHeader('Realism Mode'),
+          const SectionHeader('Porch Life'),
           const SizedBox(height: 8),
-          _buildRealismModeSection(context, storageService, theme),
+          _buildPorchLifePointer(context),
           const SizedBox(height: 24),
           const SectionHeader('Model Instructions'),
           const SizedBox(height: 8),

@@ -658,6 +658,7 @@ class StorageService extends ChangeNotifier {
   Future<void> setRealismDefault(bool v) =>
       realismSettings.setRealismDefault(v);
   bool get nsfwCooldownDefault => realismSettings.nsfwCooldownDefault;
+  bool get needsSimDefault => realismSettings.needsSimDefault;
   Future<void> setNsfwCooldownDefault(bool v) =>
       realismSettings.setNsfwCooldownDefault(v);
   bool get passageOfTimeDefault => realismSettings.passageOfTimeDefault;

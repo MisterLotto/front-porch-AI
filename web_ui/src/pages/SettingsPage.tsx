@@ -6,6 +6,7 @@ import { api, ApiError } from '../api/client';
 import { PersonaManager } from '../components/PersonaManager';
 import { ModelPicker } from '../components/ModelPicker';
 import { ChatColorsSettings } from '../components/ChatColorsSettings';
+import { PorchLifeSettings } from '../components/PorchLifeSettings';
 import { spellCheckLabel, sortedByLabel } from '../spellCheckLabels';
 import { applySpellCheckLang } from '../spellCheckLang';
 
@@ -58,21 +59,10 @@ interface Settings {
   reasoningEnabled: boolean;
   reasoningEffort: string;
   generation: Gen;
-  /** Optional: an older desktop build does not send it. */
-  realism?: RealismToggles;
   /** Dictionary tag ('en_US') or 'off'. Optional for the same reason. */
   spellCheckLanguage?: string;
   /** Dictionary tags the host can check. Optional for the same reason. */
   spellCheckLanguages?: string[];
-}
-
-/** Two engine features that work with the Realism Engine switched OFF. */
-interface RealismToggles {
-  ambitionsEnabled: boolean;
-  promiseLedgerEnabled: boolean;
-  /** Read-only context, so the warnings here match the desktop's. */
-  journalEnabled: boolean;
-  realismDefault: boolean;
 }
 
 // Legacy-engine model files still on the host (desktop parity: the Reclaim
@@ -129,8 +119,6 @@ export function SettingsPage() {
 
   const patch = (p: Partial<Settings>) => setS({ ...s, ...p });
   const patchGen = (p: Partial<Gen>) => setS({ ...s, generation: { ...s.generation, ...p } });
-  const patchRealism = (p: Partial<RealismToggles>) =>
-    s.realism && setS({ ...s, realism: { ...s.realism, ...p } });
 
   const save = async () => {
     setSaving(true);
@@ -146,12 +134,6 @@ export function SettingsPage() {
         reasoningEffort: s.reasoningEffort,
         generation: s.generation,
       };
-      if (s.realism) {
-        body.realism = {
-          ambitionsEnabled: s.realism.ambitionsEnabled,
-          promiseLedgerEnabled: s.realism.promiseLedgerEnabled,
-        };
-      }
       if (s.spellCheckLanguage !== undefined) {
         body.spellCheckLanguage = s.spellCheckLanguage;
       }
@@ -224,6 +206,8 @@ export function SettingsPage() {
       <PersonaManager />
 
       <ChatColorsSettings />
+
+      <PorchLifeSettings />
 
       <section className="card">
         <h3>Model &amp; backend</h3>
@@ -345,52 +329,6 @@ export function SettingsPage() {
               set this to the one you chat in.
             </p>
           </label>
-        )}
-        {s.realism && (
-          <>
-            <h3 className="section-label">Story features</h3>
-            <label className="row-label">
-              <span>
-                Ambitions
-                <small className="muted"> — long-term goals from the character card. Free.</small>
-              </span>
-              <input
-                type="checkbox"
-                checked={s.realism.ambitionsEnabled}
-                onChange={(e) => patchRealism({ ambitionsEnabled: e.target.checked })}
-              />
-            </label>
-            <label className="row-label">
-              <span>
-                Promises
-                <small className="muted">
-                  {' '}— remembers what either of you promised.{' '}
-                  <strong>Uses one extra AI request per reply</strong>, so it is slower and
-                  costs more on a paid API.
-                </small>
-              </span>
-              <input
-                type="checkbox"
-                checked={s.realism.promiseLedgerEnabled}
-                onChange={(e) => patchRealism({ promiseLedgerEnabled: e.target.checked })}
-              />
-            </label>
-            {s.realism.promiseLedgerEnabled && !s.realism.journalEnabled && (
-              <p className="muted small">
-                Promises need the Journal switched on — a promise is stored as a journal
-                entry, so with the Journal off this does nothing.
-              </p>
-            )}
-            {!s.realism.realismDefault && (
-              <p className="muted small">
-                Heads up: with the Realism Engine off there is no passage of time — the
-                story clock stops, and weather, needs and mood stop with it. Ambitions and
-                promises still work, but scenes will not move through the day. Working out
-                how long a scene took is part of the Realism Engine and cannot be
-                separated from it.
-              </p>
-            )}
-          </>
         )}
         <label className="row-label">
           <span>Reasoning / thinking</span>

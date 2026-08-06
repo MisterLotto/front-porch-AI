@@ -452,7 +452,10 @@ extension ChatServiceSessionManage on ChatService {
             _storageService.realismSettings.nsfwCooldownDefault,
       );
       _chaosModeService.seedFromGroupOrExt(extSeed.chaosModeEnabled, false);
-      _needsSimEnabled = extSeed.needsSimEnabled;
+      // AND-gated by the global Needs switch (see chat_entry twin).
+      _needsSimEnabled =
+          extSeed.needsSimEnabled &&
+          _storageService.realismSettings.needsSimDefault;
       _enjoysLowHygiene = extSeed.enjoysLowHygiene;
       if (_needsSimEnabled) {
         // Fresh chat / new session: seed from card baselines (falls back to

@@ -10520,3 +10520,33 @@ the same single applier — deliberately narrative, no durability bars or
 damage math (RPG stat system = explicit non-goal). Still zero extra LLM
 calls.
 Commit: 4d31e447
+
+## 2026-08-07 — feat(settings): the Porch Life tab — honest feature toggles, desktop + web
+
+**Files:** NEW lib/ui/settings/tabs/porch_life_tab.dart (5 groups) +
+lib/ui/settings/widgets/feature_row.dart (FeatureRow/FeatureGroupCard with
+dependency chips + GATING) + lib/ui/settings/tabs/tabs.dart barrel (5 solo
+imports collapsed); general_tab.dart 713 → 476 (realism block → pointer);
+settings_page.dart (6th tab); realism_settings.dart + storage_service.dart +
+both chat-seed sites (NEW global `needsSimDefault`, AND-gate, default true =
+no behavior change); settings_facade.dart + web_server_host.dart (9 Porch Life
+fields readable/writable over the API, ChatService threaded in so the three
+engine-coupled toggles reach the live chat); web PorchLifeSettings.tsx +
+SettingsPage.tsx + styles.css (+ assets/web_app rebuilt); NEW
+test/ui/settings/porch_life_tab_interaction_test.dart.
+
+**Why:** the toggles were nested inside the realism block, so realism-off
+users LOST the switches for features that work without it (recap, weather,
+Journal, ambitions). Audit: docs/design/feature-independence.md.
+
+**Maintainer corrections applied mid-build:** Needs was missing entirely (no
+global flag existed) → added, chipped "needs the Realism Engine"; Passage of
+Time re-chipped as engine-dependent; "NSFW Cooldown" renamed **Afterglow**;
+and — the important one — unmet dependencies now GATE the row (dead switch,
+dimmed, indented) instead of stacking warning banners, which read as a wall
+of nags. The `.pl-warning` CSS and its Dart twin were deleted, not left dead.
+
+**Gates:** analyze 0 · net green + negative-checked (gated switch must be
+dead while an independent row stays live) · full suite · golden container ·
+web lint + 34 tests + build.
+Commit: (fill next)

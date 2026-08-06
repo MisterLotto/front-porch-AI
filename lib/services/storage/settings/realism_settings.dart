@@ -28,6 +28,12 @@ class RealismSettings with SettingsBase {
   bool _realismDefault = false;
   bool _nsfwCooldownDefault = false;
   bool _passageOfTimeDefault = true;
+  /// Global Needs switch. Defaults TRUE and AND-gates the card's own setting
+  /// (same shape as [_passageOfTimeDefault], not the NSFW OR-override): with
+  /// it on nothing changes, with it off Needs stops for new chats regardless
+  /// of what a card asks for. Added 2026-08-07 — Needs had no global switch at
+  /// all, so the Porch Life tab had nothing to show.
+  bool _needsSimDefault = true;
   bool _realismOneShotEval = false;
   bool _weatherEnabled = true;
   bool _weatherFahrenheit = false;
@@ -42,6 +48,7 @@ class RealismSettings with SettingsBase {
   bool get realismDefault => _realismDefault;
   bool get nsfwCooldownDefault => _nsfwCooldownDefault;
   bool get passageOfTimeDefault => _passageOfTimeDefault;
+  bool get needsSimDefault => _needsSimDefault;
   bool get realismOneShotEval => _realismOneShotEval;
 
   /// Living Time story weather (living-time-features.md §3). Effective only
@@ -85,6 +92,7 @@ class RealismSettings with SettingsBase {
     _nsfwCooldownDefault = prefs?.getBool(k('nsfw_cooldown_default')) ?? false;
     _passageOfTimeDefault =
         prefs?.getBool(k('passage_of_time_default')) ?? true;
+    _needsSimDefault = prefs?.getBool(k('needs_sim_default')) ?? true;
     _realismOneShotEval = prefs?.getBool(k('realism_one_shot_eval')) ?? false;
     _weatherEnabled = prefs?.getBool(k('weather_enabled')) ?? true;
     _weatherFahrenheit = prefs?.getBool(k('weather_fahrenheit')) ?? false;
@@ -171,6 +179,12 @@ class RealismSettings with SettingsBase {
   Future<void> setNsfwCooldownDefault(bool value) async {
     _nsfwCooldownDefault = value;
     await prefs?.setBool(k('nsfw_cooldown_default'), value);
+    notify();
+  }
+
+  Future<void> setNeedsSimDefault(bool value) async {
+    _needsSimDefault = value;
+    await prefs?.setBool(k('needs_sim_default'), value);
     notify();
   }
 

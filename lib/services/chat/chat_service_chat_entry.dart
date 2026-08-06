@@ -272,7 +272,11 @@ extension ChatServiceChatEntry on ChatService {
                 _storageService.realismSettings.nsfwCooldownDefault,
           );
           _chaosModeService.seedFromGroupOrExt(ext.chaosModeEnabled, false);
-          _needsSimEnabled = ext.needsSimEnabled;
+          // AND-gated by the global Needs switch (Porch Life tab): the card
+          // asks, the global setting can veto. Default true = no change.
+          _needsSimEnabled =
+              ext.needsSimEnabled &&
+              _storageService.realismSettings.needsSimDefault;
           _enjoysLowHygiene = ext.enjoysLowHygiene;
           if (_needsSimEnabled) {
             // Brand new conversation for this character (no prior session loaded):
