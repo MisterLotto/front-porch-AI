@@ -10377,4 +10377,4 @@ worktree's real `flutter run -d macos --release` cold boot with the phase
 sequence verified in logs (PRAGMA/integrity → auto-backup → LLMProvider sync
 → quarantine clear → web server listening) and clean quit.
 **Gates:** analyze 0 · ratchet green at 1 · full suite 2,854 · goldens 94/94.
-Commit: (fill next)
+Commit: 2d6bde22
