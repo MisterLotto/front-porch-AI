@@ -10342,4 +10342,4 @@ skeleton + interpolation braces, all enumerated.
 **Gates:** analyze 0 · ratchet green at 3 · 84 targeted · full suite 2,854 ·
 golden container 94/94 · E2E app_smoke + swipe_fork_cancel centrally, plus
 app_smoke + swipe_fork_cancel + group_smoke in the gen worktree.
-Commit: (fill next)
+Commit: c94f3453
