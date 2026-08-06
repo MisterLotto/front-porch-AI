@@ -1,6 +1,14 @@
 
 # Changelog
 
+## 2026-08-06T04:50:00Z
+- **Files changed**: `lib/ui/pages/repository/stoop_completeness_panel.dart`
+- **Branch**: `Rawhide`
+- **Reason**: macOS/Windows/Linux E2E smoke shard 5 failed on stoop_test — paint assertion "borderRadius can only be given on borders with uniform colors" from the completeness panel's multi-color Border + borderRadius.
+- **Commit**: 
+- **Effect**: Panel uses uniform Border.all + left accent strip; share wizard paints cleanly again.
+
+
 ## 2026-08-06T04:29:00Z
 - **Files changed**: `lib/services/backporch/stoop_card_completeness.dart`, `lib/services/backporch/backporch.dart`, `lib/services/backporch/backporch_api.dart`, `lib/ui/pages/repository/stoop_completeness_panel.dart`, `lib/ui/pages/repository/stoop_upload_page.dart`, `lib/ui/pages/repository/stoop_world_share.dart`, `test/services/backporch/stoop_card_completeness_test.dart`
 - **Branch**: `Rawhide`
