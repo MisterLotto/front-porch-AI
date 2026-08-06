@@ -10362,3 +10362,19 @@ untouched — follow-up ruling.
 **Gates:** analyze 0 · ratchet · named DB suites 77 · full suite 2,854 ·
 goldens 94/94 · backup_restore E2E.
 Commit: 027413fd
+
+## 2026-08-06 — refactor(campaign): main.dart split — startup made explicit (baseline 2 → 1)
+
+**Files:** main.dart 2,105 → 453 shell + 6 parts (startup phases, the
+31-provider graph as one block, lifecycle/recovery/migration/reunification
+State extensions). main() is now five named phases called in the identical
+original order; early-return after DbInitErrorApp preserved; the
+StoryPipelineService ProxyProvider2 update closure verified char-for-char
+identical (personal check, not just the agent's); _dbHealthy hoisted
+top-level; 22 setState→_rebuild sites.
+**Boot proof:** app_smoke + backup_restore E2E on the merged tree, plus the
+worktree's real `flutter run -d macos --release` cold boot with the phase
+sequence verified in logs (PRAGMA/integrity → auto-backup → LLMProvider sync
+→ quarantine clear → web server listening) and clean quit.
+**Gates:** analyze 0 · ratchet green at 1 · full suite 2,854 · goldens 94/94.
+Commit: (fill next)
