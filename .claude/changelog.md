@@ -10225,7 +10225,7 @@ its contract doc.
 **Gates:** analyze 0 · ratchet green at 9 · 83 targeted tests · full suite
 2,783 · golden container 94/94 byte-identical · E2E message_actions +
 group_realism_wiring green.
-Commit: (filled below)
+Commit: 4d7ada4c
 
 ## 2026-08-06 — fix(tts): markdown links were spoken as "dollar one"
 
@@ -10237,7 +10237,7 @@ the literal text "$1" in the spoken string. Found by the TTS provability net's
 authoring pass (standalone repro verified); fixed BEFORE the net landed so the
 net ships pinning the correct behavior. Pin negative-checked personally:
 buggy call restored -> red (Expected: false / Actual: <true>), fix back -> 9/9.
-Commit: (filled below)
+Commit: 2908ba9a
 
 ## 2026-08-06 — test(nets): provability nets for the four round-2 split targets
 
@@ -10253,4 +10253,4 @@ _moveCharacterMediaFolder unpinned (needs a rename-driven entry point);
 runChatDistiller/runAutopilot unpinned; creator expandNarrative/randomize left
 to the shared machinery already pinned. These are recorded so "verified via
 source review" never quietly stands in for a guard.
-Commit: (filled below)
+Commit: dd284c48
