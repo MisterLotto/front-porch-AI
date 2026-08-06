@@ -108,6 +108,38 @@ this feature makes that pattern author-editable data.
 
 ---
 
+## Part 3 — Ambitions authoring & the Current Task swap
+
+Maintainer decision (2026-08-07). Verified wiring first: ambitions do NOT
+guide the objective system — the arrow points the other way
+(`ObjectiveProposal.onObjectiveCompleted` → `AmbitionService` progress check;
+ambitions reach scenes only via injection). `card.currentTask` does exactly
+one thing: seeds one primary objective at new-chat entry
+(`chat_service_chat_entry.dart:299-304`). An ambitions editor already EXISTS
+(one-per-line TextField in edit_character_page, `_ambitionsController`) but
+is buried while "Current Task / Quest" holds a whole prominent section — the
+maintainer didn't know the editor existed, which is the design verdict.
+
+### Scope
+- **Promote Ambitions** in the character editor: chip-style list editor
+  (same component as Likes/Dislikes), prominent placement, copy explaining
+  identity-not-quests + that objective completions tick progress.
+- **Remove the "Current Task / Quest" section from the character editor.**
+  Per-chat quest control belongs in the sidebar Objectives panel. Same swap
+  in the creator's realism step and the group wizard's member card (no
+  parallel surfaces left — deprecation rule).
+- **The `currentTask` FIELD stays fully honored** (never removed): imported/
+  existing cards still seed their first objective exactly as today. It just
+  loses its authoring surface. (V2.5/Stoop compat — additive-only contract.)
+- The sidebar Objectives panel gains a small "starting objective" affordance
+  for brand-new chats so the removed control has an obvious new home.
+- **Optional enhancement (cheap, prompt-only, maintainer call):** the
+  autonomous objective-proposal eval could be shown the character's ambitions
+  so proposed quests tend to SERVE long-term goals — closing the loop in the
+  direction users expect.
+- Parity: desktop + web editors, creator, group wizard, Stoop card detail
+  (ambitions display), same body of work.
+
 ## Sequencing
 1. Independence/toggle-tab work lands first (settles where post-turn passes
    live and which gates exist).

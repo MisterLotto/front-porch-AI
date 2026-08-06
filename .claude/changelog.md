@@ -10484,3 +10484,16 @@ simplifies: story nights pass on the fallback clock, no separate night-source
 decision. Engineering costs unchanged; protected-test amendment still gates
 implementation.
 Commit: 1b92ab24
+
+## 2026-08-07 — docs(design): tab name locked (Porch Life) + the Ambitions / Current Task swap
+
+**Files:** docs/design/pockets-and-preferences.md (new Part 3); mockup
+republished. Maintainer locked "Porch Life" as the tab name and ruled the
+character editor should author AMBITIONS (identity) while per-chat quest
+control lives in the sidebar Objectives panel — the "Current Task / Quest"
+editor section goes away (the FIELD stays honored for imported cards).
+Verified before designing: ambitions do not guide objectives — objectives
+tick ambition progress on completion; currentTask only seeds one objective
+at chat entry; an ambitions editor already exists but is buried (the
+maintainer had never seen it).
+Commit: (fill next)
