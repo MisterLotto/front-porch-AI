@@ -10457,4 +10457,4 @@ the byte-identical-regen rule for layout changes stated as law), the
 chat_service hub shell (+ the forwarder/wiring/defaults conventions), new
 services/story/ + services/image/ dirs; ratchet section now states the
 baseline is {} permanently.
-Commit: (fill next)
+Commit: 01ee0d5f
