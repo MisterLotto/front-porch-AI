@@ -10447,4 +10447,4 @@ cancelled = const values byte-identical).
 **Gates:** analyze 0 · ratchet GREEN ON `{}` · 39 parity/targeted · full
 suite 2,854 · golden container 94/94 (the dispatch-preservation proof) ·
 E2E app_smoke + group_smoke centrally (+ both in the 4b worktree).
-Commit: (fill next)
+Commit: 4992b625
