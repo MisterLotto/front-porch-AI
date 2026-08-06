@@ -10472,3 +10472,15 @@ are invisible to realism-off users (nested in the realism settings block);
 absence-notes are silently dead realism-off; weather's engine is pure — only
 the clock binds it; NSFW cooldown + fixation/stance confirmed inseparable.
 Commit: 52c27bbd
+
+## 2026-08-07 — docs(design): time fallback is internal, never a user choice (maintainer decision)
+
+**Files:** docs/design/feature-independence.md; mockup artifact republished.
+**Why:** maintainer ruled the deterministic clock must be a hidden internal
+fallback, not a selectable "Steady" mode — one Passage of Time toggle, clock
+model-judged with Realism on, silent deterministic fallback with it off; the
+realism-off dedicated eval is rejected along with the picker. Dreams
+simplifies: story nights pass on the fallback clock, no separate night-source
+decision. Engineering costs unchanged; protected-test amendment still gates
+implementation.
+Commit: (fill next)

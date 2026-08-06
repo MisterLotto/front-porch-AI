@@ -34,24 +34,35 @@ re-audited reason by reason: **all four hold at current line numbers.**
 Accuracy IS an LLM eval (`minutes ?? failureDriftMinutes`); the eval is fused
 with posture; one-shot fuses time into the realism JSON; the clock persists
 through `realism_state`. The maintainer reopening this changes what we OFFER,
-not what is true. The proposal (mockup's "Clock accuracy" control):
+not what is true.
 
-- **Steady mode** (new): realism-free deterministic clock — fixed drift per
-  turn + the OOC skip regex un-gated + calendar/nudge UI re-enabled. Honest
-  copy: "time moves at a gentle fixed pace unless you tell it otherwise."
-  Costs: a per-turn hook outside the eval path, un-gating the time prompt
-  fragment for this mode only (the current gate exists to prevent injecting a
-  frozen timestamp — Steady's clock MOVES, so the lie-prevention reason
-  vanishes), a persistence story for realism-off chats, web parity, and
-  amending `realism_off_test.dart` §3 (protected — needs the maintainer's
-  explicit approved-test-change sign-off, rationale: the asserted behavior is
-  being deliberately changed).
-- **Model-judged mode** = today's fused eval when Realism is ON (free). With
-  realism OFF it would cost one extra LLM call per turn — offered only as an
-  explicit opt-in labeled with its cost, or not at all (maintainer choice).
-- CLAUDE.md's settled block gets AMENDED (not deleted) when this ships:
-  the four constraints stay documented; the ruling becomes "the eval cannot be
-  decoupled; the CLOCK now has a deterministic standalone mode."
+**DECIDED (maintainer, 2026-08-07): the deterministic clock is an INTERNAL
+FALLBACK, never a user-selectable mode.** There is no "clock accuracy"
+control and no "Steady" branding anywhere in the UI. Users see exactly one
+toggle — Passage of Time — and it simply works:
+
+- Realism Engine ON → clock accuracy comes from the fused scene-time eval,
+  exactly as today (free).
+- Realism Engine OFF → the clock silently falls back to the deterministic
+  machinery (fixed per-turn drift + the un-gated OOC skip regex + the
+  calendar/nudge UI). Toggle copy states it plainly in one sentence ("time
+  still moves on its own and always honors 'let's skip to morning'") without
+  presenting it as a feature or a choice.
+- A dedicated realism-off time eval is NOT offered (rejected with the mode
+  picker — it was the other half of the same removed choice).
+
+Engineering costs are unchanged by hiding the seam: a per-turn fallback hook
+outside the eval path, un-gating the time prompt fragment when the fallback
+is driving (the current gate prevents injecting a FROZEN timestamp — the
+fallback clock moves, so the lie-prevention reason vanishes), a persistence
+story for realism-off chats, web parity, and amending
+`realism_off_test.dart` §3 (protected — needs the maintainer's explicit
+approved-test-change sign-off at implementation time, rationale: the
+asserted frozen-clock behavior is being deliberately changed).
+CLAUDE.md's settled block gets AMENDED (not deleted) when this ships: the
+four constraints stay documented; the ruling becomes "the eval cannot be
+decoupled; the clock falls back to internal deterministic drift when the
+engine is off."
 
 ## The plan
 
@@ -66,8 +77,11 @@ not what is true. The proposal (mockup's "Clock accuracy" control):
 - **Phase 2 — cheap truths.** Chaos relabeled independent; Ambitions' two
   fixes; absence-note fragment lift; Promises' optional purity gate
   (maintainer call); Objectives cadence copy.
-- **Phase 3 — Steady time + weather un-gate + Dreams night source.** The
-  decision block above; ships only after the maintainer picks the mode set.
+- **Phase 3 — the time fallback + weather un-gate + Dreams.** Implements the
+  decided block above (internal fallback, no user-facing mode). With the
+  fallback clock moving, story nights pass again realism-off — so Dreams
+  simply rides the clock and needs no separate night-source decision.
+  Includes the protected-test amendment sign-off at implementation time.
 - **Phase 4 — deliberately NOT doing:** Needs unbundling (kept paired by
   maintainer instinct — revisit only on user demand), NSFW cooldown and
   fixation/stance independence (would rebuild realism piecewise).
