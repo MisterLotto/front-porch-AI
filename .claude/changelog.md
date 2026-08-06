@@ -10398,4 +10398,4 @@ deliberately left for a maintainer-morning ruling.
 **Gates:** analyze 0 · ratchet green · 43 parity + 13 targeted · full suite
 2,854 · goldens 94/94 · E2E app_smoke + group_smoke + group_realism_wiring +
 message_actions in-worktree, app_smoke + group_realism_wiring centrally.
-Commit: (fill next)
+Commit: 5d8b73fc
