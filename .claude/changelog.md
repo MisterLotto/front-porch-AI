@@ -10471,4 +10471,4 @@ Objectives/Ambitions already run realism-free TODAY; recap + weather toggles
 are invisible to realism-off users (nested in the realism settings block);
 absence-notes are silently dead realism-off; weather's engine is pure — only
 the clock binds it; NSFW cooldown + fixation/stance confirmed inseparable.
-Commit: (fill next)
+Commit: 52c27bbd
