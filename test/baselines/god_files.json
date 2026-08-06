@@ -5,10 +5,7 @@
   "lib/services/image_gen_service.dart": 2011,
   "lib/services/story_pipeline_service.dart": 1977,
   "lib/services/chat/chat_service_generation.dart": 1956,
-  "lib/ui/chat_components/bubbles/message_bubble.dart": 1760,
   "lib/services/character_repository.dart": 1351,
-  "lib/services/chat/realism_evals.dart": 1201,
   "lib/services/tts_service.dart": 1191,
-  "lib/services/chat/relationship_service.dart": 1138,
   "lib/ui/character_creator/creator_state_engine.dart": 1031
 }

@@ -10192,3 +10192,37 @@ swap the framework under it.
 - **Gates:** analyze 0 throughout; ratchet green at 12; both nets green vs splits;
   finale chain (golden container for ui_settings pixel identity + full suite +
   group_smoke E2E) before commit.
+
+## 2026-08-06 — refactor(campaign): Tranche B round 1 + the Tranche A straggler (baseline 12 → 9)
+
+**Files:** message_bubble.dart 1,760 → 249 shell + 6 parts (.header/.content/
+.actions/.dialogs/.realism/.realism_layout); realism_evals.dart 1,201 → 339
+shell + 3 parts (.support/.calls/.one_shot); relationship_service.dart 1,138 →
+367 shell + 3 parts (.persistence/.dynamics/.rewind) + new barrel-exported
+relationship_tiers.dart leaf; chat/chat.dart (+1 export); god_files.json 12 → 9;
+campaign doc progress log backfilled (was missing all of Tranche A).
+
+**How:** workflow-mapped (9 files mapped in one pass — round-2 maps banked),
+then per-file dart-expert agents in worktrees off the Rawhide tip (no more
+fork-from-main drift replays), then personal line-multiset audits. realism_evals
+moved byte-verbatim (zero residue). Sanctioned edits only elsewhere: the
+rebuildState bridge + build() lifts (bubble), four static qualifications +
+underscore drops + re-pointed getters (relationship).
+
+**Ratchet catch:** the relationship agent bridged extension visibility for
+sidebar_golden_test with a 19-line re-export in chat_service.dart — growing a
+baseline file; the ratchet went red exactly as designed. Fixed by keeping
+loadScalars on the class body (true instance members resolve everywhere) and
+dropping the export; chat_service.dart back to exactly 4,583 (zero diff).
+
+**Dead code deleted:** buildRelationshipStateSnapshot (0 refs),
+the empty `if (mounted) {}` block in the revert pill.
+
+**Parity:** every 1:1-vs-group branch inventoried per file pre-split and moved
+whole into a single file; capture/restore pair kept adjacent (rewind part) with
+its contract doc.
+
+**Gates:** analyze 0 · ratchet green at 9 · 83 targeted tests · full suite
+2,783 · golden container 94/94 byte-identical · E2E message_actions +
+group_realism_wiring green.
+Commit: (filled below)

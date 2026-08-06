@@ -82,4 +82,21 @@ The two splits that predated this rule got their nets retroactively:
 6. Realism/Needs files additionally: 1:1 vs group parity audit.
 
 ## Progress log
-- 2026-08-02 — Ratchet + baseline landed (26 entries). Campaign start.
+- 2026-08-02 — Ratchet + baseline landed (26 entries). Campaign start (126383c3).
+- 2026-08-02 — First kill: `chat_page` 3,521 → 979 (8ef67114); retroactive
+  interaction nets for the two pre-rule splits (e91afa92).
+- 2026-08-04 — Tranche A ten-file session, each with a proven-to-fail
+  interaction net before its split: persona/worlds/tts-settings/story-reader
+  (da3efc5b), story-dashboard/generation-options/model-settings/voice-media
+  (816f915d), edit-group/ui-settings (927959f7, "TRANCHE A COMPLETE" — the
+  message_bubble straggler remained). `create_character` split rode the
+  realism time-travel fix (730eff3d). Baseline 22 → 12.
+- 2026-08-06 — Tranche B round 1 + the Tranche A straggler, from
+  workflow-generated split maps audited by hand (line-multiset audit per
+  file): `message_bubble` 1,760 → 249 shell + 6 parts; `realism_evals`
+  1,201 → 339 shell + 3 parts (byte-verbatim move, public extensions for
+  cross-library resolution); `relationship_service` 1,138 → 367 shell +
+  3 parts + new barrel-exported `RelationshipTiers` leaf (dead
+  `buildRelationshipStateSnapshot` deleted; `loadScalars` kept on the class
+  body so callers reaching the service through `ChatService` still resolve
+  it without importing the library). Baseline 12 → 9.
