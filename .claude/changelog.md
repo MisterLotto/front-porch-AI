@@ -10508,4 +10508,4 @@ sees ambitions + progress and proposes the next small believable step
 (additive storage) and the Objectives panel shows the link. Feedback
 direction (completion → strict progress judge) unchanged. Task generation
 untouched (transitively serves).
-Commit: (fill next)
+Commit: 7d97b89f
