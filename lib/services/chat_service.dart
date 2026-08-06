@@ -97,6 +97,7 @@ part 'chat/chat_service_greeting.dart';
 part 'chat/chat_service_prompt_blocks.dart';
 part 'chat/chat_service_scene_guest.dart';
 part 'chat/chat_service_controls.dart';
+part 'chat/chat_service_context_budget.dart';
 
 // Internal flag to signal a cancellation request for realism evaluation.
 // This is a file-scope flag to avoid needing to thread state through the
@@ -2810,10 +2811,7 @@ class ChatService extends ChangeNotifier {
   // Backing state + arming logic moved to RelationshipService.applyTrustDelta.
   // (No local field remains; @Deprecated shim on getter only.)
 
-  // ── Context / Prompt Budget ──
-  Map<String, int> _lastPromptBudget = {};
-  Map<String, String> _lastPromptSections = const {};
-
+  final ContextBudgetStore _contextBudget = ContextBudgetStore();
   // ── Session Metadata ──
   String? _sessionName;
   String? _sessionDescription;
@@ -3093,8 +3091,11 @@ class ChatService extends ChangeNotifier {
   String get authorNote => _authorNote;
   int get authorNoteStrength => _authorNoteStrength;
 
-  Map<String, int> get lastPromptBudget => _lastPromptBudget;
-  Map<String, String> get lastPromptSections => _lastPromptSections;
+  Map<String, int> get lastPromptBudget => _contextBudget.budget;
+  Map<String, String> get lastPromptSections => _contextBudget.sections;
+  ContextBudgetSource get promptBudgetSource => _contextBudget.source;
+  DateTime? get promptBudgetAssembledAt => _contextBudget.assembledAt;
+  Future<void> estimateContextBudgetNow() => _estimateContextBudgetNow();
   int get contextSize =>
       _sessionGenSettings.resolveContextSize(_storageService);
 
@@ -3197,7 +3198,6 @@ class ChatService extends ChangeNotifier {
   String get characterEmotion => _characterEmotion;
 
   String get emotionIntensity => _emotionIntensity;
-
 
   /// Whether the per-session Needs (Sims-style) simulation is active.
   /// When true and `enjoysLowHygiene` is also true, low hygiene becomes desirable.

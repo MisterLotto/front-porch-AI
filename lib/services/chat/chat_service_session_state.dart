@@ -388,6 +388,9 @@ extension ChatServiceSessionState on ChatService {
       _sessionThemeOverrides.toJsonString(),
     );
 
+    // Context Budget snapshot (last real send) — raw SQL, schema v44.
+    await _persistContextBudgetForSession(sessionId);
+
     // Replace all messages for this session using the snapshot.
     // Use a transaction for the delete+insert to keep the replace atomic even
     // if other writers (cloud sync, external tools) touch the DB concurrently.

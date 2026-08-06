@@ -4,12 +4,13 @@
 // Context Budget modal — web parity with the desktop ContextViewerDialog:
 // what the model was actually sent last turn, section by section, with the
 // REAL text behind every row (capped + scrollable so Chat History can't
-// blow the modal up) and a copy button.
+// blow the modal up) and a copy button. Reopening a chat restores the last
+// saved send; Refresh builds a live estimate.
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
 
-// Mirrors ContextViewerDialog._sectionColors on desktop.
+// Mirrors ContextViewerDialog.sectionColors on desktop.
 const SECTION_COLORS: Record<string, string> = {
   'System Prompt': '#3B82F6',
   Lorebook: '#8B5CF6',
@@ -31,7 +32,22 @@ interface BudgetSection {
 }
 interface Budget {
   contextLimit: number;
+  source?: string;
+  assembledAt?: string | null;
   sections: BudgetSection[];
+}
+
+function sourceLabel(source?: string): string {
+  if (source === 'lastSend') return 'Last send';
+  if (source === 'estimate') return 'Estimate (now)';
+  return '';
+}
+
+function fmtTime(iso?: string | null): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 export function ContextBudgetModal({ onClose }: { onClose: () => void }) {
@@ -39,19 +55,41 @@ export function ContextBudgetModal({ onClose }: { onClose: () => void }) {
   const [failed, setFailed] = useState(false);
   const [openLabel, setOpenLabel] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    api
+  const load = useCallback(() => {
+    setFailed(false);
+    return api
       .get<Budget>('/api/chat/context-budget')
       .then(setBudget)
       .catch(() => setFailed(true));
   }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const refresh = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    setFailed(false);
+    try {
+      const next = await api.post<Budget>('/api/chat/context-budget/refresh', {});
+      setBudget(next);
+    } catch {
+      setFailed(true);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const sections = budget?.sections ?? [];
   const total = sections.reduce((a, s) => a + s.tokens, 0);
   const limit = budget?.contextLimit ?? 0;
   const usage = limit > 0 ? total / limit : 0;
   const usageColor = usage >= 0.9 ? '#f87171' : usage >= 0.7 ? '#fbbf24' : '#4ade80';
+  const src = sourceLabel(budget?.source);
+  const when = fmtTime(budget?.assembledAt);
 
   const copy = async (s: BudgetSection) => {
     try {
@@ -59,8 +97,6 @@ export function ContextBudgetModal({ onClose }: { onClose: () => void }) {
       setCopied(s.label);
       setTimeout(() => setCopied(null), 1500);
     } catch {
-      // Clipboard needs a secure context; over plain-http LAN just leave the
-      // text selectable instead of pretending it copied.
       setCopied(null);
     }
   };
@@ -69,8 +105,25 @@ export function ContextBudgetModal({ onClose }: { onClose: () => void }) {
     <div className="drawer-backdrop center" onClick={onClose}>
       <div className="modal ctxb-modal" onClick={(e) => e.stopPropagation()}>
         <div className="drawer-head">
-          <span>📊 Context Budget</span>
-          <button className="link-btn" onClick={onClose}>Close</button>
+          <div>
+            <div>📊 Context Budget</div>
+            {src && (
+              <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
+                {when ? `${src} · ${when}` : src}
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              className="link-btn"
+              onClick={() => void refresh()}
+              disabled={refreshing}
+              title="Refresh estimate from this chat"
+            >
+              {refreshing ? '…' : 'Refresh'}
+            </button>
+            <button className="link-btn" onClick={onClose}>Close</button>
+          </div>
         </div>
 
         {failed && (
@@ -81,8 +134,8 @@ export function ContextBudgetModal({ onClose }: { onClose: () => void }) {
         )}
         {!failed && budget !== null && sections.length === 0 && (
           <p className="muted">
-            Send a message to populate the context budget — it’s captured each
-            time a prompt is assembled.
+            No budget for this chat yet. Send a message to save the real
+            breakdown, or tap Refresh for a quick estimate.
           </p>
         )}
 
@@ -141,8 +194,7 @@ export function ContextBudgetModal({ onClose }: { onClose: () => void }) {
                       </button>
                       <div className="ctxb-text">
                         <pre>
-                          {s.text ||
-                            '(This section was empty in the last prompt.)'}
+                          {s.text || '(Empty in this snapshot.)'}
                         </pre>
                       </div>
                     </div>

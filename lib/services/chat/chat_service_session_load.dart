@@ -110,6 +110,7 @@ extension ChatServiceSessionLoad on ChatService {
           .clear(); // 0-session: no per-chat look selection (keep reset blocks in sync)
       _sessionGenSettings =
           ChatGenerationSettings(); // 0-session: no per-chat gen overrides — without this, character B's first chat ran (and could SAVE) character A's temp/stops/sanitizer (keep reset blocks in sync)
+      _clearContextBudget();
       return;
     }
 
@@ -427,6 +428,13 @@ extension ChatServiceSessionLoad on ChatService {
       _sessionThemeOverrides = ChatThemeOverrides.fromJsonString(themeJson);
     } catch (_) {
       _sessionThemeOverrides = ChatThemeOverrides();
+    }
+
+    // Context Budget bars from the last real send (empty on older chats).
+    try {
+      await _loadContextBudgetForSession(s.id);
+    } catch (_) {
+      _clearContextBudget();
     }
 
     _needsSimulation.resetBuffers();

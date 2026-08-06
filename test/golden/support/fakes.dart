@@ -32,6 +32,7 @@ import 'package:front_porch_ai/models/chat_generation_settings.dart';
 import 'package:front_porch_ai/models/chat_message.dart';
 import 'package:front_porch_ai/models/chat_theme_overrides.dart';
 import 'package:front_porch_ai/models/chat_participant.dart';
+import 'package:front_porch_ai/services/chat/context_viewer_snapshot.dart';
 import 'package:front_porch_ai/services/chat/weather_biomes.dart';
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
 import 'package:front_porch_ai/services/chat/weather_segments.dart';
@@ -319,6 +320,14 @@ class FakeChatService extends ChangeNotifier implements ChatService {
   // Context viewer surface.
   @override
   Map<String, int> get lastPromptBudget => const {};
+  @override
+  Map<String, String> get lastPromptSections => const {};
+  @override
+  ContextBudgetSource get promptBudgetSource => ContextBudgetSource.none;
+  @override
+  DateTime? get promptBudgetAssembledAt => null;
+  @override
+  Future<void> estimateContextBudgetNow() async {}
   @override
   int get contextSize => 8192;
 

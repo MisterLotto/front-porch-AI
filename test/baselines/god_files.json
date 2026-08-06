@@ -4,7 +4,7 @@
   "lib/main.dart": 2105,
   "lib/services/image_gen_service.dart": 2011,
   "lib/services/story_pipeline_service.dart": 1977,
-  "lib/services/chat/chat_service_generation.dart": 1959,
+  "lib/services/chat/chat_service_generation.dart": 1956,
   "lib/ui/chat_components/bubbles/message_bubble.dart": 1760,
   "lib/services/character_repository.dart": 1351,
   "lib/services/chat/realism_evals.dart": 1201,

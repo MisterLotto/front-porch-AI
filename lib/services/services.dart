@@ -58,6 +58,7 @@ export 'open_router_service.dart';
 // Chat domain leaves (curated high-freq per extraction policy; needs impact evaluator
 // for the consolidated eval/impact layer; direct import also supported).
 export 'chat/needs_impact_evaluator.dart';
+export 'chat/context_viewer_snapshot.dart';
 
 // TTS / STT / media
 export 'tts_service.dart';

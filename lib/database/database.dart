@@ -31,7 +31,7 @@ import 'package:front_porch_ai/database/session_gen_overrides_heal.dart';
 import 'package:front_porch_ai/services/db_reunification_service.dart';
 
 part 'database.g.dart';
-
+part 'context_budget_db.dart';
 const _uuid = Uuid();
 
 // ── Table Definitions ─────────────────────────────────────────────────
@@ -970,12 +970,9 @@ class AppDatabase extends _$AppDatabase {
         'nsfw_cooldown_enabled INTEGER NOT NULL DEFAULT 0',
         'cooldown_turns_remaining INTEGER NOT NULL DEFAULT 0',
         'cooldown_turns_total INTEGER NOT NULL DEFAULT 0',
-        // v37 — per-chat avatar-gallery look selection. The onUpgrade ALTER is
-        // silent-catch (duplicate-column on rollback/dual-run), so this list is
-        // what guarantees the column exists if that first ALTER ever failed.
-        'selected_look_avatar_id TEXT',
-        // Per-chat theme overrides (theme preset + font/color/border/background overrides).
-        'theme_overrides TEXT',
+        'selected_look_avatar_id TEXT', // v37 gallery look
+        'theme_overrides TEXT', // per-chat theme
+        'context_budget_json TEXT', // v44 Context Viewer snapshot
       ],
       'group_members': [
         // Per current GroupMembers Dart definition + created_at (to match the repair-path CREATE TABLE).
@@ -1224,7 +1221,7 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 43;
+  int get schemaVersion => 44;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -1957,6 +1954,9 @@ class AppDatabase extends _$AppDatabase {
         } catch (_) {
           // already present (re-run / dual-version)
         }
+      }
+      if (from < 44) {
+        await migrateSessionsContextBudgetV44(this); // v44
       }
     },
   );

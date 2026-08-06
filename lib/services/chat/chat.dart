@@ -13,6 +13,7 @@ export 'biome_schedule.dart';
 export 'cast_detector.dart';
 export 'chaos_mode_service.dart';
 export 'chat_command_handler.dart';
+export 'context_viewer_snapshot.dart';
 export 'dream_service.dart';
 export 'expression_classifier.dart';
 export 'growth_ops.dart';

@@ -334,6 +334,7 @@ extension ChatServiceSessionManage on ChatService {
         .clear(); // fresh 1:1: drop prior chat's per-chat look selection (keep reset blocks in sync)
     _sessionGenSettings =
         ChatGenerationSettings(); // fresh chat: drop prior chat's per-chat gen overrides — forkSession is the ONE path that inherits them on purpose (keep reset blocks in sync)
+    _clearContextBudget();
     _summaryPaused =
         false; // explicit secondary zero for _summaryPaused (symmetric; startNew 1:1/ext-seed branch + incomplete zeroing ... now complete)
     _isSummaryGenerating =

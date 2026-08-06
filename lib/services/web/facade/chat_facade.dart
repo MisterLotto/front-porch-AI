@@ -61,11 +61,19 @@ class ChatFacade {
     final texts = _chat.lastPromptSections;
     return {
       'contextLimit': _chat.contextSize,
+      'source': _chat.promptBudgetSource.name,
+      'assembledAt': _chat.promptBudgetAssembledAt?.toIso8601String(),
       'sections': [
         for (final e in _chat.lastPromptBudget.entries)
           {'label': e.key, 'tokens': e.value, 'text': texts[e.key] ?? ''},
       ],
     };
+  }
+
+  /// Rebuild a live estimate from the open chat (no model call).
+  Future<Map<String, dynamic>> refreshContextBudget() async {
+    await _chat.estimateContextBudgetNow();
+    return contextBudget();
   }
 
   /// Full chat state payload (matches legacy `/api/chat/state`).

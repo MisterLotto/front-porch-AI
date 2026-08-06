@@ -1022,13 +1022,10 @@ extension ChatServiceGeneration on ChatService {
       final chatSystemPrompt = plan.systemText;
       final prompt = plan.userText;
 
-      // Context viewer: per-section text + budget, straight from the plan
-      // (no third hand-built copy to drift).
-      _lastPromptSections = plan.sectionTexts();
-      _lastPromptBudget = {
-        ...plan.budgetEstimates(),
-        if (droppedMessages > 0) 'Dropped Messages': droppedMessages,
-      };
+      // Context viewer: plan budget/sections (session-persisted on save).
+      _contextBudget.recordLastSend(
+        budgetMap: {...plan.budgetEstimates(), if (droppedMessages > 0) 'Dropped Messages': droppedMessages},
+        sectionMap: plan.sectionTexts(), contextLimit: contextSize);
 
       // Stop sequences, priority-ordered (stop_sequences.dart) so transports
       // that cap the server-side list keep the most important entries: user

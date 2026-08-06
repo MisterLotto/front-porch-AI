@@ -1,6 +1,14 @@
 
 # Changelog
 
+## 2026-08-06T06:15:00Z
+- **Files changed**: `lib/services/chat/context_viewer_snapshot.dart`, `lib/services/chat/chat_service_context_budget.dart`, `lib/database/context_budget_db.dart`, `lib/database/database.dart`, `lib/services/chat_service.dart`, `lib/services/chat/chat_service_generation.dart`, `lib/services/chat/chat_service_session_*.dart`, `lib/ui/dialogs/context_viewer_dialog.dart`, `lib/services/web/facade/chat_facade.dart`, `lib/services/web/routes/chat_routes.dart`, `web_ui/src/components/ContextBudgetModal.tsx`, tests + god-file baseline
+- **Branch**: `Rawhide`
+- **Reason**: Context Viewer was blank when reopening an existing chat — budget only lived in RAM after a send.
+- **Commit**: 
+- **Effect**: Last real send is saved on the session (schema v44 `context_budget_json`), restored on open; Refresh builds a live estimate; desktop + web show source label; god-file ratchet held.
+
+
 ## 2026-08-06T04:50:00Z
 - **Files changed**: `lib/ui/pages/repository/stoop_completeness_panel.dart`
 - **Branch**: `Rawhide`

@@ -28,6 +28,7 @@ class WebChatRoutes {
   WebChatRoutes(this._facade, Router router) {
     router.get('/api/chat/state', _state);
     router.get('/api/chat/context-budget', _contextBudget);
+    router.post('/api/chat/context-budget/refresh', _refreshContextBudget);
     router.get('/api/chat/participant/<id>/realism', _participantRealism);
     router.get('/api/chat/sessions', _sessions);
     router.get('/api/personas', _personas);
@@ -69,6 +70,9 @@ class WebChatRoutes {
 
   shelf.Response _contextBudget(shelf.Request request) =>
       JsonResponse.ok(_facade.contextBudget());
+
+  Future<shelf.Response> _refreshContextBudget(shelf.Request request) async =>
+      JsonResponse.ok(await _facade.refreshContextBudget());
 
   /// Re-probe the current model's tool-calling support (web pill retest).
   Future<shelf.Response> _toolTest(shelf.Request request) async =>

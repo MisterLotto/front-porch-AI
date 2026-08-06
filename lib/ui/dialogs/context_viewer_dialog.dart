@@ -23,7 +23,7 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Dialog showing token budget breakdown of the last assembled prompt.
-class ContextViewerDialog extends StatelessWidget {
+class ContextViewerDialog extends StatefulWidget {
   final ChatService chatService;
 
   const ContextViewerDialog({super.key, required this.chatService});
@@ -31,7 +31,7 @@ class ContextViewerDialog extends StatelessWidget {
   // theme-keep: data-viz legend hues — every section needs a DISTINCT
   // identity color for the stacked bar + rows (shared verbatim with the web
   // ContextBudgetModal). Chrome around them is AppColors.
-  static const _sectionColors = {
+  static const sectionColors = {
     'System Prompt': Color(0xFF3B82F6),
     'Lorebook': Color(0xFF8B5CF6),
     'Persona': Color(0xFF06B6D4),
@@ -45,199 +45,275 @@ class ContextViewerDialog extends StatelessWidget {
   };
 
   @override
-  Widget build(BuildContext context) {
-    final budget = chatService.lastPromptBudget;
-    final totalTokens = budget.values.fold<int>(0, (a, b) => a + b);
-    final contextLimit = chatService.contextSize;
-    final usage = contextLimit > 0 ? totalTokens / contextLimit : 0.0;
+  State<ContextViewerDialog> createState() => _ContextViewerDialogState();
+}
 
-    Color usageColor;
-    if (usage >= 0.9) {
-      usageColor = AppColors.negativeAccentOf(context);
-    } else if (usage >= 0.7) {
-      usageColor = AppColors.porchAmberOf(context);
-    } else {
-      usageColor = AppColors.bondHighOf(context);
+class _ContextViewerDialogState extends State<ContextViewerDialog> {
+  bool _estimating = false;
+
+  ChatService get chat => widget.chatService;
+
+  Future<void> _refreshEstimate() async {
+    if (_estimating) return;
+    setState(() => _estimating = true);
+    try {
+      await chat.estimateContextBudgetNow();
+    } finally {
+      if (mounted) setState(() => _estimating = false);
     }
+  }
 
-    return Dialog(
-      backgroundColor: AppColors.surfaceOf(context),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: AppColors.borderOf(context)),
-                ),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.analytics_outlined,
-                    color: AppColors.formMasterAccent,
-                    size: 22,
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    'Context Budget',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary(context),
-                    ),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: Icon(
-                      Icons.close,
-                      color: AppColors.iconSecondary(context),
-                      size: 20,
-                    ),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ],
-              ),
-            ),
+  String _sourceLabel() {
+    switch (chat.promptBudgetSource) {
+      case ContextBudgetSource.lastSend:
+        return 'Last send';
+      case ContextBudgetSource.estimate:
+        return 'Estimate (now)';
+      case ContextBudgetSource.none:
+        return '';
+    }
+  }
 
-            // Total usage bar
-            if (budget.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 24,
-                ),
-                child: Column(
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      color: AppColors.iconSecondary(context),
-                      size: 32,
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: chat,
+      builder: (context, _) {
+        final budget = chat.lastPromptBudget;
+        final totalTokens = budget.values.fold<int>(0, (a, b) => a + b);
+        final contextLimit = chat.contextSize;
+        final usage = contextLimit > 0 ? totalTokens / contextLimit : 0.0;
+
+        final Color usageColor;
+        if (usage >= 0.9) {
+          usageColor = AppColors.negativeAccentOf(context);
+        } else if (usage >= 0.7) {
+          usageColor = AppColors.porchAmberOf(context);
+        } else {
+          usageColor = AppColors.bondHighOf(context);
+        }
+
+        final source = _sourceLabel();
+        final at = chat.promptBudgetAssembledAt;
+
+        return Dialog(
+          backgroundColor: AppColors.surfaceOf(context),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 8, 12),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: AppColors.borderOf(context)),
                     ),
-                    const SizedBox(height: 10),
-                    Text(
-                      'Send a message to populate the context budget.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: AppColors.textSecondary(context),
-                        fontSize: 13,
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.analytics_outlined,
+                        color: AppColors.formMasterAccent,
+                        size: 22,
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Budget is captured each time a prompt is assembled.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: AppColors.textTertiary(context),
-                        fontSize: 11,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Context Budget',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary(context),
+                              ),
+                            ),
+                            if (source.isNotEmpty)
+                              Text(
+                                at != null
+                                    ? '$source · ${_fmtTime(at)}'
+                                    : source,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textTertiary(context),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
+                      IconButton(
+                        tooltip: 'Refresh estimate from this chat',
+                        onPressed: _estimating ? null : _refreshEstimate,
+                        icon: _estimating
+                            ? SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.iconSecondary(context),
+                                ),
+                              )
+                            : Icon(
+                                Icons.refresh,
+                                color: AppColors.iconSecondary(context),
+                                size: 20,
+                              ),
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          Icons.close,
+                          color: AppColors.iconSecondary(context),
+                          size: 20,
+                        ),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                ),
+                if (budget.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 24,
                     ),
-                  ],
-                ),
-              )
-            else
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 16,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    child: Column(
                       children: [
+                        Icon(
+                          Icons.info_outline,
+                          color: AppColors.iconSecondary(context),
+                          size: 32,
+                        ),
+                        const SizedBox(height: 10),
                         Text(
-                          'Total: $totalTokens / $contextLimit tokens',
+                          'No budget for this chat yet.',
+                          textAlign: TextAlign.center,
                           style: TextStyle(
-                            color: usageColor,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary(context),
+                            fontSize: 13,
                           ),
                         ),
+                        const SizedBox(height: 4),
                         Text(
-                          '${(usage * 100).toStringAsFixed(1)}%',
-                          style: TextStyle(color: usageColor, fontSize: 13),
+                          'Send a message to save the real breakdown, or tap '
+                          'refresh for a quick estimate.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: AppColors.textTertiary(context),
+                            fontSize: 11,
+                          ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: LinearProgressIndicator(
-                        value: usage.clamp(0.0, 1.0),
-                        minHeight: 8,
-                        backgroundColor: AppColors.surfaceContainerOf(context),
-                        valueColor: AlwaysStoppedAnimation<Color>(usageColor),
-                      ),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
                     ),
-                  ],
-                ),
-              ),
-
-            // Stacked bar
-            if (budget.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: SizedBox(
-                    height: 24,
-                    child: Row(
-                      children: budget.entries.map((e) {
-                        final frac = totalTokens > 0
-                            ? e.value / totalTokens
-                            : 0.0;
-                        final color = _sectionColors[e.key] ?? Colors.grey;
-                        return Expanded(
-                          flex: (frac * 1000).round().clamp(1, 1000),
-                          child: Tooltip(
-                            message: '${e.key}: ${e.value} tokens',
-                            child: Container(color: color),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Total: $totalTokens / $contextLimit tokens',
+                              style: TextStyle(
+                                color: usageColor,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              '${(usage * 100).toStringAsFixed(1)}%',
+                              style:
+                                  TextStyle(color: usageColor, fontSize: 13),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: LinearProgressIndicator(
+                            value: usage.clamp(0.0, 1.0),
+                            minHeight: 8,
+                            backgroundColor:
+                                AppColors.surfaceContainerOf(context),
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(usageColor),
                           ),
-                        );
-                      }).toList(),
+                        ),
+                      ],
                     ),
                   ),
+                if (budget.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: SizedBox(
+                        height: 24,
+                        child: Row(
+                          children: budget.entries.map((e) {
+                            final frac = totalTokens > 0
+                                ? e.value / totalTokens
+                                : 0.0;
+                            final color =
+                                ContextViewerDialog.sectionColors[e.key] ??
+                                    Colors.grey;
+                            return Expanded(
+                              flex: (frac * 1000).round().clamp(1, 1000),
+                              child: Tooltip(
+                                message: '${e.key}: ${e.value} tokens',
+                                child: Container(color: color),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    shrinkWrap: true,
+                    children: budget.entries.map((e) {
+                      final color =
+                          ContextViewerDialog.sectionColors[e.key] ??
+                              Colors.grey;
+                      final pct = totalTokens > 0
+                          ? '${(e.value / totalTokens * 100).toStringAsFixed(1)}%'
+                          : '0%';
+                      return _SectionRow(
+                        label: e.key,
+                        tokens: e.value,
+                        percentage: pct,
+                        color: color,
+                        rawText: chat.lastPromptSections[e.key] ?? '',
+                      );
+                    }).toList(),
+                  ),
                 ),
-              ),
-
-            const SizedBox(height: 12),
-
-            // Section breakdown list
-            Flexible(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                shrinkWrap: true,
-                children: budget.entries.map((e) {
-                  final color = _sectionColors[e.key] ?? Colors.grey;
-                  final pct = totalTokens > 0
-                      ? '${(e.value / totalTokens * 100).toStringAsFixed(1)}%'
-                      : '0%';
-                  return _SectionRow(
-                    label: e.key,
-                    tokens: e.value,
-                    percentage: pct,
-                    color: color,
-                    // The REAL text this section contributed to the last
-                    // prompt, straight from the PromptPlan — replaces the
-                    // old dead "(Tap to view full prompt)" placeholder.
-                    rawText: chatService.lastPromptSections[e.key] ?? '',
-                  );
-                }).toList(),
-              ),
+                const SizedBox(height: 16),
+              ],
             ),
-
-            const SizedBox(height: 16),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
+  }
+
+  static String _fmtTime(DateTime t) {
+    final l = t.toLocal();
+    final hh = l.hour.toString().padLeft(2, '0');
+    final mm = l.minute.toString().padLeft(2, '0');
+    return '$hh:$mm';
   }
 }
 
@@ -331,8 +407,6 @@ class _SectionRowState extends State<_SectionRow> {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: widget.color.withValues(alpha: 0.3)),
             ),
-            // Capped + scrollable: Chat History alone can be thousands of
-            // tokens, and inline-expanding it un-capped blew the dialog up.
             constraints: const BoxConstraints(maxHeight: 240),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -368,8 +442,7 @@ class _SectionRowState extends State<_SectionRow> {
                       width: double.infinity,
                       child: SelectableText(
                         widget.rawText.isEmpty
-                            ? '(This section was empty in the last prompt — '
-                                  'send a message first.)'
+                            ? '(Empty in this snapshot.)'
                             : widget.rawText,
                         style: TextStyle(
                           color: AppColors.textSecondary(context),
