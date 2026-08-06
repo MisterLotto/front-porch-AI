@@ -10549,4 +10549,4 @@ of nags. The `.pl-warning` CSS and its Dart twin were deleted, not left dead.
 **Gates:** analyze 0 · net green + negative-checked (gated switch must be
 dead while an independent row stays live) · full suite · golden container ·
 web lint + 34 tests + build.
-Commit: (fill next)
+Commit: 6d0ddeec
