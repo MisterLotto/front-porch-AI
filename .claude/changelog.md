@@ -10378,3 +10378,24 @@ sequence verified in logs (PRAGMA/integrity → auto-backup → LLMProvider sync
 → quarantine clear → web server listening) and clean quit.
 **Gates:** analyze 0 · ratchet green at 1 · full suite 2,854 · goldens 94/94.
 Commit: 2d6bde22
+
+## 2026-08-06 — refactor(campaign): THE FINALE — chat_service.dart 4,547 → 1,720 (baseline lowered to its last entry)
+
+**Files:** chat_service.dart 4,547 → 1,720 shell + 8 new parts:
+wiring_realism/wiring_evals/wiring_memory/wiring_injection (the ~38 late-final
+constructions as `late final _x = _buildX();` with builders in parts —
+laziness preserved, init order untouched) + send/turn_flow/message_ops/
+guest_flow (clusters moved whole). ~60 fake-pinned members verified against
+all three test doubles and kept on the class. Every moved block
+whitespace-normalized-diffed vs the original (~50 blocks byte-identical; the
+splitter's hostile self-review caught + reverted its own two rewraps).
+My multiset audit residue: builder-pattern pairs + indent-forced reflows +
+scaffolding only.
+**Baseline:** entry LOWERED 4,547 → 1,720 per the ratchet's shrink rule.
+Sub-1,000 ("round 4": banner condensing, remaining getters, possibly
+narrowing the golden fakes' interface — a protected-test decision) is
+deliberately left for a maintainer-morning ruling.
+**Gates:** analyze 0 · ratchet green · 43 parity + 13 targeted · full suite
+2,854 · goldens 94/94 · E2E app_smoke + group_smoke + group_realism_wiring +
+message_actions in-worktree, app_smoke + group_realism_wiring centrally.
+Commit: (fill next)

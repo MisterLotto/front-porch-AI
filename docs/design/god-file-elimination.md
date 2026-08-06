@@ -177,3 +177,21 @@ The two splits that predated this rule got their nets retroactively:
   plus a real `flutter run -d macos --release` cold boot with the phase
   sequence verified in the logs. Baseline 3 → 1: only `chat_service.dart`
   (4,547) remains, in flight.
+- 2026-08-06 — **The finale: `chat_service.dart`**, 4,547 → 1,720 shell +
+  8 parts via the settled lever (~38 giant `late final` constructions became
+  one-line fields calling `_buildX()` builders in four wiring parts —
+  realism/evals/memory/injection — laziness preserved so init order is
+  untouched; four method-cluster parts — send/turn_flow/message_ops/
+  guest_flow — moved whole). The ~60 fake-pinned members stayed on the class;
+  every moved block whitespace-normalized-diffed against the original
+  (~50 blocks, all byte-identical; the splitter's own hostile review caught
+  and reverted its only two accidental rewraps before reporting). Gates:
+  analyze 0 · 43 parity tests · full suite · goldens · app_smoke +
+  group_smoke + group_realism_wiring + message_actions E2E. Baseline entry
+  LOWERED 4,547 → 1,720 (not deleted): the shell is under 500 short of the
+  1,000 bar and needs the documented "round 4" (condense extraction-history
+  banners, move remaining small getters, possibly rebase the golden fakes
+  onto a narrower interface — a protected-test decision) to leave the
+  baseline. **Campaign state: 21 files fully eliminated + the hub at 38% of
+  its size; the baseline holds ONE entry.** Round 4 is a maintainer-morning
+  decision, not an overnight one.
