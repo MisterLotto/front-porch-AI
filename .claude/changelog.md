@@ -1,5 +1,44 @@
 
+
 # Changelog
+
+## 2026-08-06 — fix(e2e): stoop share wizard typed into the wrong boxes mid-animation
+- **Files changed:** `integration_test/stoop_test.dart`
+- **Why:** CI red on Rawhide at `c632289`, job `E2E smoke (macos 5/5)`:
+  `stoop_test.dart:211` timed out after 2 minutes waiting for "This card meets the
+  Stoop content standards".
+- **The message pointed at the wrong step.** Step 1's Next is gated on
+  `_name.text.isNotEmpty && _summary.text.isNotEmpty` (`stoop_upload_page.dart:477`).
+  `_summary` was empty, so Next never enabled and the test waited for a page it could
+  never reach. The real mistake was one step earlier and two minutes before the symptom.
+- **Root cause: index-based field lookup across an animation boundary.** The wizard is
+  ONE Scaffold wrapping a 250ms `AnimatedSwitcher`, so the outgoing step stays mounted
+  while the incoming one fades in, and `tapUntil` returns the instant its target text
+  appears — the START of that window. `StoopPickStep` owns a search `TextField`, so the
+  field set under that Scaffold is 5 widgets mid-transition and 4 once settled. Measured
+  directly with a temporary probe, on one machine, in one run:
+  `PROBE-BEFORE fields=5 pickStepMounted=true` / `PROBE-AFTER fields=4
+  pickStepMounted=false`. Resolving `.at(0)`/`.at(1)` across that boundary is a coin
+  flip.
+- **Not a macOS bug.** Running the OLD code repeatedly on Linux failed **twice in ~23
+  runs (~9%)**. Linux and Windows CI had simply been winning the flip. This was a latent
+  flake shipped with the suite when it was written, not something a recent change broke.
+- **Fix, three parts:** (1) wait for `StoopPickStep` to unmount before touching fields,
+  which removes the race; (2) address the two boxes by their hint text
+  (`'Name shown on The Stoop'`, `'A one-line hook shown on the card'`) instead of by
+  index, which removes the arithmetic that made the race harmful; (3) assert
+  `StoopAmberButton('Next').onPressed != null` immediately after filling, so any
+  recurrence fails AT the cause with "the name/summary boxes did not both receive text"
+  rather than as a two-minute timeout blaming the standards step.
+- **HONEST GAP:** the local reproduction confirms the flake (2/23) but I never captured
+  the failing run's message text — it failed twice under the loop and my output capture
+  missed it both times, and I stopped rather than burn more runs. So "same assertion as
+  macOS" rests on the structural evidence (the probe plus the `_canAdvance` gate needing
+  both fields), not on a captured local stack trace.
+- **Verified:** `flutter analyze` clean; the fixed test re-run repeatedly on Linux.
+- **Context — Rawhide had THREE independent red causes, two of them mine:** the
+  `en_US`/`en-US` Windows spell regression (fixed in `f73e8ea`), a transient pub.dev 403
+  on the advisory endpoint at `948690b` (re-ran green, all 22 jobs), and this.
 
 ## 2026-08-06T05:45:00Z
 - **Files changed**: `lib/database/*`, `test/services/avatar_repository_test.dart`, `test/golden/widget/_goldens/dialogs_more/context_viewer.*.png`

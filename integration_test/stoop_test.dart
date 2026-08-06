@@ -197,16 +197,68 @@ void main() {
       pickMisty,
       find.widgetWithText(StoopAmberButton, 'Next'),
     ], find.text('Display name on The Stoop'));
-    final detailFields = find.descendant(
-      of: find.byType(Scaffold).last,
-      matching: find.byType(TextField),
+    // The wizard is ONE Scaffold wrapping a 250ms AnimatedSwitcher, so the
+    // outgoing step stays mounted while the incoming one fades in — and
+    // tapUntil returns the instant its target text appears, which is the START
+    // of that window. StoopPickStep owns a search TextField, so during those
+    // 250ms `find.byType(TextField)` under the Scaffold yields five fields,
+    // not four, and every index is off by one: the display name went into the
+    // pick step's search box and the summary into the name box. _summary
+    // stayed empty, Next stayed disabled, and the NEXT step's wait timed out
+    // two minutes later pointing at the standards text — nowhere near the
+    // actual mistake. Whether the poll landed inside the window was pure
+    // timing, which is why this passed on Linux and Windows and failed on
+    // macOS.
+    //
+    // Waiting for the outgoing step to leave removes the race; addressing the
+    // fields by their hint text removes the index arithmetic that made the
+    // race harmful. Either alone would fix it; together the step cannot come
+    // back in a different shape and quietly type into the wrong box again.
+    // The wizard is ONE Scaffold wrapping a 250ms AnimatedSwitcher, so the
+    // outgoing step stays mounted while the incoming one fades in — and
+    // tapUntil returns the instant its target text appears, which is the START
+    // of that window. StoopPickStep owns a search TextField, so the field set
+    // under that Scaffold is 5 widgets mid-transition and 4 once it settles
+    // (measured, both values observed on the same machine). Addressing fields
+    // by index across that boundary is a coin flip: step 1's Next is gated on
+    // `_name` AND `_summary` both being non-empty, so landing one character
+    // off leaves _summary blank, Next disabled, and the failure surfaces two
+    // minutes later at the NEXT step's wait for the standards text — nowhere
+    // near the actual mistake. That is precisely how it failed on macOS, and
+    // it reproduces here about twice in twenty runs.
+    //
+    // Waiting for the outgoing step to leave removes the race; addressing the
+    // fields by their hint text removes the index arithmetic that made the
+    // race harmful.
+    await d.waitFor(
+      () => find.byType(StoopPickStep).evaluate().isEmpty,
+      () => 'the pick step to finish animating out of the wizard',
     );
-    await tester.enterText(detailFields.at(0), 'Misty of the Porch');
     await tester.enterText(
-      detailFields.at(1),
+      find.widgetWithText(TextField, 'Name shown on The Stoop'),
+      'Misty of the Porch',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'A one-line hook shown on the card'),
       'A gentle porch spirit, shared by the E2E suite.',
     );
     await tester.pump(const Duration(milliseconds: 200));
+
+    // Fail HERE, on the real cause, if either box was missed again. Without
+    // this the only symptom is a two-minute timeout pointing at the standards
+    // text on the following step, which is what made the macOS failure so
+    // slow to read.
+    final nextButton = tester.widget<StoopAmberButton>(
+      find.widgetWithText(StoopAmberButton, 'Next'),
+    );
+    expect(
+      nextButton.onPressed,
+      isNotNull,
+      reason:
+          'Next is still disabled, so the name/summary boxes did not both '
+          'receive text — check the wizard field hints before blaming the '
+          'standards step below.',
+    );
     // Step 2 — name+summary are filled, so Next alone advances.
     await d.tapUntil([
       find.widgetWithText(StoopAmberButton, 'Next'),
