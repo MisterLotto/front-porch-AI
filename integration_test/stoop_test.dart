@@ -221,11 +221,18 @@ void main() {
     // under that Scaffold is 5 widgets mid-transition and 4 once it settles
     // (measured, both values observed on the same machine). Addressing fields
     // by index across that boundary is a coin flip: step 1's Next is gated on
-    // `_name` AND `_summary` both being non-empty, so landing one character
-    // off leaves _summary blank, Next disabled, and the failure surfaces two
+    // `_name` AND `_summary` both being non-empty, so landing one index off
+    // leaves _summary blank, Next disabled, and the failure surfaces two
     // minutes later at the NEXT step's wait for the standards text — nowhere
-    // near the actual mistake. That is precisely how it failed on macOS, and
-    // it reproduces here about twice in twenty runs.
+    // near the actual mistake. That is how it failed on macOS CI, with that
+    // exact timeout message.
+    //
+    // Honest limit on the evidence: the race window is measured and the gate
+    // is read from the source, but the failure was NOT reproduced locally.
+    // Every local failure of this file that was actually captured turned out
+    // to be a sandbox process abort ("did not complete", one second in, before
+    // the wizard is reached) rather than this bug. So the fix rests on the
+    // mechanism being demonstrably possible, not on a local repro.
     //
     // Waiting for the outgoing step to leave removes the race; addressing the
     // fields by their hint text removes the index arithmetic that made the

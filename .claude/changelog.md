@@ -20,9 +20,18 @@
   `PROBE-BEFORE fields=5 pickStepMounted=true` / `PROBE-AFTER fields=4
   pickStepMounted=false`. Resolving `.at(0)`/`.at(1)` across that boundary is a coin
   flip.
-- **Not a macOS bug.** Running the OLD code repeatedly on Linux failed **twice in ~23
-  runs (~9%)**. Linux and Windows CI had simply been winning the flip. This was a latent
-  flake shipped with the suite when it was written, not something a recent change broke.
+- **CORRECTION to this entry's first version, which claimed a local repro.** It said the
+  old code "failed twice in ~23 runs (~9%)" locally. That claim is WITHDRAWN. Those two
+  failures were never captured, and when a failure finally was captured it turned out to
+  be a sandbox process abort — `did not complete` at 00:01, mid-DB-migration, before the
+  wizard is reached, with both the test and `tearDownAll` dying and "No tests were
+  found" — i.e. the same unexplained sandbox-local abort seen several times earlier in
+  this session and never on CI. The two uncaptured failures were most likely the same
+  thing. **The wizard flake was never reproduced locally.**
+  What IS established: the macOS CI failure message is real and specific; the 5-vs-4
+  field window is measured; the `_canAdvance` gate requiring both fields is read from
+  source. The mechanism is demonstrably possible and matches the observed symptom
+  exactly — but that is inference, not a local repro, and the code comment now says so.
 - **Fix, three parts:** (1) wait for `StoopPickStep` to unmount before touching fields,
   which removes the race; (2) address the two boxes by their hint text
   (`'Name shown on The Stoop'`, `'A one-line hook shown on the card'`) instead of by
