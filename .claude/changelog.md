@@ -10411,4 +10411,4 @@ expander ListTiles painted ink on the Material BEHIND the panel color —
 invisible ripples in release, assertion spam in debug. Fix: transparent
 Material inside the decorated box (pixel-identical; ripples now land on the
 panel). Verified: analyze 0, stoop E2E green.
-Commit: (fill next)
+Commit: a5b7d196
