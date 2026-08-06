@@ -87,6 +87,7 @@
     avatar_locked: 'A moderator has disabled profile pictures for this account.',
     missing_avatar: 'Pick an image first.',
     upload_failed: 'The upload didn’t make it — try again.',
+    incomplete_card: 'This card is missing required fields (first message, description/personality, or scenario). Fill them in your app, re-export, and try again.',
     resend_too_soon: 'Hang on a minute before requesting another email.',
     same_email: 'That’s already your sign-in email.',
     wrong_password: 'That password didn’t match.',
