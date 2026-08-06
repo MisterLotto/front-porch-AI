@@ -1,6 +1,13 @@
 
 # Changelog
 
+## 2026-08-06T04:29:00Z
+- **Files changed**: `lib/services/backporch/stoop_card_completeness.dart`, `lib/services/backporch/backporch.dart`, `lib/services/backporch/backporch_api.dart`, `lib/ui/pages/repository/stoop_completeness_panel.dart`, `lib/ui/pages/repository/stoop_upload_page.dart`, `lib/ui/pages/repository/stoop_world_share.dart`, `test/services/backporch/stoop_card_completeness_test.dart`
+- **Branch**: `Rawhide`
+- **Reason**: Dart parity for Stoop incomplete-card gate (hub + API already live). Empty first_mes / persona / scenario shells must not leave the share wizard; worlds keep lorebook optional.
+- **Commit**: `58b86ee8`
+- **Effect**: Share wizard shows field checklist on Content/Review; blocks advance/publish when incomplete; maps `incomplete_card` API errors; unit tests cover solo/group/world rules.
+
 ## 2026-08-05 — chore(deps): drop the two dead simple_spell_checker packages
 - **Files changed:** `pubspec.yaml`, `pubspec.lock`, `test/deps/dependency_floors.json`
 - **Why:** maintainer instruction. `simple_spell_checker` and
