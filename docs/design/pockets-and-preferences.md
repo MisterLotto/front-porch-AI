@@ -133,10 +133,29 @@ maintainer didn't know the editor existed, which is the design verdict.
   loses its authoring surface. (V2.5/Stoop compat — additive-only contract.)
 - The sidebar Objectives panel gains a small "starting objective" affordance
   for brand-new chats so the removed control has an obvious new home.
-- **Optional enhancement (cheap, prompt-only, maintainer call):** the
-  autonomous objective-proposal eval could be shown the character's ambitions
-  so proposed quests tend to SERVE long-term goals — closing the loop in the
-  direction users expect.
+
+### Ambition-driven objectives (maintainer ruling 2026-08-07 — CORE, not optional)
+"Ambitions need to guide the objectives, not the other way around. Ambitions
+are the final overarching goal of the character and that is what they work
+toward bit by bit." The hierarchy is now explicit:
+**Ambition (the mountain) → Objectives (the switchbacks) → Tasks (the steps).**
+- **Forward direction (new, primary):** the autonomous objective-proposal
+  eval is shown the character's ambitions + current progress bands and
+  instructed to propose the next believable SMALL step toward them —
+  favoring the least-advanced/most-relevant ambition, while situational
+  objectives unrelated to any ambition remain allowed (life happens; not
+  every quest serves the arc).
+- **Proposals TAG the ambition they serve** (eval returns it; stored with
+  the objective — additive nullable column or existing metadata, whichever
+  the objectives store offers). The sidebar Objectives panel shows the link
+  as a small chip ("→ open her own bakery"), and the Ambitions row shows
+  the active step under each goal.
+- **Feedback direction (exists today, unchanged):** completing an objective
+  runs the strict progress judge and ticks the served ambition.
+- Task generation needs no change — tasks serve the objective, the objective
+  serves the ambition, transitively.
+- Parity duties as ever: 1:1/group, one-shot/multi-call prompt parity for
+  the proposal block, desktop + web objectives panel, same body of work.
 - Parity: desktop + web editors, creator, group wizard, Stoop card detail
   (ambitions display), same body of work.
 

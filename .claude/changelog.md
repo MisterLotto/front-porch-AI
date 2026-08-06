@@ -10497,3 +10497,15 @@ tick ambition progress on completion; currentTask only seeds one objective
 at chat entry; an ambitions editor already exists but is buried (the
 maintainer had never seen it).
 Commit: 3d21e296
+
+## 2026-08-07 — docs(design): ambitions GUIDE objectives (maintainer ruling — core, not optional)
+
+**Files:** docs/design/pockets-and-preferences.md Part 3; mockup republished.
+The hierarchy is now spec: Ambition (mountain) → Objectives (switchbacks) →
+Tasks (steps). Forward direction NEW+primary: the autonomous proposal eval
+sees ambitions + progress and proposes the next small believable step
+(situational objectives still allowed); proposals TAG the served ambition
+(additive storage) and the Objectives panel shows the link. Feedback
+direction (completion → strict progress judge) unchanged. Task generation
+untouched (transitively serves).
+Commit: (fill next)
