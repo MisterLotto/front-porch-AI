@@ -10304,4 +10304,4 @@ All 32 negative-checked in worktrees (break lib -> red -> restore -> green).
 **Honest gaps:** Draw Things gRPC + ComfyUI WS paths unprovable without
 disproportionate fakes; buffered-display drain-timer branch unreachable under
 the test harness (bufferEnabled false) — named, not papered over.
-Commit: 40fec5b7
+Commit: e83ed7e6
