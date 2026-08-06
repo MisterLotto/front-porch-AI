@@ -10361,4 +10361,4 @@ don't ride the class name through show. Map's deferred dead-code candidates
 untouched — follow-up ruling.
 **Gates:** analyze 0 · ratchet · named DB suites 77 · full suite 2,854 ·
 goldens 94/94 · backup_restore E2E.
-Commit: (fill next)
+Commit: 027413fd
