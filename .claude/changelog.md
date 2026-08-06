@@ -1,6 +1,14 @@
 
 # Changelog
 
+## 2026-08-06T05:45:00Z
+- **Files changed**: `lib/database/*`, `test/services/avatar_repository_test.dart`, `test/golden/widget/_goldens/dialogs_more/context_viewer.*.png`
+- **Branch**: `Rawhide`
+- **Reason**: Red CI after Context Viewer persist — schema expect 43→44, missing column broke saves on createAll DBs, empty-budget golden outdated.
+- **Commit**: `41abf366`
+- **Effect**: Drift column + hardened write; schema test 44; Linux goldens refreshed via ci-local Docker.
+
+
 ## 2026-08-06T06:15:00Z
 - **Files changed**: `lib/services/chat/context_viewer_snapshot.dart`, `lib/services/chat/chat_service_context_budget.dart`, `lib/database/context_budget_db.dart`, `lib/database/database.dart`, `lib/services/chat_service.dart`, `lib/services/chat/chat_service_generation.dart`, `lib/services/chat/chat_service_session_*.dart`, `lib/ui/dialogs/context_viewer_dialog.dart`, `lib/services/web/facade/chat_facade.dart`, `lib/services/web/routes/chat_routes.dart`, `web_ui/src/components/ContextBudgetModal.tsx`, tests + god-file baseline
 - **Branch**: `Rawhide`

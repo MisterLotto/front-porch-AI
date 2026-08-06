@@ -30,8 +30,7 @@ import 'package:front_porch_ai/app_version.dart';
 import 'package:front_porch_ai/database/session_gen_overrides_heal.dart';
 import 'package:front_porch_ai/services/db_reunification_service.dart';
 
-part 'database.g.dart';
-part 'context_budget_db.dart';
+part 'database.g.dart'; part 'context_budget_db.dart';
 const _uuid = Uuid();
 
 // ── Table Definitions ─────────────────────────────────────────────────
@@ -212,6 +211,7 @@ class Sessions extends Table {
   /// createAll() DBs (unit tests) lacked it. No schemaVersion bump: live DBs
   /// get it from the always-on repair before open() returns. Raw-SQL access.
   TextColumn get themeOverrides => text().nullable()();
+  TextColumn get contextBudgetJson => text().nullable()(); // v44 Context Budget
 
   /// Live per-character realism/needs state for group sessions.
   /// JSON map: { charId: { emotion, needs, affection, trust, fixation, relationships, ... } }
@@ -1956,7 +1956,7 @@ class AppDatabase extends _$AppDatabase {
         }
       }
       if (from < 44) {
-        await migrateSessionsContextBudgetV44(this); // v44
+        await migrateSessionsContextBudgetV44(this);
       }
     },
   );

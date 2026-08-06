@@ -22,21 +22,37 @@ extension AppDatabaseContextBudget on AppDatabase {
     String sessionId,
     String? contextBudgetJson,
   ) async {
-    await customUpdate(
-      'UPDATE sessions SET context_budget_json = ? WHERE id = ?',
-      variables: [Variable(contextBudgetJson), Variable(sessionId)],
-      updates: {sessions},
-    );
+    Future<void> write() => customUpdate(
+          'UPDATE sessions SET context_budget_json = ? WHERE id = ?',
+          variables: [Variable(contextBudgetJson), Variable(sessionId)],
+          updates: {sessions},
+        );
+    try {
+      await write();
+    } catch (e) {
+      // Test DBs / incomplete migrations may lack the column until repair.
+      await migrateSessionsContextBudgetV44(this);
+      try {
+        await write();
+      } catch (e2) {
+        debugPrint('[DB] setContextBudgetJson skipped: $e2');
+        return;
+      }
+    }
     await bumpSyncVersion();
   }
 
   Future<String?> getContextBudgetJson(String sessionId) async {
-    final rows = await customSelect(
-      'SELECT context_budget_json FROM sessions WHERE id = ?',
-      variables: [Variable(sessionId)],
-    ).get();
-    return rows.isNotEmpty
-        ? rows.first.read<String?>('context_budget_json')
-        : null;
+    try {
+      final rows = await customSelect(
+        'SELECT context_budget_json FROM sessions WHERE id = ?',
+        variables: [Variable(sessionId)],
+      ).get();
+      return rows.isNotEmpty
+          ? rows.first.read<String?>('context_budget_json')
+          : null;
+    } catch (_) {
+      return null;
+    }
   }
 }
