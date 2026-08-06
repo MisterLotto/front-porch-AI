@@ -10288,3 +10288,20 @@ golden container 94/94 (incl. the creator behavioral golden) · E2E app_smoke +
 story_pipeline on the merged tree (story agent also ran story_pipeline +
 story_autowrite in-worktree, proving the byte-identical prompt-opener routing).
 Commit: 6875419b
+
+## 2026-08-06 — test(nets): provability nets for the final two Tranche B splits
+
+**Files (new):** test/services/image_gen_generate_test.dart (28 tests, 801
+lines — generateImage orchestration end-to-end against an in-process loopback
+HTTP fake: payloads, img2img routing, LoRA injection, portrait orientation,
+reentrancy, edit-role bail, saves, A1111 admin/discovery, catalog parse +
+curated fallback); test/services/chat/generation_stream_behavior_test.dart
+(4 tests, 371 lines — real ChatService via testLlmServiceOverride: think-aware
+stop scan, unclosed-think salvage, sanitizer wipe-guard, error mapping;
+breaking pin 1 reproduces the exact pre-fix empty-bubble bug, closing the
+flagged stop-trim regression-test follow-up).
+All 32 negative-checked in worktrees (break lib -> red -> restore -> green).
+**Honest gaps:** Draw Things gRPC + ComfyUI WS paths unprovable without
+disproportionate fakes; buffered-display drain-timer branch unreachable under
+the test harness (bufferEnabled false) — named, not papered over.
+Commit: 40fec5b7
