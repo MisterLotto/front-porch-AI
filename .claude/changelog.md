@@ -10238,3 +10238,19 @@ authoring pass (standalone repro verified); fixed BEFORE the net landed so the
 net ships pinning the correct behavior. Pin negative-checked personally:
 buggy call restored -> red (Expected: false / Actual: <true>), fix back -> 9/9.
 Commit: (filled below)
+
+## 2026-08-06 — test(nets): provability nets for the four round-2 split targets
+
+**Files (all new):** test/services/tts_service_orchestration_test.dart (9 tests),
+test/services/character_repository_media_test.dart (6),
+test/ui/character_creator/creator_modes_test.dart (5),
+test/services/story_pipeline_leaves_test.dart (13). 33 tests, all green against
+the UNSPLIT services, every pin negative-checked (break lib -> red -> restore ->
+green) in isolated worktrees.
+**Honest gaps (netters' own reports):** TTS replay-cache hit path + real
+audio/download paths unprovable offline (no DI seam for engines);
+_moveCharacterMediaFolder unpinned (needs a rename-driven entry point);
+runChatDistiller/runAutopilot unpinned; creator expandNarrative/randomize left
+to the shared machinery already pinned. These are recorded so "verified via
+source review" never quietly stands in for a guard.
+Commit: (filled below)
