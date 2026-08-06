@@ -422,4 +422,58 @@ extension ChatServiceGenerationStream on ChatService {
     }
     return false;
   }
+
+  // ── Small streaming/turn-busy accessors, moved verbatim from the god
+  // file's field block (zero behaviour change) ──
+
+  /// The honest "this turn is still in motion" predicate — what the mutation
+  /// guards should ask, rather than `_isGenerating` alone.
+  ///
+  /// NOT for the escape hatches: `stopGeneration` and
+  /// `_cancelAndWaitForGeneration` must keep testing `_isGenerating` on its
+  /// own. The first aborts an in-flight HTTP stream (there is none during
+  /// post-gen), and the second SPINS until the flag clears — broadening it
+  /// would hang the caller if post-gen ever failed to settle.
+  bool get _isTurnBusy => _isGenerating || _isPostGenerating;
+
+  void _notifyStreamListeners() {
+    if (_streamNotifyTimer != null) return; // trailing notify already queued
+    final elapsed = DateTime.now().difference(_lastStreamNotify);
+    if (elapsed >= ChatService._kStreamNotifyInterval) {
+      _lastStreamNotify = DateTime.now();
+      notifyListeners();
+    } else {
+      _streamNotifyTimer = Timer(ChatService._kStreamNotifyInterval - elapsed, () {
+        _streamNotifyTimer = null;
+        _lastStreamNotify = DateTime.now();
+        notifyListeners();
+      });
+    }
+  }
+
+  void _cancelStreamNotifyThrottle() {
+    _streamNotifyTimer?.cancel();
+    _streamNotifyTimer = null;
+  }
+
+  /// External consumers (the web server's StreamHub) listen to this for
+  /// real-time token streaming.
+  Stream<String> get tokenStream => _tokenBroadcast.stream;
+
+  /// Emits complete sentences as they're detected during LLM token streaming.
+  /// Used by call mode to start TTS on the first sentence immediately.
+  Stream<String> get sentenceStream => _sentenceBroadcast.stream;
+
+  /// Whether the app is in voice call mode (auto-disables reasoning for
+  /// lower latency).
+  bool get callMode => _callMode;
+  set callMode(bool value) {
+    _callMode = value;
+    notifyListeners();
+  }
+
+  /// True while the turn's awaited post-generation work is still settling.
+  /// Exposed so tests can assert the window opens and — more importantly —
+  /// always closes. See [_isPostGenerating].
+  bool get isSettlingTurn => _isPostGenerating;
 }

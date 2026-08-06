@@ -164,4 +164,56 @@ extension ChatServiceGroupRead on ChatService {
       notifyListeners();
     }
   }
+
+  // ── Clean delegation layer (GroupTurnManager is the real owner); moved
+  // verbatim from the god file's field block, zero behaviour change ──
+  GroupChat? get _activeGroup => _groupManager?.activeGroup;
+  List<CharacterCard> get _groupCharacters =>
+      _groupManager?.characters ?? const <CharacterCard>[];
+  bool get _observerMode => _groupManager?.observerMode ?? false;
+  set _observerMode(bool value) {
+    _groupManager?.setObserverMode(value);
+  }
+
+  bool get _autoPlayActive => _groupManager?.autoPlayActive ?? false;
+  set _autoPlayActive(bool value) {
+    if (value) {
+      _groupManager?.startAutoPlay();
+    } else {
+      _groupManager?.stopAutoPlay();
+    }
+  }
+
+  double get directorDelaySec => _groupManager?.directorDelaySec ?? 15.0;
+  set directorDelaySec(double value) {
+    if (_groupManager != null) {
+      _groupManager!.directorDelaySec = value;
+    }
+  }
+
+  bool get autoPlayActive => _groupManager?.autoPlayActive ?? false;
+
+  /// The character who will speak next in group mode.
+  /// Fully delegated to GroupTurnManager (supports forced override + both turn orders + Director Mode).
+  CharacterCard? get nextCharacter => _groupManager?.nextSpeaker;
+
+  /// True only for regular (non-Director) group chats where the Realism Engine
+  /// is enabled. Used by the group sidebar to decide whether to show per-character
+  /// emotion / needs indicators.
+  bool get isGroupRealismActive =>
+      _realismEnabled && isGroupMode && !observerMode;
+
+  /// Phase 3: Hard cap for inter-character relationship tracking.
+  /// Per the approved plan, full hidden inter-character dynamics (seeding,
+  /// decay, injection, and updates) are **only** performed when the group has
+  /// 4 or fewer members. This prevents combinatorial explosion and prompt bloat.
+  ///
+  /// When the group has 5+ members:
+  /// - Inter-character 'relationships' maps remain empty / are ignored.
+  /// - All characters still receive full per-speaker realism evaluations for
+  ///   their feelings **toward the user** (visible bars continue to work).
+  bool get _shouldTrackInterCharacterRelationships {
+    if (_activeGroup == null) return false;
+    return _groupCharacters.length <= 4;
+  }
 }

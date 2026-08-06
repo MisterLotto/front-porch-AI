@@ -25,6 +25,21 @@ part of '../chat_service.dart';
 extension ChatServiceObjectives on ChatService {
   // ── Objective System ───────────────────────────────────────────────────
 
+  /// All active objectives for the current character/session (both primary
+  /// and secondary — see [primaryObjective] / [secondaryObjectives] for the
+  /// split views).
+  List<Objective> get activeObjectives => _activeObjectives;
+
+  /// Parses [obj.tasks] (a JSON-encoded list) into task maps for the UI.
+  /// Returns an empty list on any decode failure rather than throwing.
+  List<Map<String, dynamic>> tasksForObjective(Objective obj) {
+    try {
+      return (jsonDecode(obj.tasks) as List).cast<Map<String, dynamic>>();
+    } catch (_) {
+      return [];
+    }
+  }
+
   /// Load the active objectives for the current session from DB.
   Future<void> _loadActiveObjectives() async {
     if (_activeCharacter == null || _currentSessionId == null) {

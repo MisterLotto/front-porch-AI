@@ -443,4 +443,11 @@ extension ChatServiceWiringEvals on ChatService {
       },
     );
   }
+
+  /// The current model's tool-calling verdict (sidebar pill + web facade).
+  ToolCallSupport get toolCallSupport => _toolSupportTester.current;
+  bool get isTestingToolSupport => _toolSupportTester.isTesting;
+
+  /// Re-probe the current backend+model's tool support (pill tap).
+  Future<void> testToolCalling() => _toolSupportTester.test(force: true);
 }

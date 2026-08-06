@@ -428,4 +428,40 @@ extension ChatServiceSessionState on ChatService {
 
 
   /// Evaluates emotion + relationship baseline from the greeting message only.
+
+  // ── Small session-state accessors, moved verbatim from the god file's
+  // field block (zero behaviour change) ──
+  bool get isLoadingSession => _isLoadingSession;
+
+  String? get parentSessionId => _parentSessionId;
+  int? get forkIndex => _forkIndex;
+  String? get sessionName => _sessionName;
+  String? get sessionDescription => _sessionDescription;
+
+  /// The per-chat gallery look selected for [characterId] in the active session,
+  /// or null (no look chosen → the character's library face shows). Keyed by the
+  /// character's library id so the same character shares one selection across a
+  /// group cast.
+  String? selectedLookFor(String characterId) => _selectedLooks[characterId];
+
+  /// Set (or clear, when [lookId] is null) the per-chat gallery look for
+  /// [characterId] in the active session, persist the whole map to the session's
+  /// selected-look column, and repaint. Never touches `imagePath` — the library
+  /// face is independent of which look shows in a given chat.
+  Future<void> setLookForCharacter(String characterId, String? lookId) async {
+    final sid = _currentSessionId;
+    if (sid == null || characterId.isEmpty) return; // never key by a blank id
+    // decodeSelectedLooks also drops empty keys, so a blank would silently fail
+    // to round-trip; refuse it here so the caller notices instead.
+    if (lookId == null) {
+      _selectedLooks.remove(characterId);
+    } else {
+      _selectedLooks[characterId] = lookId;
+    }
+    notifyListeners();
+    await _db.setSelectedLookForSession(
+      sid,
+      encodeSelectedLooks(_selectedLooks),
+    );
+  }
 }

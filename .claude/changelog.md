@@ -10412,3 +10412,16 @@ invisible ripples in release, assertion spam in debug. Fix: transparent
 Material inside the decorated box (pixel-identical; ripples now land on the
 panel). Verified: analyze 0, stoop E2E green.
 Commit: a5b7d196
+
+## 2026-08-07 — refactor(campaign): round 4a — chat_service.dart 1,720 → 1,300
+
+**Files:** shell + 8 parts touched (one new: chat_service_accessors.dart).
+~70 free members (with dartdocs) moved to thematic parts; 4 tombstone blocks
+condensed to pointers (constraints kept verbatim — the dormant
+moodDecayCounter column note, the keep-reset-in-sync rules); zero test-file
+edits; baseline lowered 1,720 → 1,300 (ratchet's sanctioned shrink flow,
+maintainer-directed last mile).
+**Gates (worktree):** analyze 0 · 8 targeted parity suites · full suite
+(2,851, sole red = the ratchet's own lower-the-baseline demand, resolved
+here) · E2E app_smoke + group_smoke + message_actions.
+Commit: (fill next)

@@ -112,6 +112,7 @@ part 'chat/chat_service_send.dart';
 part 'chat/chat_service_turn_flow.dart';
 part 'chat/chat_service_message_ops.dart';
 part 'chat/chat_service_guest_flow.dart';
+part 'chat/chat_service_accessors.dart';
 
 // Internal flag to signal a cancellation request for realism evaluation.
 // This is a file-scope flag to avoid needing to thread state through the
@@ -167,8 +168,13 @@ class ChatService extends ChangeNotifier {
   /// undo a user-triggered check. Scoped by try/finally; no reset needed.
   bool _objectiveTurnOpsArmed = false;
   int _messagesSinceLastCheck = 0;
-  bool _isCheckingCompletion =
-      false; // god-side secondary runtime flag for objective_proposal leaf's get/setIsChecking (early guard in check); must be defensively zeroed on *all* reset/new-chat/0-session/group/setActive/load/delete paths (like _activeObjectives + _messagesSinceLastCheck) to prevent permanent skip of future task checks after in-flight reset; see CLAUDE.md "keep reset blocks in sync" + "incomplete zeroing..." (leaves incl fact/evo/verif + needs_impact etc) + " ; no extra mutable scalar; live read from frontPorch under impersonation)" + "needsSimulation. (reason support kept for Director chips) ; cleared via sim initializeFresh/clearVector/resetBuffers on all paths; now complete)").
+  // God-side runtime flag mirroring objective_proposal's get/setIsChecking
+  // (early guard in the completion check). Must be defensively zeroed on
+  // *all* reset/new-chat/0-session/group/setActive/load/delete paths — like
+  // _activeObjectives and _messagesSinceLastCheck — or an in-flight reset
+  // permanently skips future task checks. See CLAUDE.md "keep reset blocks
+  // in sync".
+  bool _isCheckingCompletion = false;
   bool _isNewChat = false;
 
   // Central post-dispose guard (re-introduced per PR #47 rec 2 for prod stability + test flake).
@@ -190,7 +196,6 @@ class ChatService extends ChangeNotifier {
   // generationSettings.dynamicResponseMaxMessages (default 3) so the sidebar
   // flyout, /afk --messages, and the settings all share one source of truth.
 
-  List<Objective> get activeObjectives => _activeObjectives;
   Objective? get primaryObjective =>
       _activeObjectives.where((o) => o.isPrimary).firstOrNull;
   List<Objective> get secondaryObjectives =>
@@ -203,25 +208,7 @@ class ChatService extends ChangeNotifier {
   /// statically dispatched and cannot be overridden.
   bool get isCheckingCompletion => _isCheckingCompletion;
 
-  List<Map<String, dynamic>> tasksForObjective(Objective obj) {
-    try {
-      return (jsonDecode(obj.tasks) as List).cast<Map<String, dynamic>>();
-    } catch (_) {
-      return [];
-    }
-  }
-
-  /// Point this service — and the MemoryService it owns — at [db].
-  ///
-  /// Used both to wire the database in at startup and to re-point it after a
-  /// swap (stable-DB import, storage-root move, backup restore). The
-  /// MemoryService caches its own handle, so leaving it out meant RAG memory
-  /// kept querying the closed database until the app was restarted; it is null
-  /// during startup wiring, which the null-aware call covers.
-  void updateDatabase(AppDatabase db) {
-    _db = db;
-    _memoryService?.updateDatabase(db);
-  }
+  // (updateDatabase moved to chat_service_accessors.dart)
 
   CharacterCard? _activeCharacter;
 
@@ -268,49 +255,8 @@ class ChatService extends ChangeNotifier {
   /// cache lives in the widget layer; this service is foundation-only).
   String? _guestAvatarEvictPath;
 
-  /// The persistent Scene Guests currently in this 1:1 scene (resolved cards).
-  List<CharacterCard> get sceneGuestCards =>
-      List.unmodifiable(_sceneGuestCards);
-
-  /// Initial filter for a pending `/join` picker, or null when none is pending.
-  String? get pendingGuestPickerFilter => _pendingGuestPickerFilter;
-
   bool _pendingGuestPickerFull = false;
-
-  /// Whether the pending picker should add the picked character as a FULL member
-  /// (group member / 1:1->group convert) vs a lite Scene Guest.
-  bool get pendingGuestPickerFull => _pendingGuestPickerFull;
-
-  /// Transient Scene Guest create/join status line (null when idle).
-  String? get guestActivityStatus => _guestActivityStatus;
-
-  /// Whether [guestActivityStatus] is an error (drives the banner styling).
-  bool get guestActivityIsError => _guestActivityIsError;
-
-  /// True while a Scene Guest is being created/entered (input is disabled).
-  bool get isGuestBusy => _guestBusy;
-
-  /// True while forked-in character entrances are still playing. Exposed so the
-  /// composer can mirror sendMessage's `_entrancesInFlight` early-return and
-  /// avoid consuming (saving/clearing) an attached photo for a turn that
-  /// sendMessage would silently drop. See _sendCurrentMessage.
-  bool get entrancesInFlight => _entrancesInFlight;
-
-  /// True from the start of a photo turn's captioning through the end of its
-  /// send flow. Because the offline caption await (and the post-gen vision
-  /// caption) run while `_isGenerating` is false, this is the guard that keeps
-  /// a second sendMessage from interleaving during those windows — the UI and
-  /// sendMessage entry both check it. Photo turns only; text turns are
-  /// unaffected (they are covered by `_isGenerating`).
-  bool get isPhotoTurnInFlight => _photoTurnInFlight;
   bool _photoTurnInFlight = false;
-
-  /// A guest card image path whose cache the UI should evict (then call
-  /// [consumeGuestAvatarEvict]); null when there is nothing to refresh.
-  String? get guestAvatarEvictPath => _guestAvatarEvictPath;
-
-  /// Clear the pending avatar-evict signal after the UI has evicted the path.
-  void consumeGuestAvatarEvict() => _guestAvatarEvictPath = null;
 
   // ── /exit undo ──────────────────────────────────────────────────────────
   // After `/exit`, a brief UNDO is offered: delete the generated departure
@@ -329,13 +275,6 @@ class ChatService extends ChangeNotifier {
   /// deferred until the user continues — so [undoLastExit] can restore them
   /// losslessly. Committed in `sendMessage` via [_commitPendingMemberExit].
   CharacterCard? _pendingMemberExit;
-
-  /// Name to show in the UNDO SnackBar (null = nothing to offer).
-  String? get exitUndoOfferName => _exitUndoOfferName;
-
-  /// Consume the one-shot UNDO offer (the SnackBar was shown); the undo itself
-  /// stays available via [undoLastExit] until invalidated.
-  void consumeExitUndoOffer() => _exitUndoOfferName = null;
 
   ChatCommandHandler? _commandHandler;
 
@@ -410,9 +349,6 @@ class ChatService extends ChangeNotifier {
   /// here with [notifyListeners]; the page observes it and shows the popup once.
   DetectedCharacter? _pendingGuestDetection;
 
-  /// The candidate the popup should show (null = nothing pending).
-  DetectedCharacter? get pendingGuestDetection => _pendingGuestDetection;
-
   /// Names already offered (whether accepted or ignored) this session,
   /// lower-cased, so the same character is never re-offered. Cleared at the
   /// Scene Guest reset sites.
@@ -447,15 +383,9 @@ class ChatService extends ChangeNotifier {
   /// for a wedged UI, which is the worse bug.
   bool _isPostGenerating = false;
 
-  /// The honest "this turn is still in motion" predicate — what the mutation
-  /// guards should ask, rather than `_isGenerating` alone.
-  ///
-  /// NOT for the escape hatches: `stopGeneration` and
-  /// `_cancelAndWaitForGeneration` must keep testing `_isGenerating` on its
-  /// own. The first aborts an in-flight HTTP stream (there is none during
-  /// post-gen), and the second SPINS until the flag clears — broadening it
-  /// would hang the caller if post-gen ever failed to settle.
-  bool get _isTurnBusy => _isGenerating || _isPostGenerating;
+  // (_isTurnBusy — "this turn is still in motion" predicate for mutation
+  // guards, NOT for stopGeneration/_cancelAndWaitForGeneration which must
+  // keep testing _isGenerating alone — moved to chat_service_generation_stream.dart)
 
   // True while a forked-in character's custom entrance sequence is running
   // (fire-and-forget after forkToGroupChat). Blocks user-triggered turns so the
@@ -502,47 +432,24 @@ class ChatService extends ChangeNotifier {
   DateTime _lastStreamNotify = DateTime.fromMillisecondsSinceEpoch(0);
   Timer? _streamNotifyTimer;
   static const Duration _kStreamNotifyInterval = Duration(milliseconds: 33);
-
-  void _notifyStreamListeners() {
-    if (_streamNotifyTimer != null) return; // trailing notify already queued
-    final elapsed = DateTime.now().difference(_lastStreamNotify);
-    if (elapsed >= _kStreamNotifyInterval) {
-      _lastStreamNotify = DateTime.now();
-      notifyListeners();
-    } else {
-      _streamNotifyTimer = Timer(_kStreamNotifyInterval - elapsed, () {
-        _streamNotifyTimer = null;
-        _lastStreamNotify = DateTime.now();
-        notifyListeners();
-      });
-    }
-  }
-
-  void _cancelStreamNotifyThrottle() {
-    _streamNotifyTimer?.cancel();
-    _streamNotifyTimer = null;
-  }
+  // (_notifyStreamListeners / _cancelStreamNotifyThrottle moved to
+  // chat_service_generation_stream.dart)
 
   // ── Web token broadcast ──
   // External consumers (the web server's StreamHub) listen to this for real-time token streaming.
   final StreamController<String> _tokenBroadcast =
       StreamController<String>.broadcast();
-  Stream<String> get tokenStream => _tokenBroadcast.stream;
 
   /// Emits complete sentences as they're detected during LLM token streaming.
   /// Used by call mode to start TTS on the first sentence immediately.
   final StreamController<String> _sentenceBroadcast =
       StreamController<String>.broadcast();
-  Stream<String> get sentenceStream => _sentenceBroadcast.stream;
   String _sentenceBuffer = ''; // accumulates tokens until a sentence boundary
 
   /// Whether the app is in voice call mode (auto-disables reasoning for lower latency).
   bool _callMode = false;
-  bool get callMode => _callMode;
-  set callMode(bool value) {
-    _callMode = value;
-    notifyListeners();
-  }
+  // (tokenStream / sentenceStream / callMode moved to
+  // chat_service_generation_stream.dart)
 
   // ── Group chat state (owned by GroupTurnManager) ──
   GroupTurnManager? _groupManager;
@@ -556,32 +463,8 @@ class ChatService extends ChangeNotifier {
   // the forced-speaker side is handled by GroupTurnManager.setNextSpeaker.
   String? _entranceDirective;
 
-  // ── Clean delegation layer (GroupTurnManager is the real owner) ────────
-  // These keep the rest of the (very large) file readable while we finish
-  // the migration. All group state now lives in _groupManager.
-  GroupChat? get _activeGroup => _groupManager?.activeGroup;
-  List<CharacterCard> get _groupCharacters =>
-      _groupManager?.characters ?? const <CharacterCard>[];
-  bool get _observerMode => _groupManager?.observerMode ?? false;
-  set _observerMode(bool value) {
-    _groupManager?.setObserverMode(value);
-  }
-
-  bool get _autoPlayActive => _groupManager?.autoPlayActive ?? false;
-  set _autoPlayActive(bool value) {
-    if (value) {
-      _groupManager?.startAutoPlay();
-    } else {
-      _groupManager?.stopAutoPlay();
-    }
-  }
-
-  double get directorDelaySec => _groupManager?.directorDelaySec ?? 15.0;
-  set directorDelaySec(double value) {
-    if (_groupManager != null) {
-      _groupManager!.directorDelaySec = value;
-    }
-  }
+  // (Group delegation getters _activeGroup/_groupCharacters/_observerMode/
+  // _autoPlayActive/directorDelaySec moved to chat_service_group_read.dart)
 
   /// Per-character realism / needs / state for group chats.
   /// Keyed by stable charId. Populated from the hidden checkpoint.
@@ -648,8 +531,10 @@ class ChatService extends ChangeNotifier {
   // ── Chat Summary ──
   String _summary = '';
   int _summaryLastIndex = 0;
-  bool _summaryPaused =
-      false; // secondary runtime flag (like _isSummaryGenerating); must be defensively zeroed on *all* reset/new-chat/0-session/group/setActive/load/delete paths to prevent leak of pause state across contexts (see CLAUDE.md keep-sync + incomplete zeroing (simple authority; sim reason kept)).
+  // Secondary runtime flag (like _isSummaryGenerating); must be defensively
+  // zeroed on *all* reset/new-chat/0-session/group/setActive/load/delete
+  // paths or pause state leaks across contexts (see CLAUDE.md keep-sync).
+  bool _summaryPaused = false;
   bool _isSummaryGenerating = false;
 
   // ── Realism Mode ──
@@ -674,36 +559,25 @@ class ChatService extends ChangeNotifier {
   // are mid-deactivation throw "Looking up a deactivated widget's ancestor".
   Timer? _evalChunkTimer;
 
-  // TOMBSTONE: `_moodDecayCounter` lived here. It was captured into every
-  // message's realism_state, written to sessions.moodDecayCounter, and dutifully
-  // restored on regen — and NO decay logic ever read it. The counter that
-  // actually gates short-term bond decay is RelationshipService's
-  // (_turnsSinceDecayCheck in 1:1, the per-member 'turnsSinceDecayCheck' map key
-  // in a group), and that one was never restored, so the regen revert only
-  // looked like it rewound the cadence. Both are now captured and restored for
-  // real via captureCadenceAndFeelings / restoreFromMessageState.
-  // The sessions.moodDecayCounter COLUMN is deliberately left in place and
-  // dormant (it defaults to 0) — dropping it is a schema change, and external
-  // tools write this database directly.
+  // TOMBSTONE: `_moodDecayCounter` was dead state — nothing ever read it; the
+  // real short-term-decay cadence lives in RelationshipService and is
+  // captured/restored via captureCadenceAndFeelings / restoreFromMessageState.
+  // The sessions.moodDecayCounter DB COLUMN stays (dormant, defaults to 0):
+  // dropping it is a schema change, and external tools write this DB directly.
 
   // Emotional state
   String _characterEmotion = '';
   String _emotionIntensity = ''; // mild/moderate/strong
 
-  // Expression images + classification (extracted to ExpressionService in chat/expression_classifier.dart).
-  // See CLAUDE.md keep-sync + incomplete zeroing now complete + buffer removal + authority (live ext) at all sites + both startNew. (thins only)
+  // Expression images + classification live in ExpressionService
+  // (chat/expression_classifier.dart); god thins to delegation only.
 
-  // Passage of time (core state + advance/nudge/OOC/resolve/reset/seed/load logic extracted to TimeService).
-  // See CLAUDE.md keep-sync/incomplete zeroing/buffer removal/authority (live ext). Service owned.
-  // god thins to delegation + 5 @Deprecated shims. 0 new private methods added in god for time.
-  // time injection only thin wrapper here; full in step8. (cross-ref setActiveCharacter:1572 etc)
+  // Passage of time state/logic lives in TimeService (chat/time_service.dart);
+  // god thins to delegation + a few @Deprecated shims.
 
-  // NSFW cooldown & lust (core state + tier calc + reset/seed/load/restore + group per-char scalars
-  // + applyClimax/decrement extracted to NsfwService).
-  // See keep reset + zeroing + buffer removal + authority (simple) in CLAUDE.md.
-  // cooldown mutations, arousal, and helpers now owned by the service; god thins to delegation
-  // + 5 @Deprecated shims. 0 new private methods added in god for nsfw.
-  // _runPostGenNeedsChecks thin to needs_impact_evaluator (cross-ref setActiveCharacter:1572 etc; see CLAUDE.md for keep-sync).
+  // NSFW cooldown & lust state/logic lives in NsfwService
+  // (chat/nsfw_service.dart); god thins to delegation + a few @Deprecated
+  // shims. _runPostGenNeedsChecks thins to needs_impact_evaluator.
 
   // ── Chaos Mode / Chance Time (core state extracted) ──────────────────────
   // _chaosModeEnabled / _chaosNsfwEnabled / _chaosPressure / _pendingChaosInjection / _chaosEventDelivered
@@ -749,40 +623,14 @@ class ChatService extends ChangeNotifier {
   /// boundaries via the scanner reset.
   final _loreTimedEffects = LorebookTimedEffects();
 
-  /// The chat-scoped lorebook: lore that lives and dies with this one
-  /// conversation. The sidebar edits it directly (live instance) and calls
-  /// [commitChatLorebookEdit] to notify + persist.
-  Lorebook get chatLorebook => _loreTimedEffects.chatLorebook;
-
-  Future<void> commitChatLorebookEdit() async {
-    notifyListeners();
-    await _saveChat();
-  }
-
-  late final _lorebookInjector = _buildLorebookInjector();
-
-  /// Names of lore entries dropped by the token budget on the last
-  /// generation, plus the meter numbers the sidebar shows.
+  // (chatLorebook / commitChatLorebookEdit / lastLoreOverflow / lastLoreTokens
+  // / lastLoreBudget / loreTimedEffects / previewLoreTriggers /
+  // currentlyActiveLoreEntries moved to chat_service_accessors.dart)
   List<String> _lastLoreOverflow = const [];
-  List<String> get lastLoreOverflow => _lastLoreOverflow;
   int _lastLoreTokens = 0;
   int _lastLoreBudget = 0;
-  int get lastLoreTokens => _lastLoreTokens;
-  int get lastLoreBudget => _lastLoreBudget;
 
-  /// Read surface for the sidebar's sticky/cooldown countdown pills.
-  LorebookTimedEffects get loreTimedEffects => _loreTimedEffects;
-
-  /// Mutation-free "would trigger next" preview for the composer draft.
-  Set<LorebookEntry> previewLoreTriggers(String draft) =>
-      _lorebookScanner.previewTriggers(draft);
-
-  /// The post-group-filter active lore set — what is ACTUALLY injected this
-  /// turn. Sidebar dots and the web facade read this so they never show an
-  /// inclusion-group loser as active.
-  Set<LorebookEntry> currentlyActiveLoreEntries() => _lorebookInjector
-      .activeEntries(sessionSeed: _currentSessionId ?? '')
-      .toSet();
+  late final _lorebookInjector = _buildLorebookInjector();
 
   // The group lorebook is stored as a JSON string on the group row. Parse it
   // ONCE and keep the live instance — the scanner writes trigger state onto
@@ -801,8 +649,7 @@ class ChatService extends ChangeNotifier {
   /// Hydrated mid-chat climate spans + world default (Living Worlds phase 1).
   BiomeSchedule _biomeSchedule = const BiomeSchedule();
 
-  /// Public attach surface for chat tools / UI.
-  List<String> get chatWorldIds => List.unmodifiable(_chatWorldIds);
+  // (chatWorldIds moved to chat_service_accessors.dart)
 
   /// Climate active on the current story day (span override or world default).
   Biome get activeChatBiome =>
@@ -832,17 +679,7 @@ class ChatService extends ChangeNotifier {
   late final _behavioralInjection = _buildBehavioralInjection();
   late final _timeInjection = _buildTimeInjection();
 
-  /// Coarse absence bucket ("a few days"), or null under the threshold /
-  /// fresh chat. Words only — never digits (see AbsenceTracker).
-  String? get absencePhrase => AbsenceTracker.bucketPhrase(
-    _absenceGap,
-    thresholdHours: _storageService.absenceThresholdHours,
-  );
-
-  /// [absencePhrase] gated by the welcome-back-banner setting — the ONE gate
-  /// both the desktop banner and the web facade read, so they can't drift.
-  String? get absenceBannerPhrase =>
-      _storageService.absenceBannerEnabled ? absencePhrase : null;
+  // (absencePhrase / absenceBannerPhrase moved to chat_service_accessors.dart)
 
   /// Today's story weather, or null when off (living-time-features.md §3).
   /// Pure recompute from existing state — nothing stored, so save/load and
@@ -943,26 +780,16 @@ class ChatService extends ChangeNotifier {
   /// Builder in chat_service_wiring_injection.dart.
   late final _realismStateInjection = _buildRealismStateInjection();
 
-  // ── LLM Eval Engine (step 9: _fireLLMEval + strip + extract + needs impact cb) ──
-  // Plain class (not ChangeNotifier). Owns the central eval firing (streaming/retry/cancel, 4000/0.1/no-reasoning),
-  // central strip (completed+unclosed), JSON extractors, evaluateNeedsImpactCall (for needs_impact_evaluator).
-  // The 5 realism eval prompt builders + calls (rel/emotion/phys/narr w/ proposed_objective, oneShot) moved to
-  // sibling leaf realism_evals.dart (step 10); this engine provides fire/strip/extract cbs to it (granular).
-  // objective proposal handling + generateObjectiveTasks + _checkTaskCompletionInBackground moved to
-  // sibling leaf objective_proposal.dart (step 11); this engine provides strip cb to it (for 2000 paths).
-  // Wired with granular cbs for 1:1 vs group (via impersonation for speaker), test overrides,
-  // pending/emotion state, capture, + service deps (rel) .
-  // (onNotify/onSaveChat removed in step 10 fix round 1 + step11: oneShot populates pending snapshot;
-  // god owns the post-eval _saveChat/notify in pre-turn + baseline paths to avoid double + races;
-  // on* dead post step11 objective move, cleaned).
-  // 0 @Deprecated shims. 0 new god private _ methods beyond the required thin delegates (_fireLLMEval, _stripThinkBlocks, _extractJson*, evaluateNeedsImpactCall; the 5 _evaluate*Call thins now point to realism_evals; generate/check thins now to objective_proposal; the void _ count grep stayed 15; +1 late final only; thins/calls/late final only per plan). (cross-ref setActiveCharacter:1572 etc)
-  // Stateless/prompt-only: no reset calls needed. Reset hygiene comments list full set + llm_eval_engine (stateless or prompt-only;
-  // no reset calls needed; incomplete zeroing... now complete (see CLAUDE.md)) + realism_evals (stateless or prompt-only; no reset calls needed) + objective_proposal (stateless or prompt-only; no reset calls needed) + journal_maintenance (stateless or prompt-only; no reset calls needed) + cross-refs (e.g. setActiveCharacter:1572). Both startNew branches explicit.
-  // 1:1 vs group + oneShot vs normal dispatch/parity preserved exactly (cbs + impersonation temp re-load; qualified).
-  // aug exercising only passive/qualified (no llm-eval-specific aug file edits; resets/loads/greetings/post hit by pre-existing
-  // startNew/setActive/_loadLast/group in key suites; full eval/JSON/strip + needs impact only in dedicated + manual;
-  // objective proposal/gen/check exercised via god thins generate/check ; qualified notes only in dedicated header + god + MD per precedent).
-  // ── Eval pipeline (builders in chat_service_wiring_evals.dart) ──
+  // ── LLM Eval Engine (chat_service_wiring_evals.dart builds it) ──
+  // Plain class (not ChangeNotifier): central eval firing (streaming/retry/
+  // cancel, 4000 tokens/0.1 temp/no-reasoning), think-block stripping, JSON
+  // extraction, and evaluateNeedsImpactCall. The 5 realism eval prompt
+  // builders/calls live in the sibling leaf realism_evals.dart; objective
+  // proposal handling lives in objective_proposal.dart — both consume this
+  // engine's fire/strip/extract callbacks. Stateless/prompt-only: no reset
+  // calls needed. 1:1 vs group + one-shot vs normal dispatch/parity preserved
+  // via callbacks + the impersonation temp re-load (see the class doc above
+  // on the eval-timing rule this all serves).
   late final _llmEvalEngine = _buildLlmEvalEngine();
   late final _realismVerifier = _buildRealismVerifier();
   late final _needsImpactEvaluator = _buildNeedsImpactEvaluator();
@@ -992,12 +819,8 @@ class ChatService extends ChangeNotifier {
   /// chat_service_wiring_evals.dart (with `_fireToolEval` / `_evalBackendIdentity`).
   late final _toolSupportTester = _buildToolSupportTester();
 
-  /// The current model's tool-calling verdict (sidebar pill + web facade).
-  ToolCallSupport get toolCallSupport => _toolSupportTester.current;
-  bool get isTestingToolSupport => _toolSupportTester.isTesting;
-
-  /// Re-probe the current backend+model's tool support (pill tap).
-  Future<void> testToolCalling() => _toolSupportTester.test(force: true);
+  // (toolCallSupport / isTestingToolSupport / testToolCalling moved to
+  // chat_service_wiring_evals.dart)
 
   late final _journalMaintenance = _buildJournalMaintenance();
 
@@ -1026,28 +849,16 @@ class ChatService extends ChangeNotifier {
   late final _growthReview = _buildGrowthReview();
   late final _growthService = _buildGrowthService();
 
-  // Effective getters (all injection paths route through these).
-  String _getEffectivePersonality(CharacterCard card) =>
-      _growthService.effectivePersonality(card);
-  // Scenario evolution is retired (growth-rings design §3.2): the Journal
-  // recap owns "where we are", so every mode uses the card's own scenario.
-  String _getEffectiveScenario(CharacterCard card) => card.scenario;
+  // (_getEffectivePersonality / _getEffectiveScenario moved to
+  // chat_service_growth.dart)
 
-  // Step 15 (refactor remaining `ChatService`): complete. God is now thin
-  // coordinator/orchestrator + minimal god-owned state that per-plan stayed
-  // (_groupRealism + _loadGroup*IntoScalars / _saveScalarsIntoGroupRealism /
-  // _setGroup* / _loadGroupRealismStateFromSession / _sync... / _restore... ;
-  // core sendMessage pre/post + _generateResponse (pick/eval dance/impersonation/
-  // build* stayed / post-gen finalization) ; _buildChatHistoryWithBudget ;
-  // _loadLastSession / _saveChat / _doSaveChat ; _pickNextGroupCharacter ;
-  // _evaluateRealismForUpcomingSpeaker ; _waitForTtsThenContinue + drain
-  // buffer / _flush / _startDrainTimer ; _applyMoodDecay ; _maybeEmbedMessages ;
-  // _runPostGenNeedsChecks thin + periodic thins; all reset keep-sync + "now complete" (see CLAUDE.md); 0 new god priv _ (count=15); thins + coord only. Buffer removal + simple authority complete.
-  // (3 vestigial phrases cleaned: 2 briefing + 1 per-thin at _getNsfwCooldownInjection:7742) + thin consistency as part of
-  // task (no heroic new splits; smallest change; no bloat/parallel paths).
-  // 1:1 vs group parity preserved for all surfaces (dispatch via cbs + god
-  // impersonation dance). aug tests: only qualified passive (no step-15 edits).
-  // See docs/refactor-god-file-modularization.md Step 15 + CLAUDE Path Map.
+  // The god file is a thin coordinator: the state that deliberately stays
+  // here (rather than in a chat/ leaf) is _groupRealism + its load/save/sync
+  // pairs, the sendMessage/_generateResponse turn orchestration (speaker
+  // pick, eval dance, impersonation, post-gen finalization), chat history
+  // building/saving, and the TTS drain buffer. 1:1 vs group parity is
+  // preserved for all of it via callbacks + the impersonation dance. See
+  // docs/refactor-god-file-modularization.md for the full extraction history.
   Completer<void>?
   _chanceTimeCompleter; // pauses sendMessage while wheel is active (UI coordination, stays in god)
 
@@ -1181,39 +992,10 @@ class ChatService extends ChangeNotifier {
   /// `_sendCurrentMessage`.
   bool get isGenerating => _isGenerating;
 
-  /// True while the turn's awaited post-generation work is still settling.
-  /// Exposed so tests can assert the window opens and — more importantly —
-  /// always closes. See [_isPostGenerating].
-  bool get isSettlingTurn => _isPostGenerating;
-  bool get isLoadingSession => _isLoadingSession;
+  // (isSettlingTurn moved to chat_service_generation_stream.dart;
+  // isLoadingSession / selectedLookFor / setLookForCharacter moved to
+  // chat_service_session_state.dart)
   String? get currentSessionId => _currentSessionId;
-
-  /// The per-chat gallery look selected for [characterId] in the active session,
-  /// or null (no look chosen → the character's library face shows). Keyed by the
-  /// character's library id so the same character shares one selection across a
-  /// group cast.
-  String? selectedLookFor(String characterId) => _selectedLooks[characterId];
-
-  /// Set (or clear, when [lookId] is null) the per-chat gallery look for
-  /// [characterId] in the active session, persist the whole map to the session's
-  /// selected-look column, and repaint. Never touches `imagePath` — the library
-  /// face is independent of which look shows in a given chat.
-  Future<void> setLookForCharacter(String characterId, String? lookId) async {
-    final sid = _currentSessionId;
-    if (sid == null || characterId.isEmpty) return; // never key by a blank id
-    // decodeSelectedLooks also drops empty keys, so a blank would silently fail
-    // to round-trip; refuse it here so the caller notices instead.
-    if (lookId == null) {
-      _selectedLooks.remove(characterId);
-    } else {
-      _selectedLooks[characterId] = lookId;
-    }
-    notifyListeners();
-    await _db.setSelectedLookForSession(
-      sid,
-      encodeSelectedLooks(_selectedLooks),
-    );
-  }
 
   double get generationProgress => _generationProgress;
   int get tokensGenerated => _tokensGenerated;
@@ -1240,13 +1022,9 @@ class ChatService extends ChangeNotifier {
   bool get isGroupMode => _groupManager?.isActive ?? false;
   GroupChat? get activeGroup => _groupManager?.activeGroup;
   bool get observerMode => _groupManager?.observerMode ?? false;
-  bool get autoPlayActive => _groupManager?.autoPlayActive ?? false;
   List<CharacterCard> get groupCharacters =>
       _groupManager?.characters ?? const <CharacterCard>[];
-
-  /// The character who will speak next in group mode.
-  /// Fully delegated to GroupTurnManager (supports forced override + both turn orders + Director Mode).
-  CharacterCard? get nextCharacter => _groupManager?.nextSpeaker;
+  // (autoPlayActive / nextCharacter moved to chat_service_group_read.dart)
 
   /// The unified ordered cast of speakers for the active chat, regardless of
   /// mode. This is the single roster the UI reads instead of branching on
@@ -1270,25 +1048,8 @@ class ChatService extends ChangeNotifier {
     ];
   }
 
-  /// True only for regular (non-Director) group chats where the Realism Engine
-  /// is enabled. Used by the group sidebar to decide whether to show per-character
-  /// emotion / needs indicators.
-  bool get isGroupRealismActive =>
-      _realismEnabled && isGroupMode && !observerMode;
-
-  /// Phase 3: Hard cap for inter-character relationship tracking.
-  /// Per the approved plan, full hidden inter-character dynamics (seeding,
-  /// decay, injection, and updates) are **only** performed when the group has
-  /// 4 or fewer members. This prevents combinatorial explosion and prompt bloat.
-  ///
-  /// When the group has 5+ members:
-  /// - Inter-character 'relationships' maps remain empty / are ignored.
-  /// - All characters still receive full per-speaker realism evaluations for
-  ///   their feelings **toward the user** (visible bars continue to work).
-  bool get _shouldTrackInterCharacterRelationships {
-    if (_activeGroup == null) return false;
-    return _groupCharacters.length <= 4;
-  }
+  // (isGroupRealismActive / _shouldTrackInterCharacterRelationships moved to
+  // chat_service_group_read.dart)
 
   double get tokensPerSecond {
     if (_tokenTimestamps.length < 2) return 0.0;
@@ -1325,14 +1086,8 @@ class ChatService extends ChangeNotifier {
     _storageService.addListener(_onBackendIdentityMaybeChanged);
   }
 
-  void _onBackendIdentityMaybeChanged() {
-    if (_disposed) return;
-    _toolSupportTester.onBackendMaybeChanged();
-  }
-
-  /// Set the database instance after construction. Alias of [updateDatabase]
-  /// so startup wiring and post-swap rebinding can never drift apart.
-  void setDatabase(AppDatabase db) => updateDatabase(db);
+  // (_onBackendIdentityMaybeChanged / setDatabase moved to
+  // chat_service_accessors.dart)
 
   String get authorNote => _authorNote;
   int get authorNoteStrength => _authorNoteStrength;
@@ -1367,10 +1122,9 @@ class ChatService extends ChangeNotifier {
     notifyListeners();
   }
 
-  String? get parentSessionId => _parentSessionId;
-  int? get forkIndex => _forkIndex;
-  String? get sessionName => _sessionName;
-  String? get sessionDescription => _sessionDescription;
+  // (parentSessionId / forkIndex / sessionName / sessionDescription /
+  // isLoadingSession / selectedLookFor / setLookForCharacter moved to
+  // chat_service_session_state.dart)
   String get summary => _summary;
   bool get summaryPaused => _summaryPaused;
   int get summaryLastIndex => _summaryLastIndex;
@@ -1386,43 +1140,19 @@ class ChatService extends ChangeNotifier {
   // God owns the late finals (for 1:1+group dispatch, _groupRealism load/save, cbs, notify, reset hygiene).
   // Barrel not updated (internal; <3 public cross locations precedent).
   RelationshipService get relationshipService => _relationshipService;
-  ExpressionService get expressionService => _expressionService;
   TimeService get timeService => _timeService;
   NsfwService get nsfwService => _nsfwService;
   ChaosModeService get chaosModeService => _chaosModeService;
   NeedsSimulation get needsSimulation => _needsSimulation;
 
-  // Thin public surface for flat members still read/written by UI/pages/dialogs
-  // (chat.chaosPressure, chat.activeFixation, chat.pendingTrustRepair, chat.currentExpressionLabel,
-  // chat.resolveExpressionAvatar, per "thin delegation here; full XXX in the leaf" + 0 new god _ privates).
-  // Full impl in the respective *Service (chaos_mode_service, relationship_service, expression_classifier in chat/).
-  // 1:1 vs group parity via the services' cbs + god impersonation dance (unchanged).
-  int get chaosPressure => _chaosModeService.chaosPressure;
-  String get activeFixation => _relationshipService.activeFixation;
-  bool get pendingTrustRepair => _relationshipService.pendingTrustRepair;
-  String? get currentExpressionLabel =>
-      _expressionService.currentExpressionLabel;
-  AvatarImage? resolveExpressionAvatar(
-    CharacterCard character, {
-    bool rerollIfSame = false,
-  }) => _expressionService.resolveExpressionAvatar(
-    character,
-    rerollIfSame: rerollIfSame,
-  );
-
+  // (expressionService / chaosPressure / activeFixation / pendingTrustRepair /
+  // currentExpressionLabel / resolveExpressionAvatar / _realismActiveThisMode /
+  // isCancellingRealismEval moved to chat_service_accessors.dart — thin
+  // delegation to the respective *Service, 1:1 vs group parity via the
+  // services' cbs + god impersonation dance, unchanged)
   bool get realismEnabled => _realismEnabled;
 
-  /// True when the Realism Engine (and Needs) should actually run for the
-  /// current chat mode. In group chats this is only true when *not* in
-  /// Director/observerMode (per design — Director is narrative control,
-  /// not simulation).
-  bool get _realismActiveThisMode =>
-      _realismEnabled &&
-      !_autoResponseInProgress &&
-      (_activeGroup == null || !_observerMode);
-
   bool get isEvaluatingRealism => _isEvaluatingRealism;
-  bool get isCancellingRealismEval => _isCancellingRealismEval;
   bool get isProcessingGreeting => _isProcessingGreeting;
 
   // Verifier phase (for overlay header "🕵️ Verifying Realism output" + pass progress, and bubble chip data source).
@@ -1454,35 +1184,6 @@ class ChatService extends ChangeNotifier {
   /// Disabling mid-chat clears the vector; historical snapshots cannot re-enable it.
   bool get needsSimEnabled => _needsSimEnabled;
 
-  /// Returns whether the currently active character enjoys low hygiene.
-  /// We always prefer the live value from the character's FrontPorchExtensions
-  /// so that toggling the setting on the character immediately affects any
-  /// already-loaded chats (no database change required).
-  bool get enjoysLowHygiene {
-    // Group chats have no single "active character" hygiene preference — it is
-    // strictly per-speaker (the injection builders resolve it from each
-    // member's own card). Never fall through to the 1:1 scalar in a group, or a
-    // preference carried in from a previous 1:1 (e.g. a "enjoys being dirty"
-    // character) would stay stale and invert every group member's hygiene.
-    if (_activeGroup != null) {
-      return _activeCharacter?.frontPorchExtensions?.enjoysLowHygiene ?? false;
-    }
-    return _activeCharacter?.frontPorchExtensions?.enjoysLowHygiene ??
-        _enjoysLowHygiene;
-  }
-
-  /// Re-reads the "Enjoys low hygiene" preference from the currently active
-  /// character's FrontPorchExtensions. Call this after editing the character
-  /// so that existing chats immediately pick up the new setting without a
-  /// database change.
-  void refreshEnjoysLowHygieneFromActiveCharacter() {
-    if (_activeCharacter != null) {
-      _enjoysLowHygiene =
-          _activeCharacter!.frontPorchExtensions?.enjoysLowHygiene ?? false;
-      notifyListeners();
-    }
-  }
-
   bool get chaosNsfwEnabled => _chaosModeService.chaosNsfwEnabled;
 
   // (chanceTimePendingTrigger / hasPendingChaosEvent / consumeChanceTimeTrigger /
@@ -1490,127 +1191,14 @@ class ChatService extends ChangeNotifier {
 
   // (nsfw/relationship long list of @Dep shims excised in final cleanup; use nsfwService / relationshipService)
 
-  /// Human-readable mood label containing exact emotion string and valence direction.
-  String get moodLabel {
-    if (_characterEmotion.isEmpty) return 'Neutral';
-    final capEmotion =
-        _characterEmotion.substring(0, 1).toUpperCase() +
-        _characterEmotion.substring(1);
-    final intensity = _emotionIntensity.isNotEmpty
-        ? ' ($_emotionIntensity)'
-        : '';
-    return '$capEmotion$intensity';
-  }
-
-  /// Returns the standard expression label for the current emotion.
-  ///
-  /// If a manual expression is set via [setManualExpression], returns that.
-  /// When classification mode is 'onnx', uses the ONNX classifier result.
-  /// Otherwise maps the nuanced emotion to a standard label
-  /// using [EmotionLabels.nuancedToStandard].
-  // NOTE: an earlier version of this comment claimed currentExpressionLabel,
-  // resolveExpressionAvatar, setManualExpression and setExpressionClassifierService
-  // had been "excised". They had not. All four still exist and are live:
-  // chat_page.dart calls currentExpressionLabel and resolveExpressionAvatar, and
-  // main.dart calls setExpressionClassifierService during startup wiring. A
-  // cleanup that trusted the old comment would have deleted working code.
-  // They delegate to _expressionService; prefer calling that directly in new code.
-
-  /// Set the CharacterRepository so group mode can look up characters.
-  void setCharacterRepository(CharacterRepository repo) {
-    if (identical(_characterRepository, repo)) return;
-    _characterRepository?.removeListener(_onCharacterLibraryChanged);
-    _characterRepository = repo;
-    _characterRepository!.addListener(_onCharacterLibraryChanged);
-  }
-
-  /// Silently prune Scene Guests whose library card no longer exists. Deleting a
-  /// character PNG is a deliberate user action, so a deleted guest is dropped
-  /// from the open scene with NO `/exit` narration — `_resolveSceneGuestCards`
-  /// removes any id that no longer resolves. Self-heals the "deleted card but
-  /// still treated as present" case (e.g. cast detection skipping a re-narrated
-  /// character because the stale guest was still in the scene list).
-  void _onCharacterLibraryChanged() {
-    if (_disposed || _guestBusy || _sceneGuestIds.isEmpty) return;
-    // Defer out of the repository's notify callback so we never start a DB read
-    // from inside its in-progress write/transaction; re-check guards (and that
-    // the chat hasn't switched) on the microtask. _resolveSceneGuestCards also
-    // self-guards on the token, so a stale resolve can't write the wrong chat.
-    final token = _currentSessionId;
-    scheduleMicrotask(() {
-      if (_sceneChanged(token) || _guestBusy || _sceneGuestIds.isEmpty) return;
-      _resolveSceneGuestCards();
-    });
-  }
-
-  /// Wired by main.dart so that group member loading works for all call sites
-  /// (creation, home taps, fork, etc.) without every caller having to pass the repo.
-  void setGroupChatRepository(GroupChatRepository repo) {
-    _groupChatRepository = repo;
-  }
-
-  /// Set the LLMProvider after construction (to break circular dependency in provider tree).
-  void setLLMProvider(LLMProvider provider) {
-    _llmProvider = provider;
-    // Backend switches and local-engine ready transitions flow through the
-    // provider — retest tool support when the identity changes and is ready.
-    provider.addListener(_onBackendIdentityMaybeChanged);
-  }
-
-  /// Set the TtsService after construction (for TTS-aware auto-play delay).
-  void setTtsService(TtsService service) {
-    _ttsService = service;
-  }
-
-  /// Set the MemoryService after construction (for RAG memory retrieval).
-  void setMemoryService(MemoryService service) {
-    _memoryService = service;
-  }
-
-  /// Set the ImageGenService after construction (for background Scene Guest
-  /// portraits). Optional — when absent or unconfigured, guests just keep their
-  /// initials avatar.
-  void setImageGenService(ImageGenService service) {
-    _imageGenService = service;
-  }
-
-  /// Set the ExpressionClassifierService after construction (for ONNX emotion classification).
-  void setExpressionClassifierService(ExpressionClassifierService service) =>
-      _expressionService.setExpressionClassifierService(service);
-
-  /// Returns a stable ID string for a character card.
-  /// Delegates to the canonical stable ID for group contexts.
-  /// See [StableGroupId.stableGroupId] in lib/utils/character_id.dart
-  String _getCharacterIdFromCard(CharacterCard card) => card.stableGroupId;
-
-  String _getCharacterId() {
-    if (_activeGroup != null) {
-      return 'group_${_activeGroup!.id}';
-    }
-    if (_activeCharacter == null) return "unknown";
-    return _getCharacterIdFromCard(_activeCharacter!);
-  }
-
-  /// Helper used when constructing messages.
-  String? _getCharacterIdForCard(CharacterCard card) {
-    return _getCharacterIdFromCard(card);
-  }
-
-  /// Safely parse a JSON string into a mutable `Map<String, String>`.
-  /// Returns an empty map if [json] is null, empty, or invalid.
-  Map<String, String> _tryParseJsonMap(String? json) {
-    if (json == null || json.isEmpty || json == '{}') return {};
-    try {
-      final decoded = jsonDecode(json);
-      if (decoded is Map) {
-        return decoded.map(
-          (k, v) => MapEntry(k.toString(), v?.toString() ?? ''),
-        );
-      }
-    } catch (_) {}
-    return {};
-  }
-
+  // (moodLabel / enjoysLowHygiene / refreshEnjoysLowHygieneFromActiveCharacter /
+  // setCharacterRepository / _onCharacterLibraryChanged / setGroupChatRepository /
+  // setLLMProvider / setTtsService / setMemoryService / setImageGenService /
+  // setExpressionClassifierService / _getCharacterIdFromCard / _getCharacterId /
+  // _getCharacterIdForCard / _tryParseJsonMap moved to chat_service_accessors.dart.
+  // Historical note preserved there: currentExpressionLabel, resolveExpressionAvatar,
+  // setManualExpression and setExpressionClassifierService are all still live —
+  // a prior comment claiming them "excised" was wrong and nearly caused a bad cleanup.)
 
   /// Index of the most recent host (main character) message that is buried only
   /// under Scene Guest (Lite NPC) chime-in replies — i.e. the tail of the chat
@@ -1630,12 +1218,8 @@ class ChatService extends ChangeNotifier {
     return null;
   }
 
-
-
   // ensureInterCharacterRelationshipsSeeded / updateInterCharacterFeelingsFromRecentExchange
   // moved verbatim to RelationshipService (with callbacks for group/messages). Old bodies deleted.
-
-
 
   void editMessage(int index, String newText) async {
     if (index >= 0 && index < _messages.length) {
@@ -1652,9 +1236,6 @@ class ChatService extends ChangeNotifier {
     }
   }
 
-
-
-
   // ── Growth Rings runtime state (full feature in growth_service.dart leaf
   // + chat_service_growth.dart part; docs/design/growth-rings.md) ──
 
@@ -1670,7 +1251,6 @@ class ChatService extends ChangeNotifier {
   /// getters are statically dispatched and cannot be overridden via
   /// `implements`.
   bool get isGrowthPassRunning => _isGrowthPassRunning;
-
 
   // ── Prompt Injection Builders (thins only; full in lib/services/chat/prompt_injection/* step 8) ──
 

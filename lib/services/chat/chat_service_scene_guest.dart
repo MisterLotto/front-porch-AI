@@ -319,4 +319,58 @@ extension ChatServiceSceneGuest on ChatService {
     // different chat — recalls what happened.
     _maybeEmbedMessages(characterIdOverride: _getCharacterIdFromCard(guest));
   }
+
+  // ── Small Scene Guest read/consume accessors (moved verbatim from the god
+  // file's field block; zero behaviour change) ──
+
+  /// The persistent Scene Guests currently in this 1:1 scene (resolved cards).
+  List<CharacterCard> get sceneGuestCards =>
+      List.unmodifiable(_sceneGuestCards);
+
+  /// Initial filter for a pending `/join` picker, or null when none is pending.
+  String? get pendingGuestPickerFilter => _pendingGuestPickerFilter;
+
+  /// Whether the pending picker should add the picked character as a FULL member
+  /// (group member / 1:1->group convert) vs a lite Scene Guest.
+  bool get pendingGuestPickerFull => _pendingGuestPickerFull;
+
+  /// Transient Scene Guest create/join status line (null when idle).
+  String? get guestActivityStatus => _guestActivityStatus;
+
+  /// Whether [guestActivityStatus] is an error (drives the banner styling).
+  bool get guestActivityIsError => _guestActivityIsError;
+
+  /// True while a Scene Guest is being created/entered (input is disabled).
+  bool get isGuestBusy => _guestBusy;
+
+  /// True while forked-in character entrances are still playing. Exposed so the
+  /// composer can mirror sendMessage's `_entrancesInFlight` early-return and
+  /// avoid consuming (saving/clearing) an attached photo for a turn that
+  /// sendMessage would silently drop. See _sendCurrentMessage.
+  bool get entrancesInFlight => _entrancesInFlight;
+
+  /// True from the start of a photo turn's captioning through the end of its
+  /// send flow. Because the offline caption await (and the post-gen vision
+  /// caption) run while `_isGenerating` is false, this is the guard that keeps
+  /// a second sendMessage from interleaving during those windows — the UI and
+  /// sendMessage entry both check it. Photo turns only; text turns are
+  /// unaffected (they are covered by `_isGenerating`).
+  bool get isPhotoTurnInFlight => _photoTurnInFlight;
+
+  /// A guest card image path whose cache the UI should evict (then call
+  /// [consumeGuestAvatarEvict]); null when there is nothing to refresh.
+  String? get guestAvatarEvictPath => _guestAvatarEvictPath;
+
+  /// Clear the pending avatar-evict signal after the UI has evicted the path.
+  void consumeGuestAvatarEvict() => _guestAvatarEvictPath = null;
+
+  /// Name to show in the UNDO SnackBar (null = nothing to offer).
+  String? get exitUndoOfferName => _exitUndoOfferName;
+
+  /// Consume the one-shot UNDO offer (the SnackBar was shown); the undo itself
+  /// stays available via [undoLastExit] until invalidated.
+  void consumeExitUndoOffer() => _exitUndoOfferName = null;
+
+  /// The candidate the popup should show (null = nothing pending).
+  DetectedCharacter? get pendingGuestDetection => _pendingGuestDetection;
 }
