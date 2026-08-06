@@ -224,15 +224,14 @@ void main() {
     // `_name` AND `_summary` both being non-empty, so landing one index off
     // leaves _summary blank, Next disabled, and the failure surfaces two
     // minutes later at the NEXT step's wait for the standards text — nowhere
-    // near the actual mistake. That is how it failed on macOS CI, with that
-    // exact timeout message.
+    // near the actual mistake.
     //
-    // Honest limit on the evidence: the race window is measured and the gate
-    // is read from the source, but the failure was NOT reproduced locally.
-    // Every local failure of this file that was actually captured turned out
-    // to be a sandbox process abort ("did not complete", one second in, before
-    // the wizard is reached) rather than this bug. So the fix rests on the
-    // mechanism being demonstrably possible, not on a local repro.
+    // This is hardening, NOT the macOS fix — an earlier version of this
+    // comment claimed it was, and that was wrong. The macOS failure had a
+    // different cause entirely (see the scroll below), proven by reproducing
+    // it here. This block stays because index arithmetic across a live
+    // animation is fragile on its own merits, and the assertion below turns a
+    // future recurrence into an immediate, accurate failure.
     //
     // Waiting for the outgoing step to leave removes the race; addressing the
     // fields by their hint text removes the index arithmetic that made the
@@ -266,13 +265,42 @@ void main() {
           'receive text — check the wizard field hints before blaming the '
           'standards step below.',
     );
-    // Step 2 — name+summary are filled, so Next alone advances.
+    // Step 2 — name+summary are filled, so Next alone advances. Confirm on
+    // the step's own ValueKey, NOT on anything inside it: the key is on the
+    // ListView itself and therefore exists the moment the step is built,
+    // whatever is or is not scrolled into view.
     await d.tapUntil([
       find.widgetWithText(StoopAmberButton, 'Next'),
-    ], find.text('This card meets the Stoop content standards'));
+    ], find.byKey(const ValueKey('content')));
+
+    // THIS is what turned macOS red, and it is a class of bug, not a one-off.
+    //
+    // _contentStep() is a ListView, and the standards row sits well down it,
+    // behind a conditional completeness banner that renders only for some
+    // cards. A ListView builds only what is visible (plus cache extent), so
+    // when the usable window is shorter than the content, that row is NEVER
+    // IN THE WIDGET TREE and find.text legitimately returns zero — the step
+    // is open and correct, the test just cannot see the row. The suite asks
+    // for 1200x800, but a runner is free to give less, and macOS evidently
+    // does. Reproduced exactly on Linux by asking for 1200x480: same message,
+    // same line, every run.
+    //
+    // scrollUntilVisible is the fix rather than a longer timeout, because
+    // waiting cannot build a widget that is off-screen. This is the same trap
+    // climate_editor_test hit; if a third suite hits it, the scroll belongs in
+    // ChatDriver rather than copied a third time.
+    final standardsRow = find.text('This card meets the Stoop content standards');
+    await tester.scrollUntilVisible(
+      standardsRow,
+      120,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('content')),
+        matching: find.byType(Scrollable),
+      ),
+    );
     // Step 3 — the standards acknowledgement gates Next, so again one unit.
     await d.tapUntil([
-      find.text('This card meets the Stoop content standards'),
+      standardsRow,
       find.widgetWithText(StoopAmberButton, 'Next'),
     ], find.widgetWithText(StoopAmberButton, 'Submit for review'));
     // Submit → the fake accepts the multipart POST.

@@ -1,6 +1,40 @@
 
 
+
 # Changelog
+
+## 2026-08-06 — fix(e2e): the REAL macOS stoop failure — a lazy ListView, not the field race
+- **Files changed:** `integration_test/stoop_test.dart`
+- **Two earlier diagnoses in this file were wrong and are corrected here.** The macOS
+  failure was NOT the AnimatedSwitcher field-index race. That theory was plausible,
+  matched the symptom, and was wrong — the assertion added to test it (`Next` must be
+  enabled before advancing) **passed on macOS CI**, which proves both name and summary
+  were filled correctly. The comment claiming that race was the macOS cause has been
+  replaced.
+- **The actual cause, reproduced.** `_contentStep()` is a `ListView` and the standards
+  row sits well down it, behind a conditional completeness banner. A ListView builds
+  only what is visible, so when the usable window is shorter than the content **the row
+  is never in the widget tree** and `find.text` correctly returns zero — the step is open
+  and healthy, the test simply cannot see the row. The suite asks for 1200x800 but a
+  runner may grant less, and macOS evidently does.
+- **Proven, not inferred this time.** Setting the window to 1200x480 reproduces it on
+  Linux with the identical message and the identical line (`stoop_test.dart:270`,
+  `Found 0 widgets with text "This card meets the Stoop content standards"`). With the
+  fix in place the same 480-height run passes, and so does the restored 800-height run.
+  Fails before, passes after, at the size that reproduces CI.
+- **Fix:** confirm arrival on the step via its own `ValueKey('content')` — on the
+  ListView itself, so it exists regardless of scroll — then `scrollUntilVisible` the
+  standards row. A longer timeout could never have worked: waiting does not build an
+  off-screen widget.
+- **This is a CLASS of bug, not a one-off.** `climate_editor_test` hit exactly the same
+  trap earlier (lazily-built rows below the fold, invisible on the dev machine, red on
+  another platform). Noted in the test: if a third suite hits it, the scroll belongs in
+  `ChatDriver` rather than being copied a third time.
+- **The field-race hardening from the previous commit is kept**, relabelled as hardening
+  rather than the fix. Index arithmetic across a live animation is genuinely fragile —
+  the 5-vs-4 field window was measured — and the enabled-check converts any future
+  recurrence into an immediate accurate failure instead of a timeout blaming a later
+  step. It just was not what turned macOS red.
 
 ## 2026-08-06 — fix(e2e): stoop share wizard typed into the wrong boxes mid-animation
 - **Files changed:** `integration_test/stoop_test.dart`
