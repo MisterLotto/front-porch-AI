@@ -11050,3 +11050,4 @@ bundle Parts 2 and 3" note — they share a document because they were proposed
 in one conversation, not an implementation.
 
 **Gates:** docs only, no code change.
+Commit: 21e9364, 78032e8, 87b510f
