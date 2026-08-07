@@ -11294,3 +11294,4 @@ at 87% earlier today.
 **Gates:** analyze 0 · 15 new guards, two negative-checked (dropping the causes
 while keeping the offset → red; removing the anti-invention clause → red) ·
 web lint + 34 tests + build. Full unit/golden suites not run in this session.
+Commit: 8e2ac39
