@@ -241,7 +241,10 @@ class RealismPromptBuilder {
         'Weigh the exchange against those: a moment that touches something they '
         'are drawn to lands harder than the same words otherwise would, and one '
         'that hits something they are put off by costs more — even when it was '
-        'kindly meant. Do not invent preferences beyond these.\n\n';
+        'kindly meant. When one of these is what actually moved a score, SAY SO '
+        'in that score\'s reason, naming it — the user sees those reasons and '
+        'they are how a number stops being arbitrary. Do not invent preferences '
+        'beyond these.\n\n';
   }
 
   static String _subjectivityFrame(
@@ -438,7 +441,10 @@ class RealismPromptBuilder {
   static String _fixationSection(String charName) =>
       '- "fixation_topic": an intrusive thought $charName cannot stop returning to — it haunts them across '
       'scenes, in their own style (a proud character obsesses over a slight; a lonely one over a moment of '
-      'kindness). Not a temporary reaction. Default: "none".\n';
+      'kindness). Not a temporary reaction. Default: "none".\n'
+      '  Something they are stated to be drawn to, or put off by, is fair game here when the scene keeps '
+      'returning to it — a fixation growing out of a known taste is the most believable kind. It still has '
+      'to have been earned by what actually happened, not proposed because the taste exists.\n';
 
   static String _reasonSection() =>
       '- "reason": one brief sentence naming the key relationship change this turn, or "none".\n';

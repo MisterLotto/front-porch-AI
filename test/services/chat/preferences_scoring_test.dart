@@ -104,6 +104,19 @@ void main() {
       expect(txt, contains('Do not invent preferences beyond these'));
     });
 
+    test('it asks the judge to name the preference in the reason', () {
+      // This is the RECEIPT. bond_reason / trust_reason already existed, were
+      // already stamped into message metadata and already rendered as chip
+      // tooltips — the missing half was telling the judge that a preference is
+      // worth naming when it is what actually moved the score. Without it a
+      // user sees "+4 bond" and no reason to believe it; with it they see the
+      // number and why. Pinned because it is one sentence somebody tidying the
+      // prompt would drop without noticing anything break.
+      final txt = block(likes: ['being read to']);
+      expect(txt, contains('SAY SO'));
+      expect(txt, contains("that score's reason"));
+    });
+
     test('the intimate pair renders when the caller passes it', () {
       final txt = block(into: ['slow mornings'], notInto: ['an audience']);
       expect(txt, contains('warms to slow mornings'));
