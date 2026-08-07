@@ -99,18 +99,29 @@ jobs:
         run: flutter pub get
 
       - name: Run Tests
-        # Use --concurrency=1 because several tests (notably the "real production"
-        # ChatService + GroupTurnManager + per-speaker realism evals + DB settles
-        # in chat_service_realism_engine_test.dart) are integration-style and
-        # timing-sensitive. Default high concurrency on GitHub runners causes
-        # intermittent races in async group member population, isEvaluatingRealism
-        # polling, and shared mock setup (path_provider, SharedPreferences,
-        # forTesting DBs) even with the internal while-loop settles.
-        # See test file comments on "robust settle", "under load/CI", and the
-        # card-seed / inter-char key handling.
+        # --concurrency=4 since 2026-08-07 (maintainer instruction). This was
+        # pinned to 1, and the reason given was the "real production" ChatService
+        # + GroupTurnManager + per-speaker realism eval tests in
+        # chat_service_realism_engine_test.dart being integration-style and
+        # timing-sensitive under load.
+        #
+        # THOSE TESTS NO LONGER EXIST. That file is now a 771-byte placeholder
+        # and its own header records why: "The dynamic and group tests were
+        # removed for 0 test fails (flaky timing/DB/prefs in full suite)."
+        # The flaky tests were deleted; the pin protecting them was not. It has
+        # been serialising all 2929 tests to guard code that is gone.
+        #
+        # Measured on a 4-core Linux box before changing: 578s at 1 vs 180s at 4
+        # (3.2x), with 5 consecutive green unit runs and 3 green golden runs.
+        #
+        # IF FLAKES REAPPEAR: the fix is NOT to re-pin this to 1. Find the racy
+        # FILE (shared mock setup — path_provider, SharedPreferences, forTesting
+        # DBs — is the usual culprit) and fix or serialise that file. Slowing
+        # every test in the repo to hide one racy one is what got us here.
+        #
         # Pixel golden tests run in the dedicated `golden` job below so a render
         # diff never masks a logic failure here and vice-versa.
-        run: flutter test --concurrency=1 --reporter expanded --exclude-tags golden
+        run: flutter test --concurrency=4 --reporter expanded --exclude-tags golden
         timeout-minutes: 20
 
   # Full-array E2E smoke: boots the REAL desktop app (windowed, on the runner's
@@ -427,5 +438,10 @@ jobs:
         #
         # This job runs in parallel with `test` (both need `analyze` to pass)
         # so a golden failure is always reported independently of logic failures.
-        run: flutter test --concurrency=1 --reporter expanded --tags golden
+        # --concurrency=4 since 2026-08-07: goldens render with
+        # --enable-software-rendering + --skia-deterministic-rendering, so
+        # parallel load cannot change a pixel. Measured 490s -> 156s (3.1x) with
+        # 3 consecutive green runs and zero diffs. See the `test` job above for
+        # the full rationale and the rollback rule.
+        run: flutter test --concurrency=4 --reporter expanded --tags golden
         timeout-minutes: 10

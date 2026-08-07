@@ -11051,3 +11051,60 @@ in one conversation, not an implementation.
 
 **Gates:** docs only, no code change.
 Commit: 21e9364, 78032e8, 87b510f
+
+## 2026-08-07 — ci: --concurrency=1 → 4 across every test entry point
+
+**Files:** CLAUDE.md (Key Commands), .github/workflows/ci.yml (test + golden
+jobs), .github/workflows/update-goldens.yml, scripts/ci-local.sh (3 sites +
+the `test` mode fix), .github/workflows/test-integrity.yml (protect
+scripts/ci-local.sh).
+
+**Why:** the pin was costing ~3.2x on every run and the reason it existed had
+been deleted. `ci.yml` justified `--concurrency=1` by naming
+`chat_service_realism_engine_test.dart` ("integration-style and
+timing-sensitive… intermittent races in async group member population,
+isEvaluatingRealism polling, shared mock setup"). **That file is now a
+771-byte placeholder** whose own header records why: "The dynamic and group
+tests were removed for 0 test fails (flaky timing/DB/prefs in full suite)."
+The flaky tests were removed; the pin protecting them was not, and has been
+serialising all 2929 tests ever since to guard code that is gone.
+
+**Measured before changing** (4-core Linux, maintainer instruction to change
+only if every run passed):
+- unit 2929 tests — 578s @1 → 180/196/195/191s @4 (5 green runs, ~3.2x)
+- goldens 94 — 490s @1 → 156/166s @4 (green, zero pixel diffs)
+- full gate ~18 min → ~5.6 min
+
+Goldens are safe in parallel by construction: they render with
+`--enable-software-rendering --skia-deterministic-rendering`, so load cannot
+change a pixel.
+
+**Rollback rule written into ci.yml:** if flakes reappear, do NOT re-pin to 1.
+Find the racy FILE (shared mock setup — path_provider, SharedPreferences,
+forTesting DBs — is the usual culprit) and fix or serialise that one. Slowing
+every test in the repo to hide one racy test is what produced this.
+
+**Bug found while making everything match:** `scripts/ci-local.sh`'s `test`
+mode ran bare `flutter test` while its own echo claimed "CI parity". It has
+never matched CI — no `--exclude-tags golden` (so the pixel suite ran twice,
+once in its own step and again inside the full run) and default concurrency.
+Now byte-identical to the ci.yml command.
+
+**test-integrity.yml:** `scripts/ci-local.sh` is now a protected path. The rest
+of `scripts/` stays excluded (build/release code, not regression evidence);
+this one file is carved out because its entire value is REPRODUCING a gate —
+18 goldens are `@TestOn('linux')`, a green macOS run never executes them, and
+that is how a red-CI commit reached Rawhide once already. The moment the
+script drifts from ci.yml the pre-push gate silently stops being a gate, which
+is not hypothetical (see the bug above). Both files now carry a
+`--concurrency` value that must agree.
+
+**Note (cron gotcha, CLAUDE.md):** `test-integrity.yml` runs from the BASE
+branch on `pull_request_target` and `nightly.yml` schedules from the DEFAULT
+branch, so these edits do not take effect for those two until they reach
+`main`.
+
+**Gates:** 3 workflows parse as YAML · embedded github-script passes
+`node --check` · `ci-local.sh` passes `bash -n` · protected-path predicate
+re-run over all 1901 tracked files (577 protected, 558 test-ish all caught,
+nothing over-caught).

@@ -98,19 +98,37 @@ jobs:
               // gate on these same paths, and a PR that can delete it has
               // removed half the net.
               p.startsWith('.github/') ||
+              // The ONE script that is regression evidence. ci-local.sh exists
+              // to run the Linux-gated golden suite with the SAME command CI
+              // uses, so a push can be gated on the same result — 18 goldens are
+              // @TestOn('linux') and a green macOS run never executes them,
+              // which is how a red-CI commit reached Rawhide once already. Its
+              // value is entirely in matching ci.yml; the moment the two drift,
+              // the pre-push gate silently stops being a gate. That drift is not
+              // hypothetical: its `test` mode ran bare `flutter test` for a long
+              // time while CI ran --exclude-tags golden with an explicit
+              // concurrency flag (fixed 2026-08-07). Now that both files carry a
+              // --concurrency value that must agree, an unreviewed edit to
+              // either side is exactly the failure this workflow exists to make
+              // visible.
+              p === 'scripts/ci-local.sh' ||
               p === 'analysis_options.yaml' ||
               p === 'test/deps/dependency_floors.json';
 
-            // DELIBERATELY NOT PROTECTED HERE: scripts/, pubspec.yaml,
-            // pubspec.lock and lib/database/. CODEOWNERS already requires the
-            // maintainer's review on all four. They are code and packaging, not
-            // regression evidence, and they change in the course of ordinary
-            // work — a lock file moves on every dependency bump, lib/database/
-            // on every schema change. Adding them would make this gate fire on
-            // routine PRs, and a gate that cries wolf is a gate someone turns
-            // off. A lock that downgrades below a floor is already caught, by
-            // dependency_floor_test.dart failing — which is exactly the check
-            // this workflow exists to keep un-editable.
+            // DELIBERATELY NOT PROTECTED HERE: the REST of scripts/,
+            // pubspec.yaml, pubspec.lock and lib/database/. CODEOWNERS already
+            // requires the maintainer's review on all four. They are code and
+            // packaging, not regression evidence, and they change in the course
+            // of ordinary work — a lock file moves on every dependency bump,
+            // lib/database/ on every schema change. Adding them would make this
+            // gate fire on routine PRs, and a gate that cries wolf is a gate
+            // someone turns off. A lock that downgrades below a floor is already
+            // caught, by dependency_floor_test.dart failing — which is exactly
+            // the check this workflow exists to keep un-editable.
+            //
+            // scripts/ci-local.sh is carved out of that exclusion above because
+            // it is the only file in scripts/ whose job is to REPRODUCE a gate
+            // rather than to build or release something.
 
             const files = await github.paginate(
               github.rest.pulls.listFiles,

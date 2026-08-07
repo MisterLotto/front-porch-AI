@@ -29,10 +29,22 @@ dart format --set-exit-if-changed .  # Format check. NOT `flutter format` — th
                                      #   Do NOT bulk-run this: see "Verification".
 
 # Tests
-flutter test --concurrency=1 --exclude-tags golden
-                                     # What CI actually runs. Bare `flutter test`
-                                     #   races the realism-engine integration tests
-                                     #   at default concurrency.
+flutter test --concurrency=4 --exclude-tags golden
+                                     # What CI actually runs. Was pinned to
+                                     #   --concurrency=1 to protect the
+                                     #   realism-engine integration tests — but
+                                     #   those were DELETED (see
+                                     #   chat_service_realism_engine_test.dart,
+                                     #   now a one-line placeholder whose header
+                                     #   says the flaky dynamic/group tests were
+                                     #   removed). The pin outlived its reason and
+                                     #   was costing ~3.2x on every run: 578s → 180s
+                                     #   over 2929 tests. Changed 2026-08-07 on the
+                                     #   maintainer's instruction after 5 green
+                                     #   unit runs + 3 green golden runs at 4.
+                                     #   If flakes ever reappear, drop back to
+                                     #   --concurrency=1 and find the racy FILE
+                                     #   rather than re-slowing all 2929 tests.
 flutter test --coverage              # With coverage
 flutter test test/path/to/file.dart  # Single test file
 flutter test -n "test name"          # Run specific test by name
