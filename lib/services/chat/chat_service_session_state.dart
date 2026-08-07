@@ -348,6 +348,7 @@ extension ChatServiceSessionState on ChatService {
         passageOfTimeEnabled: drift.Value(_timeService.passageOfTimeEnabled),
         nsfwCooldownEnabled: drift.Value(_nsfwService.nsfwCooldownEnabled),
         needsSimEnabled: drift.Value(_needsSimEnabled),
+        objectivesEnabled: drift.Value(_objectivesEnabled),
         needsVector: drift.Value(
           _needsSimEnabled ? jsonEncode(_needsSimulation.vector) : null,
         ),

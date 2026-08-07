@@ -91,7 +91,13 @@ extension _RealismEvalSupport on RealismEvals {
       final m2 = RegExp('"proposed_objective"\\s*:\\s*"([^"]*)"', dotAll: true).firstMatch(text);
       objectiveRaw = m2?.group(1)?.trim() ?? '';
     }
-    if (objectiveRaw.toLowerCase() != 'none' && objectiveRaw.isNotEmpty) {
+    // Objectives off ⇒ the character does not get to start new quests. The
+    // eval already ran (it carries fixation too), so this costs nothing extra;
+    // it just declines to act on the proposal half of the answer.
+    final objectivesOn = getObjectivesEnabled?.call() ?? true;
+    if (objectivesOn &&
+        objectiveRaw.toLowerCase() != 'none' &&
+        objectiveRaw.isNotEmpty) {
       final active = getActiveObjectives();
       final isDuplicate = active.any(
         (o) => o.objective.toLowerCase() == objectiveRaw.toLowerCase(),

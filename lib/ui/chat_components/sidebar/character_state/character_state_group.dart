@@ -183,15 +183,6 @@ class _CharacterStateGroupState extends State<CharacterStateGroup> {
                 compact: false,
               ),
             ],
-            // ── Ambitions (Living Time §6) — visible from the first frame
-            //     so an armed ambition is never invisible ──
-            if (chat.activeCharacter != null &&
-                chat.ambitionsFor(chat.activeCharacter!).isNotEmpty) ...[
-              const SizedBox(height: 10),
-              AmbitionsRow(
-                ambitions: chat.ambitionsFor(chat.activeCharacter!),
-              ),
-            ],
             // ── Needs ──
             if (chat.needsSimEnabled &&
                 chat.needsSimulation.vector.isNotEmpty) ...[
@@ -210,6 +201,20 @@ class _CharacterStateGroupState extends State<CharacterStateGroup> {
                 crossAxisCount: 2,
               ),
             ],
+          ],
+          // ── Ambitions (Living Time §6) ──
+          // Deliberately OUTSIDE the realism branch above. Ambitions are
+          // card-authored text and their progress moves on quest completion,
+          // so they need Objectives — not the Realism Engine. Sitting inside
+          // that branch meant switching the engine off HID a feature that was
+          // still running, which is the same class of bug the Porch Life tab
+          // was built to end (docs/design/feature-independence.md).
+          if (!widget.isGroup &&
+              chat.objectivesActive &&
+              chat.activeCharacter != null &&
+              chat.ambitionsFor(chat.activeCharacter!).isNotEmpty) ...[
+            const SizedBox(height: 10),
+            AmbitionsRow(ambitions: chat.ambitionsFor(chat.activeCharacter!)),
           ],
           if (realismOn || widget.isGroup) ...[
             const SizedBox(height: 10),

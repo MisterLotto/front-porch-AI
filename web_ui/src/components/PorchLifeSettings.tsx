@@ -34,6 +34,7 @@ interface PorchLifeState {
   needsSimDefault: boolean;
   passageOfTimeDefault: boolean;
   standaloneClockEnabled: boolean;
+  objectivesEnabled: boolean;
   weatherEnabled: boolean;
   weatherFahrenheit: boolean;
   journalEnabled: boolean;
@@ -54,6 +55,7 @@ const DEFAULTS: PorchLifeState = {
   needsSimDefault: true,
   passageOfTimeDefault: true,
   standaloneClockEnabled: false,
+  objectivesEnabled: true,
   weatherEnabled: true,
   weatherFahrenheit: false,
   journalEnabled: true,
@@ -196,6 +198,9 @@ export function PorchLifeSettings() {
   const timeOn = st.passageOfTimeDefault;
   const weatherOn = st.weatherEnabled;
   const journalOn = st.journalEnabled;
+  // Objectives depend on nothing but their own eval cost; Ambitions hang off
+  // them, since finishing a quest is the only thing that moves progress.
+  const objectivesOn = st.objectivesEnabled;
   // Weather and dreams gate on the Passage of Time FLAG, deliberately not on
   // whether the clock is currently moving — gating on the latter greys Story
   // Weather out again with the engine off, which is the dead-switch problem
@@ -323,9 +328,20 @@ export function PorchLifeSettings() {
           onChange={(v) => set('promiseLedgerEnabled', v)}
         />
         <FeatureRow
+          icon="🎯"
+          label="Objectives"
+          need="alone"
+          blurb="Short-lived quests a character works toward — set your own, or let them decide what they want. Needs nothing else to run, but it does check in with the AI to see whether a task got done: every turn while the Realism Engine is on, and every few messages while it is off. Switching this off is the way to stop that cost — your quests are kept either way."
+          value={objectivesOn}
+          onChange={(v) => set('objectivesEnabled', v)}
+        />
+        <FeatureRow
           icon="🚩"
           label="Ambitions"
-          blurb={"Long-term goals written on the character's card colour how they steer a scene, and finishing an objective moves them a little closer. Costs nothing extra — the goals are already on the card."}
+          need="needs"
+          dependsOn="Objectives"
+          satisfied={objectivesOn}
+          blurb={"Long-term goals written on the character's card colour how they steer a scene, and finishing an objective moves them a little closer. Costs nothing extra — the goals are already on the card — but finishing a quest is the only thing that moves them, so they need Objectives running."}
           value={st.ambitionsEnabled}
           onChange={(v) => set('ambitionsEnabled', v)}
         />

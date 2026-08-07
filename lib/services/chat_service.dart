@@ -562,6 +562,8 @@ class ChatService extends ChangeNotifier {
   // Straight decay ticks in _needsSimulation; model deltas (+ optional Director review when authority) in _needsImpactEvaluator.
   // See CLAUDE.md for full reset keep-sync + "incomplete zeroing now complete" + buffer removal + authority decision (simple model+Director path).
   bool _needsSimEnabled = false;
+  // Per-chat Objectives switch (v45). Defaults true; read via objectivesActive.
+  bool _objectivesEnabled = true;
   bool _enjoysLowHygiene =
       false; // inversion for hygiene (enjoys being dirty/sweaty/musky)
 

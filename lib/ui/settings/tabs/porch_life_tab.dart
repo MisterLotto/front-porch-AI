@@ -68,6 +68,10 @@ class PorchLifeTab extends StatelessWidget {
     final timeOn = storage.passageOfTimeDefault;
     final weatherOn = storage.weatherEnabled;
     final journalOn = storage.journalEnabled;
+    // Objectives depend on nothing but their own eval cost (maintainer,
+    // 2026-08-07), and Ambitions hang off them: finishing a quest is the only
+    // thing that moves ambition progress.
+    final objectivesOn = storage.objectivesEnabled;
 
     // Weather and dreams gate on the Passage of Time FLAG, deliberately not on
     // whether the clock is currently moving (ChatService._clockRunning). An
@@ -254,14 +258,34 @@ class PorchLifeTab extends StatelessWidget {
               onChanged: realism.setPromiseLedgerEnabled,
             ),
             FeatureRow(
+              icon: Icons.track_changes,
+              label: 'Objectives',
+              need: FeatureNeed.alone,
+              blurb:
+                  'Short-lived quests a character works toward — set your own, '
+                  'or let them decide what they want. Needs nothing else to '
+                  'run, but it does check in with the AI to see whether a task '
+                  'got done: every turn while the Realism Engine is on, and '
+                  'every few messages while it is off. Switching this off is '
+                  'the way to stop that cost — your quests are kept either way.',
+              value: objectivesOn,
+              onChanged: (v) {
+                storage.setObjectivesEnabled(v);
+                chat.setObjectivesEnabled(v);
+              },
+            ),
+            FeatureRow(
               icon: Icons.flag_outlined,
               label: 'Ambitions',
-              need: FeatureNeed.alone,
+              need: FeatureNeed.needs,
+              dependsOn: 'Objectives',
+              satisfied: objectivesOn,
               blurb:
                   'Long-term goals written on the character\'s card colour how '
                   'they steer a scene, and finishing an objective moves them a '
                   'little closer. Costs nothing extra — the goals are already '
-                  'on the card.',
+                  'on the card — but finishing a quest is the only thing that '
+                  'moves them, so they need Objectives running.',
               value: realism.ambitionsEnabled,
               onChanged: realism.setAmbitionsEnabled,
             ),

@@ -3,6 +3,106 @@
 
 # Changelog
 
+## 2026-08-07 — feat(independence): Phase 2 complete — absence note lifted, promises made pure, cadence stated
+- **Files changed:** `lib/services/chat/prompt_injection/time_injection.dart`,
+  `prompt_injection/realism_state_injection.dart`, `lib/services/chat/chat_service_wiring_injection.dart`,
+  `lib/services/chat/chat_service_wiring_memory.dart`, `lib/ui/settings/tabs/porch_life_tab.dart`,
+  `web_ui/src/components/PorchLifeSettings.tsx`, `assets/web_app/*` (rebuilt),
+  `CLAUDE.md`, `docs/design/feature-independence.md`, `docs/Rawhide.md`
+- **Absence-note fragment lift.** `getAbsenceNote` was appended INSIDE
+  `TimeInjection.buildTimeInjection()`, so it inherited `_sceneFactsEnabled` and never reached the
+  model whenever the story clock was frozen — the "saves, confirms, reaches the model never" class
+  of bug. The note is computed from the last message's WALL-CLOCK timestamp and its own opt-in;
+  story time has no bearing on whether it is true. Now its own fragment on `RealismStateInjection`,
+  emitted in the same position so the block is byte-identical when the clock IS running.
+  No new class or file: the callback moved up one level rather than growing an `AbsenceInjection`
+  leaf that would have been a three-line pass-through.
+- **Promises' purity gate** (maintainer decision this session). With the engine off, a kept/broken
+  promise was the ONLY writer of bond and trust — every other writer is gated — so those scalars
+  moved in a chat whose sidebar reads "Realism Mode is off". Detection, the ledger, the Journal
+  card, kept/broken status and the milestone all still run; only the two score writes are skipped.
+- **Objectives cadence copy.** The completion check runs every turn with the engine on but every
+  `checkFrequency` (default 3) messages without it (`chat_service_objectives.dart:407`). Nothing in
+  the UI said so; the Porch Life row now does, desktop and web.
+- **Chaos relabelled.** CLAUDE.md filed Chaos Mode under the Realism Engine; the 2026-08-07 audit
+  found it fully independent. The entry now says so and points at the per-chat sidebar switch.
+- **Also in this batch — ambitions no-op when Objectives are off** (maintainer: *"the ambitions
+  coded into the character PNG need to no-op to not waste user tokens for something that doesn't
+  work"*). The fragment is rebuilt into the prompt EVERY turn, and with Objectives off the stage
+  word it carries is frozen for the life of the chat, so it was billing the user per-turn for a
+  line that could never change. Gate is now `ambitionsEnabled && objectivesActive`, and the web
+  chat-tools surface carries the same gate (desktop/web parity).
+- **Test-coverage honesty.** `ambition_no_op_test.dart` ships two REAL tests (a card carrying
+  ambitions produces genuinely non-empty text — the protected `prompt_injection_test.dart` uses a
+  character with none and says so, meaning it never verified the gate suppresses anything) plus two
+  clearly-labelled SOURCE tripwires. A first draft "tested" the gate by rebuilding its `if` inside
+  the test, which asserts the test's own code and would stay green if production lost the gate
+  entirely; that was deleted rather than shipped as decoration.
+- **Shared fake maintenance:** `test/golden/support/fakes_storage.dart` gained `objectivesEnabled`.
+  The Porch Life tab reads it in `build()`, and a getter the real StorageService grew but the fake
+  did not falls through to `noSuchMethod` and throws while BUILDING the tab — which took down all
+  three Porch Life tests, including the protected one. Fixed in the fake, so no test file's
+  assertions were touched.
+- **Commit hash:** (pending)
+
+## 2026-08-07 — feat(objectives): the switch Objectives never had, and Ambitions moved onto it
+- **Files changed:** `lib/database/database.tables.core.dart`, `database.migrations.dart`, `database.repair.dart`,
+  `database.dart` (schemaVersion 44→45), `database.g.dart` (regenerated),
+  `lib/services/storage/settings/realism_settings.dart`, `lib/services/storage_service.dart`,
+  `lib/services/chat_service.dart`, `lib/services/chat/chat_service_accessors.dart`,
+  `chat_service_controls.dart`, `chat_service_objectives.dart`, `chat_service_chat_entry.dart`,
+  `chat_service_session_load.dart`, `chat_service_session_state.dart`, `chat_service_wiring_evals.dart`,
+  `chat_service_wiring_injection.dart`, `lib/services/chat/realism_evals.dart`,
+  `realism_evals.support.dart`, `lib/ui/chat_components/sidebar/sidebar_body.dart`,
+  `lib/ui/chat_components/sidebar/character_state/character_state_group.dart`,
+  `lib/ui/settings/tabs/porch_life_tab.dart`, `lib/services/web/facade/settings_facade.dart`,
+  `web_ui/src/components/PorchLifeSettings.tsx`, `assets/web_app/*` (rebuilt),
+  `test/database/objectives_enabled_migration_test.dart` (new),
+  `test/ui/settings/objectives_toggle_test.dart` (new),
+  `test/services/avatar_repository_test.dart` (schemaVersion assertion — see below),
+  `docs/design/feature-independence.md`, `docs/Rawhide.md`
+- **Maintainer rulings (2026-08-07):** *"Ambitions should only require objectives"* and *"objectives
+  depends on nothing other than its eval cost"*. Both were asked as questions first — "why do
+  ambitions require realism engine?" — and the honest answer was that they never did.
+- **What was actually wrong.** Ambitions worked fine with the engine off: `buildAmbitionInjection()`
+  has no realism check, and progress accrues through AmbitionService's OWN eval on quest completion.
+  But `character_state_group.dart:148` wrapped the whole 1:1 sidebar block in `realismOn`, and the
+  Ambitions row sat inside it — so the feature kept running INVISIBLY. Meanwhile `onQuestAchieved`
+  never checked `ambitionsEnabled`, so switching ambitions off hid the display while still spending
+  a model call on every completion. Two bugs pointing in opposite directions.
+- **Objectives had no switch at all** — grep for `objectivesEnabled` returned nothing — while the
+  completion check fired every turn with the engine on, or every `checkFrequency` (default 3)
+  messages without it, forever, for any open quest. It was the only feature in this family with a
+  recurring cost and no way to stop it.
+- **Schema v45** (maintainer-approved, additive): `sessions.objectives_enabled`, `DEFAULT 1`. The
+  default is the entire safety property — objectives ran unconditionally before, so 0 would have
+  silently stopped quests across the whole installed base on upgrade. Ladder + repair path + Table
+  definition all say 1, and the new test asserts all three agree.
+- **Deliberately NO card extension.** The first draft added `objectives_enabled` to
+  `frontPorchExtensions` for Needs-parity; it changed the card JSON shape, which broke two card
+  goldens and — more importantly — ripples to The Stoop and every external card reader. Objectives
+  are not a character trait. Reverted; the session column is the per-chat store and fresh chats seed
+  from the global alone.
+- **Live gate, not stored-AND.** `objectivesActive` = per-chat AND global, evaluated per read.
+  Needs AND-gates at seed time, which means flipping the global leaves open chats running — merely
+  surprising for Needs, but it would defeat this switch's entire purpose (stopping a recurring
+  model call). Off takes effect on the next turn, everywhere.
+- **Off means gone, data kept:** completion checks, autonomous proposals, task generation and prompt
+  injection all stop, and the sidebar accordion is REMOVED rather than disabled (no dead surface
+  suggesting it still works). Objective rows are never deleted.
+- **Protected-test note (needs the maintainer's `approved-test-change` label if this goes through a
+  PR):** `test/services/avatar_repository_test.dart` hard-asserts `db.schemaVersion`. The bump to 45
+  was explicitly approved, so `expect(..., 44)` is provably wrong rather than merely inconvenient —
+  it tracks schemaVersion by definition. One line changed, rationale in-place. No other test was
+  touched; the two card goldens were fixed by removing the card extension, not by editing them.
+- **God-file ratchet:** the new field pushed `chat_service.dart` to exactly 1000 lines and the
+  ratchet failed. Fixed by trimming the comment (996), NOT by adding a baseline entry.
+- **Verification:** `flutter analyze` 0 issues; full unit suite green; new migration test 5/5 and
+  objectives UI test 2/2, **all three critical guards negative-checked** (ladder DEFAULT flipped to
+  0 → red; generated table default flipped to false → red; Ambitions chip reverted to "works alone"
+  → red; all restored → green). Web tsc + vitest 34/34 + bundle rebuilt.
+- **Commit hash:** (pending)
+
 ## 2026-08-06 — feat(time): the story clock stands on its own eval (Passage of Time decoupled from the Realism Engine)
 - **Files changed:** `lib/services/storage/settings/realism_settings.dart`, `lib/services/storage_service.dart`,
   `lib/services/chat/time_service.dart`, `lib/services/chat/realism_tools.dart`,

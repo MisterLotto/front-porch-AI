@@ -390,14 +390,17 @@ extension ChatServiceObjectives on ChatService {
   /// Check if the current task has been completed (called periodically).
   /// Manually trigger a completion check (called from UI "Check now" button).
   void forceCheckCompletion() {
-    if (_activeObjectives.isEmpty) return;
+    if (!objectivesActive || _activeObjectives.isEmpty) return;
     _checkTaskCompletionInBackground(); // step 11 thin (full in objective_proposal)
     notifyListeners(); // trigger UI to show spinner
   }
 
   /// Synchronous version — awaits the check. Used pre-generation.
   Future<void> _maybeCheckTaskCompletionSync() async {
-    if (_activeObjectives.isEmpty ||
+    // The recurring cost this feature's switch exists to stop: one model call
+    // every `freq` messages, forever, for as long as a quest is open.
+    if (!objectivesActive ||
+        _activeObjectives.isEmpty ||
         _llmProvider == null ||
         _isCheckingCompletion) {
       return;

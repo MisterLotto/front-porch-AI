@@ -187,6 +187,14 @@ class Sessions extends Table {
   TextColumn get themeOverrides => text().nullable()();
   TextColumn get contextBudgetJson => text().nullable()(); // v44 Context Budget
 
+  /// Per-chat Objectives switch (v45). Defaults TRUE because objectives have
+  /// always run unconditionally — every existing row must keep behaving
+  /// exactly as it did, so the migration's default is the no-op value.
+  /// AND-gated against the global `objectivesEnabled` the same way
+  /// [needsSimEnabled] is gated against `needsSimDefault`.
+  BoolColumn get objectivesEnabled =>
+      boolean().withDefault(const Constant(true))();
+
   /// Live per-character realism/needs state for group sessions.
   /// JSON map: { charId: { emotion, needs, affection, trust, fixation, relationships, ... } }
   /// Replaces the old hidden __group_state__ checkpoint message system (clean break in v30).

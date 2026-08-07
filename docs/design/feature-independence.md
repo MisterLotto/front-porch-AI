@@ -17,8 +17,8 @@ Mockup (approved layout pending): the "Porch Life" tab sketch artifact.
 | **Promises** | fully functional | Journal | zero; optional 1-line gate so kept/broken doesn't write frozen bond/trust scalars |
 | **Growth Rings** | fully functional | none | zero (loses felt-window annotations only) |
 | **The Journal** | pass runs; cards plant | none | zero to run; emotion stamps/salience/mood-boost need realism (or a future classifier/extra call for parity) |
-| **Objectives** | manual quests fully work | none for manual | zero; AUTONOMOUS proposals piggyback the narrative eval → standalone = +1 periodic call |
-| **Ambitions** | injection works (copy is honest) | none | two cheap fixes: the 1:1 sidebar row hides inside the realism-on block; the accrual eval ignores ambitionsEnabled |
+| **Objectives** | fully functional | **nothing but its own eval cost** (maintainer, 2026-08-07) | **DONE 2026-08-07**: given the switch it never had (`objectivesEnabled` global + `sessions.objectives_enabled` per chat, v45). Off ⇒ no completion checks, no autonomous proposals, no injection, sidebar panel gone; quests preserved |
+| **Ambitions** | injection + accrual both work | **Objectives** (quest completion is the only thing that moves progress) | **DONE 2026-08-07**: sidebar row lifted out of the realism-on block; accrual now honours `ambitionsEnabled` |
 | **Notices your absence** | silently dead (note rides the realism-gated time fragment) | its own flag + last-message timestamp | small: lift `getAbsenceNote` into its own injection fragment, own gate |
 | **Passage of Time** | frozen by default; runs on its own eval with the opt-in on | a MODEL CALL, not the engine — **DECOUPLED 2026-08-06** | +1 short call per turn, only for engine-off users who opt in |
 | **Story Weather / °F** | follows the clock — works whenever the clock moves | the CLOCK (either driver) | zero: deterministic math, no eval of its own |
@@ -110,9 +110,43 @@ the identical moment for an identical verdict.
   causes today: recap's and weather's toggles are invisible to realism-off
   users. Desktop + web same PR. The old Realism Mode section in General
   becomes a pointer (deprecation rule: no dead surface left).
-- **Phase 2 — cheap truths.** Chaos relabeled independent; Ambitions' two
-  fixes; absence-note fragment lift; Promises' optional purity gate
-  (maintainer call); Objectives cadence copy.
+- **Phase 2 — cheap truths. PARTLY DONE 2026-08-07.**
+  - ✅ **Objectives got the switch it never had.** Maintainer ruling: *"objectives
+    depends on nothing other than its eval cost"* — so it is chipped "works
+    alone" and gained a global `objectivesEnabled` + per-chat
+    `sessions.objectives_enabled` (schema v45, additive, DEFAULT 1 so every
+    existing chat keeps its quests). Off ⇒ completion checks, autonomous
+    proposals, task generation and prompt injection all stop, and the sidebar
+    accordion is REMOVED rather than disabled (no dead surface). Objective rows
+    are never deleted — flip it back and the quests are exactly as they were.
+    Deliberately NO card extension: a per-character default would change the
+    card JSON shape, which ripples to The Stoop and every external reader, and
+    objectives are not a character trait.
+  - ✅ **Ambitions' two fixes.** Maintainer ruling: *"ambitions should only
+    require objectives"*. The 1:1 sidebar row was lifted OUT of the realism-on
+    block (it was hiding a feature that kept working), and the accrual now
+    honours `ambitionsEnabled` — previously the switch hid the display while
+    still spending a model call per quest completion.
+  - ✅ **Chaos relabelled independent.** CLAUDE.md filed it under the Realism
+    Engine; the audit found it fully functional with the engine off. The entry
+    now says so and points at the per-chat sidebar switch.
+  - ✅ **Absence-note fragment lift.** `getAbsenceNote` rode inside
+    `TimeInjection`, so it inherited the scene-facts gate and was silently dead
+    whenever the story clock was frozen — despite being computed from your last
+    message's WALL-CLOCK timestamp and its own opt-in, neither of which has
+    anything to do with story time. It is now its own fragment in
+    `RealismStateInjection`, emitted in the same position (so the block is
+    byte-identical when the clock is running) under its own gate.
+  - ✅ **Promises' purity gate** (maintainer, 2026-08-07). With the engine off
+    a kept/broken promise was the ONLY writer of bond and trust — every other
+    writer is gated — so scores moved in a chat whose sidebar says "Realism
+    Mode is off". The promise still resolves in full; only the score write is
+    skipped (`chat_service_wiring_memory.dart`).
+  - ✅ **Objectives cadence copy.** The completion check runs every turn with
+    the engine on but every `checkFrequency` (default 3) messages without it.
+    The Porch Life row now says so, desktop and web.
+
+  **Phase 2 is COMPLETE.**
 - **Phase 3 — SHIPPED 2026-08-06** (it had been cancelled on the misreading
   corrected above). Passage of Time runs on its own eval behind an opt-in;
   weather and dreams follow the clock rather than the engine. Needs keeps its

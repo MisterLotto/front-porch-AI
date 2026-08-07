@@ -150,6 +150,19 @@ extension ChatServiceAccessors on ChatService {
       (_realismEnabled ||
           _storageService.realismSettings.standaloneClockEnabled);
 
+  /// Objectives are actually running for this chat: the per-chat switch AND the
+  /// global one (docs/design/feature-independence.md). Objectives depend on
+  /// nothing but their own eval cost — not the Realism Engine, not the Journal.
+  ///
+  /// The global is applied LIVE here rather than AND-ed into `_objectivesEnabled`
+  /// at seed time the way Needs does it. That difference is deliberate: the
+  /// stored-AND means flipping the global off leaves every already-open chat
+  /// running, which for Needs is merely surprising but here would defeat the
+  /// switch's whole purpose — stopping a recurring model call. Checking live
+  /// means "off" takes effect on the next turn, everywhere.
+  bool get objectivesActive =>
+      _objectivesEnabled && _storageService.realismSettings.objectivesEnabled;
+
   bool get isCancellingRealismEval => _isCancellingRealismEval;
 
   void _onBackendIdentityMaybeChanged() {

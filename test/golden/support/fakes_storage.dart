@@ -189,6 +189,16 @@ class FakeStorageService extends ChangeNotifier implements StorageService {
   @override
   int get drawThingsGrpcPort => 8080;
 
+  // Porch Life reads this in build(). Added with the v45 Objectives switch:
+  // this fake tracks StorageService's surface, and a getter the real class
+  // grew but the fake did not falls through to noSuchMethod and throws while
+  // BUILDING the tab — taking every Porch Life test down with it, including
+  // ones that have nothing to do with objectives. Subclasses that care about
+  // the value (objectives_toggle_test) override it with a real RealismSettings;
+  // everyone else gets the production default, which is ON.
+  @override
+  bool get objectivesEnabled => true;
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

@@ -745,5 +745,21 @@ extension _AppDatabaseMigrationLadder on AppDatabase {
       if (from < 44) {
         await migrateSessionsContextBudgetV44(this);
       }
+      if (from < 45) {
+        // v44→v45: per-chat Objectives switch (docs/design/feature-independence.md).
+        // Objectives ran unconditionally before this, so the default MUST be 1 —
+        // every existing chat has to keep its quests running exactly as it did.
+        // A default of 0 here would silently switch the feature off for the whole
+        // installed base on upgrade. Additive with a default, so raw external
+        // writers to `sessions` keep working untouched.
+        try {
+          await customStatement(
+            'ALTER TABLE sessions ADD COLUMN objectives_enabled INTEGER NOT NULL DEFAULT 1',
+          );
+          debugPrint('[DB] v45: added sessions.objectives_enabled');
+        } catch (_) {
+          // already present (re-run / dual-version)
+        }
+      }
   }
 }

@@ -54,7 +54,11 @@ void main() {
       // v40: Living Worlds (worlds columns + chat_worlds + chat_biome_spans).
       // v41: worlds.place_traits (atmosphere/gravity JSON).
       // v42: groups.folder_id (groups movable through folders).
-      expect(db.schemaVersion, 44);
+      // v45: sessions.objectives_enabled (the Objectives switch). Bumped with
+      //      the maintainer's explicit sign-off on the schema change
+      //      (2026-08-07); this assertion tracks schemaVersion by definition,
+      //      so it is provably wrong at 44 rather than merely inconvenient.
+      expect(db.schemaVersion, 45);
     });
 
     test('journal_memories table exists and round-trips (v35)', () async {

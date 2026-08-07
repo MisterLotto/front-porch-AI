@@ -295,6 +295,11 @@ class RealismEvals {
   final String Function(CharacterCard card) getCharacterDossier;
 
   // Objective proposal (for narr/oneShot; thin cb to god per plan for coordination)
+  /// Whether Objectives are running for this chat (v45). The autonomous
+  /// proposal is the one place a realism eval CREATES an objective, so it has
+  /// to respect the Objectives switch — otherwise turning quests off would
+  /// still grow new ones behind the user's back.
+  final bool Function()? getObjectivesEnabled;
   final Objective? Function() getPrimaryObjective;
   final List<Objective> Function() getActiveObjectives;
   final Future<void> Function(
@@ -331,6 +336,7 @@ class RealismEvals {
     required this.timeService,
     required this.getExpressionEnabled,
     required this.getCharacterDossier,
+    this.getObjectivesEnabled,
     required this.getPrimaryObjective,
     required this.getActiveObjectives,
     required this.setObjective,

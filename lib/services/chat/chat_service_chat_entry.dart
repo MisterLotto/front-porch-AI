@@ -277,6 +277,12 @@ extension ChatServiceChatEntry on ChatService {
           _needsSimEnabled =
               ext.needsSimEnabled &&
               _storageService.realismSettings.needsSimDefault;
+          // Objectives seed from the GLOBAL switch only — deliberately no card
+          // extension. A per-character default would change the card JSON
+          // shape, which ripples to The Stoop and every external reader, and
+          // nobody asked for objectives to be a per-character trait. The
+          // per-chat store is sessions.objectives_enabled.
+          _objectivesEnabled = _storageService.realismSettings.objectivesEnabled;
           _enjoysLowHygiene = ext.enjoysLowHygiene;
           if (_needsSimEnabled) {
             // Brand new conversation for this character (no prior session loaded):

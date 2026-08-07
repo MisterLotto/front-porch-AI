@@ -49,6 +49,16 @@ class RealismSettings with SettingsBase {
   /// Read only when the engine is off: with realism ON the fused scene-time
   /// eval already drives the clock for free and this flag is ignored.
   bool _standaloneClockEnabled = false;
+
+  /// Global Objectives switch (v45). Objectives are the character's short-lived
+  /// quests; they depend on NOTHING but their own eval cost — not the Realism
+  /// Engine, not the Journal — and until now they had no off switch at all,
+  /// despite firing a completion check on a recurring cadence forever.
+  /// Defaults TRUE and AND-gates the card/session setting (the [needsSimDefault]
+  /// shape, not the NSFW OR-override), so nothing changes until someone turns
+  /// it off deliberately. Ambitions hang off this, since quest completion is
+  /// the only thing that moves ambition progress.
+  bool _objectivesEnabled = true;
   bool _realismOneShotEval = false;
   bool _weatherEnabled = true;
   bool _weatherFahrenheit = false;
@@ -68,6 +78,9 @@ class RealismSettings with SettingsBase {
   /// See [_standaloneClockEnabled]. Costs one model call per turn while it is
   /// doing anything, which is why it is opt-in and says so in the UI.
   bool get standaloneClockEnabled => _standaloneClockEnabled;
+
+  /// See [_objectivesEnabled]. The switch Objectives never had.
+  bool get objectivesEnabled => _objectivesEnabled;
   bool get realismOneShotEval => _realismOneShotEval;
 
   /// Living Time story weather (living-time-features.md §3). Effective
@@ -118,6 +131,7 @@ class RealismSettings with SettingsBase {
     _needsSimDefault = prefs?.getBool(k('needs_sim_default')) ?? true;
     _standaloneClockEnabled =
         prefs?.getBool(k('standalone_clock_enabled')) ?? false;
+    _objectivesEnabled = prefs?.getBool(k('objectives_enabled')) ?? true;
     _realismOneShotEval = prefs?.getBool(k('realism_one_shot_eval')) ?? false;
     _weatherEnabled = prefs?.getBool(k('weather_enabled')) ?? true;
     _weatherFahrenheit = prefs?.getBool(k('weather_fahrenheit')) ?? false;
@@ -222,6 +236,12 @@ class RealismSettings with SettingsBase {
   Future<void> setStandaloneClockEnabled(bool value) async {
     _standaloneClockEnabled = value;
     await prefs?.setBool(k('standalone_clock_enabled'), value);
+    notify();
+  }
+
+  Future<void> setObjectivesEnabled(bool value) async {
+    _objectivesEnabled = value;
+    await prefs?.setBool(k('objectives_enabled'), value);
     notify();
   }
 

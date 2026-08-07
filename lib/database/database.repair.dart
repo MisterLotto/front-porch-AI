@@ -110,6 +110,10 @@ extension AppDatabaseMaintenance on AppDatabase {
         'selected_look_avatar_id TEXT', // v37 gallery look
         'theme_overrides TEXT', // per-chat theme
         'context_budget_json TEXT', // v44 Context Viewer snapshot
+        // v45 per-chat Objectives switch. DEFAULT 1 must match the Table
+        // definition and the ladder exactly — objectives ran unconditionally
+        // before v45, so 1 is the only value that preserves existing chats.
+        'objectives_enabled INTEGER NOT NULL DEFAULT 1',
       ],
       'group_members': [
         // Per current GroupMembers Dart definition + created_at (to match the repair-path CREATE TABLE).

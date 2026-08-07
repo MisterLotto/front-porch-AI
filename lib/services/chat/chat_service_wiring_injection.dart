@@ -263,7 +263,10 @@ extension ChatServiceWiringInjection on ChatService {
 
   AuthorNoteBuilder _buildAuthorNoteBuilder() {
     return AuthorNoteBuilder(
-      getActiveObjectives: () => _activeObjectives,
+      // Objectives off ⇒ nothing about quests reaches the model. Reading the
+      // gate here rather than clearing _activeObjectives keeps the rows intact
+      // for when the switch comes back on.
+      getActiveObjectives: () => objectivesActive ? _activeObjectives : const [],
       getPrimaryObjective: () => primaryObjective,
       tasksForObjective: (o) => tasksForObjective(o),
       getSecondaryObjectives: () => secondaryObjectives,
@@ -303,20 +306,8 @@ extension ChatServiceWiringInjection on ChatService {
     );
   }
 
-  TimeInjection _buildTimeInjection() {
-    return TimeInjection(
-      timeService: _timeService,
-      // One-shot, opt-in (default OFF), coarse-worded, speculation-forbidding —
-      // living-time-features.md §2 "Privacy by design".
-      getAbsenceNote: () {
-        if (!_storageService.absenceAckEnabled || !_absenceAckPending) {
-          return null;
-        }
-        final phrase = absencePhrase;
-        return phrase == null ? null : AbsenceTracker.ackNote(phrase);
-      },
-    );
-  }
+  TimeInjection _buildTimeInjection() =>
+      TimeInjection(timeService: _timeService);
 
   /// Climate from the first attached world that carries one (Living Worlds).
   /// Used as the schedule default when no mid-chat span covers a day.
@@ -462,11 +453,20 @@ extension ChatServiceWiringInjection on ChatService {
   /// emotion, time, needs (with x/100), behavioral anchors, nsfw state, etc.
   RealismStateInjection _buildRealismStateInjection() {
     return RealismStateInjection(
-      // Both independent of the Realism Engine. Ambitions are card-authored text
-      // and cost nothing; promises are Journal cards, so that gate also requires
-      // the Journal — without it there is nothing to read.
+      // Both independent of the Realism Engine. Promises are Journal cards, so
+      // that gate also requires the Journal — without it there is nothing to
+      // read.
+      //
+      // Ambitions additionally require OBJECTIVES (maintainer, 2026-08-07).
+      // "Cost nothing" was never true — the goals are card-authored, but the
+      // fragment is rebuilt into the prompt every single turn, so it is paid
+      // for on every turn. And with Objectives off, finishing a quest — the
+      // only thing that moves ambition progress — can never happen, so the
+      // stage word ("just beginning") is frozen for the life of the chat.
+      // Injecting it would bill the user, forever, for a line that cannot
+      // change and describes a mechanism that is switched off.
       getAmbitionsEnabled: () =>
-          _storageService.realismSettings.ambitionsEnabled,
+          _storageService.realismSettings.ambitionsEnabled && objectivesActive,
       getPromisesEnabled: () =>
           _storageService.realismSettings.promiseLedgerEnabled &&
           _storageService.memorySettings.journalEnabled,
@@ -481,6 +481,18 @@ extension ChatServiceWiringInjection on ChatService {
       needsInjection: _needsInjection,
       getRealismEnabled: () => _realismEnabled,
       getClockRunningOverride: () => _clockRunning,
+      // One-shot, opt-in (default OFF), coarse-worded, speculation-forbidding —
+      // living-time-features.md §2 "Privacy by design". Lifted here from the
+      // time fragment (2026-08-07) so it answers to its own gate: the note is
+      // about WALL-CLOCK absence, and inheriting the story clock's gate is why
+      // it never reached the model with the clock frozen.
+      getAbsenceNote: () {
+        if (!_storageService.absenceAckEnabled || !_absenceAckPending) {
+          return null;
+        }
+        final phrase = absencePhrase;
+        return phrase == null ? null : AbsenceTracker.ackNote(phrase);
+      },
       getIsGroupNonObserverMode: () => (_activeGroup != null && !_observerMode),
       getCurrentSpeakerIdForRealism: _getCurrentSpeakerIdForRealism,
       getGroupCharacters: () => _groupCharacters,

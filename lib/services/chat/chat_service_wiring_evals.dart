@@ -211,6 +211,7 @@ extension ChatServiceWiringEvals on ChatService {
       getIsObserverMode: () => _observerMode,
       getUserName: () => _userPersonaService.persona.name,
       getRealismEnabled: () => _realismEnabled,
+      getObjectivesEnabled: () => objectivesActive,
       getMessages: () => _messages,
       getPendingRealismMetadata: () => _pendingRealismMetadata ?? {},
       setPendingRealismMetadata: (v) => _pendingRealismMetadata = v,
@@ -322,6 +323,11 @@ extension ChatServiceWiringEvals on ChatService {
       // ambition progress can move. Fire-and-forget; owner resolved from the
       // objective row's characterId (per-character in groups by construction).
       onQuestAchieved: (obj) {
+        // The Ambitions switch has to stop the WORK, not just the display.
+        // Without this, turning ambitions off still spent a model call on
+        // every quest completion — a switch that hid the feature while
+        // continuing to bill for it.
+        if (!_storageService.realismSettings.ambitionsEnabled) return;
         final sessionId = _currentSessionId;
         if (sessionId == null) return;
         final card =

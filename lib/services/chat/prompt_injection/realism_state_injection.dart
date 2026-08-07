@@ -98,6 +98,17 @@ class RealismStateInjection {
   /// whenever realism was enabled.
   final bool Function()? getAmbitionsEnabled;
 
+  /// The one-shot real-absence note (living-time-features.md §2), lifted out
+  /// of the time fragment on 2026-08-07. It answers to its OWN gate — the
+  /// closure returns null unless the opt-in is on and a note is pending — and
+  /// deliberately NOT to [_sceneFactsEnabled]: the note is computed from your
+  /// last message's wall-clock timestamp, not from story time, so a frozen
+  /// story clock has no bearing on whether it is true. Riding the time
+  /// fragment is exactly why it was silently dead with the clock stopped.
+  /// Optional for the same reason as the others: the protected
+  /// prompt_injection_test keeps compiling.
+  final String? Function()? getAbsenceNote;
+
   /// The promise ledger. Independent of realism, but stored as Journal cards,
   /// so the caller's predicate must also require the Journal. Optional for the
   /// same reason as above.
@@ -122,6 +133,7 @@ class RealismStateInjection {
     required this.needsInjection,
     required this.getRealismEnabled,
     this.getClockRunningOverride,
+    this.getAbsenceNote,
     required this.getIsGroupNonObserverMode,
     required this.getCurrentSpeakerIdForRealism,
     required this.getGroupCharacters,
@@ -185,6 +197,10 @@ class RealismStateInjection {
     // order, so the emitted prompt is unchanged while the dependency is legible.
     final fragments = <String>[
       if (_sceneFactsEnabled) timeInjection.buildTimeInjection(),
+      // Directly after the time line, which is where it used to be appended —
+      // so the emitted block is byte-identical whenever the clock IS running,
+      // and the note now also survives when it is not.
+      getAbsenceNote?.call() ?? '',
       if (_sceneFactsEnabled) weatherInjection.buildWeatherInjection(),
       if (_characterStateEnabled)
         relationshipInjection.buildRelationshipInjection(),

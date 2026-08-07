@@ -243,8 +243,20 @@ extension ChatServiceWiringMemory on ChatService {
         return raw == null ? null : _llmEvalEngine.stripThinkBlocks(raw);
       },
       getMaxCards: () => _storageService.memorySettings.journalMaxCards,
-      applyTrustDelta: (d) => _relationshipService.applyTrustDelta(d),
-      applyBondDelta: (d) => _relationshipService.applyScoreDelta(d),
+      // Purity gate (maintainer, 2026-08-07). Promises work fine without the
+      // engine — detection, the ledger, the Journal card, kept/broken status
+      // and the milestone all run — but bond and trust are ENGINE scalars, and
+      // with the engine off every other writer is gated. That left a kept
+      // promise as the sole thing moving those numbers, in a chat whose own
+      // sidebar says "Realism Mode is off": invisible movement the user was
+      // told was not being tracked. The promise still resolves; only the score
+      // write is skipped.
+      applyTrustDelta: (d) {
+        if (_realismEnabled) _relationshipService.applyTrustDelta(d);
+      },
+      applyBondDelta: (d) {
+        if (_realismEnabled) _relationshipService.applyScoreDelta(d);
+      },
       onSalienceKick: () {
         _journalMaintenance.eventKickPending = true;
         _growthService.eventKickPending = true;

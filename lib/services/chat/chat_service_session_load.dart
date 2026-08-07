@@ -401,6 +401,7 @@ extension ChatServiceSessionLoad on ChatService {
       cooldownTurnsTotal: s.cooldownTurnsTotal,
     );
     _needsSimEnabled = s.needsSimEnabled;
+    _objectivesEnabled = s.objectivesEnabled;
     if (_needsSimEnabled) {
       // Seed defaults first, then overlay the saved vector ONLY when it has
       // values. A blank saved vector (e.g. needs was toggled on mid-chat before

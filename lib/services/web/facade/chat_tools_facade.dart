@@ -114,7 +114,13 @@ class ChatToolsFacade {
       },
       // Ambitions (Living Time §6) for the focused participant — additive;
       // same ChatService.ambitionsFor merge the desktop sidebar reads.
-      'ambitions': focusedCard == null || (focused?.isLite ?? false)
+      // Objectives off ⇒ empty, matching the desktop sidebar row: quest
+      // completion is the only thing that moves progress, so the web would
+      // otherwise show a stage word frozen for the life of the chat.
+      'ambitions':
+          focusedCard == null ||
+              (focused?.isLite ?? false) ||
+              !_chat.objectivesActive
           ? const []
           : [
               for (final a in _chat.ambitionsFor(focusedCard))

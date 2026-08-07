@@ -90,6 +90,7 @@ class SettingsFacade {
         'passageOfTimeDefault': _storage.realismSettings.passageOfTimeDefault,
         'standaloneClockEnabled':
             _storage.realismSettings.standaloneClockEnabled,
+        'objectivesEnabled': _storage.realismSettings.objectivesEnabled,
         'weatherEnabled': _storage.realismSettings.weatherEnabled,
         'weatherFahrenheit': _storage.realismSettings.weatherFahrenheit,
         'dreamsEnabled': _storage.realismSettings.dreamsEnabled,
@@ -161,6 +162,14 @@ class SettingsFacade {
       // open conversation picks it up on its next turn.
       final sc = realism['standaloneClockEnabled'];
       if (sc is bool) await _storage.setStandaloneClockEnabled(sc);
+      final objs = realism['objectivesEnabled'];
+      if (objs is bool) {
+        await _storage.setObjectivesEnabled(objs);
+        // Engine-coupled in the same sense the rows above are: push into the
+        // open conversation so a web toggle takes effect there too, not only
+        // on the next chat.
+        await _chat?.setObjectivesEnabled(objs);
+      }
       final wx = realism['weatherEnabled'];
       if (wx is bool) await _storage.setWeatherEnabled(wx);
       final wf = realism['weatherFahrenheit'];

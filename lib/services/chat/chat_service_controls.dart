@@ -149,6 +149,20 @@ extension ChatServiceControls on ChatService {
     notifyListeners();
   }
 
+  /// Per-chat Objectives switch (v45). Off means the quests stop running: no
+  /// completion checks, no autonomous proposals, no task generation, and the
+  /// sidebar panel goes away.
+  ///
+  /// The objective ROWS are deliberately left alone. Turning a feature off must
+  /// not delete a user's work — flip it back on and every quest, task and tick
+  /// is exactly where it was. Same "inert, values preserved" contract the NSFW
+  /// cooldown follows.
+  Future<void> setObjectivesEnabled(bool enabled) async {
+    _objectivesEnabled = enabled;
+    await _saveChat();
+    notifyListeners();
+  }
+
   // ── Manual Time Nudge ────────────────────────────────────────────────────
 
   /// Called by the sidebar chevron buttons. delta = +1 (forward) or -1 (back).

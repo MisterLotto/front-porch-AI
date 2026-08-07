@@ -187,6 +187,8 @@ Drift ORM with SQLite. The schema library is `lib/database/database.dart` (shell
 
 Key tables (REAL SQL names — verify against `database.g.dart`, not memory): `characters`, `sessions`, `messages`, `groups`, `group_members`, `folders`, `personas`, `worlds`, `chat_worlds`, `chat_biome_spans`, `message_embeddings`, `objectives`, `data_bank_entries`, `avatar_images`, `journal_memories`, `sync_meta`. 21 tables in total. UUID primary keys for merge compatibility.
 
+**Schema v45 (2026-08-07)**: `sessions.objectives_enabled` (BoolColumn, `DEFAULT 1`) — the per-chat half of the Objectives switch. The default is load-bearing: objectives ran unconditionally before v45, so `0` would silently stop quests across the whole installed base on upgrade. The Table definition, the `onUpgrade` ladder and `database.repair.dart` must all keep saying 1; `test/database/objectives_enabled_migration_test.dart` asserts they agree. Deliberately NO matching card extension — a per-character default would change the card JSON shape, which ripples to The Stoop and every external reader.
+
 **Identity gotcha that has already caused data loss:** `objectives`, `message_embeddings` and `data_bank_entries` key their `character_id` by the character's **stableGroupId** (the portable image-filename basename, e.g. `Jennifer_1782587668376`), NOT by the `characters.id` UUID. `avatar_images` DOES use the UUID. Joining the former against `characters.id` matches nothing and marks every row an orphan — that shipped in Database Cleanup and would have deleted 107/107 objectives and 68/68 RAG embeddings on a real library. Resolve identities via `stableGroupIdFrom()` in `lib/utils/character_id.dart`.
 
 **External direct writers**: none. (Character Card Forge, a community app that wrote raw SQL into these files, is abandonware — maintainer ruling 2026-08-04. Schema changes no longer need to accommodate it.)
@@ -228,7 +230,10 @@ A multi-component system spanning `chat_service.dart` (orchestration, `_groupRea
   already at exactly one advance.
 - Fixation engine (emotional obsessions)
 - Character evolution (trait development) (EvolutionService)
-- Chaos Mode / "Chance Time" random events (ChaosModeService)
+- Chaos Mode / "Chance Time" random events (ChaosModeService) — **filed here for location
+  only; NOT a realism dependency.** The 2026-08-07 audit
+  (docs/design/feature-independence.md) confirmed Chaos runs fully with the engine off;
+  its switch is per-chat in the chat sidebar, not in Porch Life.
 - Sims-style Needs Simulation (NeedsSimulation): straight per-turn decay ticks (needDecay plus exactly six `decayModifiers` — four cross-boosts `low_energy_hunger_boost` / `low_energy_comfort_boost` / `low_fun_social_boost` / `low_bladder_comfort_boost`, and two weather ones `weather_rough_comfort` / `weather_clear_fun` that vanish when weather is off. **There is no time-of-day decay term** — earlier wording here claimed one), scene deltas, stepped descriptions, hygiene inversion for "enjoys low hygiene". **The afterglow / lust-haze / post-climax-crash / arousal-suppression BUFFERS were removed** (see the class doc in `needs_simulation.dart`) — do not reason about buffer state.
 - Escape hatch: `cancelRealismEval()` aborts in-flight evals via `_isCancellingRealismEval` + `abortGeneration()`
 
