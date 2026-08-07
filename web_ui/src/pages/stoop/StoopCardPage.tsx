@@ -93,6 +93,21 @@ export function StoopCardPage() {
     return typeof v === 'string' ? v.trim() : '';
   };
 
+  // Long-term ambitions, read straight out of the card the relay already hands
+  // us — `extensions.front_porch.realism_engine.ambitions`, the same path the
+  // desktop panel's stoopRealismEngine() walks. No backend field is involved:
+  // the card blob travels verbatim, so this is a display-only addition.
+  // Defensive at every hop — old cards have no extensions, and a hostile or
+  // malformed payload must not throw the whole page.
+  const ambitions = ((): string[] => {
+    const ext = detail.card.extensions as Record<string, unknown> | undefined;
+    const fp = ext?.front_porch as Record<string, unknown> | undefined;
+    const re = fp?.realism_engine as Record<string, unknown> | undefined;
+    const raw = re?.ambitions;
+    if (!Array.isArray(raw)) return [];
+    return raw.filter((a): a is string => typeof a === 'string' && a.trim() !== '').map((a) => a.trim());
+  })();
+
   return (
     <div className="stoop-detail">
       <div className="stoop-detail-head">
@@ -174,6 +189,17 @@ export function StoopCardPage() {
           </section>
         );
       })}
+
+      {ambitions.length > 0 && (
+        <section className="card stoop-section">
+          <h4>Ambitions ({ambitions.length})</h4>
+          <ul className="stoop-ambitions">
+            {ambitions.map((a, i) => (
+              <li key={i}>🧭 {a}</li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {reporting && (
         <ReportDialog

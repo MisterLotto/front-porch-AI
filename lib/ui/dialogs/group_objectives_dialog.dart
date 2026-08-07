@@ -23,6 +23,8 @@ import 'package:flutter/material.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/database/database.dart';
+import 'package:front_porch_ai/ui/chat_components/sidebar/story_tools/story_tools.dart'
+    show AmbitionServedChip;
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Dedicated, group-aware objectives manager.
@@ -431,6 +433,9 @@ class _GroupObjectivesDialogState extends State<GroupObjectivesDialog> {
               ),
             ],
           ),
+          // Same chip the 1:1 sidebar shows (v46) — a group member's quest
+          // names the ambition it climbs exactly as a 1:1 partner's does.
+          AmbitionServedChip(servedAmbition: obj.servedAmbition),
           if (tasks.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
@@ -457,32 +462,13 @@ class _GroupObjectivesDialogState extends State<GroupObjectivesDialog> {
                 secondary: IconButton(
                   icon: const Icon(Icons.edit, size: 14),
                   onPressed: () async {
-                    final controller = TextEditingController(
-                      text: t['description'],
+                    final newText = await _promptForText(
+                      title: 'Edit task',
+                      confirmLabel: 'Save',
+                      initial: t['description']?.toString(),
                     );
-                    final newText = await showDialog<String>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: const Text('Edit task'),
-                        content: TextField(
-                          controller: controller,
-                          autofocus: true,
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx),
-                            child: const Text('Cancel'),
-                          ),
-                          TextButton(
-                            onPressed: () =>
-                                Navigator.pop(ctx, controller.text),
-                            child: const Text('Save'),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (newText != null && newText.trim().isNotEmpty) {
-                      await _updateTask(obj, i, newText.trim());
+                    if (newText != null) {
+                      await _updateTask(obj, i, newText);
                     }
                   },
                 ),
@@ -522,19 +508,27 @@ class _GroupObjectivesDialogState extends State<GroupObjectivesDialog> {
     );
   }
 
-  void _showAddDialog({required bool isPrimary}) {
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        final ctrl = TextEditingController();
-        return AlertDialog(
-          title: Text(
-            isPrimary ? 'New Primary Objective' : 'New Secondary Objective',
-          ),
+  /// The ONE text-prompt dialog here: adding an objective and renaming a task
+  /// were two copies of the same AlertDialog differing only in their labels.
+  /// Returns the TRIMMED text, or null when cancelled or left blank, so no
+  /// caller re-checks for empty. Disposes its controller; neither copy did.
+  Future<String?> _promptForText({
+    required String title,
+    required String confirmLabel,
+    String? hint,
+    String? initial,
+  }) async {
+    final ctrl = TextEditingController(text: initial);
+    try {
+      final text = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(title),
           content: TextField(
             controller: ctrl,
             autofocus: true,
-            decoration: const InputDecoration(hintText: 'Goal description'),
+            decoration: hint == null ? null : InputDecoration(hintText: hint),
+            onSubmitted: (v) => Navigator.pop(ctx, v),
           ),
           actions: [
             TextButton(
@@ -542,24 +536,32 @@ class _GroupObjectivesDialogState extends State<GroupObjectivesDialog> {
               child: const Text('Cancel'),
             ),
             TextButton(
-              onPressed: () async {
-                final g = ctrl.text.trim();
-                if (g.isNotEmpty) {
-                  Navigator.pop(ctx);
-                  await widget.chatService.setObjective(
-                    g,
-                    isPrimary: isPrimary,
-                    targetCharacter: _focused,
-                  );
-                  await _loadForCurrent();
-                }
-              },
-              child: const Text('Add'),
+              onPressed: () => Navigator.pop(ctx, ctrl.text),
+              child: Text(confirmLabel),
             ),
           ],
-        );
-      },
+        ),
+      );
+      final trimmed = text?.trim() ?? '';
+      return trimmed.isEmpty ? null : trimmed;
+    } finally {
+      ctrl.dispose();
+    }
+  }
+
+  Future<void> _showAddDialog({required bool isPrimary}) async {
+    final goal = await _promptForText(
+      title: isPrimary ? 'New Primary Objective' : 'New Secondary Objective',
+      confirmLabel: 'Add',
+      hint: 'Goal description',
     );
+    if (goal == null || !mounted) return;
+    await widget.chatService.setObjective(
+      goal,
+      isPrimary: isPrimary,
+      targetCharacter: _focused,
+    );
+    await _loadForCurrent();
   }
 
   void _showGenerateDialog() {

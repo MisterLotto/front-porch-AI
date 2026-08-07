@@ -20,6 +20,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:front_porch_ai/database/database.dart' show Objective;
 import 'package:front_porch_ai/services/chat/growth_store.dart';
 import 'package:front_porch_ai/services/chat/journal_store.dart';
 
@@ -65,6 +66,37 @@ class AmbitionService {
     if (progress >= 50) return 'halfway there';
     if (progress >= 25) return 'gaining ground';
     return 'just beginning';
+  }
+
+  /// Ambition text → the open quest currently climbing it, from
+  /// `objectives.served_ambition` (schema v46). The forward direction —
+  /// ambitions steering objectives — has been computed and stored since v46
+  /// but had no reader, so the link the user paid an eval for was invisible.
+  /// This is the ONE merge every display shares: the sidebar Ambitions row,
+  /// the group member card and the web facade all answer "what is the active
+  /// step up this mountain?" identically, in 1:1 and in group, because they
+  /// all feed it the same [Objective] list from
+  /// `getObjectivesForGroupCharacter` (which returns the 1:1 list unchanged
+  /// when there is no group).
+  ///
+  /// Pure and synchronous — safe in a `build`, no I/O, one pass over a list
+  /// that is already in memory.
+  ///
+  /// A primary quest wins a tie: only one objective can be primary, and it is
+  /// the one the character is actually working. Completed/cleared objectives
+  /// (`active == false`) and untagged ones are skipped — a stale tag pointing
+  /// at an ambition the author has since deleted simply finds no row to sit
+  /// under, which is the same forgiving behaviour the completion judge takes.
+  static Map<String, String> activeStepsFrom(Iterable<Objective> objectives) {
+    final steps = <String, String>{};
+    for (final o in objectives) {
+      final served = o.servedAmbition?.trim() ?? '';
+      if (!o.active || served.isEmpty) continue;
+      if (o.isPrimary || !steps.containsKey(served)) {
+        steps[served] = o.objective;
+      }
+    }
+    return steps;
   }
 
   static const _advanceAmounts = {'small': 10, 'solid': 20, 'major': 35};

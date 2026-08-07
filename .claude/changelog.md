@@ -3,6 +3,93 @@
 
 # Changelog
 
+## 2026-08-07 — feat(realism): the ambition→objective link finally has a reader (Part 3 UI half)
+- **Files changed:** `lib/services/chat/ambition_service.dart`,
+  `lib/ui/chat_components/sidebar/character_state/ambitions_row.dart`,
+  `character_state/character_state_group.dart`, `lib/ui/widgets/group_member_card.dart`,
+  `lib/ui/chat_components/sidebar/story_tools/objective_task_row.dart`,
+  `story_tools/objective_add_goal.dart` (new), `story_tools/objective_panel.dart`,
+  `story_tools/story_tools.dart`, `lib/ui/dialogs/group_objectives_dialog.dart`,
+  `lib/ui/pages/repository/stoop_card_sections.dart`,
+  `lib/services/web/facade/chat_tools_facade.dart`, `web_ui/src/components/ChatTools.tsx`,
+  `web_ui/src/pages/stoop/StoopCardPage.tsx`, `web_ui/src/styles.css`,
+  `assets/web_app/*` (rebuilt), `test/services/chat/ambition_steps_test.dart` (new),
+  `test/ui/ambition_step_display_test.dart` (new)
+- **Why:** schema v46 shipped the forward direction of ambition-driven objectives — the proposal eval
+  is shown the character's ambitions, picks the next step up one, and reports which in
+  `objectives.served_ambition`. That answer was stored, and read by the completion judge, and shown
+  to **nobody**. The user was paying an eval every proposal to maintain a link that had no reader,
+  and `docs/design/pockets-and-preferences.md` Part 3 listed the UI half as the outstanding work.
+- **`AmbitionService.activeStepsFrom` is the ONE merge**, deliberately not a widget helper: the
+  sidebar row, the group member card and the web facade all call it over the same
+  `getObjectivesForGroupCharacter` accessor — which returns the 1:1 list unchanged when there is no
+  group — so 1:1 and group cannot disagree about which step belongs to which mountain. Parity by
+  construction rather than by three copies that happen to match today.
+- **Why the merge is NOT a widened `ambitionsFor` record.** That was the DRYer-looking option and it
+  is blocked: `test/golden/support/fakes.dart:438` pins the exact record type
+  `List<({String text, int progress})>`, and `.github/workflows/test-integrity.yml` fails any PR that
+  edits a test file without the maintainer's `approved-test-change` label. Widening the service
+  signature would have forced a test edit to make the build compile, which is precisely the pattern
+  that gate exists to catch. The optional `steps` parameter reaches the same screen with no test
+  touched.
+- **`objective_panel.dart` was at EXACTLY 500 lines** — dead on the hard cap, so it could not grow to
+  carry either the chip or the empty-state copy. Extracted the add-goal footer into
+  `objective_add_goal.dart` (500 → 429), which is where the new "STARTING QUEST" guidance now lives.
+  That is the file the `Current Task / Quest` removal owed a home to: an author who used to type a
+  starting quest on the card previously found an unlabelled "Add new goal..." box under an empty
+  Side Quests region and no hint that this was where it went. The web PWA already framed its empty
+  state, so this is desktop catching up to web — the reverse of the usual parity direction.
+- **Shown by "no quest yet", not "brand-new chat".** There is no fresh-chat flag; `messages.isEmpty`
+  is already false when the sidebar first paints (the greeting is appended in the same branch that
+  seeds objectives); and scanning `chat.messages` in a build would copy the whole list on every
+  notify during streaming (`chat_service.dart` returns `List.unmodifiable(_messages)`). "No primary
+  and no side quests" is the state the guidance is useful in and costs one null check.
+- **The Stoop needed no backend change.** `StoopCardDetail.card` carries the whole card blob and the
+  `/api/stoop/*` relay returns the upstream body byte-for-byte, so ambitions were already arriving at
+  both clients inside `extensions.front_porch.realism_engine` — the same path the shipped "Realism
+  baseline" section already reads. Display-only addition; the additive-only API contract is untouched.
+- **Deliberately NOT gated on `re['enabled']`** the way the realism/needs Stoop sections are.
+  Ambitions are identity, they travel with the card, and they steer quests whenever Objectives is on
+  — independent of the Realism Engine. Copying that guard by reflex would have silently hidden real
+  authored content on every card whose creator left the engine off.
+- **Text-only on The Stoop:** a card you have not downloaded has no story, so there is no progress or
+  stage word. Reusing `AmbitionsRow` there would have rendered a permanently-empty bar reading "just
+  beginning" on every card in the hub.
+- **Hoisted two per-frame duplicate calls while in there:** `character_state_group.dart` called
+  `ambitionsFor` twice in one guard (it warms the progress cache each time) and
+  `group_member_card.dart` called both `ambitionsFor` and `getObjectivesForGroupCharacter` twice —
+  the latter once per member per frame.
+- **Every new guard was proven to fail before being kept.** Breaking the merge (dropping the
+  `active` filter, the primary-wins rule and the trim) turned 5 of 8 pure tests red with exact
+  wrong-value diffs; removing the step line and the chip's blank guard turned 3 of 6 widget tests
+  red; restoring the unsafe Stoop cast reproduced `type 'String' is not a subtype of type
+  'List<dynamic>?'`. All restored, all suites green.
+- **Independent review (Grok) found three real defects, all fixed:**
+  1. `stoop_card_sections.dart` used `re['ambitions'] as List?`, which **throws** on a
+     present-but-wrong-typed value — and this parse faces a card uploaded by a stranger, so one
+     malformed field would have taken down the whole card-detail panel instead of omitting one
+     section. Now `is List`, matching the web side's `Array.isArray`. Guarded by a new test.
+  2. `group_member_card.dart` rendered ambitions with **no `objectivesActive` gate**, while 1:1
+     (`character_state_group.dart`) and the web facade both had one. Pre-existing divergence, but
+     the step line would have widened it into naming an open quest from a feature the user had
+     switched off. Gated to match.
+  3. `ChatTools.tsx` used truthiness (`obj.servedAmbition && …`) where desktop trims, so a
+     whitespace-only tag would render an empty 🧭 row on web only. Now trims on all three sites.
+  Two further findings were checked and **dismissed as artifacts of the source-only diff** it was
+  given: the web bundle *was* rebuilt, and `group_member_card.dart:24` already imports the whole
+  `services/chat/chat.dart` barrel (which is why analyze was clean). Its order-dependence concern
+  was checked too and does not apply — `getActiveObjectives` orders primary-first then oldest-first,
+  so "first wins" is deterministic.
+- **One golden was intentionally regenerated:** `sidebar/objective_empty.{light,dark}.png`. The
+  Linux gate correctly failed it (93 passed / 1 failed) because the panel's empty state now carries
+  the STARTING QUEST copy — the golden's subject genuinely changed, which is exactly what it is for.
+  **This means the PR needs the maintainer's `approved-test-change` label** for those two PNGs;
+  `test-integrity.yml` blocks baseline edits and an author cannot self-approve.
+- **Verification:** `flutter analyze` clean; `flutter test --concurrency=4 --exclude-tags golden`
+  → 2945 passed / 14 skipped / 0 failed; Linux golden gate green after regeneration;
+  `npm run lint` clean; `npm test` 34 passed; `npm run build` run so `assets/web_app` carries it.
+- **Commit:** _(pending)_
+
 ## 2026-08-07 — feat(editor): Ambitions promoted to a chip editor, and reachable from the creator at last
 - **Files changed:** `lib/ui/widgets/chip_list_editor.dart` (new), `lib/ui/widgets/widgets.dart`,
   `lib/ui/widgets/realism_form_section.dart`, `lib/ui/pages/edit_character_page.dart`,

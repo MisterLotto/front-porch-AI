@@ -218,9 +218,16 @@ maintainer didn't know the editor existed, which is the design verdict.
 > audit: the group wizard's copy of the box wrote `currentTask` into the member
 > seed map, which **no code has ever read**, so it was decorative in every
 > build; and both create flows held `realismCurrentTask` state that could only
-> ever be `''` once the editor was gone — deleted. The remaining bullets (the
-> sidebar "starting objective" affordance, and the Stoop card detail showing
-> ambitions) are still open.
+> ever be `''` once the editor was gone — deleted.
+>
+> **PART 3 IS NOW COMPLETE (2026-08-07).** The last two bullets shipped with
+> the UI half below: the "starting quest" affordance lives in the extracted
+> `story_tools/objective_add_goal.dart` (shown when a chat has no primary and
+> no side quests — there is no fresh-chat flag, and scanning `chat.messages`
+> in a build would copy the list on every notify), and the Stoop card detail
+> shows ambitions on desktop and web with **no backend change**: the card blob
+> already travels verbatim through the `/api/stoop/*` relay, so both clients
+> were already receiving `extensions.front_porch.realism_engine.ambitions`.
 
 - **Promote Ambitions** in the character editor: chip-style list editor
   (same component as Likes/Dislikes), prominent placement, copy explaining
@@ -252,8 +259,22 @@ maintainer didn't know the editor existed, which is the design verdict.
 > of re-deriving which mountain the finished quest was on. Stale tags
 > (ambition achieved or deleted since) fall back to the original question.
 >
-> STILL OPEN: the UI half — the sidebar chip ("→ open her own bakery") and the
-> active step under each goal in the Ambitions row, desktop AND web.
+> **THE UI HALF SHIPPED 2026-08-07.** `AmbitionService.activeStepsFrom` is the
+> one merge behind every display — the sidebar Ambitions row, the group member
+> card and the web facade all call it over `getObjectivesForGroupCharacter`,
+> which returns the 1:1 list unchanged when there is no group, so 1:1 and group
+> cannot disagree by construction. `AmbitionServedChip` renders the "🧭 open
+> her own bakery" tag on all three objective surfaces (1:1 panel, side-quest
+> row, group dialog); `ChatTools.tsx` mirrors both, fed by two additive
+> nullable facade keys (`servedAmbition` on an objective, `step` on an
+> ambition).
+>
+> Note for whoever extends this: the merge is a separate static rather than a
+> widened `ambitionsFor` record ON PURPOSE. `test/golden/support/fakes.dart`
+> pins that record's exact type, and `test-integrity.yml` fails any PR that
+> edits a test file without the maintainer's `approved-test-change` label — so
+> widening the service signature would have forced a test edit just to compile.
+> Do not "simplify" it back.
 
 "Ambitions need to guide the objectives, not the other way around. Ambitions
 are the final overarching goal of the character and that is what they work

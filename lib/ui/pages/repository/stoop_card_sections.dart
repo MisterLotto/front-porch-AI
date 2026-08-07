@@ -112,6 +112,7 @@ List<Widget> stoopStandardSections(
     stoopTextSection(context, 'Scenario', s('scenario')),
     firstMessage ?? _defaultFirstMessage(context, card, name),
     stoopTextSection(context, 'Example dialogue', s('mes_example')),
+    stoopAmbitionsSection(context, re),
     stoopRealismSection(context, re),
     stoopNeedsSection(context, re),
     stoopLorebookSection(context, card, name),
@@ -201,6 +202,62 @@ Map<String, dynamic> stoopRealismEngine(Map<String, dynamic> card) {
 int _i(Map re, String key, int fallback) {
   final v = re[key];
   return v is num ? v.toInt() : fallback;
+}
+
+/// The character's long-term ambitions, as authored on the card.
+///
+/// Deliberately NOT gated on `re['enabled']` the way the realism and needs
+/// sections are. Ambitions are identity — they travel with the card and steer
+/// the character's quests whenever Objectives is on, which is independent of
+/// the Realism Engine. Copying the `enabled` guard by reflex would silently
+/// hide real authored content on every card whose creator left the engine off.
+/// The honest gate is "the author wrote some", matching this file's contract
+/// that a section is absent when its data is.
+///
+/// Text only: a downloaded-to-nowhere card has no story yet, so there is no
+/// progress and no stage word to show. Reusing the sidebar's AmbitionsRow here
+/// would render a permanently-empty bar reading "just beginning" on every card.
+Widget stoopAmbitionsSection(BuildContext context, Map<String, dynamic> re) {
+  // `is List` rather than `as List?`: this card came off the wire from a
+  // stranger's upload, so a malformed `ambitions` (an object, a string, a
+  // number) must render nothing rather than throw and take the whole detail
+  // panel down with it. The web counterpart guards with Array.isArray for the
+  // same reason.
+  final raw = re['ambitions'];
+  final items = [
+    for (final a in raw is List ? raw : const [])
+      if (a is String && a.trim().isNotEmpty) a.trim(),
+  ];
+  if (items.isEmpty) return const SizedBox.shrink();
+  return StoopCollapsible(
+    title: 'Ambitions (${items.length})',
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final a in items)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 5),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('🧭', style: TextStyle(fontSize: 12)),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    a,
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.35,
+                      color: AppColors.textPrimary(context),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    ),
+  );
 }
 
 /// Pre-seeded relationship/emotion baseline. Only shown when the creator enabled

@@ -23,6 +23,7 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import '../sidebar_tokens.dart';
+import 'objective_add_goal.dart';
 import 'objective_task_row.dart';
 
 /// Objectives panel — primary quest, task generation/list, secondary
@@ -38,41 +39,12 @@ class ObjectivePanel extends StatefulWidget {
 
 class _ObjectivePanelState extends State<ObjectivePanel> {
   bool _generatingTasks = false;
-  final _goalController = TextEditingController();
   final _manualTaskController = TextEditingController();
 
   @override
   void dispose() {
-    _goalController.dispose();
     _manualTaskController.dispose();
     super.dispose();
-  }
-
-  /// Shared submit path for the add-goal field and its two buttons.
-  Future<void> _submitGoal(
-    ChatService chatService, {
-    required bool isPrimary,
-  }) async {
-    final text = _goalController.text.trim();
-    if (text.isEmpty) return;
-    await chatService.setObjective(text, isPrimary: isPrimary);
-    _goalController.clear();
-  }
-
-  /// Shared decoration for the manual-task and add-goal fields.
-  InputDecoration _goalFieldDecoration(BuildContext context, String hint) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: TextStyle(
-        color: AppColors.textTertiary(context),
-        fontSize: 11,
-      ),
-      filled: true,
-      fillColor: AppColors.surfaceContainerOf(context),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
-      isDense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-    );
   }
 
   @override
@@ -164,6 +136,15 @@ class _ObjectivePanelState extends State<ObjectivePanel> {
                       ),
                     ),
                   ],
+                ),
+              ),
+              // Which ambition this quest is a step toward (v46). Sits under
+              // the goal, aligned past the star, so the mountain reads as
+              // context for the switchback rather than a second heading.
+              Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: AmbitionServedChip(
+                  servedAmbition: pObj.servedAmbition,
                 ),
               ),
 
@@ -280,7 +261,7 @@ class _ObjectivePanelState extends State<ObjectivePanel> {
                         color: AppColors.textPrimary(context),
                         fontSize: 11,
                       ),
-                      decoration: _goalFieldDecoration(
+                      decoration: objectiveFieldDecoration(
                         context,
                         'Add a task manually...',
                       ),
@@ -437,61 +418,9 @@ class _ObjectivePanelState extends State<ObjectivePanel> {
                 ),
             ],
 
-            const SizedBox(height: 12),
-
-            // Add new objective — field full width; buttons wrap below on
-            // narrow sidebars instead of overflowing.
-            AppTextField(
-              controller: _goalController,
-              style: TextStyle(
-                color: AppColors.textPrimary(context),
-                fontSize: 11,
-              ),
-              decoration: _goalFieldDecoration(context, 'Add new goal...'),
-              onSubmitted: (_) => _submitGoal(
-                chatService,
-                isPrimary: chatService.primaryObjective == null,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              alignment: WrapAlignment.end,
-              children: [
-                ElevatedButton(
-                  onPressed: () => _submitGoal(chatService, isPrimary: true),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.taskAccentOf(context),
-                    foregroundColor: AppColors.onChaosAccent,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 0,
-                    ),
-                    minimumSize: const Size(0, 28),
-                    textStyle: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  child: const Text('As Primary'),
-                ),
-                ElevatedButton(
-                  onPressed: () => _submitGoal(chatService, isPrimary: false),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.surfaceContainerOf(context),
-                    foregroundColor: AppColors.textPrimary(context),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 0,
-                    ),
-                    minimumSize: const Size(0, 28),
-                    textStyle: const TextStyle(fontSize: 10),
-                  ),
-                  child: const Text('As Side'),
-                ),
-              ],
-            ),
+            // Add-goal field + buttons, and the starting-quest copy on a chat
+            // that has none yet (objective_add_goal.dart).
+            ObjectiveAddGoal(chatService: chatService),
           ],
         );
       },

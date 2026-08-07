@@ -122,14 +122,26 @@ class ChatToolsFacade {
               (focused?.isLite ?? false) ||
               !_chat.objectivesActive
           ? const []
-          : [
-              for (final a in _chat.ambitionsFor(focusedCard))
-                {
-                  'text': a.text,
-                  'progress': a.progress,
-                  'stage': AmbitionService.stageWord(a.progress),
-                },
-            ],
+          : () {
+              // The quest climbing each ambition (v46) — the same
+              // AmbitionService merge the desktop sidebar row uses, over the
+              // same accessor, so web and desktop cannot disagree about which
+              // step belongs to which mountain. Computed once per block
+              // rather than per ambition.
+              final steps = AmbitionService.activeStepsFrom(
+                _chat.getObjectivesForGroupCharacter(focusedCard),
+              );
+              return [
+                for (final a in _chat.ambitionsFor(focusedCard))
+                  {
+                    'text': a.text,
+                    'progress': a.progress,
+                    'stage': AmbitionService.stageWord(a.progress),
+                    // Additive + nullable: older bundles ignore it.
+                    'step': steps[a.text],
+                  },
+              ];
+            }(),
       'time': {
         'timeOfDay': time.timeOfDay,
         'dayCount': time.dayCount,
@@ -274,6 +286,10 @@ class ChatToolsFacade {
       'isPrimary': o.isPrimary,
       'checkFrequency': o.checkFrequency,
       'tasks': _chat.tasksForObjective(o),
+      // The ambition this quest is a step toward (schema v46). Additive and
+      // nullable — older web bundles ignore the key, and every objective
+      // created before v46 legitimately has none.
+      'servedAmbition': o.servedAmbition,
     };
   }
 

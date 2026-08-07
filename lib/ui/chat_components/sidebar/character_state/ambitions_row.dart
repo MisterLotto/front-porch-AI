@@ -18,7 +18,7 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/services/chat/ambition_service.dart';
+import 'package:front_porch_ai/services/chat/chat.dart' show AmbitionService;
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Sidebar Ambitions rows (Living Time §6) — 🧭 text, stage word, and a thin
@@ -31,7 +31,17 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 class AmbitionsRow extends StatelessWidget {
   final List<({String text, int progress})> ambitions;
 
-  const AmbitionsRow({super.key, required this.ambitions});
+  /// Ambition text → the open quest serving it, from
+  /// [AmbitionService.activeStepsFrom]. Optional and defaulted so a caller
+  /// with no objectives to hand renders exactly what it always did; an
+  /// ambition with no active step simply shows no step line.
+  final Map<String, String> steps;
+
+  const AmbitionsRow({
+    super.key,
+    required this.ambitions,
+    this.steps = const {},
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -52,9 +62,12 @@ class AmbitionsRow extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: 6),
             child: Tooltip(
-              message:
-                  '${a.text} — ${AmbitionService.stageWord(a.progress)}.\n'
-                  'Progress moves when quests that serve it complete.',
+              message: [
+                '${a.text} — ${AmbitionService.stageWord(a.progress)}.',
+                if (steps[a.text] != null)
+                  'Working on it now: ${steps[a.text]}',
+                'Progress moves when quests that serve it complete.',
+              ].join('\n'),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -99,6 +112,26 @@ class AmbitionsRow extends StatelessWidget {
                       valueColor: AlwaysStoppedAnimation<Color>(amber),
                     ),
                   ),
+                  // The active step (v46). Since ambitions started steering
+                  // objectives, each quest records which mountain it climbs —
+                  // this is the reader for that, so a long-horizon goal shows
+                  // the switchback being walked right now instead of only a
+                  // bar that moves once a quest finishes. Indented to clear
+                  // the 🧭 and tinted with the Objectives accent so the two
+                  // panels visibly belong to each other.
+                  if (steps[a.text] != null)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 16, top: 3),
+                      child: Text(
+                        '↳ ${steps[a.text]}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: AppColors.taskAccentOf(context),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),

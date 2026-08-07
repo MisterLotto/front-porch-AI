@@ -18,6 +18,7 @@
 
 import 'package:flutter/material.dart';
 
+import 'package:front_porch_ai/services/chat/chat.dart' show AmbitionService;
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
@@ -84,6 +85,12 @@ class _CharacterStateGroupState extends State<CharacterStateGroup> {
     final realismOn = widget.isGroup
         ? chat.isGroupRealismActive
         : chat.realismEnabled;
+    // Hoisted: this used to be called twice in the Ambitions guard below, and
+    // it warms the ambition-progress cache on each call — cheap, but this
+    // sidebar rebuilds on every notify during streaming, so once is right.
+    final ambitions = chat.activeCharacter == null
+        ? const <({String text, int progress})>[]
+        : chat.ambitionsFor(chat.activeCharacter!);
 
     return PorchAccordion(
       key: _accordionKey,
@@ -212,9 +219,18 @@ class _CharacterStateGroupState extends State<CharacterStateGroup> {
           if (!widget.isGroup &&
               chat.objectivesActive &&
               chat.activeCharacter != null &&
-              chat.ambitionsFor(chat.activeCharacter!).isNotEmpty) ...[
+              ambitions.isNotEmpty) ...[
             const SizedBox(height: 10),
-            AmbitionsRow(ambitions: chat.ambitionsFor(chat.activeCharacter!)),
+            AmbitionsRow(
+              ambitions: ambitions,
+              // The quest climbing each mountain (v46). Reads the same
+              // accessor in both modes — it returns the 1:1 list unchanged
+              // when there is no group — so the step shown here and on the
+              // group member card are computed identically.
+              steps: AmbitionService.activeStepsFrom(
+                chat.getObjectivesForGroupCharacter(chat.activeCharacter!),
+              ),
+            ),
           ],
           if (realismOn || widget.isGroup) ...[
             const SizedBox(height: 10),

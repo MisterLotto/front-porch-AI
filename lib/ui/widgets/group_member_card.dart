@@ -114,6 +114,13 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
     final topNeeds = isRealism
         ? chat.getTopUrgentNeedsForGroupCharacter(widget.character, count: 2)
         : const <(String, int)>[];
+    // Hoisted: both of these were called twice further down (ambitions guard +
+    // row, and the active-objectives count). This card renders once per group
+    // member on every notify, so the duplicates were paid per member per frame.
+    final ambitions = chat.ambitionsFor(widget.character);
+    final memberObjectives = chat.getObjectivesForGroupCharacter(
+      widget.character,
+    );
 
     final bondTier = RelationshipService.bondTierFor(affection);
     final bondName = RelationshipService.bondTierLabel(bondTier);
@@ -446,15 +453,17 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                     NeedsGrid(needs: needs, mini: false, crossAxisCount: 2),
                   ],
 
-                  // Ambitions (Living Time §6) — per-member, same widget as
-                  // the 1:1 Character State accordion (parity).
-                  if (widget.chatService
-                      .ambitionsFor(widget.character)
-                      .isNotEmpty) ...[
+                  // Ambitions (Living Time §6) — per-member, same widget and
+                  // same v46 step merge as the 1:1 Character State accordion.
+                  // The objectivesActive gate matches 1:1 and the web facade,
+                  // which both had it; this card did not, so Objectives-off
+                  // showed ambitions nothing could move — and would have named
+                  // an open quest from the disabled feature (Grok, 2026-08-07).
+                  if (chat.objectivesActive && ambitions.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     AmbitionsRow(
-                      ambitions:
-                          widget.chatService.ambitionsFor(widget.character),
+                      ambitions: ambitions,
+                      steps: AmbitionService.activeStepsFrom(memberObjectives),
                     ),
                   ],
 
@@ -466,7 +475,7 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                         const Icon(Icons.flag, size: 13, color: AppColors.taskAccent),
                         const SizedBox(width: 4),
                         Text(
-                          '${chat.getObjectivesForGroupCharacter(widget.character).where((o) => o.active).length} active objectives',
+                          '${memberObjectives.where((o) => o.active).length} active objectives',
                           style: const TextStyle(
                             fontSize: 11,
                             color: AppColors.taskAccent,

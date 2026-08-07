@@ -28,6 +28,9 @@ interface ObjectiveView {
   isPrimary: boolean;
   checkFrequency: number;
   tasks: ObjectiveTask[];
+  // The ambition this quest is a step toward (schema v46). Optional: absent on
+  // older facades, and null for a situational quest that serves no ambition.
+  servedAmbition?: string | null;
 }
 interface ToolsState {
   realismEnabled: boolean;
@@ -55,7 +58,8 @@ interface ToolsState {
   chaos: { enabled: boolean; nsfwEnabled: boolean; pressure: number; hasPendingEvent: boolean };
   nsfw: { cooldownEnabled: boolean; cooldownTurnsRemaining: number; arousalLevel: number; arousalTier: string };
   // Ambitions (Living Time §6, additive — absent on older facades).
-  ambitions?: Array<{ text: string; progress: number; stage: string }>;
+  // `step` is the open quest climbing this ambition (v46); null when none.
+  ambitions?: Array<{ text: string; progress: number; stage: string; step?: string | null }>;
   time: {
     timeOfDay: string;
     dayCount: number;
@@ -297,6 +301,7 @@ export function ChatTools({
                     style={{ width: `${Math.min(100, Math.max(0, a.progress))}%` }}
                   />
                 </div>
+                {a.step?.trim() && <div className="ambition-step">↳ {a.step.trim()}</div>}
               </div>
             ))}
           </div>
@@ -361,6 +366,13 @@ export function ChatTools({
           {obj ? (
             <>
               <div className="stat-line"><strong>{obj.objective}</strong></div>
+              {/* trim(), matching desktop AmbitionServedChip: a whitespace-only
+                  tag is truthy in JS and would render an empty 🧭 row. */}
+              {obj.servedAmbition?.trim() && (
+                <div className="obj-ambition" title={`A step toward: ${obj.servedAmbition.trim()}`}>
+                  🧭 {obj.servedAmbition.trim()}
+                </div>
+              )}
               {obj.tasks.length > 0 && (
                 <ul className="task-list">
                   {obj.tasks.map((task, i) => (
@@ -415,6 +427,11 @@ export function ChatTools({
                       <strong>{sq.objective}</strong>
                       {sq.tasks.length > 0 && <span className="muted">{doneCount}/{sq.tasks.length}</span>}
                     </div>
+                    {sq.servedAmbition?.trim() && (
+                      <div className="obj-ambition" title={`A step toward: ${sq.servedAmbition.trim()}`}>
+                        🧭 {sq.servedAmbition.trim()}
+                      </div>
+                    )}
                     {sq.tasks.length > 0 && (
                       <ul className="task-list">
                         {sq.tasks.map((task, i) => (
