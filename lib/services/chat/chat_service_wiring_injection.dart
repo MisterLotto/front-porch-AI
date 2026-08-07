@@ -480,6 +480,7 @@ extension ChatServiceWiringInjection on ChatService {
       nsfwInjection: _nsfwInjection,
       needsInjection: _needsInjection,
       getRealismEnabled: () => _realismEnabled,
+      getClockRunningOverride: () => _clockRunning,
       getIsGroupNonObserverMode: () => (_activeGroup != null && !_observerMode),
       getCurrentSpeakerIdForRealism: _getCurrentSpeakerIdForRealism,
       getGroupCharacters: () => _groupCharacters,

@@ -21,7 +21,7 @@ import 'package:flutter/foundation.dart';
 import 'package:front_porch_ai/services/chat/pass_support.dart';
 import 'package:front_porch_ai/services/chat/realism_tools.dart';
 import 'package:front_porch_ai/services/chat/story_clock.dart';
-import 'package:front_porch_ai/services/llm_service.dart' show LlmToolResponse;
+import 'package:front_porch_ai/services/services.dart' show LlmToolResponse;
 
 /// Plain (non-ChangeNotifier) domain service owning the chat-scoped passage-of-time
 /// state — rewritten around a real datetime clock (design:
@@ -40,52 +40,61 @@ import 'package:front_porch_ai/services/llm_service.dart' show LlmToolResponse;
 /// period so time can never freeze forever. The old 6-turn gate, its
 /// `hold_time` veto, and the eligible/not-eligible prompt branching are gone.
 ///
-/// ── WHY PASSAGE OF TIME CANNOT BE DECOUPLED FROM THE REALISM ENGINE ──────
+/// ── PASSAGE OF TIME AND THE REALISM ENGINE: THE SEAM, AND WHERE IT IS ────
 ///
-/// Settled 2026-08-02 after the full engine audit, and written here because
-/// this class is where anyone attempting the split would start. The clock LOOKS
-/// separable — this service takes no realism input, its constructor is clean,
-/// and its test suite builds it with realism nowhere in sight. That appearance
-/// is why the idea keeps coming back. Do not act on it.
+/// SUPERSEDES the 2026-08-02 "cannot be decoupled" ruling that stood here.
+/// That ruling rested on a misreading: the maintainer said passage of time
+/// requires MODEL USAGE ("the fallback deterministic passage of time is not
+/// usable as is but an emergency 'oh shit'"), which was recorded as requiring
+/// the ENGINE. Those are different claims. Time needs an eval; it does not
+/// need bond, trust, emotion or arousal. Decoupled 2026-08-06.
 ///
-/// Four reasons, each verified in code:
+/// What was true then and is still true — reason 1 of the old four, and the
+/// reason this class fires a model call at all:
 ///
-/// 1. THE QUALITY OF TIME *IS* AN LLM EVAL. How far the clock moves comes from
-///    [_fireSceneTimeEval] asking a model how long the latest exchange took.
-///    Remove that and the only thing left is [StoryClock.failureDriftMinutes],
-///    which is a FAILURE fallback, not a time model: a two-line greeting and a
-///    two-hour dinner would advance the clock by the same fixed constant. Time
-///    would keep ticking and stop meaning anything.
+///   THE QUALITY OF TIME *IS* AN LLM EVAL. How far the clock moves comes from
+///   [_fireSceneTimeEval] asking a model how long the latest exchange took.
+///   Remove that and the only thing left is [StoryClock.failureDriftMinutes],
+///   which is a FAILURE fallback, not a time model: a two-line greeting and a
+///   two-hour dinner would advance the clock by the same fixed constant. Time
+///   would keep ticking and stop meaning anything. The deterministic drift
+///   below is therefore NEVER a mode, never surfaced, never a reason to claim
+///   the clock works without a model — it is the cushion for one failed call.
 ///
-/// 2. THE EVAL IS FUSED WITH POSTURE. That same call returns the character's
-///    spatial stance, which is a realism scalar. Splitting time out means
-///    either a SECOND model call every single turn, or keeping the posture
-///    callback — in which case the coupling survives the split and you have
-///    paid for nothing.
+/// What the other three turned out to be:
 ///
-/// 3. ONE-SHOT MODE HAS NO SEPARATE TIME CALL TO EXTRACT. It fuses
-///    `minutes_elapsed` and `new_day` into the single realism JSON
-///    (realism_tools.dart, realism_prompt_builder.dart). There is nothing to
-///    lift out; there is only a field in somebody else's payload.
+/// 2. FUSED WITH POSTURE — a cost, not a barrier, and this file already
+///    disproved it: the `!_passageOfTimeEnabled` branch below has always run
+///    a posture-ONLY call. `timeOnly` is that same shape mirrored. With the
+///    engine ON nothing changes at all — the fused call stays fused and costs
+///    exactly what it did. Only an engine-off user who opts in pays a call,
+///    and for them it replaces zero calls, not one.
+/// 3. ONE-SHOT HAS NO TIME CALL TO EXTRACT — true and irrelevant. One-shot is
+///    a REALISM optimization; with the engine off there is no fused JSON to
+///    lift a field out of. The paths never intersect, so one-shot parity is
+///    untouched by construction.
+/// 4. "THE WIRE FORMAT IS `realism_state`, so this needs a migration" — this
+///    was simply wrong. The clock's store of record is the session row
+///    (`sessions.story_clock` / `story_start_date` / `passage_of_time_enabled`),
+///    written and read unconditionally, engine or no engine.
+///    `realism_state` is the per-message swipe/regen REWIND snapshot, not
+///    persistence. No migration exists to perform.
 ///
-/// 4. THE WIRE FORMAT IS `realism_state`. The clock is patched into each
-///    message's realism_state snapshot and restored from it on swipe and regen
-///    ([onPatchLastMessageRealismState], [restoreTimeFromRealismState]).
-///    Decoupling is therefore a persistence-format change with a migration,
-///    not a code move.
+/// The standalone clock is opt-in (`standaloneClockEnabled`, default off)
+/// because it costs one model call per turn — see that flag for why the
+/// existing Passage-of-Time default could not be treated as consent.
 ///
-/// The OOC time-skip path ([detectOocTimeSkip]) is pure regex and would survive
-/// on its own — but it is a narrow fast path over enumerated phrasings, it is
-/// gated on [_passageOfTimeEnabled], and it does not cover a model narrating a
-/// long journey in words nobody listed. It is not a substitute for the eval.
+/// Deliberately NOT changed: nothing rewinds the standalone clock on
+/// swipe/regen, and nothing needs to. The engine path rewinds because it
+/// re-runs its eval and would otherwise double-advance; the standalone eval
+/// fires once per user turn from sendMessage and never re-fires on a
+/// regenerate, so the clock already sits at exactly one advance for the turn.
+/// Adding a rewind there would be a bug, not a parity fix.
 ///
-/// COROLLARY, for the prompt composer: do NOT un-gate the time fragment for
-/// realism-off users. The clock cannot advance in that state (every writer is
-/// gated and no eval runs), so the fragment would inject the SAME frozen
-/// timestamp on every turn while the story visibly moves — worse than saying
-/// nothing. See `_sceneFactsEnabled` in realism_state_injection.dart.
-///
-/// Formalise the seam; do not cut it.
+/// The OOC time-skip path ([detectOocTimeSkip]) is pure regex and stands on
+/// its own — but it is a narrow fast path over enumerated phrasings and does
+/// not cover a model narrating a long journey in words nobody listed. It is
+/// not a substitute for the eval.
 ///
 /// Time remains *chat-scoped* (shared across group members, not per-speaker).
 /// Cross-state (pending chip metadata, last-message realism_state patching
@@ -166,6 +175,8 @@ class TimeService {
 
   /// Fire one scene-time/posture eval through the shared tools-vs-text
   /// negotiation (or straight text when the tools door isn't wired).
+  /// [tools] selects the fused schema or the posture-less standalone one; both
+  /// carry the same tool NAME, so everything downstream is one code path.
   Future<String?> _fireSceneTimeEval(
     String Function({required bool toolsMode}) buildPrompt, {
     required Future<String?> Function(
@@ -174,12 +185,13 @@ class TimeService {
     })
     fireLLMEval,
     void Function(String)? onChunk,
+    List<Map<String, dynamic>>? tools,
   }) => fireToolEval != null && probe != null
       ? fireStructuredEval(
           probe: probe!,
           backendIdentity: getBackendIdentity?.call() ?? '',
           debugLabel: kSceneTimeTool,
-          tools: kSceneTimeEvalTools,
+          tools: tools ?? kSceneTimeEvalTools,
           buildPrompt: buildPrompt,
           callToText: (resp) =>
               realismToolCallToJson(kSceneTimeTool, resp.calls),
@@ -513,6 +525,17 @@ class TimeService {
   /// [oneShotText]) already carries all three fields, so no call fires here;
   /// this method only applies the clock math (strict one-shot parity: same
   /// clamp, floor, and backstop against the same clock).
+  ///
+  /// [timeOnly] is the standalone clock: the Realism Engine is OFF and the
+  /// user opted the clock in anyway, so this asks about elapsed time and
+  /// nothing else. Posture, emotion and relationship tension are all realism
+  /// scalars — with the engine off nothing reads them and no fragment injects
+  /// them, so asking for them would be paying tokens for a value that gets
+  /// dropped. Everything AFTER the eval is the shared code below: the same
+  /// [_extractMinutes], the same [_newDayCorroboration] guard, the same
+  /// [_applyElapsed] clamp/floor/backstop against the same clock. That
+  /// sharing is what makes engine-on and standalone advance identically for
+  /// an identical verdict, rather than by promise.
   Future<void> evaluateTimeProgressAndPostureIfNeeded({
     required String charName,
     required String recent,
@@ -531,16 +554,20 @@ class TimeService {
     required String Function() getEmotionIntensity,
     bool oneShotMode = false,
     String? oneShotText,
+    bool timeOnly = false,
   }) async {
-    final emotionCtx = getCharacterEmotion().isNotEmpty
+    // Realism context, and therefore skipped entirely in timeOnly mode.
+    final emotionCtx = !timeOnly && getCharacterEmotion().isNotEmpty
         ? '$charName is currently feeling ${getCharacterEmotion()} (${getEmotionIntensity()}). '
         : '';
-    final postureCtx = getCurrentSpatialStance().isNotEmpty
+    final postureCtx = !timeOnly && getCurrentSpatialStance().isNotEmpty
         ? 'Recent position reference: $charName was "${getCurrentSpatialStance()}". '
         : '';
 
     if (!_passageOfTimeEnabled) {
-      if (oneShotMode) return; // posture already set from the fused JSON
+      // Standalone mode exists only to move the clock; with passage off there
+      // is no posture to fall back to evaluating, so there is nothing to do.
+      if (oneShotMode || timeOnly) return; // posture rides the fused JSON
       // Passage disabled — posture only, time untouched.
       String buildPosturePrompt({required bool toolsMode}) =>
           '$emotionCtx$postureCtx'
@@ -613,28 +640,42 @@ class TimeService {
       return;
     }
 
-    String buildPrompt({required bool toolsMode}) =>
-        'You are evaluating scene time and physical state for $charName.\n\n'
-        '$emotionCtx$postureCtx'
-        'Relationship tension: $shortTermTierName.\n'
-        'Current story time: $displayClock on $narrativeWeekday, Day $dayCount.\n\n'
+    // The two minutes_elapsed / new_day rules are written once and shared, so
+    // the standalone clock cannot be tuned apart from the engine's by someone
+    // editing one copy. Only the posture clause and the closing instruction
+    // differ between the variants.
+    final timeRules =
         '1. "minutes_elapsed": how many in-story minutes passed during the LATEST exchange below (integer, 0-${StoryClock.maxMinutesPerTurn}). '
         'Most conversational exchanges take 2-15 minutes; activities (a meal, a walk, a task, travel) take longer. '
         'Use 0 ONLY when the scene is a continuous instant (mid-action, mid-sentence).\n'
         '2. "new_day": true ONLY if the conversation explicitly transitioned to the next day (slept, woke up, scene break). false otherwise. '
-        'Merely MENTIONING yesterday, tomorrow, or another day does NOT count — the characters must actually cross a night.\n'
-        '3. "posture": $charName\'s current physical position and location (brief grounded phrase). Use "none" if unclear.\n'
-        '   - If the scene/location has changed (new setting, time passed, scene break), update to match the new context.\n'
-        '   - Maintain continuity only within the SAME scene — do NOT anchor them to a position from a previous scene.\n\n'
-        'Recent conversation:\n$recent\n\n'
-        '${toolsMode ? 'Report by calling the $kSceneTimeTool tool with "minutes_elapsed", "new_day", and "posture". Use ONLY the tool — no plain-text reply.' : 'Respond with ONLY a flat JSON object containing "minutes_elapsed", "new_day", and "posture". '
-                  'Do NOT use markdown code blocks — return raw JSON only.'}';
+        'Merely MENTIONING yesterday, tomorrow, or another day does NOT count — the characters must actually cross a night.\n';
+
+    String buildPrompt({required bool toolsMode}) => timeOnly
+        ? 'You are evaluating how much story time just passed.\n\n'
+              'Current story time: $displayClock on $narrativeWeekday, Day $dayCount.\n\n'
+              '$timeRules\n'
+              'Recent conversation:\n$recent\n\n'
+              '${toolsMode ? 'Report by calling the $kSceneTimeTool tool with "minutes_elapsed" and "new_day". Use ONLY the tool — no plain-text reply.' : 'Respond with ONLY a flat JSON object containing "minutes_elapsed" and "new_day". '
+                        'Do NOT use markdown code blocks — return raw JSON only.'}'
+        : 'You are evaluating scene time and physical state for $charName.\n\n'
+              '$emotionCtx$postureCtx'
+              'Relationship tension: $shortTermTierName.\n'
+              'Current story time: $displayClock on $narrativeWeekday, Day $dayCount.\n\n'
+              '$timeRules'
+              '3. "posture": $charName\'s current physical position and location (brief grounded phrase). Use "none" if unclear.\n'
+              '   - If the scene/location has changed (new setting, time passed, scene break), update to match the new context.\n'
+              '   - Maintain continuity only within the SAME scene — do NOT anchor them to a position from a previous scene.\n\n'
+              'Recent conversation:\n$recent\n\n'
+              '${toolsMode ? 'Report by calling the $kSceneTimeTool tool with "minutes_elapsed", "new_day", and "posture". Use ONLY the tool — no plain-text reply.' : 'Respond with ONLY a flat JSON object containing "minutes_elapsed", "new_day", and "posture". '
+                        'Do NOT use markdown code blocks — return raw JSON only.'}';
 
     try {
       final raw = await _fireSceneTimeEval(
         buildPrompt,
         fireLLMEval: fireLLMEval,
         onChunk: onChunk,
+        tools: timeOnly ? kSceneTimeOnlyEvalTools : kSceneTimeEvalTools,
       );
       if (raw != null) {
         final text = stripThinkBlocks(raw).isNotEmpty
@@ -653,11 +694,13 @@ class TimeService {
             newDay: saidNewDay && newDayCorroborated,
           );
         }
-        final postureMatch = RegExp(
-          r'"posture"\s*:\s*"([^"]+)"',
-        ).firstMatch(text);
-        if (postureMatch != null) {
-          setSpatialStance(postureMatch.group(1)!.trim());
+        if (!timeOnly) {
+          final postureMatch = RegExp(
+            r'"posture"\s*:\s*"([^"]+)"',
+          ).firstMatch(text);
+          if (postureMatch != null) {
+            setSpatialStance(postureMatch.group(1)!.trim());
+          }
         }
       } else if (!skipOwnsClock) {
         _applyElapsed(minutes: null, newDay: false);
@@ -670,7 +713,9 @@ class TimeService {
     }
 
     debugPrint(
-      '[Realism:Physical] Posture: ${getCurrentSpatialStance()} | Time: $displayClock $displayShortDate (Day $dayCount)',
+      timeOnly
+          ? '[Clock:Standalone] Time: $displayClock $displayShortDate (Day $dayCount)'
+          : '[Realism:Physical] Posture: ${getCurrentSpatialStance()} | Time: $displayClock $displayShortDate (Day $dayCount)',
     );
   }
 }

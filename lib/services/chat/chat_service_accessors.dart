@@ -127,6 +127,29 @@ extension ChatServiceAccessors on ChatService {
       !_autoResponseInProgress &&
       (_activeGroup == null || !_observerMode);
 
+  /// The story clock advances on its OWN eval this turn: the engine is off and
+  /// the user opted in (docs/design/feature-independence.md). Keyed on
+  /// [_realismEnabled], deliberately NOT [_realismActiveThisMode] — the latter
+  /// also goes false during AFK auto-response and in group Director mode,
+  /// where the engine is merely paused and already has its own clock handling.
+  /// Letting standalone fill those gaps would change behaviour for engine-ON
+  /// users, who never asked for it.
+  bool get _standaloneClockActive =>
+      !_realismEnabled &&
+      _timeService.passageOfTimeEnabled &&
+      _storageService.realismSettings.standaloneClockEnabled;
+
+  /// The story clock is actually moving, by whichever driver. This is the
+  /// gate for everything that reads the clock rather than advancing it — the
+  /// time prompt fragment, weather, dreams — because what those needed all
+  /// along was a MOVING clock, not the engine. With the engine off and the
+  /// standalone clock off it is false, which is exactly the frozen-clock state
+  /// the old realism gate produced, so nothing changes by default.
+  bool get _clockRunning =>
+      _timeService.passageOfTimeEnabled &&
+      (_realismEnabled ||
+          _storageService.realismSettings.standaloneClockEnabled);
+
   bool get isCancellingRealismEval => _isCancellingRealismEval;
 
   void _onBackendIdentityMaybeChanged() {
@@ -308,13 +331,15 @@ extension ChatServiceAccessors on ChatService {
 
   /// Today's story weather, or null when off (living-time-features.md §3).
   /// Pure recompute from existing state — nothing stored, so save/load and
-  /// group re-entry agree for free. Gate: realism + passage-of-time + the
-  /// global toggle. Consumed by the injection leaf, the needs decay
-  /// modifiers, the sidebar TimeStrip, and the web facade — one source.
+  /// group re-entry agree for free. Gate: a MOVING clock + the global toggle.
+  /// Weather is deterministic math over the day count and needs no eval of its
+  /// own, so its realism term was only ever standing in for "the clock is
+  /// frozen"; [_clockRunning] says that directly, and the Porch Life tab has
+  /// always told users weather depends on Passage of Time. Consumed by the
+  /// injection leaf, the needs decay modifiers, the sidebar TimeStrip, and the
+  /// web facade — one source.
   DailyWeather? get _currentWeatherImpl {
-    if (!_realismEnabled ||
-        !_timeService.passageOfTimeEnabled ||
-        !_storageService.weatherEnabled) {
+    if (!_clockRunning || !_storageService.weatherEnabled) {
       return null;
     }
     final seed = _currentSessionId;

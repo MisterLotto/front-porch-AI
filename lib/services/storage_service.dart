@@ -682,6 +682,9 @@ class StorageService extends ChangeNotifier {
       realismSettings.setDreamsEnabled(v);
   Future<void> setPassageOfTimeDefault(bool v) =>
       realismSettings.setPassageOfTimeDefault(v);
+  bool get standaloneClockEnabled => realismSettings.standaloneClockEnabled;
+  Future<void> setStandaloneClockEnabled(bool v) =>
+      realismSettings.setStandaloneClockEnabled(v);
   List<String> get bannedPhrases => realismSettings.bannedPhrases;
   Future<void> setBannedPhrases(List<String> v) =>
       realismSettings.setBannedPhrases(v);

@@ -261,7 +261,13 @@ extension ChatServiceSend on ChatService {
     unawaited(_porchMemoryImport.clearAfterAcceptedUserTurn());
 
     // ── OOC Time-Skip Detection ───────────────────────────────────────────
-    if (_realismActiveThisMode) {
+    // The standalone clock is added as a second driver rather than folding
+    // both into _clockRunning: that getter is broader than the old condition
+    // (it stays true in Director mode and during AFK), so using it here would
+    // silently start honouring "(OOC: skip to morning)" in engine-ON states
+    // that ignore it today. Additive only — every case that worked still
+    // works, plus the one the user asked for.
+    if (_realismActiveThisMode || _standaloneClockActive) {
       _timeService.detectOocTimeSkip(text);
     }
 
@@ -364,6 +370,23 @@ extension ChatServiceSend on ChatService {
         // before generation — preserving the cancel-aborts-generation escape.)
         await _evaluateRealismForUpcomingSpeaker(_activeCharacter!);
       }
+    } else if (_standaloneClockActive && addressedGuest == null) {
+      // ── The standalone story clock (engine off, user opted in) ──────────
+      // Deliberately an `else` on the realism branch: exactly one driver
+      // advances the clock per turn, so the two can never double-advance.
+      //
+      // Fired here, once, rather than inside the per-speaker realism dance
+      // because story time is CHAT-scoped, not per-speaker — a group of four
+      // must cost one call per turn, not four. Same position in the turn as
+      // the engine's scene-time eval (before generation, scoring the exchange
+      // so far), so both drivers see the same input and the clock the model is
+      // shown is already this turn's.
+      //
+      // Guests are excluded for the same reason they are above: a direct
+      // address routes the turn away from the host, who never took one.
+      await _realismEvals.evaluatePhysicalStateCall(timeOnly: true);
+      await _saveChat();
+      notifyListeners();
     }
 
     // If cancellation was requested during realism evaluation, abort generation

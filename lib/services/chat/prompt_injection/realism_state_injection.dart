@@ -78,6 +78,19 @@ class RealismStateInjection {
 
   final bool Function() getRealismEnabled;
 
+  /// Whether the story clock is actually advancing — under the engine, or on
+  /// the standalone scene-time eval. Gates the scene-facts fragments (see
+  /// [_sceneFactsEnabled]).
+  ///
+  /// Optional for the same reason as the two below: existing callers and the
+  /// protected prompt_injection_test keep compiling. Absent falls back to
+  /// [getRealismEnabled], which is byte-for-byte the behaviour those callers
+  /// had before the standalone clock existed.
+  final bool Function()? getClockRunningOverride;
+
+  bool getClockRunning() =>
+      (getClockRunningOverride ?? getRealismEnabled).call();
+
   /// Long-term goals. Independent of realism: card-authored, never stale.
   ///
   /// Optional so existing callers (and the protected prompt_injection_test)
@@ -108,6 +121,7 @@ class RealismStateInjection {
     required this.nsfwInjection,
     required this.needsInjection,
     required this.getRealismEnabled,
+    this.getClockRunningOverride,
     required this.getIsGroupNonObserverMode,
     required this.getCurrentSpeakerIdForRealism,
     required this.getGroupCharacters,
@@ -136,28 +150,28 @@ class RealismStateInjection {
   /// gate at all, weather gates on the weather being null, and ambitions and
   /// promises gate on having any.
   ///
-  /// They stay gated, and the audit's framing that this is merely "incidental
-  /// coupling" was WRONG for two of the four. Settled 2026-08-02:
+  /// This getter covers only TIME and WEATHER now — ambitions and promises
+  /// each answer to their own user-facing switch (getAmbitionsEnabled /
+  /// getPromisesEnabled), because neither needs the engine: ambitions are
+  /// card-authored text, promises are Journal cards detected from dialogue.
   ///
-  /// - TIME must stay gated. The clock cannot advance with realism off — every
-  ///   writer is gated and the scene-time eval does not run — so un-gating this
-  ///   fragment would inject the SAME frozen timestamp every turn while the
-  ///   story visibly moves. That is not a little extra context; it is a lie
-  ///   told once per turn. See the decision block on TimeService for why the
-  ///   clock's ACCURACY lives inside the realism eval and cannot be lifted out.
-  /// - WEATHER is moot. currentWeather returns null with realism off, so
-  ///   un-gating changes nothing — and weather is a function of the day count,
-  ///   so it inherits the frozen clock above regardless.
-  /// - AMBITIONS and PROMISES were the genuinely open ones, and they are no
-  ///   longer gated here at all: each now answers to its own user-facing
-  ///   switch (getAmbitionsEnabled / getPromisesEnabled), because neither needs
-  ///   the engine running. Ambitions are card-authored text; promises are
-  ///   Journal cards detected from dialogue.
+  /// And time and weather do not need the engine either. They need a clock
+  /// that MOVES, which is what [getClockRunning] reports (updated 2026-08-06,
+  /// superseding the 2026-08-02 "must stay gated on realism" note here).
   ///
-  /// So this getter now covers only time and weather, and for those the answer
-  /// is settled: they stay gated. Flipping it would reintroduce the "saves,
-  /// confirms, reaches the model never" class of bug this audit removed.
-  bool get _sceneFactsEnabled => getRealismEnabled();
+  /// The old reasoning was sound for its facts: with the clock frozen, this
+  /// fragment would inject the SAME timestamp every turn while the story
+  /// visibly moved — a lie told once per turn. That is still true, and it is
+  /// still what this gate prevents. The change is only in what unfreezes the
+  /// clock: the engine used to be the sole driver, and now the standalone
+  /// scene-time eval is a second one. When neither is running, this is false
+  /// and the fragment is suppressed exactly as before. Weather follows for
+  /// free — currentWeather is null unless the clock is moving.
+  ///
+  /// Do NOT weaken this to "passage of time is enabled". That flag defaults
+  /// on and is inert without a driver, so it would resurrect precisely the
+  /// frozen-timestamp lie this gate exists to stop.
+  bool get _sceneFactsEnabled => getClockRunning();
 
   /// CHARACTER STATE: how this character is right now. Genuinely realism, and
   /// correctly gated.

@@ -243,12 +243,21 @@ extension RealismEvalCalls on RealismEvals {
     }
   }
 
+  /// Scene time (+ posture, under the engine). [timeOnly] is the standalone
+  /// clock: the engine is off and the user opted the clock in, so the realism
+  /// preconditions below do not apply — there is no speaker to score and no
+  /// posture to store. It stays THIS method rather than a second one so the
+  /// recent-window construction, the TimeService call and every argument are
+  /// literally shared; the mode only relaxes the gate and drops posture.
   Future<void> evaluatePhysicalStateCall({
     void Function(String)? onChunk,
+    bool timeOnly = false,
   }) async {
-    if (!getRealismEnabled()) return;
-    if (getActiveCharacter() == null && getActiveGroup() == null) return;
-    if (getActiveGroup() != null && getIsObserverMode()) return;
+    if (!timeOnly) {
+      if (!getRealismEnabled()) return;
+      if (getActiveCharacter() == null && getActiveGroup() == null) return;
+      if (getActiveGroup() != null && getIsObserverMode()) return;
+    }
 
     final msgs = getMessages();
     final recentCount = msgs.length < 6 ? msgs.length : 6;
@@ -258,12 +267,16 @@ extension RealismEvalCalls on RealismEvals {
         .reversed
         .map((m) => '${m.sender}: ${m.promptText}')
         .join('\n');
-    if (getActiveCharacter() == null) {
+    // Under the engine this path needs a character (the group per-speaker dance
+    // impersonates one first). The standalone clock does not: its prompt names
+    // nobody, which is also why it works unchanged in a group, where time is
+    // chat-scoped rather than per-speaker.
+    if (!timeOnly && getActiveCharacter() == null) {
       // Group chat or other mode — relationship evals not supported in this path yet.
       // (Time advance is chat-scoped and handled via delegation when active char is impersonated for group speaker.)
       return;
     }
-    final charName = getActiveCharacter()!.name;
+    final charName = getActiveCharacter()?.name ?? '';
 
     // Time progress + posture (when passage enabled) + disabled-passage posture path
     // now fully delegated to TimeService (pre-turn advance logic moved verbatim,
@@ -281,6 +294,7 @@ extension RealismEvalCalls on RealismEvals {
       getCurrentSpatialStance: () => relationshipService.spatialStance,
       getCharacterEmotion: getCharacterEmotion,
       getEmotionIntensity: getEmotionIntensity,
+      timeOnly: timeOnly,
     );
   }
 

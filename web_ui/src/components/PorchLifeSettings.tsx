@@ -33,6 +33,7 @@ interface PorchLifeState {
   nsfwCooldownDefault: boolean;
   needsSimDefault: boolean;
   passageOfTimeDefault: boolean;
+  standaloneClockEnabled: boolean;
   weatherEnabled: boolean;
   weatherFahrenheit: boolean;
   journalEnabled: boolean;
@@ -52,6 +53,7 @@ const DEFAULTS: PorchLifeState = {
   nsfwCooldownDefault: false,
   needsSimDefault: true,
   passageOfTimeDefault: true,
+  standaloneClockEnabled: false,
   weatherEnabled: true,
   weatherFahrenheit: false,
   journalEnabled: true,
@@ -194,6 +196,11 @@ export function PorchLifeSettings() {
   const timeOn = st.passageOfTimeDefault;
   const weatherOn = st.weatherEnabled;
   const journalOn = st.journalEnabled;
+  // Weather and dreams gate on the Passage of Time FLAG, deliberately not on
+  // whether the clock is currently moving — gating on the latter greys Story
+  // Weather out again with the engine off, which is the dead-switch problem
+  // this tab exists to end. Same reasoning as the desktop tab; see the comment
+  // there. The "left off, the clock holds still" fact lives on the row above.
 
   return (
     <section className="card pl-section">
@@ -237,20 +244,41 @@ export function PorchLifeSettings() {
         <FeatureRow
           icon="⏰"
           label="Passage of Time"
-          need="needs"
-          dependsOn="the Realism Engine"
-          satisfied={engineOn}
-          blurb="The story keeps its own clock — dawn to morning to evening to night, day after day. The AI judges how long each exchange actually took, which is part of the Realism Engine, so the clock moves with the engine on and stops with it off."
+          need="alone"
+          blurb="The story keeps its own clock — dawn to morning to evening to night, day after day. The AI judges how long each exchange actually took, so a shared meal moves the clock further than a passing hello."
           value={timeOn}
           onChange={(v) => set('passageOfTimeDefault', v)}
-        />
+        >
+          {/* Shown only with the engine off — with it on the clock already
+              rides the engine's reading of the scene and costs nothing extra,
+              so a switch there would be a choice about nothing. Mirrors the
+              desktop `_StandaloneClockSwitch`. */}
+          {!engineOn && (
+            <label className="pl-substitch">
+              <span className="pl-sub-body">
+                <span className="pl-sub-label">Keep the clock running without the engine</span>
+                <span className="pl-sub-blurb">
+                  The engine normally judges how long each exchange took as part of work it is
+                  already doing. With it off, the clock needs one short AI call of its own each
+                  turn — so this costs a little speed. Left off, the clock simply holds still.
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={st.standaloneClockEnabled}
+                onChange={(e) => set('standaloneClockEnabled', e.target.checked)}
+                aria-label="Keep the clock running without the engine"
+              />
+            </label>
+          )}
+        </FeatureRow>
         <FeatureRow
           icon="☁️"
           label="Story Weather"
           need="needs"
           dependsOn="Passage of Time"
           satisfied={timeOn}
-          blurb={'Weather rolls through the story\'s days and is felt in mood and comfort. Characters can see fronts coming ("looks like rain tomorrow").'}
+          blurb={'Weather rolls through the story\'s days and is felt in mood and comfort. Characters can see fronts coming ("looks like rain tomorrow"). It costs no extra AI call — the sky is worked out from the date — but it needs days to pass.'}
           value={weatherOn}
           onChange={(v) => set('weatherEnabled', v)}
         />

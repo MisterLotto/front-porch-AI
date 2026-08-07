@@ -3,6 +3,72 @@
 
 # Changelog
 
+## 2026-08-06 — feat(time): the story clock stands on its own eval (Passage of Time decoupled from the Realism Engine)
+- **Files changed:** `lib/services/storage/settings/realism_settings.dart`, `lib/services/storage_service.dart`,
+  `lib/services/chat/time_service.dart`, `lib/services/chat/realism_tools.dart`,
+  `lib/services/chat/realism_evals.calls.dart`, `lib/services/chat/chat_service_accessors.dart`,
+  `lib/services/chat/chat_service_send.dart`, `lib/services/chat/chat_service_idle_autonomous.dart`,
+  `lib/services/chat/chat_service_wiring_memory.dart`, `lib/services/chat/chat_service_wiring_injection.dart`,
+  `lib/services/chat/prompt_injection/realism_state_injection.dart`,
+  `lib/services/web/facade/settings_facade.dart`, `lib/ui/settings/tabs/porch_life_tab.dart`,
+  `web_ui/src/components/PorchLifeSettings.tsx`, `web_ui/src/styles.css`, `assets/web_app/*` (rebuilt),
+  `test/services/chat/standalone_clock_test.dart` (new), `test/ui/settings/standalone_clock_opt_in_test.dart` (new),
+  `docs/design/feature-independence.md`, `docs/Rawhide.md`, `CLAUDE.md`
+- **Why:** the design doc recorded a MISREADING. The maintainer said passage of time "requires the
+  model usage… fallback deterministic passage of time is not usable as is but an emergency 'oh
+  shit'" — i.e. the clock needs an EVAL. It was written up as requiring the ENGINE, and Phase 3 was
+  cancelled on that basis. Correctly read, the quote argues *for* giving time its own call.
+- **The four "cannot decouple" reasons, re-audited:** (1) accuracy IS an eval — the motive, not a
+  blocker; (2) fused with posture — a cost, and `time_service.dart` had ALREADY shipped a
+  posture-only branch, so `timeOnly` is that shape mirrored; (3) one-shot has no time call to
+  extract — true and irrelevant, since engine-off means no fused JSON and the paths never intersect;
+  (4) "`realism_state` means a migration" — **wrong**: the store of record is the session row
+  (`sessions.story_clock`/`story_start_date`, written at `chat_service_session_state.dart:346-348`,
+  read at `chat_service_session_load.dart:385-395`, both unconditional). No migration existed.
+- **What shipped:** `standaloneClockEnabled` (default OFF) → `evaluatePhysicalStateCall(timeOnly: true)`
+  fires ONCE per turn from `sendMessage`, chat-scoped (a group of four costs one call, not four),
+  asking only `minutes_elapsed`/`new_day`. Everything after the call is the SAME code the engine
+  path runs — clamp, failure floor, `new_day` corroboration, OOC-skip ownership — so parity is by
+  construction, not by promise. `kSceneTimeOnlyEvalTools` reuses `_sceneTimeFields`' entries by
+  reference (asserted with `same()`) so the two schemas cannot drift.
+- **Opt-in, and why the default is the whole point:** Passage of Time already defaults ON, but with
+  the engine off it was inert — nobody chose it in a world where it cost a call. Riding it would
+  have billed every existing engine-off user a per-turn call unasked. Hence a separate deliberate
+  yes, with the cost stated in the switch's own copy.
+- **Consequence worth noting: `integration_test/realism_off_test.dart` needed NO amendment.** With
+  the opt-in defaulting off, §2 (zero eval calls) and §3 (frozen clock) stay true exactly as
+  written. The protected file is untouched; no `approved-test-change` label is needed. The design
+  doc's earlier plan to amend §3 is moot.
+- **Ripple, per maintainer:** Weather and Dreams now gate on `_clockRunning` (either driver) instead
+  of carrying a realism term that only ever stood in for "the clock is frozen". Weather is
+  deterministic math and costs no eval. AFK advance and the AFK "time passed" cue follow the same
+  getter.
+- **Bug fixed in passing:** the OOC time-skip regex was gated on `_realismActiveThisMode`, so
+  "(OOC: skip to morning)" was silently dead with the engine off — contradicting the design doc's
+  own claim that it survived. Now `_realismActiveThisMode || _standaloneClockActive` (additive, so
+  no engine-on behaviour changed).
+- **One overreach caught by an existing test and reverted:** the first draft gated Porch Life's
+  Story Weather / Dreams rows on `clockRunning`, which greys those switches out again with the
+  engine off — precisely the dead-switch bug that tab exists to end.
+  `porch_life_tab_interaction_test.dart` failed on it. The tab sets DEFAULTS, so the rows gate on
+  the Passage of Time flag; the "left off, the clock holds still" fact lives on the row that owns
+  it. Runtime gating (`_clockRunning`) is unchanged and still correct.
+- **Deliberately NOT done:** no swipe/regen rewind for the standalone clock. The engine path rewinds
+  because it re-runs its eval and would double-advance; the standalone eval fires once per user turn
+  and never re-fires on regenerate, so it already sits at exactly one advance. Adding a rewind would
+  be a bug. Documented in `time_service.dart` so it is not "fixed" later.
+- **Verification:** `flutter analyze` 0 issues; full unit suite `--concurrency=1 --exclude-tags golden`
+  **2870 passed / 0 failed** (12 skipped); new `standalone_clock_test.dart` 11/11 (proves both
+  drivers land on the identical clock for an identical verdict, incl. clamp, drift floor, `new_day`
+  corroboration and OOC ownership); new `standalone_clock_opt_in_test.dart` 2/2; protected
+  `porch_life_tab_interaction_test.dart` + `time_service_test.dart` green. Web `tsc` + vitest 34/34
+  + `npm run build` (bundle rebuilt). Goldens run natively on Linux (no Docker daemon in this
+  environment; the container exists to obtain Linux, which this host already is): **one failure,
+  `RealismFormSection — enabled/light+dark`, reproduced identically on a pristine `origin/Rawhide`
+  worktree (0.17%, ~1419px) — PRE-EXISTING on Rawhide, not from this change, and deliberately not
+  "fixed" here since the baseline is protected and the cause is unrelated.**
+- **Commit hash:** (pending)
+
 ## 2026-08-06 — fix(e2e): the REAL macOS stoop failure — a lazy ListView, not the field race
 - **Files changed:** `integration_test/stoop_test.dart`
 - **Two earlier diagnoses in this file were wrong and are corrected here.** The macOS

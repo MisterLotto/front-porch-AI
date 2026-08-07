@@ -1619,6 +1619,14 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 .pl-row-gated { opacity: .45; }
 .pl-row-gated .pl-switch input { cursor: not-allowed; }
 .pl-child { margin: 8px 0 0 28px; }
+/* The standalone-clock opt-in that rides the Passage of Time row. Same shape
+   as a pl-row's main line (body + trailing switch) at sub-row weight, so it
+   reads as part of that row rather than a fourth feature. */
+.pl-substitch { display: flex; align-items: flex-start; gap: 12px; margin: 0; cursor: pointer; }
+.pl-sub-body { display: flex; flex-direction: column; gap: 2px; }
+.pl-sub-label { font-size: 0.8rem; font-weight: 600; color: var(--text-2, var(--muted)); }
+.pl-sub-blurb { font-size: 0.74rem; line-height: 1.4; color: var(--muted); }
+.pl-substitch input { flex: none; width: auto; margin-top: 1px; }
 .pl-away.row-label { margin: 0; gap: 10px; }
 .pl-away select { width: auto; }
 .pl-error { margin: 10px 0 0; }

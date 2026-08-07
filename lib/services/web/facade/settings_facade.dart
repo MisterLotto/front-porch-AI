@@ -88,6 +88,8 @@ class SettingsFacade {
         'nsfwCooldownDefault': _storage.realismSettings.nsfwCooldownDefault,
         'needsSimDefault': _storage.realismSettings.needsSimDefault,
         'passageOfTimeDefault': _storage.realismSettings.passageOfTimeDefault,
+        'standaloneClockEnabled':
+            _storage.realismSettings.standaloneClockEnabled,
         'weatherEnabled': _storage.realismSettings.weatherEnabled,
         'weatherFahrenheit': _storage.realismSettings.weatherFahrenheit,
         'dreamsEnabled': _storage.realismSettings.dreamsEnabled,
@@ -153,6 +155,12 @@ class SettingsFacade {
         await _storage.setPassageOfTimeDefault(pot);
         _chat?.setPassageOfTimeEnabled(pot);
       }
+      // No live-chat push: unlike the toggles around it, this one is read
+      // per turn straight off StorageService (ChatService._standaloneClockActive
+      // and ._clockRunning), so writing the setting IS the whole update and an
+      // open conversation picks it up on its next turn.
+      final sc = realism['standaloneClockEnabled'];
+      if (sc is bool) await _storage.setStandaloneClockEnabled(sc);
       final wx = realism['weatherEnabled'];
       if (wx is bool) await _storage.setWeatherEnabled(wx);
       final wf = realism['weatherFahrenheit'];

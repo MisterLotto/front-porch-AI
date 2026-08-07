@@ -262,9 +262,11 @@ extension ChatServiceWiringMemory on ChatService {
         final raw = await _llmEvalEngine.fireLLMEval(prompt);
         return raw == null ? null : _llmEvalEngine.stripThinkBlocks(raw);
       },
+      // Dreams fire on day crossings, so what they need is a clock that
+      // crosses days — not the engine. _clockRunning is that condition for
+      // either driver; with both off it is false, i.e. exactly the old gate.
       isEnabled: () =>
-          _realismEnabled &&
-          _timeService.passageOfTimeEnabled &&
+          _clockRunning &&
           _storageService.journalEnabled &&
           _storageService.dreamsEnabled,
     );

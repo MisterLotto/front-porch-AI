@@ -38,7 +38,7 @@ library;
 
 import 'dart:convert';
 
-import 'package:front_porch_ai/services/llm_service.dart' show LlmToolCall;
+import 'package:front_porch_ai/services/services.dart' show LlmToolCall;
 import 'package:front_porch_ai/utils/utils.dart';
 
 /// Tool names (also referenced by the prompts' tools-mode instruction).
@@ -260,6 +260,24 @@ final List<Map<String, dynamic>> kSceneTimeEvalTools = [
     'Report the scene-time verdict and the character\'s current posture.',
     _sceneTimeFields,
     const ['posture'],
+  ),
+];
+
+/// Time-only variant for the standalone clock (Realism Engine off — see
+/// TimeService's `timeOnly` mode). Deliberately the SAME tool name, so
+/// [realismToolCallToJson] and every parse step downstream are literally the
+/// same code path; it just drops `posture`, which is a realism scalar that
+/// nothing reads while the engine is off. Field definitions are reused from
+/// [_sceneTimeFields] rather than restated, so the two variants cannot drift.
+final List<Map<String, dynamic>> kSceneTimeOnlyEvalTools = [
+  _tool(
+    kSceneTimeTool,
+    'Report how much in-story time the latest exchange took.',
+    {
+      'minutes_elapsed': _sceneTimeFields['minutes_elapsed']!,
+      'new_day': _sceneTimeFields['new_day']!,
+    },
+    const ['minutes_elapsed'],
   ),
 ];
 

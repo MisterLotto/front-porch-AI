@@ -43,10 +43,16 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 /// simulation. It AND-gates the card's own setting — default true, so nothing
 /// changes until a user deliberately turns it off.
 ///
-/// Dependency truths per the maintainer (2026-08-07): Needs, Afterglow and
-/// Passage of Time all genuinely REQUIRE the engine — the clock's accuracy is
-/// an engine eval, and the deterministic drift underneath is an emergency
-/// fallback, never a usable standalone mode. Weather requires the clock.
+/// Dependency truths per the maintainer: Needs and Afterglow genuinely REQUIRE
+/// the engine.
+///
+/// Passage of Time no longer does (2026-08-06). What the clock needs is a model
+/// call sizing each exchange, not bond and trust — so it now runs on its own
+/// eval when the engine is off, behind the opt-in sub-switch on that row. The
+/// deterministic drift underneath remains what it always was: the cushion for
+/// one failed call, never a mode and never offered as one. Weather and Dreams
+/// follow the CLOCK rather than the engine, which is what this tab already
+/// told users they did.
 class PorchLifeTab extends StatelessWidget {
   const PorchLifeTab({super.key});
 
@@ -57,11 +63,22 @@ class PorchLifeTab extends StatelessWidget {
     final realism = storage.realismSettings;
 
     // The engine gates everything in "needs Realism" rows; passage of time
-    // additionally gates weather, and weather gates the °F display.
+    // additionally gates weather and dreams, and weather gates the °F display.
     final engineOn = storage.realismDefault;
     final timeOn = storage.passageOfTimeDefault;
     final weatherOn = storage.weatherEnabled;
     final journalOn = storage.journalEnabled;
+
+    // Weather and dreams gate on the Passage of Time FLAG, deliberately not on
+    // whether the clock is currently moving (ChatService._clockRunning). An
+    // earlier draft used the latter, on the theory that it was more honest —
+    // it is not, it is the old bug wearing a new hat. With the engine off and
+    // the standalone opt-in off, gating on it greys out Story Weather again,
+    // which is precisely the dead-switch problem this tab was built to end.
+    // This tab sets DEFAULTS: a user must be able to record what they want now
+    // and have it apply the moment the clock starts moving. The one fact that
+    // subtlety depends on — "left off, the clock simply holds still" — is
+    // stated on the row that owns it, one row above.
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -142,20 +159,27 @@ class PorchLifeTab extends StatelessWidget {
             FeatureRow(
               icon: Icons.schedule,
               label: 'Passage of Time',
-              need: FeatureNeed.needs,
-              dependsOn: 'the Realism Engine',
-              satisfied: engineOn,
+              need: FeatureNeed.alone,
               blurb:
                   'The story keeps its own clock — dawn to morning to evening '
                   'to night, day after day. The AI judges how long each '
-                  'exchange actually took, which is part of the Realism '
-                  'Engine, so the clock moves with the engine on and stops '
-                  'with it off.',
+                  'exchange actually took, so a shared meal moves the clock '
+                  'further than a passing hello.',
               value: timeOn,
               onChanged: (v) {
                 storage.setPassageOfTimeDefault(v);
                 chat.setPassageOfTimeEnabled(v);
               },
+              // Shown only with the engine off. With it on, the clock already
+              // rides the engine's own reading of the scene and costs nothing
+              // extra, so offering a switch there would be a choice about
+              // nothing.
+              child: engineOn
+                  ? null
+                  : _StandaloneClockSwitch(
+                      value: realism.standaloneClockEnabled,
+                      onChanged: storage.setStandaloneClockEnabled,
+                    ),
             ),
             FeatureRow(
               icon: Icons.cloud_outlined,
@@ -166,7 +190,8 @@ class PorchLifeTab extends StatelessWidget {
               blurb:
                   'Weather rolls through the story\'s days and is felt in mood '
                   'and comfort. Characters can see fronts coming ("looks like '
-                  'rain tomorrow").',
+                  'rain tomorrow"). It costs no extra AI call — the sky is '
+                  'worked out from the date — but it needs days to pass.',
               value: weatherOn,
               onChanged: storage.setWeatherEnabled,
             ),
@@ -299,6 +324,59 @@ class PorchLifeTab extends StatelessWidget {
             ),
           ),
         ),
+      ],
+    );
+  }
+}
+
+/// The opt-in that keeps the clock running with the Realism Engine off.
+///
+/// It exists as its own switch, rather than reading the Passage of Time row
+/// above, because that row already defaults ON — for years it meant nothing
+/// while the engine was off, so nobody chose it in a world where it cost a
+/// model call. Treating it as consent would hand every engine-off user a new
+/// per-turn call without asking. Hence a separate, deliberate yes, and copy
+/// that states the cost in the same breath as the benefit.
+class _StandaloneClockSwitch extends StatelessWidget {
+  const _StandaloneClockSwitch({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Keep the clock running without the engine',
+                style: TextStyle(
+                  color: AppColors.textSecondary(context),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'The engine normally judges how long each exchange took as '
+                'part of work it is already doing. With it off, the clock '
+                'needs one short AI call of its own each turn — so this costs '
+                'a little speed. Left off, the clock simply holds still.',
+                style: TextStyle(
+                  color: AppColors.textTertiary(context),
+                  fontSize: 11,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Switch(value: value, onChanged: onChanged),
       ],
     );
   }

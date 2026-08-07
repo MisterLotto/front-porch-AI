@@ -34,6 +34,21 @@ class RealismSettings with SettingsBase {
   /// of what a card asks for. Added 2026-08-07 — Needs had no global switch at
   /// all, so the Porch Life tab had nothing to show.
   bool _needsSimDefault = true;
+
+  /// Run the story clock on its own eval when the Realism Engine is OFF
+  /// (docs/design/feature-independence.md, "Passage of Time" — decoupled
+  /// 2026-08-06, superseding the 2026-08-02 ruling).
+  ///
+  /// Defaults FALSE on purpose, and the default is the whole point. Passage of
+  /// Time already defaults TRUE, but with the engine off that flag was inert —
+  /// nobody chose it in a world where it did anything. Treating it as consent
+  /// would hand a per-turn model call to every existing realism-off user
+  /// without asking, which is exactly the cost the maintainer declined
+  /// (2026-08-06). So standalone advancement needs its own deliberate yes.
+  ///
+  /// Read only when the engine is off: with realism ON the fused scene-time
+  /// eval already drives the clock for free and this flag is ignored.
+  bool _standaloneClockEnabled = false;
   bool _realismOneShotEval = false;
   bool _weatherEnabled = true;
   bool _weatherFahrenheit = false;
@@ -49,10 +64,16 @@ class RealismSettings with SettingsBase {
   bool get nsfwCooldownDefault => _nsfwCooldownDefault;
   bool get passageOfTimeDefault => _passageOfTimeDefault;
   bool get needsSimDefault => _needsSimDefault;
+
+  /// See [_standaloneClockEnabled]. Costs one model call per turn while it is
+  /// doing anything, which is why it is opt-in and says so in the UI.
+  bool get standaloneClockEnabled => _standaloneClockEnabled;
   bool get realismOneShotEval => _realismOneShotEval;
 
-  /// Living Time story weather (living-time-features.md §3). Effective only
-  /// when realism + passage-of-time are on — ChatService gates that.
+  /// Living Time story weather (living-time-features.md §3). Effective
+  /// whenever the story clock is actually moving — under the engine, or on
+  /// the standalone clock. ChatService gates that (`_clockRunning`); weather
+  /// itself is deterministic math and needs no eval of its own.
   bool get weatherEnabled => _weatherEnabled;
 
   /// Display temperatures in °F instead of °C (§3 v3). Display-only: the
@@ -68,8 +89,10 @@ class RealismSettings with SettingsBase {
   bool get absenceAckEnabled => _absenceAckEnabled;
   int get absenceThresholdHours => _absenceThresholdHours;
 
-  /// Living Time dreams (living-time-features.md §1). Effective only when
-  /// realism + passage-of-time + the Journal are on — ChatService gates.
+  /// Living Time dreams (living-time-features.md §1). Effective when the
+  /// story clock is moving (engine or standalone) and the Journal is on —
+  /// ChatService gates. Dreams fire on day crossings, so what they actually
+  /// need is a clock that crosses days, not the engine per se.
   bool get dreamsEnabled => _dreamsEnabled;
 
   /// Long-term character goals. Independent of the Realism Engine on purpose:
@@ -93,6 +116,8 @@ class RealismSettings with SettingsBase {
     _passageOfTimeDefault =
         prefs?.getBool(k('passage_of_time_default')) ?? true;
     _needsSimDefault = prefs?.getBool(k('needs_sim_default')) ?? true;
+    _standaloneClockEnabled =
+        prefs?.getBool(k('standalone_clock_enabled')) ?? false;
     _realismOneShotEval = prefs?.getBool(k('realism_one_shot_eval')) ?? false;
     _weatherEnabled = prefs?.getBool(k('weather_enabled')) ?? true;
     _weatherFahrenheit = prefs?.getBool(k('weather_fahrenheit')) ?? false;
@@ -191,6 +216,12 @@ class RealismSettings with SettingsBase {
   Future<void> setPassageOfTimeDefault(bool value) async {
     _passageOfTimeDefault = value;
     await prefs?.setBool(k('passage_of_time_default'), value);
+    notify();
+  }
+
+  Future<void> setStandaloneClockEnabled(bool value) async {
+    _standaloneClockEnabled = value;
+    await prefs?.setBool(k('standalone_clock_enabled'), value);
     notify();
   }
 

@@ -198,24 +198,34 @@ A multi-component system spanning `chat_service.dart` (orchestration, `_groupRea
 - Bond/trust relationship scoring (bond clamped to ±300, arousal ±100) (RelationshipService)
 - Time progression — `lib/services/chat/time_service.dart` (`TimeService`) + `story_clock.dart`. Advancement is CONTINUOUS AND PER-TURN: the scene-time eval reports `minutes_elapsed` for the exchange, clamped by `StoryClock.maxMinutesPerTurn`, with `StoryClock.failureDriftMinutes` as the deterministic floor when the eval fails and a `stallBackstopTurns` backstop so time can never freeze. **The old 6-turn gate and its `hold_time` veto are GONE** — do not reason about a turn counter.
 
-  **PASSAGE OF TIME CANNOT BE DECOUPLED FROM REALISM. Settled 2026-08-02 — do
-  not re-propose it.** TimeService looks separable (clean constructor, no
-  realism input, a test suite that builds it with realism nowhere in sight) and
-  that appearance is why the idea keeps recurring. Four reasons, all verified:
-  (1) the clock's ACCURACY is an LLM eval — `_fireSceneTimeEval` asks the model
-  how long the exchange took, and without it the only fallback is
-  `failureDriftMinutes`, a fixed constant, so a two-line greeting and a two-hour
-  dinner would move the clock equally; (2) that eval is FUSED with posture, a
-  realism scalar, so splitting costs a second model call every turn or keeps the
-  coupling anyway; (3) one-shot mode has no separate time call to extract — it
-  fuses `minutes_elapsed`/`new_day` into the realism JSON; (4) the clock is
-  persisted and restored through each message's `realism_state`, so decoupling
-  is a migration, not a code move. The OOC skip path (`detectOocTimeSkip`) is
-  regex and would survive alone, but it only matches enumerated phrasings and is
-  itself gated on `passageOfTimeEnabled` — it is a fast path, not a substitute.
-  COROLLARY: never un-gate the time PROMPT FRAGMENT for realism-off users; the
-  clock cannot advance in that state, so it would inject the same frozen
-  timestamp every turn. Formalise the seam; do not cut it.
+  **PASSAGE OF TIME IS DECOUPLED FROM THE ENGINE (2026-08-06).** This AMENDS
+  the 2026-08-02 "cannot be decoupled" ruling, which rested on reading the
+  maintainer's "passage of time requires the model usage" as requiring the
+  *engine*. It requires a MODEL CALL; it does not require bond/trust/emotion.
+  The four old reasons, re-audited: (1) accuracy IS an LLM eval — still true,
+  and it is the reason the clock fires a call at all; `failureDriftMinutes`
+  remains a FAILURE cushion, never a mode, never surfaced; (2) fused with
+  posture — a cost, not a barrier: TimeService already shipped a posture-only
+  branch, and `timeOnly` mirrors it; (3) one-shot has no time call to extract —
+  true and irrelevant, since with the engine off there is no fused JSON, so the
+  paths never intersect; (4) "`realism_state` means a migration" — WRONG: the
+  clock's store of record is the session row (`sessions.story_clock` /
+  `story_start_date`), written and read unconditionally; `realism_state` is the
+  swipe/regen rewind snapshot.
+  How it works now: `standaloneClockEnabled` (default OFF, opt-in — Passage of
+  Time already defaults on and could not be treated as consent for a per-turn
+  call) makes `evaluatePhysicalStateCall(timeOnly: true)` fire once per turn
+  from `sendMessage`, chat-scoped so a group costs one call. Everything after
+  the call is SHARED with the engine path (clamp, failure floor, `new_day`
+  corroboration, OOC-skip ownership) — that sharing is the parity guarantee,
+  pinned by `test/services/chat/standalone_clock_test.dart`. Weather and Dreams
+  now gate on `_clockRunning` (either driver), not the engine.
+  COROLLARY, unchanged in spirit: the time PROMPT FRAGMENT gates on
+  `_clockRunning`, never on `passageOfTimeEnabled` alone — that flag defaults on
+  and is inert without a driver, so gating on it would inject the same frozen
+  timestamp every turn. Do NOT add a swipe/regen rewind for the standalone
+  clock: it fires once per user turn and never re-fires on regenerate, so it is
+  already at exactly one advance.
 - Fixation engine (emotional obsessions)
 - Character evolution (trait development) (EvolutionService)
 - Chaos Mode / "Chance Time" random events (ChaosModeService)
