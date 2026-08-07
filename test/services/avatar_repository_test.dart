@@ -58,7 +58,16 @@ void main() {
       //      the maintainer's explicit sign-off on the schema change
       //      (2026-08-07); this assertion tracks schemaVersion by definition,
       //      so it is provably wrong at 44 rather than merely inconvenient.
-      expect(db.schemaVersion, 45);
+      // v46: objectives.served_ambition (which ambition a quest is a step
+      //      toward — docs/design/pockets-and-preferences.md Part 3). Same
+      //      reasoning as v45: this assertion exists to track schemaVersion,
+      //      so once the version really is 46 the old value is false, not
+      //      merely failing. The column itself is guarded by
+      //      test/database/served_ambition_migration_test.dart, which checks
+      //      the Table, the ladder and the repair path agree — that is the
+      //      test that would catch a BAD schema change; this one only notices
+      //      that a change happened at all.
+      expect(db.schemaVersion, 46);
     });
 
     test('journal_memories table exists and round-trips (v35)', () async {
