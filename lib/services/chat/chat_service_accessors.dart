@@ -226,14 +226,14 @@ extension ChatServiceAccessors on ChatService {
   /// still treated as present" case (e.g. cast detection skipping a re-narrated
   /// character because the stale guest was still in the scene list).
   void _onCharacterLibraryChanged() {
-    if (_disposed || _guestBusy || _sceneGuestIds.isEmpty) return;
+    if (_disposed || _sceneGuest.busy || _sceneGuest.ids.isEmpty) return;
     // Defer out of the repository's notify callback so we never start a DB read
     // from inside its in-progress write/transaction; re-check guards (and that
     // the chat hasn't switched) on the microtask. _resolveSceneGuestCards also
     // self-guards on the token, so a stale resolve can't write the wrong chat.
     final token = _currentSessionId;
     scheduleMicrotask(() {
-      if (_sceneChanged(token) || _guestBusy || _sceneGuestIds.isEmpty) return;
+      if (_sceneChanged(token) || _sceneGuest.busy || _sceneGuest.ids.isEmpty) return;
       _resolveSceneGuestCards();
     });
   }
@@ -433,7 +433,7 @@ extension ChatServiceAccessors on ChatService {
     final host = _activeCharacter;
     return [
       if (host != null) ChatParticipant(card: host, isHost: true),
-      for (final g in _sceneGuestCards) ChatParticipant(card: g, isHost: false),
+      for (final g in _sceneGuest.cards) ChatParticipant(card: g, isHost: false),
     ];
   }
 
@@ -504,7 +504,7 @@ extension ChatServiceAccessors on ChatService {
     _disposed = true;
     _cancelIdleTimer();
     _cancelStreamNotifyThrottle();
-    _guestStatusClearTimer?.cancel();
+    _sceneGuest.statusClearTimer?.cancel();
     _characterRepository?.removeListener(_onCharacterLibraryChanged);
     _storageService.removeListener(_onBackendIdentityMaybeChanged);
     _llmProvider?.removeListener(_onBackendIdentityMaybeChanged);

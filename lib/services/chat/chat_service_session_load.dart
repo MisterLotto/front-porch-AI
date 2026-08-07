@@ -534,13 +534,13 @@ extension ChatServiceSessionLoad on ChatService {
       // while this session's own guests are never restored. Mirror the
       // _loadLastSession 1:1 branch: full reset, then load this session's blob.
       if (_activeGroup == null) {
-        _pendingGuestDeparture = null;
-        _pendingGuestPickerFilter = null;
+        _sceneGuest.pendingDeparture = null;
+        _sceneGuest.pendingPickerFilter = null;
         _resetGuestActivityState();
-        _userMessagesSinceLastCastScan = 0;
-        _pendingGuestDetection = null;
-        _offeredOrIgnoredGuestNames.clear();
-        // (clears + restores _sceneGuestIds/_sceneGuestCards + guest evolution)
+        _sceneGuest.turnsSinceCastScan = 0;
+        _sceneGuest.pendingDetection = null;
+        _sceneGuest.offeredOrIgnoredNames.clear();
+        // (clears + restores _sceneGuest.ids/_sceneGuest.cards + guest evolution)
         _loadSceneGuestsFromSession(session);
       } else {
         // Group session: restore live per-character realism/needs from the

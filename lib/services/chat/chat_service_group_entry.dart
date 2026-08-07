@@ -57,16 +57,16 @@ extension ChatServiceGroupEntry on ChatService {
     _groupCharacterRAGPriorities = {};
 
     // Scene Guests are 1:1-only — clear them when entering a group.
-    _sceneGuestIds.clear();
-    _sceneGuestCards.clear();
-    _pendingGuestDeparture = null;
-    _pendingGuestPickerFilter = null;
+    _sceneGuest.ids.clear();
+    _sceneGuest.cards.clear();
+    _sceneGuest.pendingDeparture = null;
+    _sceneGuest.pendingPickerFilter = null;
     _resetGuestActivityState();
     // Phase 2 cast detection: reset the scan cadence + pending/debounce state
     // for the new 1:1 context (kept in sync with the Scene Guest clears).
-    _userMessagesSinceLastCastScan = 0;
-    _pendingGuestDetection = null;
-    _offeredOrIgnoredGuestNames.clear();
+    _sceneGuest.turnsSinceCastScan = 0;
+    _sceneGuest.pendingDetection = null;
+    _sceneGuest.offeredOrIgnoredNames.clear();
 
     // Path B: Load per-character group system prompts from the clean model field
     _groupCharacterSystemPrompts = Map<String, String>.from(

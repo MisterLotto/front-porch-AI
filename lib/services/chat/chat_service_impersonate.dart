@@ -26,7 +26,7 @@ extension ChatServiceImpersonate on ChatService {
   }) async {
     if ((_activeCharacter == null && _activeGroup == null) ||
         _isTurnBusy ||
-        _guestBusy) {
+        _sceneGuest.busy) {
       return;
     }
     if (await _abortIfBackendDown()) return;

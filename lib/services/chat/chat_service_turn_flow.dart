@@ -286,11 +286,11 @@ extension ChatServiceTurnFlow on ChatService {
     if (!sceneDetectionEnabled) return;
     if (_activeGroup != null) return; // 1:1 only by design
     if (_activeCharacter == null) return;
-    if (_pendingGuestDetection != null) return; // one offer at a time
+    if (_sceneGuest.pendingDetection != null) return; // one offer at a time
 
-    _userMessagesSinceLastCastScan++;
-    if (_userMessagesSinceLastCastScan < _castScanInterval) return;
-    _userMessagesSinceLastCastScan = 0;
+    _sceneGuest.turnsSinceCastScan++;
+    if (_sceneGuest.turnsSinceCastScan < _castScanInterval) return;
+    _sceneGuest.turnsSinceCastScan = 0;
 
     // Fire-and-forget: never block the turn on the eval.
     _performCastScan();
@@ -304,8 +304,8 @@ extension ChatServiceTurnFlow on ChatService {
   /// won't immediately re-fire on the next turn.
   Future<bool> runCastDetectionNow() async {
     if (_activeGroup != null || _activeCharacter == null) return false;
-    if (_pendingGuestDetection != null) return false;
-    _userMessagesSinceLastCastScan = 0;
+    if (_sceneGuest.pendingDetection != null) return false;
+    _sceneGuest.turnsSinceCastScan = 0;
     // Re-resolve first so any guest whose library card was deleted is pruned
     // from the scene list — otherwise the detector still treats them as "already
     // a scene guest" and silently rejects re-detecting them (the exact symptom
@@ -315,7 +315,7 @@ extension ChatServiceTurnFlow on ChatService {
     // dismissals/offers — otherwise a character you ignored (or added then
     // deleted) can never be re-surfaced without starting a fresh chat. Names
     // still genuinely in the scene are excluded by the live scene-guest filter.
-    _offeredOrIgnoredGuestNames.clear();
+    _sceneGuest.offeredOrIgnoredNames.clear();
     final detected = await _performCastScan();
     return detected != null;
   }
@@ -332,11 +332,11 @@ extension ChatServiceTurnFlow on ChatService {
     // the eval — otherwise a character detected from chat A's narration would
     // pop as an offer inside chat B and get minted into B's scene.
     if (_sceneChanged(token) || _activeGroup != null) return null;
-    if (_pendingGuestDetection != null) return null;
+    if (_sceneGuest.pendingDetection != null) return null;
     // Mark as offered immediately so a later scan won't re-propose it even if
     // the user leaves the popup open.
-    _offeredOrIgnoredGuestNames.add(detected.name.trim().toLowerCase());
-    _pendingGuestDetection = detected;
+    _sceneGuest.offeredOrIgnoredNames.add(detected.name.trim().toLowerCase());
+    _sceneGuest.pendingDetection = detected;
     notifyListeners();
     return detected;
   }

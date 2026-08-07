@@ -36,21 +36,21 @@ extension ChatServiceGuestFlow on ChatService {
             _messages.last.sender != 'System')
         ? _messages.last
         : null;
-    _exitUndoGuest = guest;
-    _exitUndoMessage = departure;
-    _exitUndoOfferName = guest.name;
+    _sceneGuest.exitUndoGuest = guest;
+    _sceneGuest.exitUndoMessage = departure;
+    _sceneGuest.exitUndoOfferName = guest.name;
     notifyListeners();
   }
 
   void _clearExitUndo() {
-    _exitUndoGuest = null;
-    _exitUndoMessage = null;
-    _exitUndoOfferName = null;
+    _sceneGuest.exitUndoGuest = null;
+    _sceneGuest.exitUndoMessage = null;
+    _sceneGuest.exitUndoOfferName = null;
     // A pending full-member exit that is cleared WITHOUT committing (context
     // switch / new chat) is simply cancelled: the member's row was never deleted,
     // so they stay. The sendMessage commit path runs _commitPendingMemberExit
     // before this, so a real "continue" still finalizes the removal.
-    _pendingMemberExit = null;
+    _sceneGuest.pendingMemberExit = null;
   }
 
   /// Undo the last `/exit`: delete the departure message (which reverts the host
@@ -62,10 +62,10 @@ extension ChatServiceGuestFlow on ChatService {
     // roster reload plus deleting their goodbye turn (which reverts the realism
     // that turn applied). The destructive removal never ran, so there is nothing
     // to un-collapse.
-    final pendingMember = _pendingMemberExit;
+    final pendingMember = _sceneGuest.pendingMemberExit;
     if (pendingMember != null) {
-      final departure = _exitUndoMessage;
-      _pendingMemberExit = null;
+      final departure = _sceneGuest.exitUndoMessage;
+      _sceneGuest.pendingMemberExit = null;
       _clearExitUndo();
       if (departure != null) {
         final idx = _messages.indexOf(departure);
@@ -77,8 +77,8 @@ extension ChatServiceGuestFlow on ChatService {
       return;
     }
 
-    final guest = _exitUndoGuest;
-    final departure = _exitUndoMessage;
+    final guest = _sceneGuest.exitUndoGuest;
+    final departure = _sceneGuest.exitUndoMessage;
     if (guest == null) return;
     _clearExitUndo();
     if (departure != null) {
@@ -86,8 +86,8 @@ extension ChatServiceGuestFlow on ChatService {
       if (idx >= 0) deleteMessage(idx); // removes + reverts realism + saves
     }
     final id = guest.dbId;
-    if (id != null && !_sceneGuestIds.contains(id)) {
-      _sceneGuestIds.add(id);
+    if (id != null && !_sceneGuest.ids.contains(id)) {
+      _sceneGuest.ids.add(id);
       await _resolveSceneGuestCards();
       await _saveChat();
     }
@@ -105,7 +105,7 @@ extension ChatServiceGuestFlow on ChatService {
       return const [];
     }
     final hostId = _activeCharacter!.dbId;
-    final present = _sceneGuestIds.toSet();
+    final present = _sceneGuest.ids.toSet();
     return repo.characters.where((c) {
       final id = c.dbId;
       if (id == null) return false;
@@ -184,7 +184,7 @@ extension ChatServiceGuestFlow on ChatService {
     // dropped. A character who is already a present guest just gets promoted
     // (no fresh entrance); a brand-new arrival makes an organic, LLM-written
     // entrance from the chat so far + their card (mirroring the lite /join flow).
-    final present = List<CharacterCard>.from(_sceneGuestCards);
+    final present = List<CharacterCard>.from(_sceneGuest.cards);
     final cardId = _getCharacterIdFromCard(card);
     final isPresentGuest = present.any(
       (g) => _getCharacterIdFromCard(g) == cardId,
@@ -224,7 +224,7 @@ extension ChatServiceGuestFlow on ChatService {
       return;
     }
     if (_activeGroup != null) return; // already a group
-    final present = List<CharacterCard>.from(_sceneGuestCards);
+    final present = List<CharacterCard>.from(_sceneGuest.cards);
     if (present.isEmpty) {
       _setGuestStatus(
         '⚠ No guests to promote — bring one in with /join --full <name>.',
@@ -251,7 +251,7 @@ extension ChatServiceGuestFlow on ChatService {
   ) async {
     // The present guests are becoming full members — drop their lite state so
     // they aren't represented twice once we switch into group mode.
-    _sceneGuestIds.clear();
+    _sceneGuest.ids.clear();
 
     final group = await forkToGroupChat(additional, repo, entrances: entrances);
     if (group == null) {
@@ -294,8 +294,8 @@ extension ChatServiceGuestFlow on ChatService {
 
   /// Clear a pending picker request (user cancelled or finished picking).
   void dismissGuestPicker() {
-    _pendingGuestPickerFilter = null;
-    _pendingGuestPickerFull = false;
+    _sceneGuest.pendingPickerFilter = null;
+    _sceneGuest.pendingPickerFull = false;
     notifyListeners();
   }
 
@@ -303,10 +303,10 @@ extension ChatServiceGuestFlow on ChatService {
   /// EXISTING mint+add+enter path (same as `/create`). Seeds the guest from the
   /// detected name + descriptor (as concept). Surfaces errors like `/create`.
   Future<void> acceptDetectedGuest() async {
-    final detected = _pendingGuestDetection;
+    final detected = _sceneGuest.pendingDetection;
     if (detected == null) return;
-    _pendingGuestDetection = null;
-    _offeredOrIgnoredGuestNames.add(detected.name.trim().toLowerCase());
+    _sceneGuest.pendingDetection = null;
+    _sceneGuest.offeredOrIgnoredNames.add(detected.name.trim().toLowerCase());
     notifyListeners();
 
     await _addGuestWithStatus(
@@ -322,11 +322,11 @@ extension ChatServiceGuestFlow on ChatService {
   /// Decline the pending detection; the name is remembered so it is never
   /// re-offered this session.
   void dismissDetectedGuest() {
-    final detected = _pendingGuestDetection;
+    final detected = _sceneGuest.pendingDetection;
     if (detected != null) {
-      _offeredOrIgnoredGuestNames.add(detected.name.trim().toLowerCase());
+      _sceneGuest.offeredOrIgnoredNames.add(detected.name.trim().toLowerCase());
     }
-    _pendingGuestDetection = null;
+    _sceneGuest.pendingDetection = null;
     notifyListeners();
   }
 
@@ -398,7 +398,7 @@ extension ChatServiceGuestFlow on ChatService {
   /// mutation, no DB, no UI signal — when this returns true after an `await`.
   bool _sceneChanged(String? token) => _disposed || _currentSessionId != token;
 
-  /// Re-resolve `_sceneGuestCards` from `_sceneGuestIds` using the repository.
+  /// Re-resolve `_sceneGuest.cards` from `_sceneGuest.ids` using the repository.
   /// Called whenever the id list changes or on session load. Drops ids that no
   /// longer resolve (e.g. the guest character was deleted from the library).
   ///
@@ -414,18 +414,18 @@ extension ChatServiceGuestFlow on ChatService {
     // Never run two passes at once: each awaits per-id DB reads and then mutates
     // the shared id/card lists, so overlapping passes could read a half-mutated
     // list or race the DB. Coalesce concurrent requests into one trailing re-run.
-    if (_resolvingSceneGuests) {
-      _sceneGuestsResolvePending = true;
+    if (_sceneGuest.resolving) {
+      _sceneGuest.resolvePending = true;
       return;
     }
     final token = _currentSessionId;
-    _resolvingSceneGuests = true;
+    _sceneGuest.resolving = true;
     try {
       do {
-        _sceneGuestsResolvePending = false;
+        _sceneGuest.resolvePending = false;
         final resolved = <CharacterCard>[];
         final validIds = <String>[];
-        for (final id in List<String>.from(_sceneGuestIds)) {
+        for (final id in List<String>.from(_sceneGuest.ids)) {
           if (_sceneChanged(token)) {
             return; // disposed or chat switched mid-pass
           }
@@ -436,16 +436,16 @@ extension ChatServiceGuestFlow on ChatService {
           }
         }
         if (_sceneChanged(token)) return;
-        _sceneGuestIds
+        _sceneGuest.ids
           ..clear()
           ..addAll(validIds);
-        _sceneGuestCards
+        _sceneGuest.cards
           ..clear()
           ..addAll(resolved);
         notifyListeners();
-      } while (_sceneGuestsResolvePending && !_disposed);
+      } while (_sceneGuest.resolvePending && !_disposed);
     } finally {
-      _resolvingSceneGuests = false;
+      _sceneGuest.resolving = false;
     }
   }
 }

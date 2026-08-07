@@ -158,7 +158,7 @@ extension ChatServiceWiringMemory on ChatService {
           }
         }
         if (name == null) {
-          for (final g in _sceneGuestCards) {
+          for (final g in _sceneGuest.cards) {
             if (_getCharacterIdFromCard(g) == charId) {
               name = g.name;
               break;
@@ -197,7 +197,7 @@ extension ChatServiceWiringMemory on ChatService {
       getActiveCharacter: () => _activeCharacter,
       getActiveGroup: () => _activeGroup,
       getGroupCharacters: () => _groupCharacters,
-      getSceneGuestCards: () => _sceneGuestCards,
+      getSceneGuestCards: () => _sceneGuest.cards,
       getCharacterIdFromCard: _getCharacterIdFromCard,
       getMessages: () => _messages,
       getUserName: () => _userPersonaService.persona.name,
@@ -292,8 +292,8 @@ extension ChatServiceWiringMemory on ChatService {
       setExpression: (label) => _expressionService.setManualExpression(label),
       activeCharacterIsSet: () =>
           _activeCharacter != null && _activeGroup == null,
-      getSceneGuestCards: () => _sceneGuestCards,
-      setPendingGuestDeparture: (name) => _pendingGuestDeparture = name,
+      getSceneGuestCards: () => _sceneGuest.cards,
+      setPendingGuestDeparture: (name) => _sceneGuest.pendingDeparture = name,
       onSystemMessage: (message) =>
           // Surface usage hints / errors as the transient inline banner instead
           // of a saved 'System' chat message (no litter). '⚠' prefix = error.
@@ -304,7 +304,7 @@ extension ChatServiceWiringMemory on ChatService {
         mint: (onStatus) => _mintSceneGuest(name, concept, onStatus: onStatus),
       ),
       exitGuest: (guest) async {
-        _sceneGuestIds.remove(guest.dbId);
+        _sceneGuest.ids.remove(guest.dbId);
         await _resolveSceneGuestCards();
         await _saveChat();
       },
@@ -313,8 +313,8 @@ extension ChatServiceWiringMemory on ChatService {
       joinFull: joinFull,
       promoteScene: promoteSceneToFull,
       requestGuestPicker: (filter, full) {
-        _pendingGuestPickerFilter = filter;
-        _pendingGuestPickerFull = full;
+        _sceneGuest.pendingPickerFilter = filter;
+        _sceneGuest.pendingPickerFull = full;
         notifyListeners();
       },
       runCastScan: runCastDetectionNow,
@@ -379,8 +379,8 @@ extension ChatServiceWiringMemory on ChatService {
   /// `LlmEvalEngine` fire/strip/extract surface for its relevance gate (no new
   /// LLM-firing path) and only triggers parity-safe guest turns.
   SceneGuestDirector _ensureSceneGuestDirector() {
-    return _sceneGuestDirector ??= SceneGuestDirector(
-      getSceneGuestCards: () => _sceneGuestCards,
+    return _sceneGuest.director ??= SceneGuestDirector(
+      getSceneGuestCards: () => _sceneGuest.cards,
       generateGuestTurn: generateGuestTurn,
       getLatestAssistantText: () {
         for (final m in _messages.reversed) {
@@ -400,7 +400,7 @@ extension ChatServiceWiringMemory on ChatService {
   /// callbacks so it never imports this god file. Reuses the existing
   /// `LlmEvalEngine` fire/strip surface (no new LLM-firing path).
   CastDetector _ensureCastDetector() {
-    return _castDetector ??= CastDetector(
+    return _sceneGuest.castDetector ??= CastDetector(
       // Shared tools transport (one probe per backend identity, app-wide).
       fireToolEval: _fireToolEval,
       probe: _toolProbe,
@@ -425,8 +425,8 @@ extension ChatServiceWiringMemory on ChatService {
       stripThinkBlocks: _stripThinkBlocks,
       getHostName: () => _activeCharacter?.name ?? '',
       getUserName: () => _userPersonaService.persona.name,
-      getSceneGuestNames: () => _sceneGuestCards.map((g) => g.name).toList(),
-      getOfferedOrIgnoredNames: () => _offeredOrIgnoredGuestNames,
+      getSceneGuestNames: () => _sceneGuest.cards.map((g) => g.name).toList(),
+      getOfferedOrIgnoredNames: () => _sceneGuest.offeredOrIgnoredNames,
     );
   }
 

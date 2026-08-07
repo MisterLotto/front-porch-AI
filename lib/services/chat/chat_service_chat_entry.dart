@@ -109,17 +109,17 @@ extension ChatServiceChatEntry on ChatService {
     _groupCharacterRAGPriorities = {};
 
     // Reset Scene Guests for the new 1:1 context (repopulated by _loadLastSession
-    // if the loaded session persisted any). _pendingGuestDeparture is one-shot.
-    _sceneGuestIds.clear();
-    _sceneGuestCards.clear();
-    _pendingGuestDeparture = null;
-    _pendingGuestPickerFilter = null;
+    // if the loaded session persisted any). _sceneGuest.pendingDeparture is one-shot.
+    _sceneGuest.ids.clear();
+    _sceneGuest.cards.clear();
+    _sceneGuest.pendingDeparture = null;
+    _sceneGuest.pendingPickerFilter = null;
     _resetGuestActivityState();
     // Phase 2 cast detection: reset the scan cadence + pending/debounce state
     // for the new 1:1 context (kept in sync with the Scene Guest clears).
-    _userMessagesSinceLastCastScan = 0;
-    _pendingGuestDetection = null;
-    _offeredOrIgnoredGuestNames.clear();
+    _sceneGuest.turnsSinceCastScan = 0;
+    _sceneGuest.pendingDetection = null;
+    _sceneGuest.offeredOrIgnoredNames.clear();
 
     _activeCharacter = character;
 

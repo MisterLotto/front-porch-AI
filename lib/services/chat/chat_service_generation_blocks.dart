@@ -232,7 +232,7 @@ extension ChatServiceGenerationBlocks on ChatService {
             'as ${t.guestSpeaker!.name}: their own dialogue, actions, and '
             'thoughts, reacting to what just happened. Do NOT write, speak, or '
             'narrate anything for $hostName or ${t.userName}.]\n';
-      } else if (_sceneGuestCards.isNotEmpty) {
+      } else if (_sceneGuest.cards.isNotEmpty) {
         // Host turn with guests present: hard ban on ventriloquising them, or
         // the host writes the guests' lines too (the "generated both at once"
         // bug). Acknowledging/reacting is allowed; speaking for them is not.
@@ -242,7 +242,7 @@ extension ChatServiceGenerationBlocks on ChatService {
         // has ended" the many-shot momentum beats the ban (Discord
         // double-response report, 2026-07-28). The defer clause covers an
         // addressed guest the sendMessage vocative router didn't catch.
-        final names = _sceneGuestCards.map((g) => g.name).join(', ');
+        final names = _sceneGuest.cards.map((g) => g.name).join(', ');
         t.authorNoteBlock +=
             '[Also present in the scene: $names — each is a separate '
             'character played by another actor, replying in their own '
@@ -257,11 +257,11 @@ extension ChatServiceGenerationBlocks on ChatService {
       }
       // One-shot guest departure (armed by /exit) — narrated by the primary
       // on this turn only, then cleared so it never persists.
-      if (t.guestSpeaker == null && _pendingGuestDeparture != null) {
+      if (t.guestSpeaker == null && _sceneGuest.pendingDeparture != null) {
         t.authorNoteBlock +=
-            '[${_pendingGuestDeparture!} leaves the scene; '
+            '[${_sceneGuest.pendingDeparture!} leaves the scene; '
             'write them exiting naturally.]\n';
-        _pendingGuestDeparture = null;
+        _sceneGuest.pendingDeparture = null;
       }
     }
 

@@ -60,6 +60,7 @@ export 'relationship_service.dart';
 export 'relationship_tiers.dart';
 export 'scenario_fade.dart';
 export 'scene_guest_director.dart';
+export 'scene_guest_state.dart';
 export 'scene_guest_factory.dart';
 export 'sentence_stream.dart';
 export 'stop_sequences.dart';

@@ -207,69 +207,19 @@ class ChatService extends ChangeNotifier {
 
   CharacterCard? _activeCharacter;
 
-  // ── Scene Guests (Lite NPCs) ──────────────────────────────────────────────
-  // Persistent guest characters added to a 1:1 scene. They are real library
-  // characters that speak in their own bubble via the existing generation
-  // engine but carry NO Realism Engine / Needs state (parity-safe). Stored as
-  // dbIds inside the session's groupRealismState column (always '{}' for plain
-  // 1:1 sessions) so no schema change is needed. Group sessions never use these.
-  final List<String> _sceneGuestIds = [];
-  final List<CharacterCard> _sceneGuestCards = [];
+  // ── Scene Guests (Lite NPCs) ────────────────────────────────────────────
+  // Every field the feature owns lives in SceneGuestState (chat/
+  // scene_guest_state.dart) — full documentation is there. Behaviour stays in
+  // the chat_service_scene_guest / _cast / _guest_flow parts, which read and
+  // write it directly; only the declarations moved out of this shell.
+  //
+  // Guests grow Growth Rings exactly like members do — rings are keyed by the
+  // guest's stable charId in the growth_rings table, so no per-guest evolution
+  // state lives here either (the growth pass includes 1:1 guests who spoke in
+  // the window via resolvePassOwners).
+  final SceneGuestState _sceneGuest = SceneGuestState();
 
-  // Scene Guests grow Growth Rings exactly like members do — rings are keyed
-  // by the guest's stable charId in the growth_rings table, so no per-guest
-  // evolution state lives here anymore (the growth pass includes 1:1 guests
-  // who spoke in the window via resolvePassOwners).
-
-  /// A one-shot departure instruction consumed by the NEXT primary 1:1
-  /// generation so the active character narrates the guest leaving. Set by
-  /// `/exit`, cleared after a single injection.
-  String? _pendingGuestDeparture;
-
-  /// A pending request to open the Scene Guest picker (the `/join` flow). Holds
-  /// the initial search filter ('' = show everyone); null = no picker pending.
-  /// Surfaced to the chat UI exactly like [pendingGuestDetection] — set + clear
-  /// here with [notifyListeners]; the page observes it and shows the picker once.
-  String? _pendingGuestPickerFilter;
-
-  /// Transient one-line status for the Scene Guest create/join flow, shown as an
-  /// inline banner above the input and NEVER saved to chat history (replaces the
-  /// old per-step 'System' chat messages that both littered the scene and were
-  /// persisted into it). Updated in place across the steps, then auto-clears.
-  String? _guestActivityStatus;
-  bool _guestActivityIsError = false;
-  Timer? _guestStatusClearTimer;
-
-  /// True while a guest is being created/entered. The mint runs a separate LLM
-  /// call that does NOT set `_isGenerating`, so this is the guard that blocks a
-  /// user message (or regen/swipe) from racing the in-flight guest creation.
-  bool _guestBusy = false;
-
-  /// Set when a guest's background portrait was just written to its card PNG, so
-  /// the UI can evict that path from the image cache and show the new art (image
-  /// cache lives in the widget layer; this service is foundation-only).
-  String? _guestAvatarEvictPath;
-
-  bool _pendingGuestPickerFull = false;
   bool _photoTurnInFlight = false;
-
-  // ── /exit undo ──────────────────────────────────────────────────────────
-  // After `/exit`, a brief UNDO is offered: delete the generated departure
-  // message (reverting its host realism via deleteMessage's time-travel
-  // rollback) and re-add the guest. Their evolution counts + RAG memory are NOT
-  // cleared by exit, so re-adding the id restores full context. The offer is
-  // consumed by the UI (one SnackBar) but the undo data stays valid until the
-  // user sends a real message / switches chats.
-  CharacterCard? _exitUndoGuest;
-  ChatMessage? _exitUndoMessage;
-  String? _exitUndoOfferName;
-
-  /// Set when a FULL group member's `/exit` is awaiting commit. They have said
-  /// goodbye and left the live roster, but their DB row/realism/evolution/quests/
-  /// memory are untouched and the real removal (plus any collapse to a 1:1) is
-  /// deferred until the user continues — so [undoLastExit] can restore them
-  /// losslessly. Committed in `sendMessage` via [_commitPendingMemberExit].
-  CharacterCard? _pendingMemberExit;
 
   ChatCommandHandler? _commandHandler;
 
@@ -299,8 +249,6 @@ class ChatService extends ChangeNotifier {
   /// no settings UI yet; a public setter lets callers toggle it.
   bool autoChimeEnabled = true;
 
-  SceneGuestDirector? _sceneGuestDirector;
-
   // ── Scene Guest cast detection (Phase 2) ────────────────────────────────
   // Periodically (not every turn) scans the primary's recent narration in a
   // 1:1 chat for a newly-introduced, recurring, named side character and offers
@@ -313,25 +261,6 @@ class ChatService extends ChangeNotifier {
 
   // (_castScanInterval moved to chat_service_defaults.dart as a
   // library-top-level const)
-
-  /// Primary turns since the last cast-detection scan (zeroed at the same
-  /// Scene Guest reset sites alongside `_pendingGuestDeparture = null`).
-  int _userMessagesSinceLastCastScan = 0;
-
-  /// A detected candidate awaiting the user's accept/ignore choice. Surfaced to
-  /// the chat UI exactly like the Chance Time wheel's pending flag: set + clear
-  /// here with [notifyListeners]; the page observes it and shows the popup once.
-  DetectedCharacter? _pendingGuestDetection;
-
-  /// Names already offered (whether accepted or ignored) this session,
-  /// lower-cased, so the same character is never re-offered. Cleared at the
-  /// Scene Guest reset sites.
-  final Set<String> _offeredOrIgnoredGuestNames = {};
-
-  CastDetector? _castDetector;
-
-  bool _resolvingSceneGuests = false;
-  bool _sceneGuestsResolvePending = false;
 
   final List<ChatMessage> _messages = [];
   Future<void> _saveChain = Future.value();

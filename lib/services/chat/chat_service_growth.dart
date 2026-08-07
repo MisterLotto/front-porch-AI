@@ -190,7 +190,7 @@ extension ChatServiceGrowth on ChatService {
         activeId = _getCharacterIdFromCard(_activeCharacter!);
         ids.add(activeId);
       }
-      for (final g in _sceneGuestCards) {
+      for (final g in _sceneGuest.cards) {
         ids.add(_getCharacterIdFromCard(g));
       }
     }

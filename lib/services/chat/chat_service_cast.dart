@@ -71,18 +71,18 @@ extension ChatServiceCast on ChatService {
         .where((c) => _getCharacterIdFromCard(c) != memberId)
         .toList();
     _groupManager?.refreshCharacters(remaining);
-    _pendingMemberExit = member;
+    _sceneGuest.pendingMemberExit = member;
     // 3. Arm the UNDO snackbar; the just-generated goodbye turn is what undo
     //    deletes (its realism rollback included). Mirrors armSceneGuestExitUndo
-    //    but without the lite `_exitUndoGuest` marker so undoLastExit takes the
+    //    but without the lite `_sceneGuest.exitUndoGuest` marker so undoLastExit takes the
     //    group branch.
-    _exitUndoMessage =
+    _sceneGuest.exitUndoMessage =
         (_messages.isNotEmpty &&
             !_messages.last.isUser &&
             _messages.last.sender != 'System')
         ? _messages.last
         : null;
-    _exitUndoOfferName = member.name;
+    _sceneGuest.exitUndoOfferName = member.name;
     await _saveChat();
     notifyListeners();
     return true;
@@ -93,8 +93,8 @@ extension ChatServiceCast on ChatService {
   /// is pending. The goodbye turn was already narrated at exit time, so this only
   /// does the destructive half via the shared removal path.
   Future<void> _commitPendingMemberExit() async {
-    final member = _pendingMemberExit;
-    _pendingMemberExit = null;
+    final member = _sceneGuest.pendingMemberExit;
+    _sceneGuest.pendingMemberExit = null;
     if (member == null) return;
     final repo = _groupChatRepository;
     if (repo == null || _activeGroup == null) return;

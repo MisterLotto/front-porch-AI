@@ -79,7 +79,7 @@ extension ChatServiceMessageOps on ChatService {
   }
 
   Future<void> continueGeneration() async {
-    if (_messages.isEmpty || _isTurnBusy || _guestBusy) return;
+    if (_messages.isEmpty || _isTurnBusy || _sceneGuest.busy) return;
 
     // Only continue if the last message is from a bot (non-user, non-system).
     // Narration banners (dreams, Chance Time) are excluded: continue_ streams

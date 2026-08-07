@@ -31,8 +31,8 @@ extension ChatServiceSessionState on ChatService {
   /// group realism column, then resolve their cards. Tolerant of missing,
   /// empty, '{}', legacy group state, or malformed JSON (clears guests).
   void _loadSceneGuestsFromSession(Session? session) {
-    _sceneGuestIds.clear();
-    _sceneGuestCards.clear();
+    _sceneGuest.ids.clear();
+    _sceneGuest.cards.clear();
     final stateJson = session?.groupRealismState;
     // Timed lorebook effects ride the same blob — hydrate (resets first, so
     // a null/empty session clears any prior chat's timers).
@@ -43,7 +43,7 @@ extension ChatServiceSessionState on ChatService {
       if (decoded is Map && decoded['sceneGuests'] is List) {
         for (final id in decoded['sceneGuests'] as List) {
           final s = id?.toString();
-          if (s != null && s.isNotEmpty) _sceneGuestIds.add(s);
+          if (s != null && s.isNotEmpty) _sceneGuest.ids.add(s);
         }
       }
       // (The old 'guestEvolution' key is no longer read — guest growth lives
@@ -52,7 +52,7 @@ extension ChatServiceSessionState on ChatService {
       debugPrint('[SceneGuest] Failed to parse sceneGuests from session: $e');
       return;
     }
-    if (_sceneGuestIds.isNotEmpty) {
+    if (_sceneGuest.ids.isNotEmpty) {
       // Fire-and-forget resolve; UI updates via notifyListeners inside.
       _resolveSceneGuestCards();
     }
@@ -273,11 +273,11 @@ extension ChatServiceSessionState on ChatService {
         'objectives': perCharObjectives,
         'savedAt': DateTime.now().toIso8601String(),
       });
-    } else if (_activeGroup == null && _sceneGuestIds.isNotEmpty) {
+    } else if (_activeGroup == null && _sceneGuest.ids.isNotEmpty) {
       // 1:1 with Scene Guests (Lite NPCs): reuse the (otherwise '{}') group
       // realism column to persist the guest dbIds. No schema change needed.
       // (Guest growth lives in the growth_rings table — nothing co-located.)
-      groupRealismJson = jsonEncode({'sceneGuests': _sceneGuestIds});
+      groupRealismJson = jsonEncode({'sceneGuests': _sceneGuest.ids});
     }
 
     // Merge the lorebook timed-effect + macro-variable fragments into

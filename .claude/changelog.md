@@ -3,6 +3,32 @@
 
 # Changelog
 
+## 2026-08-07 — refactor(chat): Scene Guest state out of the shell (998 → 927 lines)
+- **Files changed:** `lib/services/chat/scene_guest_state.dart` (new), `lib/services/chat_service.dart`,
+  `lib/services/chat/chat.dart` (barrel), + 18 chat/ part files (mechanical renames only)
+- **Why now:** the v45 Objectives work left `chat_service.dart` at 998 lines against the CI-enforced
+  1,000-line god-file ratchet. Two lines of headroom means the next feature commit fails CI, so the
+  extraction had to come before any further work rather than after it.
+- **What moved:** the 21 state fields the Scene Guests (Lite NPCs) feature owns — guest roster, the
+  `/join` picker, the activity banner, `/exit` undo, pending member exit, and cast detection — into a
+  plain `SceneGuestState` holder. The long doc comments moved with them, which is where they belonged.
+- **Why a state holder and not a service or an extension:** Dart parts CANNOT add fields to a class
+  declared elsewhere, so an extension could never have carried these. And the behaviour already lives
+  in the `chat_service_scene_guest` / `_cast` / `_guest_flow` parts, which read and write the fields
+  directly — turning it into a service would have meant inventing callbacks for state that has no
+  cross-service consumers. Only declarations moved; not one line of logic changed.
+- **Deliberately left on the class:** the public `autoChimeEnabled` and `sceneDetectionEnabled`.
+  They are part of ChatService's public surface, which `FakeChatService implements`, and moving
+  public members off the class is the exact dispatch trap that produced an 87% golden diff earlier
+  today (see the objectivesActive fix). Private fields have no such constraint.
+- **Verification:** `flutter analyze` 0 issues on the FIRST pass — the compiler validated all 134
+  renames across 19 files, which is the property that makes this refactor safe rather than brave.
+  Full unit suite 2881 passed / 0 failed; golden suite 94/94; zero stale references to the old field
+  names anywhere in lib/, test/ or integration_test/.
+- **Headroom delivered:** 71 lines. Enough for the ambitions/objectives, Likes & Dislikes and Pockets
+  stages that follow (docs/design/pockets-and-preferences.md).
+- **Commit hash:** (pending)
+
 ## 2026-08-07 — feat(independence): Phase 2 complete — absence note lifted, promises made pure, cadence stated
 - **Files changed:** `lib/services/chat/prompt_injection/time_injection.dart`,
   `prompt_injection/realism_state_injection.dart`, `lib/services/chat/chat_service_wiring_injection.dart`,

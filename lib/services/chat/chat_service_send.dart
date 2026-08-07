@@ -40,7 +40,7 @@ extension ChatServiceSend on ChatService {
     if (_entrancesInFlight) return;
     // Likewise, don't race an in-flight Scene Guest creation/entrance (the mint
     // runs a separate LLM call that doesn't set _isGenerating).
-    if (_guestBusy) return;
+    if (_sceneGuest.busy) return;
     // A photo turn's captioning windows run while _isGenerating is false; this
     // guard stops a second send from interleaving them (see isPhotoTurnInFlight).
     if (_photoTurnInFlight) return;
@@ -464,7 +464,7 @@ extension ChatServiceSend on ChatService {
     CharacterCard? exclude,
   }) async {
     if (_activeGroup != null ||
-        _sceneGuestCards.isEmpty ||
+        _sceneGuest.cards.isEmpty ||
         _isTurnBusy ||
         _entrancesInFlight) {
       return;
