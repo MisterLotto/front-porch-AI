@@ -508,7 +508,11 @@ class RealismPromptBuilder {
       '${arousalEnabled ? _arousalSection(charName, userName, arousalLevel, refractoryTurnsLeft) : ''}'
       '\n'
       '${_recentBlock(recent)}'
-      '${toolsMode ? _toolInstruction('report_emotional_state') : _jsonInstruction(['emotion', 'emotion_intensity', if (arousalEnabled) 'arousal_delta'])}';
+      '${toolsMode ? _toolInstruction('report_emotional_state') : _jsonInstruction([
+        'emotion',
+        'emotion_intensity',
+        if (arousalEnabled) 'arousal_delta',
+      ])}';
 
   static String narrativeEvalPrompt({
     required String charName,

@@ -11295,3 +11295,70 @@ at 87% earlier today.
 while keeping the offset → red; removing the anti-invention clause → red) ·
 web lint + 34 tests + build. Full unit/golden suites not run in this session.
 Commit: 8e2ac39
+
+## 2026-08-07 — fix(realism): Afterglow required Needs, silently, on most cards
+
+**Files:** NEW lib/services/chat/climax_eval.dart (its own post-gen leaf) + NEW
+lib/services/chat/chat_service_climax.dart (part: the gate + the pass);
+chat_service.dart (part directive + `_climaxEval`); chat.dart barrel;
+realism_tools.dart (`kClimaxToolName`/`kClimaxFields`/`kClimaxEvalTools`,
+REGISTERED in `_fieldsByTool`; climax removed from `_needsImpactFields`);
+needs_impact_evaluator.dart (deleted `_readClimax`, `onClimax`, both call sites,
+a stale comment); llm_eval_engine.dart (deleted the climax guidance from the
+needs prompt); chat_service_wiring_evals.dart (`_buildClimaxEval`; the old
+`onClimax` closure removed); chat_service_generation_postgen.dart (the pass);
+porch_life_tab.dart (cost stated). NEW
+test/services/chat/afterglow_independence_test.dart; PROTECTED
+climax_detection_tool_schema_test.dart repointed.
+
+**The bug, as a user hit it:** 18+ on, Realism Engine on, Afterglow on — and
+nothing ever happens. Arousal pins at 100 forever, while the Porch Life row
+shows the switch live and ungreyed.
+
+**Cause.** `NsfwService.applyClimaxEffects` is the cooldown's only trigger. Its
+only caller was `onClimax`, fired from two sites BOTH inside
+`NeedsImpactEvaluator`, which opens `if (!getNeedsSimEnabled() ||
+!getRealismEnabled()) return;`. `CharacterCard.needsSimEnabled` DEFAULTS FALSE,
+so on most cards that eval never ran → no climax → no Afterglow. A dependency
+nobody declared and the UI actively contradicted. Same shape as the Pockets
+ruling: a feature riding another feature's pass inherits its gates.
+
+**Fix.** Climax detection gets its OWN post-generation pass, gated on
+`_realismEnabled && nsfwCooldownEnabled` and nothing else. Post-gen because it
+reads the REPLY — that is the question it answers.
+
+**A WRONG TURN, recorded because the lesson is the valuable part.** The first
+version of this fix moved climax onto the PRE-generation arousal eval. That
+eval scores the user's message: it would have judged a reply that did not exist
+yet, lagged a turn, re-fired on the same climax still in recent history, and
+put the pre-gen judge in the business of scoring the character's own words —
+which the settled rule forbids because a reroll would then reroll it. The
+maintainer caught it by asking whether the eval timing had changed.
+**The full unit (3070) and golden (94) suites were GREEN on that version.**
+Every guard written for it was structural or prompt-shaped; none asserted WHEN
+it ran. The rewritten test file now has an `it runs post-generation, on the
+reply` group that fails on exactly that mistake, negative-checked.
+
+**Cost, and it is a real change:** standing alone means one short extra AI
+request per reply while Afterglow is on. It was previously free for the
+Needs-on minority and broken for everyone else. Stated in the toggle copy the
+way Pockets and Promises state theirs.
+
+**Protected test repointed, with rationale.** `climax_detection_tool_schema_test`
+asserted climax lives on the needs tool. That assertion is FALSE now, not merely
+failing — the field moved. Every assertion kept its meaning
+(required-not-optional, string "true" parses, tool call survives to flat JSON);
+only the tool asked about changed.
+
+**Found while in there, NOT fixed (separate features, separate commits):**
+- **Pockets' tools transport has never worked.** `realismToolCallToJson`
+  returns null for any tool absent from `_fieldsByTool`, and `report_inventory`
+  is not registered — so every Pockets tool call converts to null and falls
+  back to text. Not broken (text is the floor) but the negotiation is a wasted
+  round trip. Climax avoids this by declaring its schema in realism_tools.dart,
+  registered by construction.
+- **20 files carry a damaged AGPL header** (`// the Software Foundation`, with
+  "Free" dropped), pre-existing in HEAD.
+
+**Gates:** analyze 0 · 11 guards, negative-checked (removing the post-gen call
+turns the placement guard red) · 92 green across the five affected suites.

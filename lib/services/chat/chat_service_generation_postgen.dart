@@ -209,6 +209,10 @@ extension ChatServiceGenerationPostGen on ChatService {
             // this exchange rather than being a new one, and re-reading it
             // would apply the same item changes twice (she would pick the
             // keys up again). Answers to its own switch and nothing else.
+            // Afterglow. Reads the reply that was just written, which is why
+            // it lives here and not on the pre-generation judges. Skipped on
+            // Continue for the same reason the needs checks are.
+            await _runClimaxPass(finalResponse);
             await _runPocketsPass(finalResponse);
           }
 

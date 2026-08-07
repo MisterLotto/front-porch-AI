@@ -84,6 +84,7 @@ part 'chat/chat_service_generation_stream.dart';
 part 'chat/chat_service_generation_postgen.dart';
 part 'chat/chat_service_pockets.dart';
 part 'chat/chat_service_mood.dart';
+part 'chat/chat_service_climax.dart';
 part 'chat/chat_service_cast.dart';
 part 'chat/chat_service_images.dart';
 part 'chat/chat_service_photo.dart';
@@ -598,6 +599,7 @@ class ChatService extends ChangeNotifier {
 
   /// The Pockets detection pass. Its own eval by design — see PocketsEval.
   late final _pocketsEval = _buildPocketsEval();
+  late final _climaxEval = _buildClimaxEval();
 
   /// The 1:1 speaker's pockets. In a group each member's record lives in their
   /// `_groupRealism` slot instead, which is what keeps it session-scoped and

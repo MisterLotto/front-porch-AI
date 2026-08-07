@@ -26,7 +26,10 @@ import 'package:front_porch_ai/services/chat/realism_verification.dart';
 
 /// Test factory (modeled on createTestSim / createTestNeeds).
 /// Live closures for group maps + cbs so real dispatch exercised.
-/// onClimax etc noop in dedicated (unexercised by design; passive).
+/// Climax detection MOVED OUT of this evaluator 2026-08-07 — it is an
+/// arousal event and now rides the realism evals (see realism_evals.support
+/// _applyClimaxIfReported). The unused factory param went with it; no
+/// assertion in this file referenced it.
 NeedsImpactEvaluator createTestEvaluator({
   NeedsSimulation? sim,
   List<String>? notifies,
@@ -53,7 +56,6 @@ NeedsImpactEvaluator createTestEvaluator({
     Map<String, int>? previousDeltas,
   })?
   impactCallFn,
-  void Function(int)? onClimax,
   Future<VerificationResult> Function({
     required String evalKind,
     required String rawOutput,
@@ -131,7 +133,6 @@ NeedsImpactEvaluator createTestEvaluator({
     getRealismEnabled: realismFn ?? () => true,
     getNeedsModelAuthorityEnabled: authorityFn ?? () => false,
     getNeedsSimStrength: strengthFn ?? () => 1,
-    onClimax: onClimax,
   );
 }
 

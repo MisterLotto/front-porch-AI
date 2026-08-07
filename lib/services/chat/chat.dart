@@ -41,6 +41,7 @@ export 'lorebook_timed_effects.dart';
 export 'member_origin_resolver.dart';
 export 'milestone_feed.dart';
 export 'milestone_providers.dart';
+export 'climax_eval.dart';
 export 'mood_baseline.dart';
 export 'needs_impact_evaluator.dart';
 export 'needs_simulation.dart';

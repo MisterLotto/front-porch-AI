@@ -800,12 +800,9 @@ void main() {
           'bladder_delta': 0,
           'comfort_delta': 8,
           'reason': 'climaxed during sex',
-          'is_climax': 'true', // string bool coerces
-          'refractory_turns': 6,
         }),
       ]);
       expect(needsJson, isNotNull);
-      expect(needsJson, contains('"is_climax":true'));
       expect(needsJson, contains('"activities":["sexual","messy"]'));
       expect(needsJson, contains('"intensity":7'));
       expect(needsJson, contains('"energy_delta":-12'));

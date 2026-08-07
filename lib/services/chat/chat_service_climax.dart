@@ -1,0 +1,75 @@
+// Copyright (C) 2026 Front Porch AI
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of Front Porch AI.
+//
+// Front Porch AI is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Front Porch AI is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
+
+part of '../chat_service.dart';
+
+/// Afterglow's post-generation climax check — the one place it is gated, fired
+/// and applied.
+///
+/// Sits beside `_runPocketsPass` in the same post-gen phase and for the same
+/// reason: it reads the reply that was just written. See the class doc on
+/// [ClimaxEval] for why it must be post-generation and why it stands alone
+/// instead of riding the needs-impact eval.
+extension ChatServiceClimax on ChatService {
+  /// Whether Afterglow can run at all this turn.
+  ///
+  /// The Realism Engine and the Afterglow switch. NOT Needs — that dependency
+  /// was never declared anywhere, and it is what made the feature dead on most
+  /// cards while its row showed green.
+  bool get _afterglowActive =>
+      _realismEnabled && _nsfwService.nsfwCooldownEnabled;
+
+  /// Ask whether the reply narrated the character's own climax, and start the
+  /// refractory if it did.
+  ///
+  /// Skipped on Continue by its caller, exactly as the needs checks are: a
+  /// continuation extends the same exchange, and re-reading it would restart a
+  /// refractory that is already running.
+  Future<void> _runClimaxPass(String reply) async {
+    if (!_afterglowActive) return;
+    if (reply.trim().isEmpty) return;
+
+    final speaker = _activeCharacter;
+    if (speaker == null) return;
+
+    final turns = await _climaxEval.detect(
+      charName: speaker.name,
+      reply: reply,
+    );
+    if (turns == null) return;
+
+    // Metadata first, then the effect — applyClimaxEffects zeroes arousal, so
+    // reading it afterwards would record 0 as the pre-climax level and the
+    // chip would say the character peaked from nothing.
+    final preClimaxArousal = _nsfwService.arousalLevel;
+    if (_messages.isNotEmpty && !_messages.last.isUser) {
+      final msg = _messages.last;
+      final meta = Map<String, dynamic>.from(msg.activeMetadata ?? {});
+      meta['climax_triggered'] = true;
+      meta['pre_climax_arousal'] = preClimaxArousal;
+      msg.swipeMetadata[msg.swipeIndex] = meta;
+    }
+    _nsfwService.applyClimaxEffects(turns: turns);
+
+    debugPrint(
+      '[Afterglow] climax detected (arousal was $preClimaxArousal) — '
+      'refractory $turns turns',
+    );
+    notifyListeners();
+  }
+}

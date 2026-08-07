@@ -64,7 +64,7 @@ class NeedsImpactEvaluator {
   final Map<String, dynamic> Function()? getPendingRealismMetadata;
   final void Function(Map<String, dynamic>)? setPendingRealismMetadata;
 
-  final void Function(int crashTurns)? onClimax;
+
 
   final CharacterCard? Function() getActiveCharacter;
   final GroupChat? Function() getActiveGroup;
@@ -105,7 +105,6 @@ class NeedsImpactEvaluator {
     required this.getRealismEnabled,
     required this.getNeedsModelAuthorityEnabled,
     this.getNeedsSimStrength = _defaultStrength,
-    this.onClimax,
   });
 
   static int _defaultStrength() => 1;
@@ -411,11 +410,6 @@ class NeedsImpactEvaluator {
       ).firstMatch(effectiveText);
       final reason = reasonMatch?.group(1)?.trim();
 
-      final climax = _readClimax(parsed, effectiveText);
-      if (climax.isClimax) {
-        onClimax?.call(climax.crashTurns.clamp(1, 10));
-      }
-
       final impact = NeedsImpact(
         deltas: deltas,
         reason: (reason != null && reason.toLowerCase() != 'none')
@@ -433,45 +427,6 @@ class NeedsImpactEvaluator {
     }
   }
 
-  /// Read the climax verdict out of an eval result. Was two byte-identical
-  /// copies, one per eval path; a fix to one silently missed the other.
-  ///
-  /// WHY THE TEXT FALLBACK RUNS EVEN ON A GOOD PARSE. `is_climax` is a field
-  /// the model has to volunteer, and the old code only consulted the raw text
-  /// when parsing produced NOTHING — so a perfectly well-formed reply that
-  /// simply omitted the key was read as "no climax" and never looked at again.
-  /// That is how orgasm detection shipped silently broken: a backend returned
-  /// the eight required delta/reason fields and no others, with a reason
-  /// reading "Violet experiences her first orgasm ever". The schema now
-  /// requires the field (realism_tools.dart), and this second look means one
-  /// backend ignoring `required` cannot switch the whole feature off again.
-  ({bool isClimax, int crashTurns}) _readClimax(
-    Map<String, dynamic> parsed,
-    String effectiveText,
-  ) {
-    bool? climax;
-    final c = parsed['is_climax'];
-    if (c is bool) {
-      climax = c;
-    } else if (c is String) {
-      climax = c.toLowerCase() == 'true';
-    }
-    if (climax == null) {
-      final m = RegExp(
-        r'"is_climax"\s*:\s*(true|false)',
-      ).firstMatch(effectiveText);
-      if (m != null) climax = m.group(1) == 'true';
-    }
-
-    final t = parsed['crashTurns'] ?? parsed['refractory_turns'];
-    final turns = t is num
-        ? t.toInt()
-        : (_extractInt(effectiveText, 'crashTurns') ??
-              _extractInt(effectiveText, 'refractory_turns') ??
-              5);
-
-    return (isClimax: climax ?? false, crashTurns: turns);
-  }
 
   int? _extractInt(String text, String key) {
     final re = RegExp('"$key"\\s*:\\s*(-?\\d+)');
@@ -596,16 +551,6 @@ class NeedsImpactEvaluator {
         r'"reason"\s*:\s*"([^"]*)"',
       ).firstMatch(effectiveText);
       final reason = reasonMatch?.group(1)?.trim();
-
-      // Same reader as the main path. This copy was MISSED when _readClimax
-      // was extracted — the commit claimed both paths were consolidated and
-      // one still ran the old inline parse, so a manual needs-reprocess got
-      // neither the missing-key text fallback nor any future fix. Caught by
-      // an independent review of that commit, not by the suite.
-      final climax = _readClimax(parsed, effectiveText);
-      if (climax.isClimax) {
-        onClimax?.call(climax.crashTurns.clamp(1, 10));
-      }
 
       final impact = NeedsImpact(
         deltas: effective,

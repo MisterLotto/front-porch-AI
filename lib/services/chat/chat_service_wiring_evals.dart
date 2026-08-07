@@ -109,6 +109,28 @@ extension ChatServiceWiringEvals on ChatService {
     );
   }
 
+  // ── Afterglow's climax check (its own pass; see ClimaxEval) ──
+  // Shares only the transport, never another feature's call — the same
+  // probe-and-fallback every structured eval uses, so a tool-less backend gets
+  // the flat-JSON floor for free.
+  ClimaxEval _buildClimaxEval() {
+    return ClimaxEval(
+      fire: ({required debugLabel, required tools, required buildPrompt}) async {
+        return fireStructuredEval(
+          probe: _toolProbe,
+          backendIdentity: _evalBackendIdentity,
+          debugLabel: debugLabel,
+          tools: tools,
+          buildPrompt: buildPrompt,
+          callToText: (resp) =>
+              realismToolCallToJson(ClimaxEval.kClimaxTool, resp.calls),
+          fireToolEval: _fireToolEval,
+          fireTextEval: (p, {onChunk}) => _fireLLMEval(p),
+        );
+      },
+    );
+  }
+
   // ── Realism Evals (step 10: the 5 realism evaluation calls — relationship, emotional, physical, narrative, one-shot) ──
   // Plain leaf sibling to LlmEvalEngine. Owns the 5 eval prompt builders + call orchestration + parse for realism results
   // (bond/trust/emotion/arousal/fixation/spatial stance/time + pending for chips/reasons) + side effects (apply deltas on
@@ -202,17 +224,6 @@ extension ChatServiceWiringEvals on ChatService {
           false),
       getNeedsSimStrength: () =>
           (_activeCharacter?.frontPorchExtensions?.needsSimStrength ?? 1),
-      onClimax: (turns) {
-        final preClimaxArousal = _nsfwService.arousalLevel;
-        if (_messages.isNotEmpty && !_messages.last.isUser) {
-          final msg = _messages.last;
-          final meta = Map<String, dynamic>.from(msg.activeMetadata ?? {});
-          meta['climax_triggered'] = true;
-          meta['pre_climax_arousal'] = preClimaxArousal;
-          msg.swipeMetadata[msg.swipeIndex] = meta;
-        }
-        _nsfwService.applyClimaxEffects(turns: turns);
-      },
     );
   }
 

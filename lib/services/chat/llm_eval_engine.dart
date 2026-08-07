@@ -496,21 +496,11 @@ class LlmEvalEngine {
         ? 'Current physical position/stance of $charName: "${relationshipService.spatialStance}". '
         : '';
 
-    // Shared climax-detection guidance, injected into BOTH the main and the
-    // critique prompts. Without explicit criteria the model (especially a
-    // reasoning/"thinking" model, which won't guess at an undefined field)
-    // almost never sets is_climax=true, so the post-orgasm cooldown never fires
-    // and the Lust/arousal bar stays pinned at the top. This mirrors the
-    // "high arousal is NOT climax" rule the other realism evals already use
-    // (see realism_evals.dart arousal instructions).
-    final climaxGuidance =
-        'CLIMAX DETECTION — "is_climax": Set this to true ONLY when $charName themselves reaches sexual orgasm / release in THIS scene — '
-        'i.e. the text explicitly narrates their own climax (coming, finishing, a shuddering or spasming release, '
-        'crying out as they tip over the edge, gushing/ejaculating, going limp or boneless right after the peak). '
-        'High arousal, being "close", edging, begging, grinding, foreplay, or ONLY the partner/user climaxing are NOT a climax for '
-        '$charName — leave "is_climax" false in those cases. '
-        'When (and only when) "is_climax" is true, also emit "refractory_turns" as an int from 3 to 7 for how long the post-orgasm '
-        'cooldown should last (~6-7 for an intense, drawn-out, or repeated climax; ~3 for a quick one). When false, set "refractory_turns" to 0.\n\n';
+    // Climax guidance USED TO LIVE HERE. It moved to the arousal section of
+    // the realism evals (2026-08-07) because Afterglow depended on it and this
+    // eval never runs unless Needs is on — which it is not, on most cards. The
+    // needs eval has no reader for is_climax any more, so asking for it here
+    // would be paying tokens for a field nothing consumes.
 
     final needsStateStr = currentNeeds != null && currentNeeds.isNotEmpty
         ? '\nCurrent needs for $charName (0-100, lower = more urgent): '
@@ -592,7 +582,6 @@ class LlmEvalEngine {
           '{"hunger_delta": 8, "energy_delta": 0, "hygiene_delta": -2, "fun_delta": 5, "social_delta": 0, "bladder_delta": 0, "comfort_delta": 1, "reason": "ate snack per critique", "is_climax": false, "refractory_turns": 0}\n'
           '{"hunger_delta": 0, "energy_delta": 0, "hygiene_delta": 0, "fun_delta": 0, "social_delta": 0, "bladder_delta": 0, "comfort_delta": 0, "reason": "no notable need impact", "is_climax": false, "refractory_turns": 0}\n'
           '{"hunger_delta": 0, "energy_delta": -12, "hygiene_delta": -10, "fun_delta": 25, "social_delta": 10, "bladder_delta": 0, "comfort_delta": 8, "reason": "$charName climaxed during sex", "is_climax": true, "refractory_turns": 6}\n\n' +
-          climaxGuidance +
           flatJsonAsk +
           (toolsMode
               ? ''
@@ -623,7 +612,6 @@ class LlmEvalEngine {
               '  • A thorough wash, shower, or bath → hygiene +50 to +90\n'
               '  • Deep, fulfilling social connection, cuddling, or play → social / fun +20 to +50; comfort +10 to +25\n'
               'Partial or interrupted versions get proportionally smaller deltas. Reserve small numbers (±1 to ±8) for INCIDENTAL effects, never for a complete relief or restoration. (These are 1x baselines — scale by the strength factor above.)\n\n' +
-            climaxGuidance +
             flatJsonAsk +
             (toolsMode
                 ? 'If the scene had little or no notable effect on needs, use small numbers or zeros and a short reason.'

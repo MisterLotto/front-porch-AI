@@ -370,7 +370,9 @@ class PorchLifeTab extends StatelessWidget {
                     'instead of resetting — so intimacy keeps a believable '
                     'rhythm and a character is not instantly ready to go '
                     'again. The engine is what scores desire, so this cannot '
-                    'run without it.',
+                    'run without it — and nothing else, despite what it used '
+                    'to do. Uses one short extra AI request per reply to '
+                    'notice a climax, so it costs a little more on a paid API.',
                 value: storage.nsfwCooldownDefault,
                 onChanged: (v) {
                   storage.setNsfwCooldownDefault(v);

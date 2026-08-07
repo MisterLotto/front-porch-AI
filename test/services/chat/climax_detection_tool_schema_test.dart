@@ -50,6 +50,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:front_porch_ai/services/chat/climax_eval.dart';
 import 'package:front_porch_ai/services/chat/realism_tools.dart';
 import 'package:front_porch_ai/services/llm_service.dart' show LlmToolCall;
 
@@ -64,10 +65,23 @@ Map<String, dynamic> _propsOf(List<Map<String, dynamic>> tools) =>
         as Map<String, dynamic>;
 
 void main() {
-  group('the needs-impact tool must force a climax verdict', () {
+  group('the climax check must force a verdict', () {
+    // REPOINTED 2026-08-07 from the needs-impact tool. Not because these
+    // assertions became inconvenient — because they became FALSE. Climax moved
+    // off the needs eval, which early-returns unless Needs is on, and Needs is
+    // off on most cards (CharacterCard.needsSimEnabled defaults false), so
+    // Afterglow silently did nothing for most users who switched it on. It now
+    // has its own POST-GENERATION pass, gated on the Realism Engine and the
+    // Afterglow switch alone.
+    //
+    // Every assertion below keeps its exact original meaning — that the verdict
+    // is REQUIRED rather than optional (an optional field is never emitted, the
+    // whole reason this file exists), that a loose string "true" still reads as
+    // a climax, and that a tool call survives the trip to flat JSON. Only the
+    // tool they are asked about changed.
     test('is_climax is required, not optional', () {
       expect(
-        _requiredOf(kNeedsImpactEvalTools),
+        _requiredOf(ClimaxEval.tools),
         contains('is_climax'),
         reason: 'optional means the model may skip it, and skipping reads as '
             '"no climax" — the refractory then never starts and Lust stays '
@@ -79,15 +93,15 @@ void main() {
       // Answering "yes a climax happened" without saying for how long leaves
       // the cooldown length to a default, which is the same guess-the-undefined
       // problem one field along.
-      expect(_requiredOf(kNeedsImpactEvalTools), contains('refractory_turns'));
+      expect(_requiredOf(ClimaxEval.tools), contains('refractory_turns'));
     });
 
     test('every required field actually exists in the schema', () {
       // A typo in the required list is worse than a missing entry: some
       // backends reject the whole tool, which would take the eval down rather
       // than just the climax verdict.
-      final props = _propsOf(kNeedsImpactEvalTools);
-      for (final key in _requiredOf(kNeedsImpactEvalTools)) {
+      final props = _propsOf(ClimaxEval.tools);
+      for (final key in _requiredOf(ClimaxEval.tools)) {
         expect(
           props.containsKey(key),
           isTrue,
@@ -99,9 +113,9 @@ void main() {
     test('a tool call carrying the verdict survives the trip to flat JSON', () {
       // The bridge only copies keys it recognises, so a boolean that the model
       // DID supply must not be dropped on the way through.
-      final json = realismToolCallToJson(kNeedsImpactTool, [
+      final json = realismToolCallToJson(ClimaxEval.kClimaxTool, [
         LlmToolCall(
-          name: kNeedsImpactTool,
+          name: ClimaxEval.kClimaxTool,
           arguments: const {
             'hunger_delta': 80,
             'energy_delta': -40,
@@ -125,9 +139,9 @@ void main() {
 
     test('a string "true" from a loose backend still reads as a climax', () {
       // Some backends stringify every tool argument.
-      final json = realismToolCallToJson(kNeedsImpactTool, [
+      final json = realismToolCallToJson(ClimaxEval.kClimaxTool, [
         LlmToolCall(
-          name: kNeedsImpactTool,
+          name: ClimaxEval.kClimaxTool,
           arguments: const {'reason': 'came hard', 'is_climax': 'true'},
         ),
       ]);

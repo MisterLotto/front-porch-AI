@@ -50,6 +50,7 @@ const String kNeedsImpactTool = 'report_needs_impact';
 const String kSceneTimeTool = 'report_scene_time';
 const String kExpressionTool = 'report_expression_label';
 const String kCastDetectTool = 'report_detected_character';
+const String kClimaxToolName = 'report_climax';
 
 Map<String, dynamic> _intField(String description) => {
   'type': 'integer',
@@ -202,14 +203,6 @@ final Map<String, Map<String, dynamic>> _needsImpactFields = {
   ])
     '${k}_delta': _intField('Net signed effect on $k.'),
   'reason': _strField('Brief grounded reason for the deltas.'),
-  'is_climax': {
-    'type': 'boolean',
-    'description':
-        'True ONLY when the character themselves reaches climax in this scene.',
-  },
-  'refractory_turns': _intField(
-    'Post-climax cooldown turns (3-7) when is_climax is true, else 0.',
-  ),
 };
 
 final List<Map<String, dynamic>> kNeedsImpactEvalTools = [
@@ -226,7 +219,20 @@ final List<Map<String, dynamic>> kNeedsImpactEvalTools = [
       'bladder_delta',
       'comfort_delta',
       'reason',
-      // is_climax MUST be required. A model answering a tool call fills in what
+      // CLIMAX MOVED OUT (2026-08-07). It used to be required here, and the
+      // comment below records why — a lesson worth keeping, because the same
+      // trap applies to the arousal tool it moved to.
+      //
+      // It moved because Afterglow depended on it, and this eval early-returns
+      // unless BOTH Needs and the Realism Engine are on. Needs is off on most
+      // cards (CharacterCard.needsSimEnabled defaults false), so Afterglow
+      // silently did nothing for most users who switched it on — while the
+      // Porch Life row told them its one dependency (the engine) was met.
+      // It now has its own post-generation pass (ClimaxEval) — post-gen
+      // because the question is about the REPLY, and standalone so it answers
+      // to the Realism Engine and the Afterglow switch and nothing else.
+      //
+      // The kept lesson: is_climax MUST be required. A model answering a tool call fills in what
       // the schema demands and skips what it does not, and this field was
       // optional — so orgasm detection was silently off on every tools-capable
       // backend. Observed live: the model returned exactly these eight fields
@@ -241,8 +247,6 @@ final List<Map<String, dynamic>> kNeedsImpactEvalTools = [
       // route — the field was defined, but optional. Forcing an explicit
       // true/false is that lesson expressed in schema. refractory_turns rides
       // along because it is meaningless to answer one without the other.
-      'is_climax',
-      'refractory_turns',
     ],
   ),
 ];
@@ -325,6 +329,34 @@ final List<Map<String, dynamic>> kCastDetectEvalTools = [
   ),
 ];
 
+/// Afterglow's climax check (ClimaxEval). Declared HERE rather than in the
+/// leaf because [_fieldsByTool] below is what makes the tools transport work
+/// at all — an unregistered tool makes [realismToolCallToJson] return null,
+/// so the call silently falls back to text on every backend, forever. One
+/// definition, registered by construction.
+final Map<String, Map<String, dynamic>> kClimaxFields = {
+  'is_climax': {
+    'type': 'boolean',
+    'description': 'True ONLY when the character themselves reached climax.',
+  },
+  'refractory_turns': _intField(
+    'Cooldown turns (3-7) when is_climax is true, else 0.',
+  ),
+};
+
+final List<Map<String, dynamic>> kClimaxEvalTools = [
+  _tool(
+    kClimaxToolName,
+    'Report whether the character reached climax.',
+    kClimaxFields,
+    // BOTH required — the lesson from the needs tool: a model fills in what
+    // the schema demands and skips what it does not, so an optional is_climax
+    // was never emitted and detection was silently off on every tools-capable
+    // backend.
+    const ['is_climax', 'refractory_turns'],
+  ),
+];
+
 /// The whitelisted keys per tool (anything else the model invents is
 /// dropped, mirroring how the regex extractors ignore unknown text keys).
 final Map<String, Map<String, Map<String, dynamic>>> _fieldsByTool = {
@@ -336,6 +368,7 @@ final Map<String, Map<String, Map<String, dynamic>>> _fieldsByTool = {
   kSceneTimeTool: _sceneTimeFields,
   kExpressionTool: _expressionFields,
   kCastDetectTool: _castDetectFields,
+  kClimaxToolName: kClimaxFields,
 };
 
 /// Convert the first matching tool call into the canonical flat-JSON text
