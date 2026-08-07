@@ -33,7 +33,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:front_porch_ai/ui/chat_components/sidebar/character_state/ambitions_row.dart';
 import 'package:front_porch_ai/ui/chat_components/sidebar/story_tools/objective_task_row.dart';
-import 'package:front_porch_ai/ui/pages/repository/stoop_card_sections.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_identity_sections.dart';
 
 Widget host(Widget child) => MaterialApp(
   home: Scaffold(body: SizedBox(width: 320, child: child)),
@@ -207,6 +207,87 @@ void main() {
         );
         expect(tester.takeException(), isNull);
         expect(find.textContaining('Ambitions'), findsNothing);
+      }
+    });
+  });
+
+  // Same untrusted-input surface, same reasoning as the ambitions section
+  // above. The 18+ pair is deliberately NOT rendered here — the card page is
+  // browsed by anyone signed in, and opening a card is not opting into 18+
+  // content. That is a display decision, so it is pinned like one.
+  group('stoopPreferencesSection', () {
+    testWidgets('renders both sides, counted together', (tester) async {
+      await tester.pumpWidget(
+        host(
+          Builder(
+            builder: (c) => stoopPreferencesSection(c, const {
+              'likes': ['thunderstorms', 'being read to'],
+              'dislikes': ['being interrupted'],
+            }),
+          ),
+        ),
+      );
+      expect(find.textContaining('Likes & Dislikes (3)'), findsOneWidget);
+
+      await tester.tap(find.textContaining('Likes & Dislikes (3)'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('DRAWN TO'), findsOneWidget);
+      expect(find.textContaining('PUT OFF BY'), findsOneWidget);
+      expect(find.text('thunderstorms'), findsOneWidget);
+      expect(find.text('being interrupted'), findsOneWidget);
+    });
+
+    testWidgets('one side only omits the other sub-label', (tester) async {
+      await tester.pumpWidget(
+        host(
+          Builder(
+            builder: (c) => stoopPreferencesSection(c, const {
+              'likes': ['thunderstorms'],
+            }),
+          ),
+        ),
+      );
+      await tester.tap(find.textContaining('Likes & Dislikes (1)'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('PUT OFF BY'), findsNothing);
+    });
+
+    testWidgets('the 18+ pair never reaches the public card page', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        host(
+          Builder(
+            builder: (c) => stoopPreferencesSection(c, const {
+              'likes': ['thunderstorms'],
+              'intimate_preferences': {
+                'into': ['slow mornings'],
+                'not_into': ['an audience'],
+              },
+            }),
+          ),
+        ),
+      );
+      await tester.tap(find.textContaining('Likes & Dislikes'));
+      await tester.pumpAndSettle();
+      expect(find.text('thunderstorms'), findsOneWidget);
+      expect(find.textContaining('slow mornings'), findsNothing);
+      expect(find.textContaining('an audience'), findsNothing);
+    });
+
+    testWidgets('malformed or absent renders nothing, never throws', (
+      tester,
+    ) async {
+      for (final re in <Map<String, dynamic>>[
+        const {},
+        const {'likes': 'thunderstorms', 'dislikes': 7},
+        const {'likes': [], 'dislikes': []},
+      ]) {
+        await tester.pumpWidget(
+          host(Builder(builder: (c) => stoopPreferencesSection(c, re))),
+        );
+        expect(tester.takeException(), isNull);
+        expect(find.textContaining('Likes & Dislikes'), findsNothing);
       }
     });
   });

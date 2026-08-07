@@ -21,6 +21,7 @@
 // progress with the same word. A local copy here would drift the first time a
 // band moved.
 import 'package:front_porch_ai/services/chat/ambition_service.dart';
+import 'package:front_porch_ai/services/chat/preference_phrases.dart';
 
 /// Per-eval delta limits for the realism LLM calls (relationship, emotional
 /// state, one-shot). These are the authoritative ranges for what each eval is
@@ -36,6 +37,7 @@ const kMinTrustDelta = -200;
 const kMaxTrustDelta = 50;
 const kMinArousalDelta = -25;
 const kMaxArousalDelta = 25;
+
 
 /// Single source of truth for the Realism Engine judge prompts.
 ///
@@ -191,7 +193,62 @@ class RealismPromptBuilder {
 
   // ── Shared judgment fragments ──────────────────────────────────────────────
 
-  static String _subjectivityFrame(String charName, String userName) =>
+  /// The card's authored Likes & Dislikes, as ONE line the judge weighs.
+  ///
+  /// This is the SCORING half of the feature (the behavioural half is
+  /// prompt_injection/preferences_injection.dart, which needs no engine). It
+  /// makes [_subjectivityFrame]'s closing claim concrete: that paragraph
+  /// already tells the model "what genuinely reaches someone is what THEY
+  /// value" and then leaves it to guess what this particular character values.
+  /// Now it does not have to.
+  ///
+  /// Rendered ONCE per turn and handed to all three prompts that carry the
+  /// frame — relationship, emotional state, and the fused one-shot — so
+  /// one-shot/multi-call parity holds by construction rather than by three
+  /// copies that happen to match today (the strict-parity contract in
+  /// CLAUDE.md).
+  ///
+  /// [intimateInto]/[intimateNotInto] are already NSFW-filtered by the caller;
+  /// this builder does not consult a switch, so there is exactly one place
+  /// that decision is made.
+  ///
+  /// Empty in, empty out: a character with no authored preferences costs their
+  /// eval exactly what it cost before this existed — the same contract the
+  /// ambition roster keeps.
+  static String preferencesBlock({
+    required String charName,
+    List<String> likes = const [],
+    List<String> dislikes = const [],
+    List<String> intimateInto = const [],
+    List<String> intimateNotInto = const [],
+  }) {
+    // ONE shared cleanup with the behavioural injection (preference_phrases.dart)
+    // so what the judge weighs and what the character was told cannot diverge —
+    // and so a downloaded card's text cannot smuggle newlines into this prompt.
+    final l = sanitizePreferencePhrases(likes);
+    final d = sanitizePreferencePhrases(dislikes);
+    final i = sanitizePreferencePhrases(intimateInto);
+    final n = sanitizePreferencePhrases(intimateNotInto);
+    if (l.isEmpty && d.isEmpty && i.isEmpty && n.isEmpty) return '';
+
+    final parts = [
+      if (l.isNotEmpty) 'drawn to ${l.join(', ')}',
+      if (d.isNotEmpty) 'put off by ${d.join(', ')}',
+      if (i.isNotEmpty) 'warms to ${i.join(', ')}',
+      if (n.isNotEmpty) 'not interested in ${n.join(', ')}',
+    ];
+    return 'Specifically, $charName is ${parts.join('; ')}. '
+        'Weigh the exchange against those: a moment that touches something they '
+        'are drawn to lands harder than the same words otherwise would, and one '
+        'that hits something they are put off by costs more — even when it was '
+        'kindly meant. Do not invent preferences beyond these.\n\n';
+  }
+
+  static String _subjectivityFrame(
+    String charName,
+    String userName,
+    String preferences,
+  ) =>
       'Score this exchange as $charName would privately feel it — through their personality, values, '
       'boundaries, and history — never by generic politeness.\n'
       'The same gesture lands differently on different people: affection, gifts, praise, or closeness '
@@ -200,7 +257,8 @@ class RealismPromptBuilder {
       'familiarity or smothering reads as cloying, presumptuous, or suspicious — score it neutral or '
       'negative no matter how kindly it was meant.\n'
       'What genuinely reaches someone is what THEY value: for one person open tenderness; for another, '
-      'respect on their terms, competence, wit, backbone, obedience, patience, or being challenged.\n\n';
+      'respect on their terms, competence, wit, backbone, obedience, patience, or being challenged.\n'
+      '$preferences';
 
   static String _bondSection(String charName, String userName) =>
       '- "relationship_delta": how this exchange shifted $charName\'s genuine warmth toward $userName '
@@ -406,13 +464,14 @@ class RealismPromptBuilder {
     required String dossier,
     required String standing,
     required String recent,
+    String preferences = '',
     bool toolsMode = false,
   }) =>
       'You are the private inner voice of $charName in a roleplay with $userName, scoring how this '
       'exchange truly landed for them.\n\n'
       '$dossier'
       '$standing'
-      '${_subjectivityFrame(charName, userName)}'
+      '${_subjectivityFrame(charName, userName, preferences)}'
       'Evaluate:\n'
       '${_bondSection(charName, userName)}'
       '${_trustSection(charName, userName)}'
@@ -430,13 +489,14 @@ class RealismPromptBuilder {
     required int arousalLevel,
     int refractoryTurnsLeft = 0,
     List<String> allowedEmotionLabels = const [],
+    String preferences = '',
     bool toolsMode = false,
   }) =>
       'You are the private inner voice of $charName in a roleplay with $userName, naming what they '
       'truly feel right now.\n\n'
       '$dossier'
       '$standing'
-      '${_subjectivityFrame(charName, userName)}'
+      '${_subjectivityFrame(charName, userName, preferences)}'
       'Evaluate:\n'
       '${_emotionSection(charName, allowedEmotionLabels)}'
       '${arousalEnabled ? _arousalSection(charName, userName, arousalLevel, refractoryTurnsLeft) : ''}'
@@ -481,6 +541,7 @@ class RealismPromptBuilder {
     List<String> allowedEmotionLabels = const [],
     String? primaryObjective,
     List<({String text, int progress})> ambitions = const [],
+    String preferences = '',
     bool toolsMode = false,
   }) =>
       'You are the private inner voice of $charName in a roleplay with $userName, scoring how this '
@@ -488,7 +549,7 @@ class RealismPromptBuilder {
       '$dossier'
       '$standing'
       '${_ambitionRoster(ambitions)}'
-      '${_subjectivityFrame(charName, userName)}'
+      '${_subjectivityFrame(charName, userName, preferences)}'
       'Evaluate ALL of the following at once:\n'
       '${_bondSection(charName, userName)}'
       '${_trustSection(charName, userName)}'

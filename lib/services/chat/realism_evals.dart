@@ -314,6 +314,16 @@ class RealismEvals {
   /// character's eval costs exactly what it did before this existed.
   final List<({String text, int progress})> Function()? getAmbitions;
 
+  /// The evaluated speaker's authored Likes & Dislikes, already rendered to
+  /// the ONE prompt line every judge sees (RealismPromptBuilder.preferencesBlock).
+  ///
+  /// Rendered by the caller rather than passed as four lists because the
+  /// NSFW decision belongs upstream — this layer must not learn a second place
+  /// to consult the 18+ switch. Absent or empty means the block is omitted
+  /// entirely and that character's eval costs exactly what it did before,
+  /// the same contract [getAmbitions] keeps.
+  final String Function()? getPreferences;
+
   final Future<void> Function(
     String objectiveText, {
     bool isPrimary,
@@ -353,6 +363,7 @@ class RealismEvals {
     required this.getPrimaryObjective,
     required this.getActiveObjectives,
     this.getAmbitions,
+    this.getPreferences,
     required this.setObjective,
     this.verifyRealismOutput,
   });

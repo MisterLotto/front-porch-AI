@@ -69,6 +69,7 @@ extension RealismEvalCalls on RealismEvals {
 
     String buildPrompt({required bool toolsMode}) =>
         RealismPromptBuilder.relationshipEvalPrompt(
+          preferences: getPreferences?.call() ?? '',
           charName: charName,
           userName: userName,
           dossier: dossier,
@@ -172,6 +173,7 @@ extension RealismEvalCalls on RealismEvals {
 
     String buildPrompt({required bool toolsMode}) =>
         RealismPromptBuilder.emotionalEvalPrompt(
+          preferences: getPreferences?.call() ?? '',
           charName: charName,
           userName: userName,
           dossier: dossier,

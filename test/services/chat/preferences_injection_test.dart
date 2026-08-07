@@ -36,6 +36,7 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/chat/preference_phrases.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/preferences_injection.dart';
 
 PreferencesInjection make(
@@ -149,8 +150,8 @@ void main() {
       final many = [for (var i = 0; i < 12; i++) 'thing$i'];
       final txt = make(who('Alice', likes: many)).buildPreferencesInjection();
       expect(txt, contains('thing0'));
-      expect(txt, contains('thing${PreferencesInjection.maxPerLine - 1}'));
-      expect(txt, isNot(contains('thing${PreferencesInjection.maxPerLine}')));
+      expect(txt, contains('thing${kMaxPreferencePhrases - 1}'));
+      expect(txt, isNot(contains('thing$kMaxPreferencePhrases')));
       // The card itself is untouched — the editor still shows all twelve.
       expect(many.length, 12);
     });

@@ -78,6 +78,7 @@ extension RealismEvalOneShot on RealismEvals {
     // parity by construction — the rubric text cannot drift between paths).
     String buildPrompt({required bool toolsMode}) =>
         RealismPromptBuilder.oneShotEvalPrompt(
+          preferences: getPreferences?.call() ?? '',
           charName: charName,
           userName: userName,
           dossier: dossier,

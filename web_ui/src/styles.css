@@ -1803,6 +1803,13 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
    downloaded has no story, so no progress bar or stage word). */
 .stoop-ambitions { margin: 0; padding: 0; list-style: none; }
 .stoop-ambitions li { margin: 0 0 5px; line-height: 1.35; }
+.stoop-sublabel {
+  margin: 10px 0 4px;
+  font-size: 10px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
 [data-layout='phone'] .stoop-detail-head { flex-direction: column; }
 [data-layout='phone'] .stoop-detail-art { width: 110px; }
 

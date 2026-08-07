@@ -17,6 +17,7 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/chat/preference_phrases.dart';
 import 'speaker_resolution.dart';
 
 /// Likes & Dislikes fragment for the words-only state block — what this
@@ -64,14 +65,8 @@ class PreferencesInjection with SpeakerCardResolver {
     required this.getNsfwEnabled,
   });
 
-  /// Most a single line will name. The cap is on the PROMPT, not on the card:
-  /// an author may keep as many as they like and the editor shows them all —
-  /// this only bounds what is spent per turn. Taking the first few is stable
-  /// across turns (no shuffling), which keeps KV-cache prefixes intact.
-  static const maxPerLine = 5;
-
-  /// Hard ceiling on the whole fragment, so a card with five essay-length
-  /// "phrases" cannot quietly eat the context budget.
+  /// Hard ceiling on the whole fragment. Per-phrase and per-list bounds live in
+  /// preference_phrases.dart, shared with the scoring block.
   static const maxChars = 420;
 
   String buildPreferencesInjection() {
@@ -81,8 +76,8 @@ class PreferencesInjection with SpeakerCardResolver {
 
     final lines = <String>[];
 
-    final likes = ext.likes.take(maxPerLine).toList();
-    final dislikes = ext.dislikes.take(maxPerLine).toList();
+    final likes = sanitizePreferencePhrases(ext.likes);
+    final dislikes = sanitizePreferencePhrases(ext.dislikes);
     if (likes.isNotEmpty || dislikes.isNotEmpty) {
       final parts = [
         if (likes.isNotEmpty) 'drawn to ${likes.join(', ')}',
@@ -95,8 +90,8 @@ class PreferencesInjection with SpeakerCardResolver {
     }
 
     if (getNsfwEnabled()) {
-      final into = ext.intimateInto.take(maxPerLine).toList();
-      final notInto = ext.intimateNotInto.take(maxPerLine).toList();
+      final into = sanitizePreferencePhrases(ext.intimateInto);
+      final notInto = sanitizePreferencePhrases(ext.intimateNotInto);
       if (into.isNotEmpty || notInto.isNotEmpty) {
         final parts = [
           if (into.isNotEmpty) 'warms to ${into.join(', ')}',

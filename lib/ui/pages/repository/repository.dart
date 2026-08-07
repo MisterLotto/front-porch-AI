@@ -19,6 +19,8 @@ export 'stoop_avatar.dart';
 export 'stoop_browse_view.dart';
 export 'stoop_card_detail_page.dart';
 export 'stoop_card_sections.dart';
+export 'stoop_collapsible.dart';
+export 'stoop_identity_sections.dart';
 export 'stoop_card_tile.dart';
 export 'stoop_change_email_dialog.dart';
 export 'stoop_creator_page.dart';

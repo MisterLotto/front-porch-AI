@@ -93,20 +93,29 @@ export function StoopCardPage() {
     return typeof v === 'string' ? v.trim() : '';
   };
 
-  // Long-term ambitions, read straight out of the card the relay already hands
-  // us — `extensions.front_porch.realism_engine.ambitions`, the same path the
-  // desktop panel's stoopRealismEngine() walks. No backend field is involved:
-  // the card blob travels verbatim, so this is a display-only addition.
-  // Defensive at every hop — old cards have no extensions, and a hostile or
-  // malformed payload must not throw the whole page.
-  const ambitions = ((): string[] => {
+  // One reader for every card-authored phrase list, straight out of the card
+  // the relay already hands us — `extensions.front_porch.realism_engine.<key>`,
+  // the same path the desktop panel walks. No backend field is involved: the
+  // card blob travels verbatim, so these sections are display-only additions.
+  //
+  // Mirrors the Dart stoopPhrases(). Array.isArray rather than a cast, and
+  // defensive at every hop, because old cards have no extensions at all and a
+  // malformed field on a stranger's upload must cost that field, not the page.
+  const cardPhrases = (key: string): string[] => {
     const ext = detail.card.extensions as Record<string, unknown> | undefined;
     const fp = ext?.front_porch as Record<string, unknown> | undefined;
     const re = fp?.realism_engine as Record<string, unknown> | undefined;
-    const raw = re?.ambitions;
+    const raw = re?.[key];
     if (!Array.isArray(raw)) return [];
     return raw.filter((a): a is string => typeof a === 'string' && a.trim() !== '').map((a) => a.trim());
-  })();
+  };
+  const ambitions = cardPhrases('ambitions');
+  const likes = cardPhrases('likes');
+  const dislikes = cardPhrases('dislikes');
+  // The 18+ pair is deliberately NOT read here: the card page is browsed by
+  // anyone signed in, and opening a card is not opting into 18+ content. The
+  // data still travels with the card and works once downloaded (mirrors
+  // stoopPreferencesSection on desktop).
 
   return (
     <div className="stoop-detail">
@@ -198,6 +207,32 @@ export function StoopCardPage() {
               <li key={i}>🧭 {a}</li>
             ))}
           </ul>
+        </section>
+      )}
+
+      {(likes.length > 0 || dislikes.length > 0) && (
+        <section className="card stoop-section">
+          <h4>Likes &amp; Dislikes ({likes.length + dislikes.length})</h4>
+          {likes.length > 0 && (
+            <>
+              <h5 className="stoop-sublabel">Drawn to</h5>
+              <ul className="stoop-ambitions">
+                {likes.map((a, i) => (
+                  <li key={i}>♥ {a}</li>
+                ))}
+              </ul>
+            </>
+          )}
+          {dislikes.length > 0 && (
+            <>
+              <h5 className="stoop-sublabel">Put off by</h5>
+              <ul className="stoop-ambitions">
+                {dislikes.map((a, i) => (
+                  <li key={i}>✕ {a}</li>
+                ))}
+              </ul>
+            </>
+          )}
         </section>
       )}
 

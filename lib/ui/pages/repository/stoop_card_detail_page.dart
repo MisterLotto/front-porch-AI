@@ -24,6 +24,7 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/group_card_importer.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_avatar.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_card_sections.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_collapsible.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_group_sections.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_creator_page.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';

@@ -256,6 +256,32 @@ extension ChatServiceWiringEvals on ChatService {
               !objectivesActive
           ? const []
           : ambitionsFor(_activeCharacter!),
+      // Likes & Dislikes — the SCORING half. Called once per prompt BUILD, not
+      // once per turn (review, 2026-08-07 — the earlier comment here claimed
+      // otherwise). What makes one-shot parity hold is that it is PURE: it
+      // reads only the speaker's card and one setting, so relationship,
+      // emotional and one-shot receive a byte-identical block. Keep it pure —
+      // anything time-, counter- or random-dependent added here would break
+      // both cross-path parity AND regen determinism at temperature 0.1.
+      //
+      // This is also the ONE place the 18+ switch is consulted for scoring:
+      // with adult themes off the intimate pair is not passed, so it cannot
+      // reach a prompt no matter which path runs. Reads the same
+      // `_activeCharacter` the ambition roster above does — during the realism
+      // dance that is the speaker being evaluated, and the two must not
+      // disagree about whose card they describe.
+      getPreferences: () {
+        final ext = _activeCharacter?.frontPorchExtensions;
+        if (ext == null) return '';
+        final adult = _storageService.realismSettings.adultThemesEnabled;
+        return RealismPromptBuilder.preferencesBlock(
+          charName: _activeCharacter!.name,
+          likes: ext.likes,
+          dislikes: ext.dislikes,
+          intimateInto: adult ? ext.intimateInto : const [],
+          intimateNotInto: adult ? ext.intimateNotInto : const [],
+        );
+      },
       setObjective:
           (
             text, {
