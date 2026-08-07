@@ -11011,3 +11011,42 @@ Would need `approved-test-change` if routed through a PR.
 **Gates:** analyze 0 · 26 new guards across 3 files, two negative-checked
 (resolver reading the unfiltered list → red; ignoring the tag in the judge →
 red) · regenerated database.g.dart purely additive.
+
+## 2026-08-07 — docs(design): Pockets gets its own eval — maintainer ruling recorded
+
+**Files:** docs/design/pockets-and-preferences.md.
+
+**Why:** maintainer ruling — "Pockets needs its own separate eval, not to get
+mixed with needs" — recorded so the next agent implements it instead of
+re-deriving it from a document that said the opposite.
+
+Earlier drafts had Pockets ride the post-generation needs-impact eval as an
+extra `inventory_ops` JSON field, headlined "zero new LLM calls". Retracted.
+Two reasons written into the doc:
+
+1. **Principle (governs):** interleaving one feature's data into another
+   feature's pass is what produced the tangle that
+   docs/design/feature-independence.md spent a day undoing.
+2. **Fact:** `NeedsImpactEvaluator.evaluateAndApply` early-returns unless
+   `getNeedsSimEnabled() && getRealismEnabled()`, and `realismEnabled`
+   defaults FALSE. The carrier never runs on a default install, so riding it
+   would have coupled an inventory feature to the bond/trust/emotion engine —
+   the exact dependency class the audit exists to remove. "Zero new calls" was
+   only true for users already opted into both.
+
+**Written into the doc so it is not re-litigated:** its own eval + own leaf;
+own Porch Life switch defaulting OFF with copy stating the per-turn cost
+(standalone-clock precedent); dependency chip NONE; reuse shared plumbing
+(LlmEvalEngine + fireStructuredEval/ToolTransportProbe) but never another
+feature's call; off means absent, not greyed. Plus a rejected-alternatives
+table (ride needs / gate on needsSimEnabled / ride the Journal pass / regex
+inference / default ON) so each has a recorded reason.
+
+Also corrected: the doc's global "zero new LLM calls in either v1" headline
+(now false for Part 1, still true for Part 2 — Likes & Dislikes adds blocks to
+prompts that already fire); the Sequencing section, which listed the
+independence work as a blocker that has since shipped; and an explicit "do not
+bundle Parts 2 and 3" note — they share a document because they were proposed
+in one conversation, not an implementation.
+
+**Gates:** docs only, no code change.

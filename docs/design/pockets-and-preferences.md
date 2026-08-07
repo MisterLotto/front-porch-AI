@@ -1,13 +1,78 @@
 # Pockets & Wardrobe + Likes & Dislikes
 
 Two character-depth features that share one design principle: **a deterministic
-record the model is re-told every turn, updated by deltas from a pass that
-already runs.** Zero new LLM calls in either v1.
+record the model is re-told every turn, updated by deltas.**
 
-Status: PROPOSED (maintainer conversation 2026-08-07). Blocked behind the
-feature-independence work (`docs/design/feature-independence.md`) only insofar
-as the post-turn evaluator hook should land on whatever gating shape that work
-settles on.
+Status: PROPOSED (maintainer conversation 2026-08-07). No longer blocked behind
+the feature-independence work — see the ruling immediately below, which settles
+the one question that was waiting on it.
+
+---
+
+## SETTLED — Pockets runs its own eval. Do not re-open this.
+
+**Maintainer ruling, 2026-08-07:** *"Pockets needs its own separate eval, not to
+get mixed with needs."* Earlier drafts of this document had Pockets ride the
+post-generation needs-impact eval as an extra JSON field, advertised as "zero
+new LLM calls". **That is retracted.** Both the reason of principle and the
+technical fact are recorded here so the next agent to pick this up implements
+it rather than re-deriving it.
+
+**Reason of principle (the maintainer's, and it governs):** interleaving one
+feature's data into another feature's pass is what produced the mess that took
+a full day to untangle in `docs/design/feature-independence.md`. Pockets stands
+alone or it repeats that.
+
+**The technical fact that makes the old plan unworkable anyway.** The carrier
+does not run on a default install. `NeedsImpactEvaluator.evaluateAndApply`
+opens with:
+
+```dart
+if (!getNeedsSimEnabled() || !getRealismEnabled() || responseText.trim().isEmpty) {
+  return;
+}
+```
+
+Two switches, both required, and `realismEnabled` defaults **false**. So riding
+that eval would have meant Pockets silently does nothing until the user turns on
+the Realism Engine AND Needs — coupling an inventory feature to a
+bond/trust/emotion engine it has no relationship with, which is precisely the
+dependency class the independence audit exists to remove. "Zero new LLM calls"
+was only ever true for the subset of users who had already opted into both.
+
+### What this means concretely — implement exactly this
+
+- **Its own eval.** One small post-generation call that asks only for
+  `inventory_ops`. Own prompt builder, own parse, own leaf under
+  `lib/services/chat/`. It does NOT read or write needs state, and no needs
+  code path learns the word "inventory".
+- **Its own switch** in Settings → Porch Life, **defaulting OFF**. This is a
+  real per-turn token cost, and the standing rule from the standalone story
+  clock applies: a feature that spends a call every turn is opt-in, because
+  that is the user's money to spend, not ours. The toggle copy must say plainly
+  that it costs one short extra AI request per turn.
+- **Dependency chip: none.** Not the Realism Engine, not Needs, not the
+  Journal, not Objectives. Pockets is a record plus an injection plus an
+  applier; none of that needs another engine. If a reviewer proposes a
+  dependency, that is a design regression, not a simplification.
+- **It reuses the shared plumbing, not another feature's pass.** Fire through
+  `LlmEvalEngine` (retry/cancel/think-strip) and negotiate tools via the shared
+  `fireStructuredEval` / `ToolTransportProbe` in `pass_support.dart`, exactly as
+  the realism evals, the journal pass and growth do. Reusing *infrastructure* is
+  correct; riding another feature's *call* is what was wrong.
+- **Off means off.** With the switch off: no eval fires, no injection block is
+  built, and the sidebar panel is absent — not greyed, absent. The Porch Life
+  gating shape already established for the other rows applies.
+
+### Explicitly rejected alternatives — do not propose these again
+
+| Proposal | Why it is rejected |
+|---|---|
+| Add `inventory_ops` to the needs-impact eval JSON | The maintainer's ruling; and the carrier is gated behind Realism + Needs, so it never runs by default. |
+| Gate Pockets on `needsSimEnabled` | Couples two unrelated features; a user wanting inventory would have to run a needs simulation they did not ask for. |
+| Ride the Journal maintenance pass instead | Same interleaving mistake with a different host. The Journal pass is periodic, not per-turn, so item state would lag the scene badly. |
+| Make it free by inferring items from the reply text with regex/heuristics | Discussed and dropped: this is exactly the "prose scrolling out of context" problem the feature exists to fix. A judged eval is the point. |
+| Default the switch ON because "it's cheap" | Per-turn cost is never ours to assume. See the standalone clock precedent. |
 
 ---
 
@@ -30,13 +95,16 @@ record, inject it every turn, apply deltas.
 - **Injection**: one compact block in the character prompt
   (`[<char> is wearing: …. Carrying: ….]`), capped (8 worn / 8 carried),
   built by a new `prompt_injection/inventory_injection.dart` leaf.
-- **Detection**: the post-generation needs-impact eval gains one JSON field
-  (`inventory_ops: [{op: wear|remove|pickup|drop|give|update|transform, item,
-  to?, state?}]`) — same transport, same forgiving parse, ZERO extra calls.
+- **Detection**: **its own** post-generation eval (see the SETTLED section
+  above — this used to say the needs-impact eval, and that is retracted). One
+  small call, asking for one field:
+  `inventory_ops: [{op: wear|remove|pickup|drop|give|update|transform, item,
+  to?, state?}]`. Tools transport first via the shared
+  `fireStructuredEval`/`ToolTransportProbe` negotiation, with the same forgiving
+  flat-JSON regex floor every other eval keeps for tool-less backends. Fires
+  only when the Pockets switch is on, and only when the reply is non-empty.
   Ops apply to the record through ONE applier with dedup (token-overlap, the
-  promise-dedup precedent). When Needs is disabled, the ops ride whatever
-  post-turn pass the independence work keeps alive (open decision — see that
-  doc).
+  promise-dedup precedent).
 - **Item state & transformations (maintainer-requested 2026-08-07)**: every
   item carries an optional FREE-TEXT condition (`state`, capped ~60 chars) —
   "half-eaten", "rain-soaked, muddy hem", "notched, needs sharpening".
@@ -75,6 +143,12 @@ record, inject it every turn, apply deltas.
   BEFORE the wiring, negative-checked.
 - Prompt bloat → hard char budget on the injection block; PromptPlan section
   so the Context Budget viewer shows its true cost.
+- **Per-turn call cost — the honest one.** Its own eval means Pockets bills a
+  short request every turn it is on. Mitigations: the switch defaults OFF and
+  says so in its copy; the eval is one field with a tight max-token cap; it is
+  chat-scoped, so a group costs one call and not one per member (the same
+  decision the standalone story clock made). Measure the real cost on the
+  Context Budget viewer before/after and record it here.
 
 ---
 
@@ -206,10 +280,22 @@ toward bit by bit." The hierarchy is now explicit:
   (ambitions display), same body of work.
 
 ## Sequencing
-1. Independence/toggle-tab work lands first (settles where post-turn passes
-   live and which gates exist).
-2. Likes & Dislikes (smaller, pure-additive, no new store) ships second.
+1. ~~Independence/toggle-tab work lands first~~ — **DONE 2026-08-07.** The
+   Porch Life tab shipped, Objectives got a switch, and the story clock was
+   decoupled from the Realism Engine. Pockets no longer waits on it: the
+   question it was waiting to answer ("where do post-turn passes live?") is
+   answered by the ruling at the top of this document — Pockets brings its own.
+2. Likes & Dislikes (smaller, pure-additive, no new store) ships second. Note
+   this one genuinely IS zero-new-calls: it adds a block to eval prompts that
+   already fire and to the behavioural injection. That is not the same shape as
+   Pockets and the two should not be reasoned about together.
 3. Pockets & Wardrobe v1 third; wardrobe→portrait as its own follow-up.
+
+**Do not bundle 2 and 3 into one body of work.** They are in this document
+together because they were proposed in the same conversation, not because they
+share an implementation. Likes & Dislikes touches card fields, injections and
+eval prompts; Pockets adds a store, a switch, an eval and a UI panel. Shipping
+them together is how the interleaving starts.
 
 Every stage: provability nets first (applier/dedup/injection budgets),
 desktop+web same PR, 1:1/group parity audit, one-shot/multi-call parity for
