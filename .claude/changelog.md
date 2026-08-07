@@ -43,7 +43,7 @@
   did not falls through to `noSuchMethod` and throws while BUILDING the tab — which took down all
   three Porch Life tests, including the protected one. Fixed in the fake, so no test file's
   assertions were touched.
-- **Commit hash:** (pending)
+- **Commit hash:** 300f840
 
 ## 2026-08-07 — feat(objectives): the switch Objectives never had, and Ambitions moved onto it
 - **Files changed:** `lib/database/database.tables.core.dart`, `database.migrations.dart`, `database.repair.dart`,
@@ -101,7 +101,7 @@
   objectives UI test 2/2, **all three critical guards negative-checked** (ladder DEFAULT flipped to
   0 → red; generated table default flipped to false → red; Ambitions chip reverted to "works alone"
   → red; all restored → green). Web tsc + vitest 34/34 + bundle rebuilt.
-- **Commit hash:** (pending)
+- **Commit hash:** 300f840
 
 ## 2026-08-06 — feat(time): the story clock stands on its own eval (Passage of Time decoupled from the Realism Engine)
 - **Files changed:** `lib/services/storage/settings/realism_settings.dart`, `lib/services/storage_service.dart`,
