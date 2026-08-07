@@ -11401,3 +11401,4 @@ silent data loss.
 
 **Scope note:** the converter is shared by every eval, which is why this is its
 own commit rather than folded into the Afterglow fix.
+Commit: 55daadb
