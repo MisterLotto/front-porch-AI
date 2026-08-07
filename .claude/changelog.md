@@ -40,7 +40,7 @@
 - **Verification:** analyze 0; 5 new widget tests, negative-checked — removing `.trim()` and making
   dedup case-sensitive each turned the matching test red, restored green. Web tsc + vitest 34/34 +
   bundle rebuilt. Full unit + golden gates run before push.
-- **Commit hash:** (pending)
+- **Commit hash:** 5760625
 
 ## 2026-08-07 — fix(settings): Porch Life back in line with the approved sketch (After Dark + Growth Rings)
 - **Files changed:** `lib/ui/settings/tabs/porch_life_tab.dart`, `lib/ui/settings/tabs/general_tab.dart`,
