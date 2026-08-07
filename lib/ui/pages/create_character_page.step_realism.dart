@@ -92,6 +92,9 @@ extension _CreateCharacterRealismStep on _CreateCharacterPageState {
                 onChaosModeChanged: (v) =>
                     rebuildState(() => _realismChaosMode = v),
                 currentTask: _realismCurrentTask,
+                ambitions: _realismAmbitions,
+                onAmbitionsChanged: (v) =>
+                    rebuildState(() => _realismAmbitions = v),
                 onCurrentTaskChanged: (v) =>
                     rebuildState(() => _realismCurrentTask = v),
                 realismVerificationEnabled: _realismVerificationEnabled,

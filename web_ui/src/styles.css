@@ -2287,3 +2287,29 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 .promise-text { font-size: 0.85rem; line-height: 1.4; margin: 6px 0; }
 .promise-actions { display: flex; gap: 8px; }
 .promise-actions button { font-size: 0.75rem; padding: 3px 10px; }
+
+/* Chip-list editor — the web mirror of ChipListEditor (approved sketch §4).
+   Used for Ambitions now and Likes/Dislikes next, hence the neutral naming.
+   `accent` is the amber-bordered treatment the sketch draws for ambitions. */
+.chiplist { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+.chiplist-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 4px 6px 4px 10px; font-size: 0.8rem;
+}
+.chiplist-chip.accent { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.chiplist-chip button {
+  all: unset; cursor: pointer; line-height: 1; padding: 2px 3px;
+  color: var(--muted); border-radius: 4px; font-size: 0.9rem;
+}
+.chiplist-chip button:hover { color: var(--text); }
+.chiplist-add {
+  all: unset; cursor: pointer; font-size: 0.8rem; font-weight: 600;
+  color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 8px; padding: 6px 11px;
+}
+.chiplist input.chiplist-entry {
+  width: 210px; font-size: 0.8rem; padding: 6px 10px;
+  border-radius: 8px; border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.chiplist-count { font-size: 0.72rem; color: var(--muted); margin-left: auto; }

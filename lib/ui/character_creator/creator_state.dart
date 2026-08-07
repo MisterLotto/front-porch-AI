@@ -263,6 +263,10 @@ class CreatorState extends ChangeNotifier {
   bool realismEnjoysLowHygiene = false;
   String realismCurrentTask = '';
 
+  /// Long-term ambitions authored in the creator's realism step (approved
+  /// sketch §4). Card-resident like the rest of this state.
+  List<String> realismAmbitions = const [];
+
   // Needs simulation tuning — custom per-character baselines (0-100 starting
   // levels) and decay rates (drop per tick). Mirrors the character editor so
   // AI-created characters can ship the same custom needs setup; written into

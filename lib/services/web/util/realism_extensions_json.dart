@@ -54,6 +54,19 @@ FrontPorchExtensions frontPorchFromFields(
   bool asBool(String key, bool fallback) =>
       fields[key] is bool ? fields[key] as bool : fallback;
 
+  /// Defensive list-of-strings read: a hand-edited or older client may send a
+  /// scalar, a null, or entries that are not strings. Anything unusable is
+  /// dropped rather than throwing, matching how every other field here fails
+  /// soft.
+  List<String> asStrList(String key, List<String> fallback) {
+    final v = fields[key];
+    if (v is! List) return fallback;
+    return [
+      for (final e in v)
+        if (e is String && e.trim().isNotEmpty) e.trim(),
+    ];
+  }
+
   String asStr(String key, String fallback) =>
       fields.containsKey(key) && fields[key] != null
       ? fields[key].toString()
@@ -88,6 +101,7 @@ FrontPorchExtensions frontPorchFromFields(
     ),
     chaosModeEnabled: asBool('chaosModeEnabled', b.chaosModeEnabled),
     currentTask: asStr('currentTask', b.currentTask),
+    ambitions: asStrList('ambitions', b.ambitions),
 
     // Realism verification (Director/Verifier).
     realismVerificationEnabled: asBool(
@@ -143,6 +157,7 @@ Map<String, dynamic> frontPorchToJson(FrontPorchExtensions e) => {
   'passageOfTimeEnabled': e.passageOfTimeEnabled,
   'chaosModeEnabled': e.chaosModeEnabled,
   'currentTask': e.currentTask,
+  'ambitions': e.ambitions,
   'realismVerificationEnabled': e.realismVerificationEnabled,
   'realismVerificationMaxReprocesses': e.realismVerificationMaxReprocesses,
   'realismVerificationStrictness': e.realismVerificationStrictness,

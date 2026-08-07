@@ -105,6 +105,7 @@ extension CreatorEngine on CreatorState {
         needsSimEnabled: realismNeedsSim,
         enjoysLowHygiene: realismEnjoysLowHygiene,
         currentTask: realismCurrentTask,
+        ambitions: realismAmbitions,
         realismVerificationEnabled: realismVerificationEnabled,
         realismVerificationMaxReprocesses: realismVerificationMaxReprocesses,
         realismVerificationStrictness: realismVerificationStrictness,

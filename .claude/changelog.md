@@ -3,6 +3,45 @@
 
 # Changelog
 
+## 2026-08-07 — feat(editor): Ambitions promoted to a chip editor, and reachable from the creator at last
+- **Files changed:** `lib/ui/widgets/chip_list_editor.dart` (new), `lib/ui/widgets/widgets.dart`,
+  `lib/ui/widgets/realism_form_section.dart`, `lib/ui/pages/edit_character_page.dart`,
+  `edit_character_page.tabs_core.dart`, `lib/ui/pages/create_character_page.dart`,
+  `create_character_page.step_realism.dart`, `create_character_page.save.dart`,
+  `lib/ui/character_creator/creator_state.dart`, `creator_state_engine.dart`,
+  `steps/realism_step.dart`, `lib/services/web/util/realism_extensions_json.dart`,
+  `web_ui/src/components/realism/ChipList.tsx` (new), `realism/RealismFormSection.tsx`,
+  `realism/realismTypes.ts`, `web_ui/src/styles.css`, `assets/web_app/*` (rebuilt),
+  `test/ui/chip_list_editor_test.dart` (new)
+- **Why (approved sketch §4, artifact 3bee9e58):** "Ambitions — long-term goals, one per chip". The
+  editor already existed but was a one-per-line TextField buried under System Prompt in the desktop
+  editor — the maintainer did not know it was there, which was the design verdict.
+- **The old shape was not merely ugly, it was lossy.** A list encoded as text accepted blank lines,
+  kept untrimmed whitespace verbatim into the prompt, allowed silent duplicates, and showed no count
+  — so an author could not tell what they had actually saved. Each of those is now a test.
+- **The creator had NO ambitions field at all** (verified: zero references across
+  `lib/ui/character_creator/` and `create_character_page*`). It has one now, via the shared
+  `RealismFormSection`, so both creator flows and the desktop editor agree.
+- **`ChipListEditor` is deliberately generic** — `accent` is the only visual variation, because the
+  sketch draws ambitions amber-bordered and preference chips plain. Likes & Dislikes (Stage B) reuses
+  it rather than growing a second widget. Same for the web `ChipList`.
+- **Web parity needed a bridge fix first:** `realism_extensions_json.dart` did not round-trip
+  ambitions at all, so the web could neither read nor write them. Added, with a defensive
+  `asStrList` that drops non-string/blank entries rather than throwing — matching how every other
+  field there fails soft.
+- **No duplicate surface:** `ambitions` on `RealismFormSection` is optional, and the desktop
+  editor's own call deliberately omits it (that page renders the chip editor itself, higher up), so
+  exactly one ambitions editor exists per screen.
+- **NOT done, tracked as task #15:** the sketch also lists the Stoop card detail. Verified absent
+  today. The DATA already travels — ambitions ride inside the card's frontPorchExtensions, which The
+  Stoop stores whole — so downloads keep them; only the browse/detail preview cannot show them. Left
+  out deliberately rather than half-done: it is a read-only display on a separate surface with its
+  own parity duty.
+- **Verification:** analyze 0; 5 new widget tests, negative-checked — removing `.trim()` and making
+  dedup case-sensitive each turned the matching test red, restored green. Web tsc + vitest 34/34 +
+  bundle rebuilt. Full unit + golden gates run before push.
+- **Commit hash:** (pending)
+
 ## 2026-08-07 — fix(settings): Porch Life back in line with the approved sketch (After Dark + Growth Rings)
 - **Files changed:** `lib/ui/settings/tabs/porch_life_tab.dart`, `lib/ui/settings/tabs/general_tab.dart`,
   `lib/services/storage/settings/realism_settings.dart`, `lib/services/storage_service.dart`,

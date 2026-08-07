@@ -150,6 +150,11 @@ class RealismStep extends StatelessWidget {
                   state.notify();
                 },
                 currentTask: state.realismCurrentTask,
+                ambitions: state.realismAmbitions,
+                onAmbitionsChanged: (v) {
+                  state.realismAmbitions = v;
+                  state.notify();
+                },
                 onCurrentTaskChanged: (v) {
                   state.realismCurrentTask = v;
                   state.notify();

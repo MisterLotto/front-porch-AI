@@ -4,6 +4,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🚩 **Ambitions are a real editor now — and you can set them while creating a character** — A character's long-term goals were edited in a small "one per line" text box buried under the System Prompt, which is to say most people never found it. Ambitions now get their own proper section with one goal per chip, up near the rest of the personality, in **both** the character editor and the character creator — the creator had no way to set them at all before. Blank lines, stray spaces and accidental duplicates simply can't happen any more, and you can see at a glance how many you have. On the web app too.
+
 - 🔞 **Adult switches are now hidden unless you ask for them** — The Afterglow setting sat in the middle of the main feature list where everyone saw it, whether or not they use 18+ themes at all. There's now a plain **18+ themes** switch in **Settings → General**, and the adult features live in their own **After Dark** group that simply isn't there when it's off. If you already had Afterglow turned on, nothing changes and nothing is hidden from you — the app takes that as your answer. Turning it off never erases what you set; it only hides the switches.
 
 - 🌱 **Growth Rings has a switch in Porch Life at last** — Slow character evolution was already a real setting, but the only way to reach it was the chat sidebar, and the Porch Life tab wrongly said it was per-chat only. It's now a row like everything else, on desktop and the web app.

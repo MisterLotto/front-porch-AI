@@ -107,6 +107,9 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
   bool _realismNeedsSim = false;
   bool _realismEnjoysLowHygiene = false;
   String _realismCurrentTask = '';
+
+  /// Long-term ambitions (approved sketch §4) — a list, not newline text.
+  List<String> _realismAmbitions = const [];
   bool _realismVerificationEnabled = false;
   int _realismVerificationMaxReprocesses = 1;
   int _realismVerificationStrictness = 3;

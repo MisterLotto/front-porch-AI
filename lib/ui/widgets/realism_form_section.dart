@@ -19,6 +19,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/ui/widgets/chip_list_editor.dart';
 import 'package:front_porch_ai/ui/widgets/story_begins_row.dart';
 
 /// Shared Realism Engine configuration form.
@@ -57,6 +58,13 @@ class RealismFormSection extends StatelessWidget {
   final ValueChanged<bool> onChaosModeChanged;
   final String currentTask;
   final ValueChanged<String> onCurrentTaskChanged;
+
+  /// Long-term ambitions, edited as chips (approved sketch §4). Optional so
+  /// the surfaces that have no ambitions state yet — the group-member card,
+  /// for one — keep working untouched; absent means the section is simply not
+  /// rendered rather than rendered empty and dead.
+  final List<String>? ambitions;
+  final ValueChanged<List<String>>? onAmbitionsChanged;
 
   // Realism Verification (Director/Verifier) toggle — shown under Optional Features like other optionals.
   // Sliders for max reprocesses + strictness live in the Details dialog (right-click edit); form surfaces the toggle for creator/edit flows.
@@ -106,6 +114,8 @@ class RealismFormSection extends StatelessWidget {
     required this.onChaosModeChanged,
     required this.currentTask,
     required this.onCurrentTaskChanged,
+    this.ambitions,
+    this.onAmbitionsChanged,
     required this.realismVerificationEnabled,
     required this.onRealismVerificationChanged,
     this.showVerificationToggle = true,
@@ -676,6 +686,36 @@ class RealismFormSection extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
+
+          // ── Ambitions (approved sketch §4) ──
+          // "Ambitions — long-term goals, one per chip (replaces 'Current
+          // Task / Quest' in this editor)". The mountain, not the next step:
+          // quests are per-chat and live in the sidebar's Objectives panel.
+          if (ambitions != null && onAmbitionsChanged != null) ...[
+            _sectionHeader(Icons.flag, 'Ambitions', AppColors.taskAccent),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.cardOf(context),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.borderOf(context)),
+              ),
+              child: ChipListEditor(
+                label: 'Long-term goals',
+                accent: true,
+                values: ambitions!,
+                onChanged: onAmbitionsChanged!,
+                hintText: 'e.g. open her own bakery',
+                helper:
+                    'What this character is working toward across the whole '
+                    'story. They colour how the character steers a scene, and '
+                    'they inch forward when objectives complete. Not a to-do '
+                    'list — quests live in the chat sidebar.',
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
 
           // Task / Quest Section
           _sectionHeader(

@@ -117,7 +117,8 @@ class _EditCharacterPageState extends State<EditCharacterPage>
 
   /// Long-term ambitions (Living Time §6), one per line. Identity — travels
   /// with the card; per-chat progress lives in the Journal.
-  final _ambitionsController = TextEditingController();
+  // Ambitions are a LIST, not newline-encoded text (see ChipListEditor).
+  List<String> _ambitions = const [];
   final ValueNotifier<int> _tokenNotifier = ValueNotifier<int>(0);
 
   // ── Realism Engine state ──
@@ -256,9 +257,9 @@ class _EditCharacterPageState extends State<EditCharacterPage>
       _needsDecayHygiene = ext.needsDecayHygiene;
       _needsDecayComfort = ext.needsDecayComfort;
     }
-    _ambitionsController.text =
-        (widget.character.frontPorchExtensions?.ambitions ?? const [])
-            .join('\n');
+    _ambitions = List<String>.from(
+      widget.character.frontPorchExtensions?.ambitions ?? const [],
+    );
 
     _tabController = TabController(length: 4, vsync: this);
 
@@ -295,7 +296,6 @@ class _EditCharacterPageState extends State<EditCharacterPage>
       c.dispose();
     }
     _tagController.dispose();
-    _ambitionsController.dispose();
     _tokenNotifier.dispose();
     _tabController.dispose();
     super.dispose();
@@ -405,8 +405,8 @@ class _EditCharacterPageState extends State<EditCharacterPage>
         needsSimEnabled: _realismNeedsSim,
         enjoysLowHygiene: _realismEnjoysLowHygiene,
         ambitions: [
-          for (final line in _ambitionsController.text.split('\n'))
-            if (line.trim().isNotEmpty) line.trim(),
+          for (final a in _ambitions)
+            if (a.trim().isNotEmpty) a.trim(),
         ],
         currentTask: _realismCurrentTask,
         realismVerificationEnabled: _realismVerificationEnabled,

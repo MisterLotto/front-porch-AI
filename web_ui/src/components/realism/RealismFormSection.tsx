@@ -9,6 +9,7 @@
 // (NeedsFormSection) rendered alongside this one.
 
 import { Slider, ToggleRow, SelectRow } from './controls';
+import { ChipList } from './ChipList';
 import {
   type RealismValues,
   INTENSITY_OPTIONS,
@@ -159,6 +160,18 @@ export function RealismFormSection({ v, set }: { v: RealismValues; set: Patch })
               </>
             )}
           </div>
+
+          {/* ── Ambitions (approved sketch §4) ──
+              "Ambitions — long-term goals, one per chip (replaces 'Current
+              Task / Quest' in this editor)". Mirrors the desktop editor. */}
+          <ChipList
+            label="Ambitions"
+            accent
+            values={v.ambitions}
+            onChange={(a) => set({ ambitions: a })}
+            placeholder="e.g. open her own bakery"
+            helper="What this character is working toward across the whole story. They colour how the character steers a scene, and they inch forward when objectives complete. Not a to-do list — quests live in the chat sidebar."
+          />
 
           {/* ── Current task / quest ── */}
           <h4 className="realism-head">Current task / quest</h4>

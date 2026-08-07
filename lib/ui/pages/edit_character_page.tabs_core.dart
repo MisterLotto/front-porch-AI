@@ -240,15 +240,21 @@ extension _EditCharacterCoreTabs on _EditCharacterPageState {
               const SizedBox(height: 20),
 
               // ── Ambitions (Living Time §6) ──
-              _styledField(
-                controller: _ambitionsController,
-                label: 'Long-term Ambitions (one per line)',
-                maxLines: 3,
-                hint:
-                    'e.g. Open my own bakery\nThe character works toward '
-                    'these across the whole story — progress moves when '
-                    'their objectives complete, and lands in the Journal '
-                    'and "Our Story" timeline.',
+              // Chips, not a newline-encoded TextField: this is who the
+              // character IS, and the approved sketch gives it one goal per
+              // chip. See ChipListEditor for why the old shape misled authors.
+              ChipListEditor(
+                label: 'Ambitions',
+                accent: true,
+                values: _ambitions,
+                onChanged: (v) => rebuildState(() => _ambitions = v),
+                hintText: 'e.g. open her own bakery',
+                helper:
+                    'The long-term goals that define this character — the '
+                    'mountain, not the next step. They colour how the '
+                    'character steers a scene, and they inch forward when '
+                    'objectives complete. Not a to-do list: quests live in '
+                    'the chat sidebar.',
               ),
               const SizedBox(height: 20),
 

@@ -21,6 +21,8 @@ export interface RealismValues {
   passageOfTimeEnabled: boolean;
   chaosModeEnabled: boolean;
   currentTask: string;
+  /** Long-term goals, one per chip (approved sketch §4). */
+  ambitions: string[];
   realismVerificationEnabled: boolean;
   realismVerificationMaxReprocesses: number;
   realismVerificationStrictness: number;
@@ -59,6 +61,7 @@ export const REALISM_DEFAULTS: RealismValues = {
   passageOfTimeEnabled: true,
   chaosModeEnabled: false,
   currentTask: '',
+  ambitions: [],
   realismVerificationEnabled: false,
   realismVerificationMaxReprocesses: 1,
   realismVerificationStrictness: 3,
