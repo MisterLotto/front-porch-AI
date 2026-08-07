@@ -10894,3 +10894,4 @@ red) and the widget guard negative-checked (re-added the section header → red)
 · full unit suite · full golden suite green on linux/amd64 (93/94 pixel-identical
 before regen, which is the evidence the regen matches the CI container) ·
 web lint + 34 tests + build.
+Commit: 138c813
