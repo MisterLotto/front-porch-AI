@@ -48,7 +48,7 @@
   94/94; 5 new guards with TWO negative checks — forcing the group always-visible went red, and
   replacing the seed with a plain `false` went red on exactly the "existing user keeps their switch"
   case; both restored green. Web tsc + vitest 34/34 + bundle rebuilt.
-- **Commit hash:** (pending)
+- **Commit hash:** a9e0ece
 
 ## 2026-08-07 — refactor(chat): Scene Guest state out of the shell (998 → 927 lines)
 - **Files changed:** `lib/services/chat/scene_guest_state.dart` (new), `lib/services/chat_service.dart`,
