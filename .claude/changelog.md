@@ -27,7 +27,7 @@
   names anywhere in lib/, test/ or integration_test/.
 - **Headroom delivered:** 71 lines. Enough for the ambitions/objectives, Likes & Dislikes and Pockets
   stages that follow (docs/design/pockets-and-preferences.md).
-- **Commit hash:** (pending)
+- **Commit hash:** b6d131c
 
 ## 2026-08-07 — feat(independence): Phase 2 complete — absence note lifted, promises made pure, cadence stated
 - **Files changed:** `lib/services/chat/prompt_injection/time_injection.dart`,
