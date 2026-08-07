@@ -30,6 +30,7 @@ export 'author_note_builder.dart';
 export 'behavioral_injection.dart';
 export 'chaos_injection.dart';
 export 'emotion_injection.dart';
+export 'inventory_injection.dart';
 export 'journal_injection.dart';
 export 'needs_injection.dart';
 export 'nsfw_injection.dart';

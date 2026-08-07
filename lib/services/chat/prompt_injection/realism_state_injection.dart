@@ -22,6 +22,7 @@ import 'package:front_porch_ai/services/chat/prompt_injection/behavioral_injecti
 import 'package:front_porch_ai/services/chat/prompt_injection/emotion_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/needs_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/nsfw_injection.dart';
+import 'package:front_porch_ai/services/chat/prompt_injection/inventory_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/preferences_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/promise_debt_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/relationship_injection.dart';
@@ -73,6 +74,7 @@ class RealismStateInjection {
   final WeatherInjection weatherInjection;
   final AmbitionInjection ambitionInjection;
   final PreferencesInjection preferencesInjection;
+  final InventoryInjection inventoryInjection;
   final PromiseDebtInjection promiseDebtInjection;
   final BehavioralInjection behavioralInjection;
   final NsfwInjection nsfwInjection;
@@ -130,6 +132,7 @@ class RealismStateInjection {
     this.getPromisesEnabled,
     required this.ambitionInjection,
     required this.preferencesInjection,
+    required this.inventoryInjection,
     required this.promiseDebtInjection,
     required this.behavioralInjection,
     required this.nsfwInjection,
@@ -219,6 +222,10 @@ class RealismStateInjection {
       // scoring, so it must survive the Realism Engine being off. It
       // self-gates on the card carrying any.
       preferencesInjection.buildPreferencesInjection(),
+      // Pockets & Wardrobe. Ungated here for the same reason preferences are:
+      // it answers to its own switch and nothing else. The leaf self-gates on
+      // the record being non-empty, which it is only when the feature is on.
+      inventoryInjection.buildInventoryInjection(),
       if (getPromisesEnabled?.call() ?? true)
         promiseDebtInjection.buildPromiseDebtInjection(),
       if (_characterStateEnabled)

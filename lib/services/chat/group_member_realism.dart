@@ -51,6 +51,8 @@
 /// pins fromJson→toJson identity on a full 41-key slot.
 library;
 
+import 'package:front_porch_ai/services/chat/pockets.dart';
+
 /// The runtime keys the engine reads and writes each turn. Every name that
 /// used to be scattered as a string literal across chat_service parts lives
 /// here and only here.
@@ -73,6 +75,12 @@ abstract final class GroupRealismKeys {
   static const emotion = 'emotion';
   static const emotionIntensity = 'emotionIntensity';
   static const needs = 'needs';
+
+  /// Pockets & Wardrobe (docs/design/pockets-and-preferences.md Part 1). Rides
+  /// this per-member bag rather than earning a schema migration: the record is
+  /// strictly session-scoped, so living in the session's own state blob means
+  /// it is deleted with the chat by construction rather than by a cleanup job.
+  static const pockets = 'pockets';
   static const relationships = 'relationships';
 
   /// Everything the generic bridges ([GroupMemberRealism.valueFor] /
@@ -191,6 +199,22 @@ class GroupMemberRealism {
   // ── Structured members ────────────────────────────────────────────────
   /// Raw needs vector, coerced, or null when the slot has never carried one —
   /// and that null is load-bearing (needs-enabled inference; see class doc).
+  /// What this member is wearing and carrying. Absent (not empty) when the
+  /// feature has never run for them, so an untouched member serialises exactly
+  /// as they did before Pockets existed.
+  Pockets? get pockets {
+    final v = _data[GroupRealismKeys.pockets];
+    return v is Map ? Pockets.fromJson(v) : null;
+  }
+
+  set pockets(Pockets? v) {
+    if (v == null || v.isEmpty) {
+      _data.remove(GroupRealismKeys.pockets);
+    } else {
+      _data[GroupRealismKeys.pockets] = v.toJson();
+    }
+  }
+
   Map<String, int>? get needs => _intMap(GroupRealismKeys.needs);
   set needs(Map<String, int>? v) => _data[GroupRealismKeys.needs] = v;
 

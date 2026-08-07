@@ -417,6 +417,21 @@ extension ChatServiceWiringInjection on ChatService {
     );
   }
 
+  InventoryInjection _buildInventoryInjection() {
+    return InventoryInjection(
+      getActiveCharacter: () => _activeCharacter,
+      getIsGroupNonObserverMode: () => (_activeGroup != null && !_observerMode),
+      getCurrentSpeakerIdForRealism: _getCurrentSpeakerIdForRealism,
+      getGroupCharacters: () => _groupCharacters,
+      getCharacterIdFromCard: _getCharacterIdFromCard,
+      // Off means off: with the switch down the record is never read, so the
+      // fragment is absent rather than stale. Pockets answers to this ONE
+      // switch and nothing else.
+      getPockets: (charId) =>
+          _storageService.realismSettings.pocketsEnabled ? pocketsFor(charId) : null,
+    );
+  }
+
   PromiseDebtInjection _buildPromiseDebtInjection() {
     return PromiseDebtInjection(
       promiseDebtService: _promiseDebtService,
@@ -492,6 +507,7 @@ extension ChatServiceWiringInjection on ChatService {
       weatherInjection: _weatherInjection,
       ambitionInjection: _ambitionInjection,
       preferencesInjection: _preferencesInjection,
+      inventoryInjection: _inventoryInjection,
       promiseDebtInjection: _promiseDebtInjection,
       behavioralInjection: _behavioralInjection,
       nsfwInjection: _nsfwInjection,

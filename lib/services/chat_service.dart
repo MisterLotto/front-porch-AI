@@ -590,6 +590,32 @@ class ChatService extends ChangeNotifier {
   /// Likes & Dislikes fragment — NOT realism-gated (see PreferencesInjection).
   late final _preferencesInjection = _buildPreferencesInjection();
 
+  /// Pockets & Wardrobe — the per-turn record fragment. Answers to its own
+  /// switch only (see PocketsEval for why it depends on nothing else).
+  late final _inventoryInjection = _buildInventoryInjection();
+
+  /// The 1:1 speaker's pockets. In a group each member's record lives in their
+  /// `_groupRealism` slot instead, which is what keeps it session-scoped and
+  /// deleted with the chat; this scalar is the same record for the host.
+  Pockets? _pockets;
+
+  /// The record for [characterId], whichever mode the chat is in — the ONE
+  /// read every Pockets surface uses, so 1:1 and group cannot diverge about
+  /// whose pockets are whose.
+  Pockets? pocketsFor(String characterId) {
+    if (_activeGroup == null) return _pockets;
+    return _groupRealism[characterId]?.pockets;
+  }
+
+  /// Persist [p] back to wherever that character's record lives.
+  void setPocketsFor(String characterId, Pockets p) {
+    if (_activeGroup == null) {
+      _pockets = p;
+      return;
+    }
+    (_groupRealism[characterId] ??= GroupMemberRealism()).pockets = p;
+  }
+
   // ── Promise & debt ledger (Train B) — builder in chat_service_wiring_memory.dart ──
   late final _promiseDebtService = _buildPromiseDebtService();
   late final _promiseDebtInjection = _buildPromiseDebtInjection();
