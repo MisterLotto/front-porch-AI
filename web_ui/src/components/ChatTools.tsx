@@ -59,6 +59,7 @@ interface ToolsState {
   nsfw: { cooldownEnabled: boolean; cooldownTurnsRemaining: number; arousalLevel: number; arousalTier: string };
   // Ambitions (Living Time §6, additive — absent on older facades).
   // `step` is the open quest climbing this ambition (v46); null when none.
+  standingMood?: string;
   ambitions?: Array<{ text: string; progress: number; stage: string; step?: string | null }>;
   // Pockets & Wardrobe (additive, null when the switch is off).
   pockets?: { worn?: Array<{ name: string; state?: string }>; carrying?: Array<{ name: string; state?: string }> } | null;
@@ -287,6 +288,14 @@ export function ChatTools({
         </div>
       </details>
 
+      {/* What she walked in carrying, before you said anything. Reads
+          "Came in …" so it can never be mistaken for a reaction to something
+          the user did — which is the entire point of the feature. */}
+      {!!t.standingMood && (
+        <p className="muted small" style={{ margin: '0 0 10px', fontStyle: 'italic' }}>
+          🌤️ Came in {t.standingMood}
+        </p>
+      )}
       {(t.ambitions?.length ?? 0) > 0 && (
         <details className="tool-section" open>
           <summary>Ambitions</summary>

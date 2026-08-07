@@ -83,6 +83,7 @@ part 'chat/chat_service_generation_request.dart';
 part 'chat/chat_service_generation_stream.dart';
 part 'chat/chat_service_generation_postgen.dart';
 part 'chat/chat_service_pockets.dart';
+part 'chat/chat_service_mood.dart';
 part 'chat/chat_service_cast.dart';
 part 'chat/chat_service_images.dart';
 part 'chat/chat_service_photo.dart';
@@ -874,6 +875,10 @@ class ChatService extends ChangeNotifier {
   bool get realismEnabled => _realismEnabled;
   // Fake-pinned (see the class doc): body in accessors, member stays here.
   bool get objectivesActive => _objectivesActiveImpl;
+
+  /// Fake-pinned (see the class doc): body in chat/chat_service_mood.dart.
+  /// What the speaker walked in carrying before the user said anything, or ''.
+  String get standingMoodSummary => standingMoodSummaryImpl;
 
   bool get isEvaluatingRealism => _isEvaluatingRealism;
   bool get isProcessingGreeting => _isProcessingGreeting;

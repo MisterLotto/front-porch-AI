@@ -202,21 +202,37 @@ extension _BubbleRealism on _MessageBubbleState {
     }
 
     if (emotionLabel.isNotEmpty) {
+      // The mood chip was the ONLY chip here with no hover reason — bond,
+      // trust, every need, the verifier and Chance Time all carry one, and
+      // this alone said "Mood: wistful" with nothing behind it. It could not
+      // have one: the emotional eval returns a label and an intensity, never a
+      // cause.
+      //
+      // Standing Mood answers the honest half. Not "why she feels this", which
+      // nothing knows, but what she walked in carrying — so a user can tell
+      // which part of her mood was them and which part was her day. Absent
+      // (and the chip unchanged) when the feature is off or the day was
+      // unremarkable.
+      final moodReason =
+          MoodBaseline.fromJson(metadata['mood_context'])?.summary ?? '';
       chips.add(
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.psychology, size: 11, color: Colors.purpleAccent),
-            const SizedBox(width: 4),
-            Text(
-              'Mood: $emotionLabel',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
-                color: Colors.purpleAccent,
+        maybeTooltip(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.psychology, size: 11, color: Colors.purpleAccent),
+              const SizedBox(width: 4),
+              Text(
+                'Mood: $emotionLabel',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.purpleAccent,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
+          moodReason.isEmpty ? '' : 'Came in $moodReason',
         ),
       );
     }

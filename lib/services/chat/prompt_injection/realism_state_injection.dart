@@ -113,6 +113,12 @@ class RealismStateInjection {
   /// prompt_injection_test keeps compiling.
   final String? Function()? getAbsenceNote;
 
+  /// Standing Mood — what the character walked in carrying, before the user
+  /// said anything. Ungated in the fragment list below for the same reason
+  /// preferences and pockets are: it answers to its own switch and nothing
+  /// else, and it self-gates to '' on an unremarkable day.
+  final String? Function()? getStandingMood;
+
   /// The promise ledger. Independent of realism, but stored as Journal cards,
   /// so the caller's predicate must also require the Journal. Optional for the
   /// same reason as above.
@@ -140,6 +146,7 @@ class RealismStateInjection {
     required this.getRealismEnabled,
     this.getClockRunningOverride,
     this.getAbsenceNote,
+    this.getStandingMood,
     required this.getIsGroupNonObserverMode,
     required this.getCurrentSpeakerIdForRealism,
     required this.getGroupCharacters,
@@ -207,6 +214,7 @@ class RealismStateInjection {
       // so the emitted block is byte-identical whenever the clock IS running,
       // and the note now also survives when it is not.
       getAbsenceNote?.call() ?? '',
+      getStandingMood?.call() ?? '',
       if (_sceneFactsEnabled) weatherInjection.buildWeatherInjection(),
       if (_characterStateEnabled)
         relationshipInjection.buildRelationshipInjection(),

@@ -496,6 +496,8 @@ extension ChatServiceWiringInjection on ChatService {
       // stage word ("just beginning") is frozen for the life of the chat.
       // Injecting it would bill the user, forever, for a line that cannot
       // change and describes a mechanism that is switched off.
+      // Standing Mood: free (pure derivation), gated inside the leaf.
+      getStandingMood: buildStandingMoodInjection,
       getAmbitionsEnabled: () =>
           _storageService.realismSettings.ambitionsEnabled && objectivesActive,
       getPromisesEnabled: () =>

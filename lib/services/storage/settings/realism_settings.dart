@@ -68,6 +68,17 @@ class RealismSettings with SettingsBase {
   /// would have done nothing at all on a default install.
   bool _pocketsEnabled = false;
 
+  /// Standing Mood (docs/design/pockets-and-preferences.md is not its home —
+  /// see the class doc on MoodBaseline). Lets a character arrive already
+  /// tired, hungry or cheered by the weather, so not every shift in her mood
+  /// is something the user did.
+  ///
+  /// Defaults OFF because it changes the felt behaviour of every reply, and
+  /// this is the first release of it. It costs NOTHING per turn — pure
+  /// derivation from state already computed, no model call — so the default is
+  /// about caution, not cost.
+  bool _standingMoodEnabled = false;
+
   /// Global Objectives switch (v45). Objectives are the character's short-lived
   /// quests; they depend on NOTHING but their own eval cost — not the Realism
   /// Engine, not the Journal — and until now they had no off switch at all,
@@ -118,6 +129,9 @@ class RealismSettings with SettingsBase {
 
   /// See [_pocketsEnabled]. Costs one short model call per turn while on.
   bool get pocketsEnabled => _pocketsEnabled;
+
+  /// See [_standingMoodEnabled]. Free: no model call, ever.
+  bool get standingMoodEnabled => _standingMoodEnabled;
 
   /// See [_adultThemesExplicit]. The seed is evaluated on READ, not snapshotted
   /// at load: until the user makes an explicit choice, "do you want adult
@@ -176,6 +190,8 @@ class RealismSettings with SettingsBase {
         prefs?.getBool(k('standalone_clock_enabled')) ?? false;
     _objectivesEnabled = prefs?.getBool(k('objectives_enabled')) ?? true;
     _pocketsEnabled = prefs?.getBool(k('pockets_enabled')) ?? false;
+    _standingMoodEnabled =
+        prefs?.getBool(k('standing_mood_enabled')) ?? false;
     _adultThemesExplicit = prefs?.getBool(k('adult_themes_enabled'));
     _realismOneShotEval = prefs?.getBool(k('realism_one_shot_eval')) ?? false;
     _weatherEnabled = prefs?.getBool(k('weather_enabled')) ?? true;
@@ -299,6 +315,12 @@ class RealismSettings with SettingsBase {
   Future<void> setPocketsEnabled(bool value) async {
     _pocketsEnabled = value;
     await prefs?.setBool(k('pockets_enabled'), value);
+    notify();
+  }
+
+  Future<void> setStandingMoodEnabled(bool value) async {
+    _standingMoodEnabled = value;
+    await prefs?.setBool(k('standing_mood_enabled'), value);
     notify();
   }
 

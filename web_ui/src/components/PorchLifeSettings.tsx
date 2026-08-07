@@ -40,6 +40,7 @@ interface PorchLifeState {
   journalEnabled: boolean;
   characterEvolutionEnabled: boolean;
   pocketsEnabled: boolean;
+  standingMoodEnabled: boolean;
   adultThemesEnabled: boolean;
   dreamsEnabled: boolean;
   promiseLedgerEnabled: boolean;
@@ -64,6 +65,7 @@ const DEFAULTS: PorchLifeState = {
   journalEnabled: true,
   characterEvolutionEnabled: false,
   pocketsEnabled: false,
+  standingMoodEnabled: false,
   adultThemesEnabled: false,
   dreamsEnabled: true,
   promiseLedgerEnabled: true,
@@ -331,6 +333,14 @@ export function PorchLifeSettings() {
           blurb="What they are wearing and carrying is remembered instead of scrolling out of the conversation — so the keys she picked up an hour ago are still in her pocket, and the coat she took off is still off. Items can change: a candy bar becomes a wrapper, a sword gets notched. Uses one extra AI request per reply to notice what changed, so it is slower and costs more on a paid API. Kept per chat and cleared with it."
           value={st.pocketsEnabled}
           onChange={(v) => set('pocketsEnabled', v)}
+        />
+        <FeatureRow
+          icon="🌤️"
+          label="Standing Mood"
+          need="alone"
+          blurb="Lets them arrive already in a mood you had nothing to do with — tired, hungry, worn down by a week of rain, or cheerful after a good night. Everything else in the app reacts to YOU, which slowly makes you the centre of their world; this is the part that is just their day. It is never invented: it comes from what the app already tracks, and the mood chip tells you exactly what they walked in carrying, so you can always tell their day from your doing. Costs nothing — no extra AI request."
+          value={st.standingMoodEnabled}
+          onChange={(v) => set('standingMoodEnabled', v)}
         />
         <FeatureRow
           icon="🌱"

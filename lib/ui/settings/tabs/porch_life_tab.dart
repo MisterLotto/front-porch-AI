@@ -255,6 +255,23 @@ class PorchLifeTab extends StatelessWidget {
               value: realism.pocketsEnabled,
               onChanged: realism.setPocketsEnabled,
             ),
+            FeatureRow(
+              icon: Icons.cloud_queue,
+              label: 'Standing Mood',
+              need: FeatureNeed.alone,
+              blurb:
+                  'Lets them arrive already in a mood you had nothing to do '
+                  'with — tired, hungry, worn down by a week of rain, or '
+                  'cheerful after a good night. Everything else in the app '
+                  'reacts to YOU, which slowly makes you the centre of their '
+                  'world; this is the part that is just their day. It is never '
+                  'invented: it comes from what the app already tracks, and '
+                  'hovering the mood chip tells you exactly what they walked '
+                  'in carrying, so you can always tell their day from your '
+                  'doing. Costs nothing — no extra AI request.',
+              value: realism.standingMoodEnabled,
+              onChanged: realism.setStandingMoodEnabled,
+            ),
           ],
         ),
 

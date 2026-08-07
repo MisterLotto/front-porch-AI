@@ -11233,3 +11233,64 @@ branch, so these edits do not take effect for those two until they reach
 re-run over all 1901 tracked files (577 protected, 558 test-ish all caught,
 nothing over-caught).
 Commit: ce11fee
+
+## 2026-08-07 — feat(realism): Standing Mood + the mood chip's missing reason
+
+**Files:** NEW lib/services/chat/mood_baseline.dart (pure derivation) + NEW
+lib/services/chat/chat_service_mood.dart (part; gate + injection + stamp);
+chat_service.dart (part directive + fake-pinned `standingMoodSummary`
+forwarder); chat.dart barrel; realism_settings.dart (`standingMoodEnabled`,
+default OFF); realism_state_injection.dart + chat_service_wiring_injection.dart
+(`getStandingMood` callback); chat_service_generation_stream.dart (ONE stamp at
+the attach funnel); message_bubble.realism.dart (the chip tooltip);
+character_state_group.dart (sidebar line, ungated); porch_life_tab.dart;
+settings_facade.dart + chat_tools_facade.dart; web PorchLifeSettings.tsx +
+ChatTools.tsx (+ assets/web_app rebuilt); test/golden/support/fakes.dart;
+NEW test/services/chat/mood_baseline_test.dart.
+
+**Why:** every delta the engine produces is caused by the user's message.
+Coherent — and it quietly makes the user the centre of the character's
+universe, which is the tell of a companion app rather than a person. Real
+people arrive already in a mood you had nothing to do with.
+
+**The maintainer's two objections, and how the design answers them.** The first
+proposal was an *unexplained* drift. Rejected on two grounds that turned out to
+be the same ground: (1) a user cannot tell an uncaused mood from a reaction to
+them, so it reads as the app being random; (2) handing "she's in a mood" to a
+local model invites it to invent a cause and defend it for forty turns, which
+the Journal would then record as fact.
+So the offset is never invented — it is DERIVED from state the app already owns
+(needs, story clock, weather), carries its causes in plain language, and is
+shown verbatim. **There is no LLM call anywhere in this feature**, so there is
+no point at which a model can make anything up. The prompt fragment states a
+STATE and never a mood ("they are exhausted", never "she is upset") and closes
+with the same anti-invention guardrail, in the same words, that
+preferences_injection.dart carries — Likes & Dislikes hit this failure mode
+first.
+
+**The condition it shipped under: it never reaches the evals.** It colours
+generation and display only. It does not touch bond or trust — a bad night must
+not compound into relationship damage the user did not cause and cannot undo —
+and keeping it out of eval prompts also keeps regen deterministic. Guarded by a
+source check over all six eval files, honestly labelled as structural.
+
+**The chip.** The mood chip was the ONLY chip with no hover reason; bond,
+trust, every need, the verifier and Chance Time all had one. It could not have
+one — the emotional eval returns a label and an intensity, never a cause, and
+adding an `emotion_reason` field would have changed the eval and its cost on
+every path. Standing Mood supplies the honest half for free: not "why she feels
+this", which nothing knows, but what she walked in carrying.
+
+**Design notes:** stamped at the ONE funnel every path attaches through
+(one-shot, multi-call, group, reprocess) rather than beside each of the four
+sites writing `emotion_label` — one of those would eventually be missed. The
+sidebar line sits OUTSIDE the `realismOn` gate because the feature depends on
+nothing; gating it would be the dead-switch bug the Porch Life tab exists to
+end. `standingMoodSummary` is a class-level forwarder, not an extension member,
+because extension members are statically dispatched and a `FakeChatService`
+cannot override one — the exact trap that took the character_state goldens down
+at 87% earlier today.
+
+**Gates:** analyze 0 · 15 new guards, two negative-checked (dropping the causes
+while keeping the offset → red; removing the anti-invention clause → red) ·
+web lint + 34 tests + build. Full unit/golden suites not run in this session.

@@ -56,6 +56,16 @@ extension ChatServiceGenerationStream on ChatService {
     String targetSender;
     bool isUserTarget;
 
+    // Standing Mood rides the turn's metadata so the mood chip can explain
+    // itself. Stamped HERE — the single funnel every path attaches through
+    // (one-shot, multi-call, group per-speaker, reprocess) — rather than
+    // beside each of the four sites that write 'emotion_label', which is how
+    // one of them would eventually be missed. No-op when the feature is off or
+    // the day is unremarkable.
+    if (_pendingRealismMetadata != null) {
+      stampStandingMood(_pendingRealismMetadata!);
+    }
+
     if (t.mode == GenerationMode.continue_) {
       t.streamTarget = _messages.last;
       originalText = t.streamTarget.text;

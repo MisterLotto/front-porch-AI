@@ -228,6 +228,14 @@ class FakeChatService extends ChangeNotifier implements ChatService {
   @override
   bool get objectivesActive => true;
 
+  /// Same fake-pinned reason as objectivesActive directly above: the sidebar
+  /// reads this, its body is an extension member, and an unoverridden
+  /// extension call from a fake reaches ChatService privates and throws
+  /// mid-build. Empty = "unremarkable day", which keeps the goldens showing
+  /// the panel exactly as they did before Standing Mood existed.
+  @override
+  String get standingMoodSummary => '';
+
   @override
   final bool isGenerating;
   @override
