@@ -16,6 +16,12 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+// Stage words come from AmbitionService so the eval prompt, the per-turn
+// ambition injection and the journal progress cards all describe the same
+// progress with the same word. A local copy here would drift the first time a
+// band moved.
+import 'package:front_porch_ai/services/chat/ambition_service.dart';
+
 /// Per-eval delta limits for the realism LLM calls (relationship, emotional
 /// state, one-shot). These are the authoritative ranges for what each eval is
 /// allowed to contribute in a single turn. They are used both for .clamp()
@@ -279,24 +285,97 @@ class RealismPromptBuilder {
       '- "new_day": true ONLY if the conversation explicitly transitioned to the next day (slept, woke up, '
       'scene break). false otherwise.\n';
 
+  /// The ambitions a proposal should be steering toward, numbered with their
+  /// stage words. Empty when the character has none — and then the whole
+  /// forward-direction block, `serves_ambition` included, is omitted rather
+  /// than sent as an empty list. A cardless character must cost exactly the
+  /// tokens it did before ambitions existed.
+  static String _ambitionRoster(List<({String text, int progress})> ambitions) {
+    final open = openAmbitions(ambitions);
+    if (open.isEmpty) return '';
+    return 'Long-term ambitions (the mountain; each objective should be one switchback on it):\n'
+        '${[for (var i = 0; i < open.length; i++) '${i + 1}. ${open[i].text} (${AmbitionService.stageWord(open[i].progress)})'].join('\n')}\n\n';
+  }
+
+  /// The ambitions the roster numbers — achieved ones are dropped, because a
+  /// finished mountain has no next switchback and offering it invites the
+  /// model to keep proposing steps toward something already done.
+  ///
+  /// Public because [resolveServedAmbition] is the inverse of the numbering
+  /// this produces, and the two must read the same list. When they didn't,
+  /// "2" would mean a different ambition on the way out than on the way back.
+  static List<({String text, int progress})> openAmbitions(
+    List<({String text, int progress})> ambitions,
+  ) => [
+    for (final a in ambitions)
+      if (a.progress < 100) a,
+  ];
+
+  /// Turn a `serves_ambition` answer back into the ambition's TEXT, against
+  /// the same roster the prompt numbered. Returns null for "none", junk, an
+  /// out-of-range number, or a missing field — all of which mean the same
+  /// thing downstream: this quest serves no ambition.
+  ///
+  /// Forgiving on purpose (local-model floor): a model that answers "2",
+  /// "ambition 2", or "2 — open her own bakery" all resolve the same way.
+  static String? resolveServedAmbition(
+    String? raw,
+    List<({String text, int progress})> ambitions,
+  ) {
+    if (raw == null) return null;
+    final text = raw.trim();
+    if (text.isEmpty || text.toLowerCase().contains('none')) return null;
+    final m = RegExp(r'\d+').firstMatch(text);
+    if (m == null) return null;
+    final idx = int.parse(m.group(0)!);
+    final open = openAmbitions(ambitions);
+    if (idx < 1 || idx > open.length) return null;
+    return open[idx - 1].text;
+  }
+
+  /// The ambition-steering half of the objective instruction. Ambitions drive
+  /// objectives, not the other way around (maintainer ruling 2026-08-07): the
+  /// proposal is asked for the next believable step up one of the mountains
+  /// above, favouring the least-advanced. Situational quests stay legal on
+  /// purpose — a character whose every want serves the arc reads like a
+  /// questgiver, not a person.
+  static String _ambitionSteer(String charName, bool hasAmbitions) =>
+      hasAmbitions
+      ? '  PREFER a concrete next step toward one of the ambitions listed above — the one that is least '
+            'far along and most relevant to what just happened. A goal that serves no ambition is still '
+            'allowed when life genuinely pulls $charName that way, but when both fit, the ambition-serving '
+            'one is the better answer.\n'
+      : '';
+
+  static String _servesAmbitionField(bool hasAmbitions) => hasAmbitions
+      ? '- "serves_ambition": the NUMBER of the ambition the proposed objective is a step toward, or "none" '
+            'if it serves none of them. Always "none" when "proposed_objective" is "none". Do not stretch — '
+            'a quest that merely happens near an ambition does not serve it.\n'
+      : '';
+
   static String _objectiveSection(
     String charName,
     String userName,
     String? primaryObjective,
-  ) => primaryObjective != null
-      ? '- "proposed_objective": a meaningful, emotionally-driven goal $charName independently wants to '
-            'pursue — DISTINCT from their current main quest ("$primaryObjective"), true to who they are, '
-            'and triggered by a STRONG, specific event THIS turn. Not a trivial step, and not a restatement '
-            'of the main quest.\n'
-            '  Default to "none" — the overwhelming majority of turns produce "none". Only propose one if '
-            '$charName would genuinely lose sleep over it.\n'
-      : '- "proposed_objective": an OVERARCHING goal $charName independently wants to pursue — a driving '
-            'want big enough to span many scenes, born from who they are (their ambitions, wounds, '
-            'appetites), e.g. "get $userName to admit their greatest fear" or a personal ambition they\'ve '
-            'been chasing — not a one-scene errand. It becomes $charName\'s main quest and will be broken '
-            'into concrete steps. Triggered by a strong, specific event THIS turn.\n'
-            '  Default to "none" — the overwhelming majority of turns produce "none". Only propose one if '
-            '$charName would genuinely lose sleep over it.\n';
+    List<({String text, int progress})> ambitions,
+  ) {
+    final hasAmbitions = _ambitionRoster(ambitions).isNotEmpty;
+    final body = primaryObjective != null
+        ? '- "proposed_objective": a meaningful, emotionally-driven goal $charName independently wants to '
+              'pursue — DISTINCT from their current main quest ("$primaryObjective"), true to who they are, '
+              'and triggered by a STRONG, specific event THIS turn. Not a trivial step, and not a restatement '
+              'of the main quest.\n'
+              '  Default to "none" — the overwhelming majority of turns produce "none". Only propose one if '
+              '$charName would genuinely lose sleep over it.\n'
+        : '- "proposed_objective": an OVERARCHING goal $charName independently wants to pursue — a driving '
+              'want big enough to span many scenes, born from who they are (their ambitions, wounds, '
+              'appetites), e.g. "get $userName to admit their greatest fear" or a personal ambition they\'ve '
+              'been chasing — not a one-scene errand. It becomes $charName\'s main quest and will be broken '
+              'into concrete steps. Triggered by a strong, specific event THIS turn.\n'
+              '  Default to "none" — the overwhelming majority of turns produce "none". Only propose one if '
+              '$charName would genuinely lose sleep over it.\n';
+    return '$body${_ambitionSteer(charName, hasAmbitions)}${_servesAmbitionField(hasAmbitions)}';
+  }
 
   static String _fixationSection(String charName) =>
       '- "fixation_topic": an intrusive thought $charName cannot stop returning to — it haunts them across '
@@ -371,18 +450,24 @@ class RealismPromptBuilder {
     required String dossier,
     required String recent,
     String? primaryObjective,
+    List<({String text, int progress})> ambitions = const [],
     bool toolsMode = false,
   }) =>
       'You are the autonomous story engine inside $charName\'s head, judging what they now want and '
       'what lingers with them. Both must fit who $charName is — their ambitions, wounds, and style — '
       'not generic story beats.\n\n'
       '$dossier'
+      '${_ambitionRoster(ambitions)}'
       'Evaluate:\n'
-      '${_objectiveSection(charName, userName, primaryObjective)}'
+      '${_objectiveSection(charName, userName, primaryObjective, ambitions)}'
       '${_fixationSection(charName)}'
       '\n'
       '${_recentBlock(recent)}'
-      '${toolsMode ? _toolInstruction('report_narrative') : _jsonInstruction(const ['proposed_objective', 'fixation_topic'])}';
+      '${toolsMode ? _toolInstruction('report_narrative') : _jsonInstruction([
+        'proposed_objective',
+        if (_ambitionRoster(ambitions).isNotEmpty) 'serves_ambition',
+        'fixation_topic',
+      ])}';
 
   static String oneShotEvalPrompt({
     required String charName,
@@ -395,12 +480,14 @@ class RealismPromptBuilder {
     int refractoryTurnsLeft = 0,
     List<String> allowedEmotionLabels = const [],
     String? primaryObjective,
+    List<({String text, int progress})> ambitions = const [],
     bool toolsMode = false,
   }) =>
       'You are the private inner voice of $charName in a roleplay with $userName, scoring how this '
       'exchange truly landed for them across every dimension below.\n\n'
       '$dossier'
       '$standing'
+      '${_ambitionRoster(ambitions)}'
       '${_subjectivityFrame(charName, userName)}'
       'Evaluate ALL of the following at once:\n'
       '${_bondSection(charName, userName)}'
@@ -409,7 +496,7 @@ class RealismPromptBuilder {
       '${_postureSection(charName)}'
       '${_sceneTimeSection()}'
       '${arousalEnabled ? _arousalSection(charName, userName, arousalLevel, refractoryTurnsLeft) : ''}'
-      '${_objectiveSection(charName, userName, primaryObjective)}'
+      '${_objectiveSection(charName, userName, primaryObjective, ambitions)}'
       '${_fixationSection(charName)}'
       '${_reasonSection()}'
       '\n'
@@ -426,6 +513,7 @@ class RealismPromptBuilder {
         'new_day',
         if (arousalEnabled) 'arousal_delta',
         'proposed_objective',
+        if (_ambitionRoster(ambitions).isNotEmpty) 'serves_ambition',
         'fixation_topic',
         'reason',
       ])}';

@@ -91,6 +91,15 @@ final Map<String, Map<String, dynamic>> _narrativeFields = {
   'proposed_objective': _strField(
     'A goal the character independently wants to pursue, or "none".',
   ),
+  // Present in the schema unconditionally even though the PROMPT only asks for
+  // it when the character has ambitions: a tool schema is a fixed contract
+  // negotiated once per backend identity, not per turn, and every field here
+  // is optional. A character with no ambitions is simply never told to fill it
+  // in, and the parse treats absent and "none" identically.
+  'serves_ambition': _strField(
+    'The number of the ambition the proposed objective is a step toward, or '
+    '"none". Only asked for when the character has ambitions.',
+  ),
   'fixation_topic': _strField(
     'An intrusive thought the character keeps returning to, or "none".',
   ),

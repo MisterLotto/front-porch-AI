@@ -69,6 +69,7 @@ extension _RealismEvalSupport on RealismEvals {
     // Parse JSON once (both keys live in the same payload) rather than twice.
     String fixationRaw = '';
     String objectiveRaw = '';
+    String servesRaw = '';
     try {
       final noFence = text.replaceAll(RegExp(r'```(?:json)?\s*|\s*```', dotAll: true), ' ').trim();
       final si = noFence.indexOf('{');
@@ -78,6 +79,7 @@ extension _RealismEvalSupport on RealismEvals {
         if (obj is Map) {
           if (obj['fixation_topic'] != null) fixationRaw = obj['fixation_topic'].toString().trim();
           if (obj['proposed_objective'] != null) objectiveRaw = obj['proposed_objective'].toString().trim();
+          if (obj['serves_ambition'] != null) servesRaw = obj['serves_ambition'].toString().trim();
         }
       }
     } catch (_) {}
@@ -90,6 +92,12 @@ extension _RealismEvalSupport on RealismEvals {
     if (objectiveRaw.isEmpty) {
       final m2 = RegExp('"proposed_objective"\\s*:\\s*"([^"]*)"', dotAll: true).firstMatch(text);
       objectiveRaw = m2?.group(1)?.trim() ?? '';
+    }
+    if (servesRaw.isEmpty) {
+      // Same regex floor the other two fields get. Unquoted is allowed here
+      // because a model asked for "the NUMBER" often answers with a bare 2.
+      final m3 = RegExp('"serves_ambition"\\s*:\\s*"?([^",}]*)"?', dotAll: true).firstMatch(text);
+      servesRaw = m3?.group(1)?.trim() ?? '';
     }
     // Objectives off ⇒ the character does not get to start new quests. The
     // eval already ran (it carries fixation too), so this costs nothing extra;
@@ -120,6 +128,13 @@ extension _RealismEvalSupport on RealismEvals {
           objectiveRaw,
           isPrimary: becomesPrimary,
           autoGenerateTasks: true,
+          // Resolved against the SAME roster the prompt numbered, so "2" here
+          // and "2" there are the same ambition. Null when the model said
+          // none, answered junk, or was never asked (no ambitions).
+          servedAmbition: RealismPromptBuilder.resolveServedAmbition(
+            servesRaw,
+            getAmbitions?.call() ?? const [],
+          ),
         );
       }
     }

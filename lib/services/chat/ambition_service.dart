@@ -144,6 +144,7 @@ class AmbitionService {
     required String characterName,
     required String objectiveText,
     required List<String> ambitions,
+    String? servedAmbition,
     int? storyDay,
     String? storyClock,
   }) async {
@@ -155,24 +156,52 @@ class AmbitionService {
           .toList();
       if (open.isEmpty) return;
 
+      // v46 — the proposal may already have recorded which ambition this quest
+      // was a step toward (objectives.served_ambition). When it did, asking the
+      // model "which one?" a second time is a worse question, not a cheaper
+      // one: it re-guesses from the finished text alone, having lost the
+      // context that produced the quest. So the tag picks the ambition and the
+      // eval rules only on the SIZE of the step.
+      //
+      // Ignored when the tagged ambition is already achieved or no longer on
+      // the card (the author edited the list after the quest was proposed) —
+      // then this falls through to the original question, which is also the
+      // path every user-typed and pre-v46 objective takes.
+      final tagged = servedAmbition != null && open.contains(servedAmbition)
+          ? servedAmbition
+          : null;
+
       final numbered = [
         for (var i = 0; i < open.length; i++)
           '${i + 1}. ${open[i]} (${stageWord(progress[open[i]] ?? 0)})',
       ].join('\n');
       final raw = await fireEval(
-        '$characterName just completed: "$objectiveText"\n\n'
-        '$characterName\'s long-term ambitions:\n$numbered\n\n'
-        'Did completing that meaningfully advance one of these ambitions? '
-        'Judge strictly — most objectives advance nothing.\n'
-        'Answer with EXACTLY one line: NONE, or the ambition number followed '
-        'by the size of the step (small, solid, or major). Example: "2 solid". '
-        'Nothing else.',
+        tagged != null
+            ? '$characterName just completed: "$objectiveText"\n\n'
+                  'That quest was taken up in service of this ambition:\n'
+                  '1. $tagged (${stageWord(progress[tagged] ?? 0)})\n\n'
+                  'How far did completing it actually move $characterName toward '
+                  'that ambition? Judge strictly — finishing a quest is not the '
+                  'same as arriving.\n'
+                  'Answer with EXACTLY one line: NONE if it turned out not to '
+                  'advance the ambition at all, otherwise "1" followed by the '
+                  'size of the step (small, solid, or major). Example: '
+                  '"1 solid". Nothing else.'
+            : '$characterName just completed: "$objectiveText"\n\n'
+                  '$characterName\'s long-term ambitions:\n$numbered\n\n'
+                  'Did completing that meaningfully advance one of these ambitions? '
+                  'Judge strictly — most objectives advance nothing.\n'
+                  'Answer with EXACTLY one line: NONE, or the ambition number followed '
+                  'by the size of the step (small, solid, or major). Example: "2 solid". '
+                  'Nothing else.',
       );
-      final advance = parseAdvance(raw, open.length);
+      // A tagged prompt offers exactly one numbered ambition, so the answer is
+      // parsed against a roster of one and resolves back to that ambition.
+      final advance = parseAdvance(raw, tagged != null ? 1 : open.length);
       if (advance == null) return;
 
       final (idx, amount) = advance;
-      final ambition = open[idx - 1];
+      final ambition = tagged ?? open[idx - 1];
       final before = progress[ambition] ?? 0;
       final after = (before + amount).clamp(0, 100);
       await _writeProgress(

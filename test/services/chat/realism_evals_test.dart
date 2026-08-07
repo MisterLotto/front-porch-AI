@@ -65,7 +65,12 @@ RealismEvals createTestRealismEvals({
   String Function(CharacterCard card)? dossierFn,
   Objective? Function()? primaryFn,
   List<Objective> Function()? objectivesFn,
-  Future<void> Function(String, {bool isPrimary, bool autoGenerateTasks})?
+  Future<void> Function(
+    String, {
+    bool isPrimary,
+    bool autoGenerateTasks,
+    String? servedAmbition,
+  })?
   setObjFn,
   Future<String?> Function(String, {void Function(String)? onChunk})? fireFn,
   Future<LlmToolResponse?> Function(String, List<Map<String, dynamic>>)?
@@ -197,7 +202,8 @@ RealismEvals createTestRealismEvals({
     getActiveObjectives: objectivesFn ?? () => <Objective>[],
     setObjective:
         setObjFn ??
-        (text, {isPrimary = false, autoGenerateTasks = false}) async {},
+        (text, {isPrimary = false, autoGenerateTasks = false, servedAmbition})
+            async {},
     verifyRealismOutput: verifyFn,
   );
 }
@@ -284,7 +290,7 @@ void main() {
       () async {
         String lastObj = '';
         final svc = createTestRealismEvals(
-          setObjFn: (t, {isPrimary = false, autoGenerateTasks = false}) async {
+          setObjFn: (t, {isPrimary = false, autoGenerateTasks = false, servedAmbition}) async {
             lastObj = t;
           },
           fireFn: (p, {onChunk}) async =>
@@ -419,7 +425,7 @@ void main() {
     test('proposed "none" does not call setObjective', () async {
       bool called = false;
       final svc = createTestRealismEvals(
-        setObjFn: (t, {isPrimary = false, autoGenerateTasks = false}) async {
+        setObjFn: (t, {isPrimary = false, autoGenerateTasks = false, servedAmbition}) async {
           called = true;
         },
         fireFn: (p, {onChunk}) async =>
@@ -436,7 +442,7 @@ void main() {
         bool? lastAutoGen;
         final svc = createTestRealismEvals(
           primaryFn: () => null,
-          setObjFn: (t, {isPrimary = false, autoGenerateTasks = false}) async {
+          setObjFn: (t, {isPrimary = false, autoGenerateTasks = false, servedAmbition}) async {
             lastIsPrimary = isPrimary;
             lastAutoGen = autoGenerateTasks;
           },
@@ -467,7 +473,7 @@ void main() {
         );
         final svc = createTestRealismEvals(
           primaryFn: () => primary,
-          setObjFn: (t, {isPrimary = false, autoGenerateTasks = false}) async {
+          setObjFn: (t, {isPrimary = false, autoGenerateTasks = false, servedAmbition}) async {
             lastIsPrimary = isPrimary;
           },
           fireFn: (p, {onChunk}) async =>
@@ -484,7 +490,7 @@ void main() {
         bool? lastIsPrimary;
         final svc = createTestRealismEvals(
           primaryFn: () => null,
-          setObjFn: (t, {isPrimary = false, autoGenerateTasks = false}) async {
+          setObjFn: (t, {isPrimary = false, autoGenerateTasks = false, servedAmbition}) async {
             lastIsPrimary = isPrimary;
           },
           fireFn: (p, {onChunk}) async =>

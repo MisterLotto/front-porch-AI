@@ -101,6 +101,10 @@ extension ChatServiceObjectives on ChatService {
     CharacterCard? targetCharacter,
     bool autoGenerateTasks = false,
     bool recordTurnOps = false,
+    /// v46 — the ambition this quest is a step toward, or null for one that
+    /// serves none. Only the autonomous proposal paths pass it; a quest the
+    /// user typed has no eval behind it to say which mountain it climbs.
+    String? servedAmbition,
   }) async {
     if (goal.trim().isEmpty) return;
     if (_currentSessionId == null) return;
@@ -183,6 +187,7 @@ extension ChatServiceObjectives on ChatService {
         chatId: drift.Value(_currentSessionId),
         active: const drift.Value(true),
         isPrimary: drift.Value(isPrimary),
+        servedAmbition: drift.Value(servedAmbition),
       ),
     );
     if (recordTurnOps) {

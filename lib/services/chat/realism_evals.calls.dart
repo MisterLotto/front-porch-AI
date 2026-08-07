@@ -328,6 +328,7 @@ extension RealismEvalCalls on RealismEvals {
           dossier: dossier,
           recent: recent,
           primaryObjective: primary?.objective,
+          ambitions: getAmbitions?.call() ?? const [],
           toolsMode: toolsMode,
         );
     final prompt = buildPrompt(toolsMode: false);

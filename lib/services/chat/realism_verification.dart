@@ -541,7 +541,12 @@ class RealismVerification {
         ? 'Classic $kind: prior rejected. Output scene-supported deltas.'
         : '';
     final structHint = (kind == 'narrative')
-        ? ' Preserve full shape: include "proposed_objective" ("none" or short goal) and "fixation_topic" (persistent lingering/intrusive thought or "none"). Only correct unsupported values; keep well-supported fixations.'
+        // "serves_ambition" is named for the same reason "is_climax" is named
+        // below: the Director REWRITES this text and the rewrite is what gets
+        // parsed, so a field omitted here is a field the parse never sees. Drop
+        // it and every Director-verified proposal loses its ambition tag —
+        // silently, and only in chats that have verification switched on.
+        ? ' Preserve full shape: include "proposed_objective" ("none" or short goal), "serves_ambition" (the ambition number the objective serves, or "none" — carry it through unchanged unless you changed the objective itself) and "fixation_topic" (persistent lingering/intrusive thought or "none"). Only correct unsupported values; keep well-supported fixations.'
         : (kind == 'needs_impact')
             // "is_climax" is named explicitly because the Director REWRITES this
             // text and the rewrite is what gets parsed. Dropping the verdict here

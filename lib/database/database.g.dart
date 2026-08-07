@@ -12289,6 +12289,17 @@ class $ObjectivesTable extends Objectives
     requiredDuringInsert: false,
     defaultValue: const Constant(4),
   );
+  static const VerificationMeta _servedAmbitionMeta = const VerificationMeta(
+    'servedAmbition',
+  );
+  @override
+  late final GeneratedColumn<String> servedAmbition = GeneratedColumn<String>(
+    'served_ambition',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -12312,6 +12323,7 @@ class $ObjectivesTable extends Objectives
     isPrimary,
     checkFrequency,
     injectionDepth,
+    servedAmbition,
     createdAt,
   ];
   @override
@@ -12392,6 +12404,15 @@ class $ObjectivesTable extends Objectives
         ),
       );
     }
+    if (data.containsKey('served_ambition')) {
+      context.handle(
+        _servedAmbitionMeta,
+        servedAmbition.isAcceptableOrUnknown(
+          data['served_ambition']!,
+          _servedAmbitionMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -12443,6 +12464,10 @@ class $ObjectivesTable extends Objectives
         DriftSqlType.int,
         data['${effectivePrefix}injection_depth'],
       )!,
+      servedAmbition: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}served_ambition'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -12466,6 +12491,23 @@ class Objective extends DataClass implements Insertable<Objective> {
   final bool isPrimary;
   final int checkFrequency;
   final int injectionDepth;
+
+  /// v46 — the ambition this objective is a step toward, stored as the
+  /// ambition's TEXT (the same string the card authors and the journal
+  /// progress cards key on), or NULL for a situational quest that serves no
+  /// long-term goal.
+  ///
+  /// Nullable with no default on purpose: NULL is a real, common answer, not
+  /// a missing value. Ambition (the mountain) → Objectives (the switchbacks)
+  /// → Tasks (the steps); most switchbacks are on the mountain, but life
+  /// happens and some are not.
+  ///
+  /// Text and not an index: ambitions live in the card's `ambitions` list,
+  /// which the author can reorder or edit at any time, so a stored index
+  /// would silently start pointing at a different goal. The text is what
+  /// AmbitionService already keys progress on, so the two agree by
+  /// construction.
+  final String? servedAmbition;
   final DateTime createdAt;
   const Objective({
     required this.id,
@@ -12477,6 +12519,7 @@ class Objective extends DataClass implements Insertable<Objective> {
     required this.isPrimary,
     required this.checkFrequency,
     required this.injectionDepth,
+    this.servedAmbition,
     required this.createdAt,
   });
   @override
@@ -12493,6 +12536,9 @@ class Objective extends DataClass implements Insertable<Objective> {
     map['is_primary'] = Variable<bool>(isPrimary);
     map['check_frequency'] = Variable<int>(checkFrequency);
     map['injection_depth'] = Variable<int>(injectionDepth);
+    if (!nullToAbsent || servedAmbition != null) {
+      map['served_ambition'] = Variable<String>(servedAmbition);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -12510,6 +12556,9 @@ class Objective extends DataClass implements Insertable<Objective> {
       isPrimary: Value(isPrimary),
       checkFrequency: Value(checkFrequency),
       injectionDepth: Value(injectionDepth),
+      servedAmbition: servedAmbition == null && nullToAbsent
+          ? const Value.absent()
+          : Value(servedAmbition),
       createdAt: Value(createdAt),
     );
   }
@@ -12529,6 +12578,7 @@ class Objective extends DataClass implements Insertable<Objective> {
       isPrimary: serializer.fromJson<bool>(json['isPrimary']),
       checkFrequency: serializer.fromJson<int>(json['checkFrequency']),
       injectionDepth: serializer.fromJson<int>(json['injectionDepth']),
+      servedAmbition: serializer.fromJson<String?>(json['servedAmbition']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -12545,6 +12595,7 @@ class Objective extends DataClass implements Insertable<Objective> {
       'isPrimary': serializer.toJson<bool>(isPrimary),
       'checkFrequency': serializer.toJson<int>(checkFrequency),
       'injectionDepth': serializer.toJson<int>(injectionDepth),
+      'servedAmbition': serializer.toJson<String?>(servedAmbition),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -12559,6 +12610,7 @@ class Objective extends DataClass implements Insertable<Objective> {
     bool? isPrimary,
     int? checkFrequency,
     int? injectionDepth,
+    Value<String?> servedAmbition = const Value.absent(),
     DateTime? createdAt,
   }) => Objective(
     id: id ?? this.id,
@@ -12570,6 +12622,9 @@ class Objective extends DataClass implements Insertable<Objective> {
     isPrimary: isPrimary ?? this.isPrimary,
     checkFrequency: checkFrequency ?? this.checkFrequency,
     injectionDepth: injectionDepth ?? this.injectionDepth,
+    servedAmbition: servedAmbition.present
+        ? servedAmbition.value
+        : this.servedAmbition,
     createdAt: createdAt ?? this.createdAt,
   );
   Objective copyWithCompanion(ObjectivesCompanion data) {
@@ -12589,6 +12644,9 @@ class Objective extends DataClass implements Insertable<Objective> {
       injectionDepth: data.injectionDepth.present
           ? data.injectionDepth.value
           : this.injectionDepth,
+      servedAmbition: data.servedAmbition.present
+          ? data.servedAmbition.value
+          : this.servedAmbition,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -12605,6 +12663,7 @@ class Objective extends DataClass implements Insertable<Objective> {
           ..write('isPrimary: $isPrimary, ')
           ..write('checkFrequency: $checkFrequency, ')
           ..write('injectionDepth: $injectionDepth, ')
+          ..write('servedAmbition: $servedAmbition, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -12621,6 +12680,7 @@ class Objective extends DataClass implements Insertable<Objective> {
     isPrimary,
     checkFrequency,
     injectionDepth,
+    servedAmbition,
     createdAt,
   );
   @override
@@ -12636,6 +12696,7 @@ class Objective extends DataClass implements Insertable<Objective> {
           other.isPrimary == this.isPrimary &&
           other.checkFrequency == this.checkFrequency &&
           other.injectionDepth == this.injectionDepth &&
+          other.servedAmbition == this.servedAmbition &&
           other.createdAt == this.createdAt);
 }
 
@@ -12649,6 +12710,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
   final Value<bool> isPrimary;
   final Value<int> checkFrequency;
   final Value<int> injectionDepth;
+  final Value<String?> servedAmbition;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const ObjectivesCompanion({
@@ -12661,6 +12723,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
     this.isPrimary = const Value.absent(),
     this.checkFrequency = const Value.absent(),
     this.injectionDepth = const Value.absent(),
+    this.servedAmbition = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -12674,6 +12737,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
     this.isPrimary = const Value.absent(),
     this.checkFrequency = const Value.absent(),
     this.injectionDepth = const Value.absent(),
+    this.servedAmbition = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -12689,6 +12753,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
     Expression<bool>? isPrimary,
     Expression<int>? checkFrequency,
     Expression<int>? injectionDepth,
+    Expression<String>? servedAmbition,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -12702,6 +12767,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
       if (isPrimary != null) 'is_primary': isPrimary,
       if (checkFrequency != null) 'check_frequency': checkFrequency,
       if (injectionDepth != null) 'injection_depth': injectionDepth,
+      if (servedAmbition != null) 'served_ambition': servedAmbition,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -12717,6 +12783,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
     Value<bool>? isPrimary,
     Value<int>? checkFrequency,
     Value<int>? injectionDepth,
+    Value<String?>? servedAmbition,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -12730,6 +12797,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
       isPrimary: isPrimary ?? this.isPrimary,
       checkFrequency: checkFrequency ?? this.checkFrequency,
       injectionDepth: injectionDepth ?? this.injectionDepth,
+      servedAmbition: servedAmbition ?? this.servedAmbition,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -12765,6 +12833,9 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
     if (injectionDepth.present) {
       map['injection_depth'] = Variable<int>(injectionDepth.value);
     }
+    if (servedAmbition.present) {
+      map['served_ambition'] = Variable<String>(servedAmbition.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -12786,6 +12857,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
           ..write('isPrimary: $isPrimary, ')
           ..write('checkFrequency: $checkFrequency, ')
           ..write('injectionDepth: $injectionDepth, ')
+          ..write('servedAmbition: $servedAmbition, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -21784,6 +21856,7 @@ typedef $$ObjectivesTableCreateCompanionBuilder =
       Value<bool> isPrimary,
       Value<int> checkFrequency,
       Value<int> injectionDepth,
+      Value<String?> servedAmbition,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -21798,6 +21871,7 @@ typedef $$ObjectivesTableUpdateCompanionBuilder =
       Value<bool> isPrimary,
       Value<int> checkFrequency,
       Value<int> injectionDepth,
+      Value<String?> servedAmbition,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -21853,6 +21927,11 @@ class $$ObjectivesTableFilterComposer
 
   ColumnFilters<int> get injectionDepth => $composableBuilder(
     column: $table.injectionDepth,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get servedAmbition => $composableBuilder(
+    column: $table.servedAmbition,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -21916,6 +21995,11 @@ class $$ObjectivesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get servedAmbition => $composableBuilder(
+    column: $table.servedAmbition,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -21964,6 +22048,11 @@ class $$ObjectivesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get servedAmbition => $composableBuilder(
+    column: $table.servedAmbition,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 }
@@ -22008,6 +22097,7 @@ class $$ObjectivesTableTableManager
                 Value<bool> isPrimary = const Value.absent(),
                 Value<int> checkFrequency = const Value.absent(),
                 Value<int> injectionDepth = const Value.absent(),
+                Value<String?> servedAmbition = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ObjectivesCompanion(
@@ -22020,6 +22110,7 @@ class $$ObjectivesTableTableManager
                 isPrimary: isPrimary,
                 checkFrequency: checkFrequency,
                 injectionDepth: injectionDepth,
+                servedAmbition: servedAmbition,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -22034,6 +22125,7 @@ class $$ObjectivesTableTableManager
                 Value<bool> isPrimary = const Value.absent(),
                 Value<int> checkFrequency = const Value.absent(),
                 Value<int> injectionDepth = const Value.absent(),
+                Value<String?> servedAmbition = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ObjectivesCompanion.insert(
@@ -22046,6 +22138,7 @@ class $$ObjectivesTableTableManager
                 isPrimary: isPrimary,
                 checkFrequency: checkFrequency,
                 injectionDepth: injectionDepth,
+                servedAmbition: servedAmbition,
                 createdAt: createdAt,
                 rowid: rowid,
               ),

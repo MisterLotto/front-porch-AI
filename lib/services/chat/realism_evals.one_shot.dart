@@ -88,6 +88,7 @@ extension RealismEvalOneShot on RealismEvals {
           refractoryTurnsLeft: nsfwService.cooldownTurnsRemaining,
           allowedEmotionLabels: labels,
           primaryObjective: primary?.objective,
+          ambitions: getAmbitions?.call() ?? const [],
           toolsMode: toolsMode,
         );
     final prompt = buildPrompt(toolsMode: false);
@@ -203,6 +204,15 @@ extension RealismEvalOneShot on RealismEvals {
               newObj,
               isPrimary: becomesPrimary,
               autoGenerateTasks: true,
+              // Same field, same resolver, same roster as the narrative path —
+              // one-shot must produce a 1:1 equivalent objective or the two
+              // modes disagree about which mountain the quest is on.
+              servedAmbition: RealismPromptBuilder.resolveServedAmbition(
+                RegExp(
+                  r'"serves_ambition"\s*:\s*"?([^",}]*)"?',
+                ).firstMatch(textForOneShot)?.group(1),
+                getAmbitions?.call() ?? const [],
+              ),
             );
           }
         }

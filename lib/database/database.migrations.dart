@@ -761,5 +761,28 @@ extension _AppDatabaseMigrationLadder on AppDatabase {
           // already present (re-run / dual-version)
         }
       }
+
+      if (from < 46) {
+        // v45→v46: which ambition an objective is a step toward
+        // (docs/design/pockets-and-preferences.md Part 3).
+        //
+        // NULLABLE WITH NO DEFAULT, and that is the whole design: every
+        // objective that already exists was proposed before ambitions steered
+        // anything, so "which ambition does it serve" has no honest answer for
+        // them. NULL says exactly that. Backfilling a guess here would put a
+        // wrong "→ open her own bakery" chip under quests the character never
+        // took for that reason.
+        //
+        // Additive and nullable, so a downgrade to a v45 build keeps reading
+        // and writing this table normally — the column is simply ignored.
+        try {
+          await customStatement(
+            'ALTER TABLE objectives ADD COLUMN served_ambition TEXT',
+          );
+          debugPrint('[DB] v46: added objectives.served_ambition');
+        } catch (_) {
+          // already present (re-run / dual-version)
+        }
+      }
   }
 }

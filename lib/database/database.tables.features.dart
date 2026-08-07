@@ -226,6 +226,23 @@ class Objectives extends Table {
   IntColumn get injectionDepth => integer().withDefault(
     const Constant(4),
   )(); // how many messages from end to inject (0=strongest)
+
+  /// v46 — the ambition this objective is a step toward, stored as the
+  /// ambition's TEXT (the same string the card authors and the journal
+  /// progress cards key on), or NULL for a situational quest that serves no
+  /// long-term goal.
+  ///
+  /// Nullable with no default on purpose: NULL is a real, common answer, not
+  /// a missing value. Ambition (the mountain) → Objectives (the switchbacks)
+  /// → Tasks (the steps); most switchbacks are on the mountain, but life
+  /// happens and some are not.
+  ///
+  /// Text and not an index: ambitions live in the card's `ambitions` list,
+  /// which the author can reorder or edit at any time, so a stored index
+  /// would silently start pointing at a different goal. The text is what
+  /// AmbitionService already keys progress on, so the two agree by
+  /// construction.
+  TextColumn get servedAmbition => text().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
   @override

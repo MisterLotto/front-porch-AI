@@ -157,7 +157,9 @@ class _Rig {
       ),
       getPrimaryObjective: () => null,
       getActiveObjectives: () => const <Objective>[],
-      setObjective: (t, {isPrimary = false, autoGenerateTasks = false}) async {},
+      setObjective:
+          (t, {isPrimary = false, autoGenerateTasks = false, servedAmbition})
+              async {},
     );
   }
 

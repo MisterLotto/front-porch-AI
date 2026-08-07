@@ -237,11 +237,36 @@ extension ChatServiceWiringEvals on ChatService {
       ),
       getPrimaryObjective: () => primaryObjective,
       getActiveObjectives: () => _activeObjectives,
-      setObjective: (text, {isPrimary = false, autoGenerateTasks = false}) =>
-          setObjective(
+      // The EVALUATED speaker's ambitions. Realism evals run under speaker
+      // impersonation (_activeCharacter is temporarily whoever is being
+      // scored), so this reads the right character in a group without a
+      // second code path — and it goes through the same public ambitionsFor
+      // merge the sidebar and the web read, so the model and the user can
+      // never be shown different progress.
+      //
+      // Gated on the SAME condition as the per-turn ambition injection
+      // (ambitionsEnabled && objectivesActive), and for the same reason: with
+      // either switch off, nothing can ever move ambition progress, so paying
+      // per turn to steer quests toward a frozen goal bills the user for a
+      // mechanism they turned off. Empty here removes the roster, the steering
+      // paragraph and the serves_ambition field from the prompt entirely.
+      getAmbitions: () =>
+          _activeCharacter == null ||
+              !_storageService.realismSettings.ambitionsEnabled ||
+              !objectivesActive
+          ? const []
+          : ambitionsFor(_activeCharacter!),
+      setObjective:
+          (
+            text, {
+            isPrimary = false,
+            autoGenerateTasks = false,
+            servedAmbition,
+          }) => setObjective(
             text,
             isPrimary: isPrimary,
             autoGenerateTasks: autoGenerateTasks,
+            servedAmbition: servedAmbition,
             // Eval-proposed objectives belong to the turn being generated —
             // record them so regen can roll them back (turn-ops; the UI's
             // direct setObjective calls stay unrecorded).
@@ -348,6 +373,12 @@ extension ChatServiceWiringEvals on ChatService {
             characterName: card.name,
             objectiveText: obj.objective,
             ambitions: ambitions,
+            // v46: if the proposal already said which mountain this quest
+            // climbs, the judge does not have to guess it again — it only has
+            // to rule on how big a step it was. Null for user-typed quests and
+            // for everything created before the column existed, which fall
+            // back to the original "which, if any?" question.
+            servedAmbition: obj.servedAmbition,
             storyDay: _timeService.dayCount,
             storyClock: _timeService.storyClockIso,
           ),

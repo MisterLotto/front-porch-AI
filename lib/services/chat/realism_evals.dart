@@ -302,10 +302,23 @@ class RealismEvals {
   final bool Function()? getObjectivesEnabled;
   final Objective? Function() getPrimaryObjective;
   final List<Objective> Function() getActiveObjectives;
+
+  /// The evaluated speaker's ambitions with live progress — the mountain the
+  /// proposal is asked to find the next switchback on (maintainer ruling
+  /// 2026-08-07: ambitions guide objectives, not the other way around).
+  ///
+  /// Same source the sidebar and the web read, so what the model is shown and
+  /// what the user is shown can never disagree. Empty (a character with no
+  /// ambitions, or the getter absent) means the whole steering block and the
+  /// `serves_ambition` field are omitted from the prompt entirely — that
+  /// character's eval costs exactly what it did before this existed.
+  final List<({String text, int progress})> Function()? getAmbitions;
+
   final Future<void> Function(
     String objectiveText, {
     bool isPrimary,
     bool autoGenerateTasks,
+    String? servedAmbition,
   })
   setObjective;
 
@@ -339,6 +352,7 @@ class RealismEvals {
     this.getObjectivesEnabled,
     required this.getPrimaryObjective,
     required this.getActiveObjectives,
+    this.getAmbitions,
     required this.setObjective,
     this.verifyRealismOutput,
   });

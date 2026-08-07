@@ -162,6 +162,25 @@ maintainer didn't know the editor existed, which is the design verdict.
   for brand-new chats so the removed control has an obvious new home.
 
 ### Ambition-driven objectives (maintainer ruling 2026-08-07 — CORE, not optional)
+
+> **Status 2026-08-07 — the forward direction has SHIPPED (schema v46).** The
+> proposal eval is shown the character's open ambitions with stage words and
+> asked for the next step up the least-advanced one; situational quests stay
+> legal. It returns `serves_ambition`, resolved against the same roster the
+> prompt numbered and stored in `objectives.served_ambition` (TEXT, nullable,
+> no default — NULL is a real answer and the only honest one for pre-v46
+> rows). Both transports and both paths (multi-call + one-shot, JSON + tools)
+> carry it, and the Director's preserve-shape hint names it. A character with
+> no unachieved ambitions gets none of it, at no token cost.
+>
+> The feedback direction also improved: with a tag present, the completion
+> judge is shown only that ambition and rules on the SIZE of the step instead
+> of re-deriving which mountain the finished quest was on. Stale tags
+> (ambition achieved or deleted since) fall back to the original question.
+>
+> STILL OPEN: the UI half — the sidebar chip ("→ open her own bakery") and the
+> active step under each goal in the Ambitions row, desktop AND web.
+
 "Ambitions need to guide the objectives, not the other way around. Ambitions
 are the final overarching goal of the character and that is what they work
 toward bit by bit." The hierarchy is now explicit:

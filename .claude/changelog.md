@@ -10939,3 +10939,75 @@ excluded). YAML parses; the embedded github-script block passes `node --check`.
 Negative check: the seven newly-covered paths were each confirmed UNGUARDED
 under the previous predicate.
 Commit: 3d4e572
+
+## 2026-08-07 — feat(realism): schema v46 + ambitions now steer objective proposals
+
+**Files:** database.tables.features.dart (`Objectives.servedAmbition`),
+database.dart (schemaVersion 46), database.migrations.dart (v45→v46 ladder),
+database.repair.dart, database.g.dart (regenerated — +93 lines, 0 deletions,
+declaration order unchanged); realism_prompt_builder.dart (`_ambitionRoster`,
+`openAmbitions`, `resolveServedAmbition`, `_ambitionSteer`,
+`_servesAmbitionField`, both prompts); realism_tools.dart (`serves_ambition`
+in `_narrativeFields`, which `_oneShotFields` spreads); realism_evals.dart
+(`getAmbitions` callback + widened `setObjective` type);
+realism_evals.calls.dart + realism_evals.one_shot.dart (pass the roster, parse
+the field); realism_evals.support.dart (parse + resolve);
+realism_verification.dart (Director preserve-shape);
+chat_service_objectives.dart (`setObjective(servedAmbition:)`);
+chat_service_wiring_evals.dart (wire `getAmbitions`, pass `obj.servedAmbition`
+into the completion judge); ambition_service.dart (tagged judge branch).
+NEW test/database/served_ambition_migration_test.dart,
+test/services/chat/ambition_steering_test.dart,
+test/services/chat/ambition_tag_judge_test.dart.
+
+**Why:** maintainer ruling 2026-08-07 — "Ambitions need to guide the
+objectives, not the other way around." Before this the arrow only pointed
+backwards: completing a quest ran a judge that MIGHT tick an ambition, but
+nothing ever steered a proposal toward one. Ambition (the mountain) →
+Objectives (the switchbacks) → Tasks (the steps) is now explicit in the
+prompt.
+
+**The column:** `served_ambition` TEXT, nullable, no default. NULL is a real
+answer (a situational quest serves nothing) AND the only honest value for
+every objective that predates the column — a backfill would put a confident
+"→ open her own bakery" chip under quests never taken for that reason. Stored
+as TEXT not an index because the author can reorder or edit the `ambitions`
+list at any time; TEXT is also what AmbitionService already keys progress on,
+so the two agree by construction.
+
+**The drift hazard this design closes:** the prompt NUMBERS a roster and the
+parse turns a number back into an ambition. If those two ever read different
+lists, "2" means one goal going out and another coming back — nothing throws,
+the user just sees a chip naming a goal their quest has nothing to do with.
+So `openAmbitions` (achieved ones dropped) is public and BOTH the roster
+builder and `resolveServedAmbition` call it. Negative-checked by pointing the
+resolver at the unfiltered list: the guard went red with `learn to drive`
+instead of `open her own bakery`.
+
+**Cost:** a character with no ambitions (or none unachieved) gets no roster,
+no steering paragraph and no `serves_ambition` field — the eval costs exactly
+what it did before this existed. Guarded both directions. The wiring is also
+gated on `ambitionsEnabled && objectivesActive`, the SAME condition the
+per-turn ambition injection already carries: with either switch off nothing
+can move ambition progress, so steering quests toward a frozen goal would
+bill the user per turn for a mechanism they turned off — precisely the class
+of bug docs/design/feature-independence.md exists to end.
+
+**Redundancy closed (the overlapping-features rule):** the completion judge
+used to ask "did this advance one of these ambitions, and which?" With a tag
+present that question is not cheaper, it is WORSE — it re-guesses from the
+finished text having lost the context that produced the quest. Tagged quests
+now get a one-ambition prompt asking only about the SIZE of the step. Stale
+tags (ambition since achieved or deleted from the card) fall back to the
+original question, which is also the path every user-typed and pre-v46
+objective takes.
+
+**Protected tests touched — signature only:** one_shot_parity_test.dart and
+realism_evals_test.dart construct `RealismEvals` with no-op `setObjective`
+stubs, which stopped compiling when the callback gained `servedAmbition`.
+Their stubs were widened; no assertion, expectation or test body changed.
+Would need `approved-test-change` if routed through a PR.
+
+**Gates:** analyze 0 · 26 new guards across 3 files, two negative-checked
+(resolver reading the unfiltered list → red; ignoring the tag in the judge →
+red) · regenerated database.g.dart purely additive.

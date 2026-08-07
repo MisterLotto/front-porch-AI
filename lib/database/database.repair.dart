@@ -59,6 +59,11 @@ extension AppDatabaseMaintenance on AppDatabase {
         'chat_id TEXT', // v29 — the one that was actively crashing group objective loads
         'is_primary INTEGER NOT NULL DEFAULT 1', // v20
         'injection_depth INTEGER NOT NULL DEFAULT 4', // safety (was in v8 CREATE + v9 ALTER)
+        // v46 — must match the Table definition and the ladder exactly:
+        // nullable, no default. NULL means "this quest serves no ambition",
+        // which is a real answer and the only honest one for every objective
+        // that predates the column.
+        'served_ambition TEXT',
       ],
       'message_embeddings': [
         // Added to the MessageEmbeddings Table class during the Journal work
