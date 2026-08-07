@@ -227,6 +227,46 @@ class Pockets {
 /// of keys, which is the failure that makes an inventory feature worse than no
 /// inventory feature. Token overlap is the same rule the promise ledger uses to
 /// decide whether a promise is the one already on file.
+/// Which of [names] did the model mean by [to]?
+///
+/// Returns the matched name, or null when nothing matches confidently — and
+/// null is a real answer, not a failure. The whole reason `give` shipped
+/// without transfers was that guessing wrong puts an item in the WRONG
+/// character's pocket, which is invisible and wrong rather than merely
+/// incomplete. So this refuses anything it is not sure about, and the caller
+/// falls back to the old behaviour: the item leaves the giver and goes nowhere.
+///
+/// Deliberately NOT fuzzy. Three passes, each of which can only produce one
+/// answer:
+///   1. exact, case-insensitive ("bob" -> "Bob")
+///   2. first name, when it is unambiguous across the roster ("Bob" -> "Bob
+///      Vance"); skipped entirely if two members share a first name
+///   3. nothing else. Pronouns ("him"), roles ("the barkeep"), the user, and
+///      anyone off-screen all resolve to null on purpose.
+///
+/// Substring matching is what this must never do: "Ann" would match "Joanne",
+/// and a longest-common-prefix rule would hand "Sam"'s coat to "Samantha".
+String? resolveRecipient(String to, List<String> names) {
+  final t = to.trim().toLowerCase();
+  if (t.isEmpty || names.isEmpty) return null;
+
+  for (final n in names) {
+    if (n.trim().toLowerCase() == t) return n;
+  }
+
+  // First names, only where they are unique. A roster with two Bobs gets no
+  // first-name pass at all rather than an arbitrary winner.
+  final firsts = <String, List<String>>{};
+  for (final n in names) {
+    final f = n.trim().split(RegExp(r'\s+')).first.toLowerCase();
+    if (f.isNotEmpty) (firsts[f] ??= []).add(n);
+  }
+  final hit = firsts[t];
+  if (hit != null && hit.length == 1) return hit.single;
+
+  return null;
+}
+
 bool sameItem(String a, String b) {
   String norm(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9 ]'), '');
   final an = norm(a), bn = norm(b);
@@ -264,7 +304,24 @@ bool sameItem(String a, String b) {
 /// keys"), in order, for the message chips. An op that changes nothing returns
 /// nothing — a model reporting that she is still wearing the dress she was
 /// already wearing should not produce a chip.
-List<String> applyPocketOps(Pockets p, Iterable<PocketOpReport> ops) {
+/// Apply [ops] to [p] in place and return the receipt lines for the chips.
+///
+/// [onTransfer] fires when a `give` names a recipient and the item was really
+/// in the giver's possession — it hands over the ITEM AS IT WAS, condition and
+/// all, so a rain-soaked coat arrives rain-soaked. It stays a callback rather
+/// than a return value because this function owns exactly one character's
+/// record; who the other side is, and whether that name resolves to anyone, is
+/// the caller's business (see ChatService._runPocketsPass).
+///
+/// A `give` with no recipient, or with one nobody can resolve, still removes
+/// the item from the giver. That is the floor and it is deliberate: the giver
+/// no longer holding what she handed over is true regardless of whether the
+/// app can work out who took it.
+List<String> applyPocketOps(
+  Pockets p,
+  Iterable<PocketOpReport> ops, {
+  void Function(String to, PocketItem item)? onTransfer,
+}) {
   final receipts = <String>[];
 
   int find(List<PocketItem> list, String name) =>
@@ -316,26 +373,22 @@ List<String> applyPocketOps(Pockets p, Iterable<PocketOpReport> ops) {
         capTo(p.carrying, kMaxCarrying);
         receipts.add('picked up: ${op.item}');
 
-      // KNOWN v1 LIMITATION, deliberately shipped: `give` removes the item
-      // from the giver and does NOT add it to the recipient. In a group that
-      // means Alice handing Bob the keys leaves Bob's record unchanged, and
-      // his next injection will not mention them (Grok, 2026-08-07).
-      //
-      // Transferring properly means resolving a free-text name the model chose
-      // ("Bob", "him", "the barkeep") to a member record, and guessing wrong
-      // would put an item in the WRONG character's pockets — a worse failure
-      // than not moving it, because it is invisible and wrong rather than
-      // merely incomplete. The giver's side is correct today, which is the
-      // half that keeps her from still holding what she handed over.
+      // `give` used to be half a transfer: the item left the giver and reached
+      // nobody, so Alice handing Bob the keys left Bob's record untouched. The
+      // reason was real — resolving a free-text name the model chose to a
+      // member record, and putting the keys in the WRONG character's pocket, is
+      // a worse failure than not moving them, because it is invisible AND
+      // wrong. The fix is not to guess better; it is to only accept a name the
+      // caller can match to a real member, and otherwise keep the old floor.
       case PocketOpKind.drop:
       case PocketOpKind.give:
         final c = find(p.carrying, op.item);
         final w = find(p.worn, op.item);
         if (c == -1 && w == -1) break;
-        if (c != -1) {
-          p.carrying.removeAt(c);
-        } else {
-          p.worn.removeAt(w);
+        // Take the item as it stands, so its condition travels with it.
+        final taken = c != -1 ? p.carrying.removeAt(c) : p.worn.removeAt(w);
+        if (op.kind == PocketOpKind.give && op.to.isNotEmpty) {
+          onTransfer?.call(op.to, taken);
         }
         receipts.add(
           op.kind == PocketOpKind.give && op.to.isNotEmpty

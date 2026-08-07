@@ -79,6 +79,14 @@ class RealismSettings with SettingsBase {
   /// about caution, not cost.
   bool _standingMoodEnabled = false;
 
+  /// Hand-offs between characters in a group (Pockets). Off by default and
+  /// gated on Pockets, because it asks the model for something strictly harder
+  /// than the rest of the record: not just WHAT changed but WHO now has it. A
+  /// model that names the wrong person puts an item in the wrong character's
+  /// pocket — invisible and wrong, rather than merely missing — so this is the
+  /// one part of Pockets that genuinely wants a frontier model.
+  bool _pocketTransfersEnabled = false;
+
   /// Global Objectives switch (v45). Objectives are the character's short-lived
   /// quests; they depend on NOTHING but their own eval cost — not the Realism
   /// Engine, not the Journal — and until now they had no off switch at all,
@@ -132,6 +140,10 @@ class RealismSettings with SettingsBase {
 
   /// See [_standingMoodEnabled]. Free: no model call, ever.
   bool get standingMoodEnabled => _standingMoodEnabled;
+
+  /// See [_pocketTransfersEnabled]. Costs nothing extra — it rides the Pockets
+  /// pass that is already running.
+  bool get pocketTransfersEnabled => _pocketTransfersEnabled;
 
   /// See [_adultThemesExplicit]. The seed is evaluated on READ, not snapshotted
   /// at load: until the user makes an explicit choice, "do you want adult
@@ -192,6 +204,8 @@ class RealismSettings with SettingsBase {
     _pocketsEnabled = prefs?.getBool(k('pockets_enabled')) ?? false;
     _standingMoodEnabled =
         prefs?.getBool(k('standing_mood_enabled')) ?? false;
+    _pocketTransfersEnabled =
+        prefs?.getBool(k('pocket_transfers_enabled')) ?? false;
     _adultThemesExplicit = prefs?.getBool(k('adult_themes_enabled'));
     _realismOneShotEval = prefs?.getBool(k('realism_one_shot_eval')) ?? false;
     _weatherEnabled = prefs?.getBool(k('weather_enabled')) ?? true;
@@ -321,6 +335,12 @@ class RealismSettings with SettingsBase {
   Future<void> setStandingMoodEnabled(bool value) async {
     _standingMoodEnabled = value;
     await prefs?.setBool(k('standing_mood_enabled'), value);
+    notify();
+  }
+
+  Future<void> setPocketTransfersEnabled(bool value) async {
+    _pocketTransfersEnabled = value;
+    await prefs?.setBool(k('pocket_transfers_enabled'), value);
     notify();
   }
 

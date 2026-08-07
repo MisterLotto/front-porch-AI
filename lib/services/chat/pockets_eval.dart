@@ -111,11 +111,15 @@ class PocketsEval {
   /// on, so it carries the current record and the reply and nothing else — no
   /// dossier, no relationship standing, none of the context the realism judges
   /// need. It is a bookkeeping question, not a judgement.
+  /// [others] is the rest of the cast, by name, when hand-offs are on. Empty
+  /// otherwise — and then the model is never invited to name a recipient at
+  /// all, because a `to` nobody can resolve is a `to` that does nothing.
   static String buildPrompt({
     required String charName,
     required Pockets current,
     required String reply,
     required bool toolsMode,
+    List<String> others = const [],
   }) {
     String list(String label, List<PocketItem> items) => items.isEmpty
         ? '$label: (nothing recorded)\n'
@@ -131,7 +135,11 @@ class PocketsEval {
         'Each change is one op:\n'
         '  wear / remove — clothing put on or taken off\n'
         '  pickup / drop — something taken up or set down, lost or thrown away\n'
-        '  give — handed to someone else (name them in "to")\n'
+        '${others.isEmpty ? '  give — handed to someone else\n' : '  give — handed to someone else. Put their name in "to", spelled EXACTLY '
+              'as it appears here: ${others.join(', ')}. If it went to anyone '
+              'else — the person you are talking to, a passer-by, nobody in '
+              'particular — leave "to" empty rather than guessing a name from '
+              'that list.\n'}'
         '  update — the same item, new condition ("state": "half-eaten", '
         '"rain-soaked")\n'
         '  transform — the item BECAME something else ("item": "candy bar", '
@@ -192,6 +200,8 @@ class PocketsEval {
     required String charName,
     required Pockets pockets,
     required String reply,
+    List<String> others = const [],
+    void Function(String to, PocketItem item)? onTransfer,
   }) async {
     if (reply.trim().isEmpty) return const [];
     try {
@@ -203,11 +213,12 @@ class PocketsEval {
           current: pockets,
           reply: reply,
           toolsMode: toolsMode,
+          others: others,
         ),
       );
       final ops = parseOps(raw);
       if (ops.isEmpty) return const [];
-      return applyPocketOps(pockets, ops);
+      return applyPocketOps(pockets, ops, onTransfer: onTransfer);
     } catch (e) {
       // Never surface as a failed turn: the reply already happened and the
       // record simply misses one update. Logged rather than swallowed silently.

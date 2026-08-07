@@ -11434,3 +11434,45 @@ their docs), all of them in one of the two categories above. A comment now says
 so at the site, so the next person to come shrinking does not try and rediscover
 the trap.
 Commit: 4b3683f
+
+## 2026-08-07 — feat(pockets): hand-offs between characters actually transfer
+
+**Files:** pockets.dart (`onTransfer` callback on `applyPocketOps`; NEW
+`resolveRecipient`); pockets_eval.dart (`others` roster in the prompt, threaded
+through `evaluateAndApply`); chat_service_pockets.dart (resolve + deliver);
+realism_settings.dart (`pocketTransfersEnabled`, default OFF);
+porch_life_tab.dart + settings_facade.dart + web PorchLifeSettings.tsx
+(+ assets/web_app rebuilt); NEW test/services/chat/pocket_transfers_test.dart.
+
+**Why:** `give` shipped as half a transfer — the item left the giver and
+reached nobody, so Alice handing Bob the keys left Bob's record untouched. The
+original reasoning was sound and is what shaped this fix: resolving a free-text
+name the model picked, and putting the keys in the WRONG character's pocket, is
+worse than not moving them — invisible AND wrong, where the old behaviour was
+merely incomplete.
+
+**So the fix is not a better guess.** `resolveRecipient` accepts an exact
+(case-insensitive) name, or a first name that is unambiguous across the roster,
+and NOTHING else. No substring matching, no prefix matching, no pronouns, no
+roles. An ambiguous first name ("Bob", with two Bobs) resolves to nobody rather
+than a coin flip. Anything it refuses falls back to the pre-existing floor: the
+item leaves the giver and goes nowhere.
+
+**The model is only asked for what it can answer.** The prompt carries the
+actual roster with exact spellings, and explicitly tells the model to leave
+`to` empty for a hand-off to the user or a passer-by rather than picking the
+nearest name on the list. With transfers off — or in a 1:1, where the only
+other party has no record — the roster is empty and the model is never invited
+to name a recipient at all.
+
+**Item condition travels.** `onTransfer` hands over the PocketItem as it stood,
+so a rain-soaked coat arrives rain-soaked; the record does not launder things.
+
+**Cost:** none. It rides the Pockets pass that is already running. The switch
+is gated on Pockets (`FeatureNeed.needs`, `satisfied: pocketsEnabled`) and the
+copy recommends a frontier model, because naming WHO received something is
+strictly harder than noticing what changed.
+
+**Gates:** analyze 0 · 13 new guards, negative-checked with the fuzzy resolver
+a future contributor would reach for (startsWith/contains) — it hands Sam's
+coat to Samantha and reddens two tests · web lint + 34 tests + build.

@@ -256,6 +256,27 @@ class PorchLifeTab extends StatelessWidget {
               onChanged: realism.setPocketsEnabled,
             ),
             FeatureRow(
+              icon: Icons.swap_horiz,
+              label: 'Hand things between characters',
+              need: FeatureNeed.needs,
+              dependsOn: 'Pockets & Wardrobe',
+              satisfied: realism.pocketsEnabled,
+              blurb:
+                  'In a group chat, when one character hands something to '
+                  'another it actually moves — out of her pocket and into '
+                  'theirs, keeping whatever condition it was in. Without this, '
+                  'a handed-over item simply leaves the giver and reaches no '
+                  'one. Costs nothing extra; it rides the check Pockets is '
+                  'already doing. Best with a frontier model (Claude, GPT, '
+                  'Gemini): it has to name WHO received the thing, which is '
+                  'harder than noticing what changed, and smaller local models '
+                  'often get the name wrong. When the name does not match '
+                  'somebody in the chat, the app declines to guess — the item '
+                  'leaves the giver and goes nowhere, exactly as before.',
+              value: realism.pocketTransfersEnabled,
+              onChanged: realism.setPocketTransfersEnabled,
+            ),
+            FeatureRow(
               icon: Icons.cloud_queue,
               label: 'Standing Mood',
               need: FeatureNeed.alone,

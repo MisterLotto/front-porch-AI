@@ -74,11 +74,56 @@ extension ChatServicePockets on ChatService {
         pocketsFor(charId) ??
         Pockets.fromJson(speaker.frontPorchExtensions?.inventory);
 
+    // Hand-offs (Porch Life -> "Hand things between characters"). Only ever in
+    // a group: in a 1:1 the only other party is the user, who has no record to
+    // put anything into, so the roster stays empty and the model is never
+    // invited to name a recipient.
+    final transfersOn =
+        _storageService.realismSettings.pocketTransfersEnabled &&
+        _activeGroup != null;
+    final others = transfersOn
+        ? [
+            for (final c in _groupCharacters)
+              if (_getCharacterIdFromCard(c) != charId) c.name,
+          ]
+        : const <String>[];
+
+    final handedOver = <String, PocketItem>{};
     final receipts = await _pocketsEval.evaluateAndApply(
       charName: speaker.name,
       pockets: record,
       reply: reply,
+      others: others,
+      onTransfer: transfersOn
+          // Resolve against the roster the model was actually shown. An
+          // unresolvable name is DROPPED, not guessed: the item still leaves
+          // the giver (that much is true either way) and simply reaches
+          // nobody, which is the behaviour every build before this one had.
+          ? (to, item) {
+              final match = resolveRecipient(to, others);
+              if (match != null) handedOver[match] = item;
+            }
+          : null,
     );
+
+    // Apply the arrivals AFTER the giver's own record is settled, so a
+    // hand-off can never be read back out of the giver mid-pass.
+    for (final entry in handedOver.entries) {
+      final matches = _groupCharacters.where((c) => c.name == entry.key);
+      if (matches.isEmpty) continue;
+      final recipient = matches.first;
+      final rid = _getCharacterIdFromCard(recipient);
+      final theirs =
+          pocketsFor(rid) ?? Pockets.fromJson(recipient.frontPorchExtensions?.inventory);
+      theirs.carrying.add(entry.value);
+      while (theirs.carrying.length > kMaxCarrying) {
+        theirs.carrying.removeAt(0);
+      }
+      setPocketsFor(rid, theirs);
+      debugPrint(
+        '[Pockets] ${speaker.name} -> ${recipient.name}: ${entry.value.display}',
+      );
+    }
 
     // Store even when nothing changed: the first turn is what promotes a
     // card-seeded record into the chat, and without this it would be re-seeded

@@ -93,6 +93,8 @@ class SettingsFacade {
         'objectivesEnabled': _storage.realismSettings.objectivesEnabled,
         'pocketsEnabled': _storage.realismSettings.pocketsEnabled,
         'standingMoodEnabled': _storage.realismSettings.standingMoodEnabled,
+        'pocketTransfersEnabled':
+            _storage.realismSettings.pocketTransfersEnabled,
         'adultThemesEnabled': _storage.realismSettings.adultThemesEnabled,
         'weatherEnabled': _storage.realismSettings.weatherEnabled,
         'weatherFahrenheit': _storage.realismSettings.weatherFahrenheit,
@@ -176,6 +178,10 @@ class SettingsFacade {
       final pockets = realism['pocketsEnabled'];
       if (pockets is bool) {
         await _storage.realismSettings.setPocketsEnabled(pockets);
+      }
+      final transfers = realism['pocketTransfersEnabled'];
+      if (transfers is bool) {
+        await _storage.realismSettings.setPocketTransfersEnabled(transfers);
       }
       final mood = realism['standingMoodEnabled'];
       if (mood is bool) {
