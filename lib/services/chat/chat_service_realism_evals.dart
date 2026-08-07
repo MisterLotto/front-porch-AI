@@ -185,6 +185,20 @@ extension ChatServiceRealismEvals on ChatService {
       'activeFixation': _relationshipService.activeFixation,
       'fixationLifespan': _relationshipService.fixationLifespan,
       'spatialStance': _relationshipService.spatialStance,
+      // Pockets & Wardrobe rides the rewind contract like every other
+      // per-turn scalar. Without this a regenerate re-runs the detection pass
+      // on a NEW reply while the record still carries the discarded reply's
+      // changes — she picks the keys up twice, or is left holding something
+      // from a version of the scene that no longer exists. Found in review by
+      // Grok, 2026-08-07, and required by the design doc in as many words.
+      ...(() {
+        final c = _activeCharacter;
+        if (c == null) return const <String, dynamic>{};
+        final p = pocketsFor(_getCharacterIdFromCard(c));
+        return p == null
+            ? const <String, dynamic>{}
+            : {'pockets': p.toJson()};
+      })(),
     };
 
     // Include needs snapshot when the simulation is active (clean port).

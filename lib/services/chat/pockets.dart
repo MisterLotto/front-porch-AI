@@ -205,11 +205,18 @@ class Pockets {
   /// card author writes by hand in `frontPorchExtensions.inventory`.
   static Pockets fromJson(Object? raw) {
     if (raw is! Map) return Pockets();
-    List<PocketItem> list(Object? v) => [
-      for (final e in v is List ? v : const [])
+    // Capped on the way IN, not only in the applier. A card is a stranger's
+    // upload: without this a hostile or careless `inventory` with hundreds of
+    // entries would load whole into session state and be re-serialised every
+    // turn. The applier's own cap only ever ran on ops. (Grok, 2026-08-07.)
+    List<PocketItem> list(Object? v, int max) => [
+      for (final e in (v is List ? v : const []).take(max))
         ?PocketItem.fromJson(e),
     ];
-    return Pockets(worn: list(raw['worn']), carrying: list(raw['carrying']));
+    return Pockets(
+      worn: list(raw['worn'], kMaxWorn),
+      carrying: list(raw['carrying'], kMaxCarrying),
+    );
   }
 }
 
@@ -274,7 +281,17 @@ List<String> applyPocketOps(Pockets p, Iterable<PocketOpReport> ops) {
   for (final op in ops) {
     switch (op.kind) {
       case PocketOpKind.wear:
-        if (find(p.worn, op.item) != -1) break;
+        final alreadyWorn = find(p.worn, op.item);
+        if (alreadyWorn != -1) {
+          // Already on — but the model may be reporting a CHANGE to it ("her
+          // dress is now torn"), and dropping that on the floor was silent
+          // data loss (Grok, 2026-08-07). Nothing to say without a state.
+          if (op.state.isNotEmpty && p.worn[alreadyWorn].state != op.state) {
+            p.worn[alreadyWorn] = p.worn[alreadyWorn].withState(op.state);
+            receipts.add('${op.item}: ${op.state}');
+          }
+          break;
+        }
         final c = find(p.carrying, op.item);
         final item = c != -1
             ? p.carrying.removeAt(c)
@@ -299,6 +316,17 @@ List<String> applyPocketOps(Pockets p, Iterable<PocketOpReport> ops) {
         capTo(p.carrying, kMaxCarrying);
         receipts.add('picked up: ${op.item}');
 
+      // KNOWN v1 LIMITATION, deliberately shipped: `give` removes the item
+      // from the giver and does NOT add it to the recipient. In a group that
+      // means Alice handing Bob the keys leaves Bob's record unchanged, and
+      // his next injection will not mention them (Grok, 2026-08-07).
+      //
+      // Transferring properly means resolving a free-text name the model chose
+      // ("Bob", "him", "the barkeep") to a member record, and guessing wrong
+      // would put an item in the WRONG character's pockets — a worse failure
+      // than not moving it, because it is invisible and wrong rather than
+      // merely incomplete. The giver's side is correct today, which is the
+      // half that keeps her from still holding what she handed over.
       case PocketOpKind.drop:
       case PocketOpKind.give:
         final c = find(p.carrying, op.item);

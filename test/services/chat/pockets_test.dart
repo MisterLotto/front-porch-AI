@@ -168,6 +168,64 @@ void main() {
     });
   });
 
+  group('the fixes review found', () {
+    test('an emptied record stays empty — it does not re-seed from the card', () {
+      // The bug: an EMPTY record used to be stored as ABSENT, and the seed path
+      // reads absence as "never promoted from the card". A character who
+      // dropped everything got her whole starting wardrobe back next turn,
+      // permanently. She could never end a scene empty-handed.
+      final p = Pockets(carrying: [const PocketItem('car keys')]);
+      applyPocketOps(p, [op(PocketOpKind.drop, 'car keys')]);
+      expect(p.isEmpty, isTrue);
+      // Empty must SURVIVE a round trip as empty, not vanish into absence.
+      final back = Pockets.fromJson(p.toJson());
+      expect(back.isEmpty, isTrue);
+      expect(back.carrying, isEmpty);
+    });
+
+    test('a hostile card cannot load hundreds of items', () {
+      // Caps used to run only inside the applier, so a stranger's card with a
+      // huge `inventory` loaded whole into session state and was re-serialised
+      // every turn.
+      final back = Pockets.fromJson({
+        'worn': [for (var i = 0; i < 400; i++) 'w\$i'],
+        'carrying': [for (var i = 0; i < 400; i++) 'c\$i'],
+      });
+      expect(back.worn.length, kMaxWorn);
+      expect(back.carrying.length, kMaxCarrying);
+    });
+
+    test('wearing something already worn still records a new condition', () {
+      // "her dress is now torn" reported as `wear` used to be dropped
+      // silently, because the op short-circuited on "already wearing it".
+      final p = Pockets(worn: [const PocketItem('sundress')]);
+      final r = applyPocketOps(p, [
+        op(PocketOpKind.wear, 'sundress', state: 'torn'),
+      ]);
+      expect(p.worn.single.display, 'sundress (torn)');
+      expect(r, ['sundress: torn']);
+    });
+
+    test('re-wearing with no change still produces no receipt', () {
+      final p = Pockets(worn: [const PocketItem('sundress', state: 'torn')]);
+      final r = applyPocketOps(p, [
+        op(PocketOpKind.wear, 'sundress', state: 'torn'),
+      ]);
+      expect(r, isEmpty);
+    });
+
+    test('give removes from the giver — transfer is a known v1 gap', () {
+      // Pinned so the limitation is visible rather than folklore: the giver's
+      // side is correct, and nothing silently lands in another character.
+      final p = Pockets(carrying: [const PocketItem('car keys')]);
+      final r = applyPocketOps(p, [
+        op(PocketOpKind.give, 'car keys', to: 'Bob'),
+      ]);
+      expect(p.carrying, isEmpty);
+      expect(r, ['gave car keys to Bob']);
+    });
+  });
+
   group('bounds and hostile input', () {
     test('the cap drops the oldest, keeping what the scene is about', () {
       final p = Pockets();

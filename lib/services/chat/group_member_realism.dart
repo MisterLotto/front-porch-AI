@@ -208,7 +208,14 @@ class GroupMemberRealism {
   }
 
   set pockets(Pockets? v) {
-    if (v == null || v.isEmpty) {
+    // An EMPTY record is stored, not removed. Removing it made absence and
+    // emptiness the same thing, and the seed path reads absence as "never
+    // promoted from the card" — so a character who dropped everything had her
+    // whole starting wardrobe reappear next turn, permanently. She could never
+    // end a scene empty-handed. (Grok, 2026-08-07.) Only an explicit null —
+    // meaning "this member has no record at all" — clears the slot, which is
+    // what keeps an untouched member serialising exactly as before.
+    if (v == null) {
       _data.remove(GroupRealismKeys.pockets);
     } else {
       _data[GroupRealismKeys.pockets] = v.toJson();

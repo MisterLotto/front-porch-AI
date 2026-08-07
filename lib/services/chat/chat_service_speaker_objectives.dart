@@ -320,6 +320,18 @@ extension ChatServiceSpeakerObjectives on ChatService {
       _needsSimulation.restoreFromSnapshot(needsData);
     }
 
+    // Pockets & Wardrobe. Restored unconditionally rather than behind the
+    // switch: a snapshot only exists if the feature was on when the turn ran,
+    // and rolling the timeline back must put the record where it was even if
+    // the user has since toggled Pockets off and on again.
+    final pocketsSnap = state['pockets'];
+    if (pocketsSnap is Map && _activeCharacter != null) {
+      setPocketsFor(
+        _getCharacterIdFromCard(_activeCharacter!),
+        Pockets.fromJson(pocketsSnap),
+      );
+    }
+
     debugPrint(
       '[Realism] Engine state successfully rolled back to match timeline.',
     );

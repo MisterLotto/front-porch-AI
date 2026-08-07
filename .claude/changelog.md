@@ -3,6 +3,43 @@
 
 # Changelog
 
+## 2026-08-07 — feat(pockets): Pockets & Wardrobe v1, complete
+- **Files changed:** `lib/services/chat/pockets.dart` (new), `pockets_eval.dart` (new),
+  `chat_service_pockets.dart` (new), `prompt_injection/inventory_injection.dart` (new),
+  `lib/ui/chat_components/sidebar/character_state/pockets_row.dart` (new),
+  `group_member_realism.dart`, `chat_service.dart`, `chat_service_wiring_evals.dart`,
+  `chat_service_wiring_injection.dart`, `chat_service_generation_postgen.dart`,
+  `chat_service_realism_evals.dart`, `chat_service_speaker_objectives.dart`,
+  `realism_settings.dart`, `character_card.dart`, `porch_life_tab.dart`,
+  `message_bubble.realism.dart`, `character_state_group.dart`,
+  `settings_facade.dart`, `chat_tools_facade.dart`, `PorchLifeSettings.tsx`,
+  `ChatTools.tsx`, `styles.css`, `assets/web_app/*` (rebuilt), 4 new test files
+- **Why:** docs/design/pockets-and-preferences.md Part 1. No AI chat app keeps clothing or
+  carried-item state straight because nothing STORES it — it is prose that scrolls out of
+  context. Same shape the app already solves three times (Needs, Journal, story clock).
+- **Its OWN eval, settled ruling:** the earlier plan had it ride the needs-impact pass as one
+  extra field ("zero new calls"). Retracted — that carrier opens with
+  `if (!getNeedsSimEnabled() || !getRealismEnabled())` and realismEnabled defaults FALSE, so
+  Pockets would have done nothing on a default install. Shares transport, not another
+  feature's call.
+- **Default OFF**, one gate, copy states the per-turn cost. Depends on nothing.
+- **Grok review found 4 real defects, all fixed:** (1) no regen rewind — a regenerate re-ran
+  the pass while the record still held the discarded reply's changes, double-applying;
+  pockets now ride the realism_state snapshot/restore contract like every other per-turn
+  scalar, which the design doc had specified and I had missed. (2) An emptied record was
+  stored as ABSENT, and the seed path reads absence as "never promoted from the card" — so a
+  character who dropped everything got her whole starting wardrobe back next turn, forever.
+  (3) Caps ran only in the applier, so a hostile card's `inventory` loaded whole into session
+  state. (4) `wear` of an already-worn item silently dropped a new condition.
+- **Dismissed 3 as excerpt artifacts** (default off, injection gated, web shipped — all
+  verified present) and documented `give`-does-not-transfer as a deliberate v1 limitation:
+  resolving a free-text recipient name to a member record would put items in the WRONG
+  character's pockets when it guessed wrong, which is worse than incomplete.
+- **Verification:** analyze clean; 3043 unit tests; 94 Linux goldens unchanged; tsc + 34
+  vitest; npm run build. Every guard negative-checked.
+- **Commit:** _(pending)_
+
+
 ## 2026-08-07 — feat(realism): the ambition→objective link finally has a reader (Part 3 UI half)
 - **Files changed:** `lib/services/chat/ambition_service.dart`,
   `lib/ui/chat_components/sidebar/character_state/ambitions_row.dart`,
