@@ -46,6 +46,7 @@ export 'needs_simulation.dart';
 export 'nsfw_service.dart';
 export 'objective_proposal.dart';
 export 'pockets.dart';
+export 'pockets_eval.dart';
 export 'pass_support.dart';
 export 'porch_memory_import.dart';
 export 'porch_memory_mailbox.dart';

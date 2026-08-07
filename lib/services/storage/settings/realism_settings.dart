@@ -50,6 +50,24 @@ class RealismSettings with SettingsBase {
   /// eval already drives the clock for free and this flag is ignored.
   bool _standaloneClockEnabled = false;
 
+  /// Pockets & Wardrobe — whether the app tracks what a character is wearing
+  /// and carrying (docs/design/pockets-and-preferences.md Part 1).
+  ///
+  /// Defaults FALSE, and unlike most switches here that is not caution — it is
+  /// the ruling. Pockets runs its OWN post-generation eval, so it bills a short
+  /// model request on every turn it is on, and the standing rule set by the
+  /// standalone story clock applies: a feature that spends a call per turn is
+  /// opt-in, because that is the user's money to spend and not ours. The
+  /// toggle copy says so in as many words.
+  ///
+  /// Depends on NOTHING. Not the Realism Engine, not Needs, not the Journal,
+  /// not Objectives. Pockets is a record plus an injection plus an applier, and
+  /// the settled design ruling is explicit that a dependency here would be a
+  /// regression rather than a simplification — the earlier plan had it ride the
+  /// needs-impact eval, which is gated behind BOTH Realism and Needs and so
+  /// would have done nothing at all on a default install.
+  bool _pocketsEnabled = false;
+
   /// Global Objectives switch (v45). Objectives are the character's short-lived
   /// quests; they depend on NOTHING but their own eval cost — not the Realism
   /// Engine, not the Journal — and until now they had no off switch at all,
@@ -97,6 +115,9 @@ class RealismSettings with SettingsBase {
 
   /// See [_objectivesEnabled]. The switch Objectives never had.
   bool get objectivesEnabled => _objectivesEnabled;
+
+  /// See [_pocketsEnabled]. Costs one short model call per turn while on.
+  bool get pocketsEnabled => _pocketsEnabled;
 
   /// See [_adultThemesExplicit]. The seed is evaluated on READ, not snapshotted
   /// at load: until the user makes an explicit choice, "do you want adult
@@ -154,6 +175,7 @@ class RealismSettings with SettingsBase {
     _standaloneClockEnabled =
         prefs?.getBool(k('standalone_clock_enabled')) ?? false;
     _objectivesEnabled = prefs?.getBool(k('objectives_enabled')) ?? true;
+    _pocketsEnabled = prefs?.getBool(k('pockets_enabled')) ?? false;
     _adultThemesExplicit = prefs?.getBool(k('adult_themes_enabled'));
     _realismOneShotEval = prefs?.getBool(k('realism_one_shot_eval')) ?? false;
     _weatherEnabled = prefs?.getBool(k('weather_enabled')) ?? true;
@@ -271,6 +293,12 @@ class RealismSettings with SettingsBase {
   Future<void> setObjectivesEnabled(bool value) async {
     _objectivesEnabled = value;
     await prefs?.setBool(k('objectives_enabled'), value);
+    notify();
+  }
+
+  Future<void> setPocketsEnabled(bool value) async {
+    _pocketsEnabled = value;
+    await prefs?.setBool(k('pockets_enabled'), value);
     notify();
   }
 
