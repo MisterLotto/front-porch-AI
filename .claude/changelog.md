@@ -37,7 +37,7 @@
   character's pockets when it guessed wrong, which is worse than incomplete.
 - **Verification:** analyze clean; 3043 unit tests; 94 Linux goldens unchanged; tsc + 34
   vitest; npm run build. Every guard negative-checked.
-- **Commit:** _(pending)_
+- **Commit:** `15b40fdd`
 
 
 ## 2026-08-07 — feat(realism): the ambition→objective link finally has a reader (Part 3 UI half)
