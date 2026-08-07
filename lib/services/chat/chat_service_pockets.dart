@@ -25,6 +25,34 @@ part of '../chat_service.dart';
 /// generation pipeline, because the pipeline part is already long and this is
 /// self-contained: read the speaker's record, ask what changed, write it back.
 extension ChatServicePockets on ChatService {
+  /// Strike one item off by hand. The detection eval is a model doing
+  /// bookkeeping; when it misses, this is what stops a wrong entry becoming
+  /// permanent. Routed through the same setter the pass uses, so there is no
+  /// second write path.
+  Future<void> removePocketItem(
+    String characterId, {
+    required bool worn,
+    required int index,
+  }) async {
+    final p = pocketsFor(characterId);
+    if (p == null) return;
+    final list = worn ? p.worn : p.carrying;
+    if (index < 0 || index >= list.length) return;
+    list.removeAt(index);
+    setPocketsFor(characterId, p);
+    await _saveChat();
+    notifyListeners();
+  }
+
+  /// Persist [p] back to wherever that character's record lives.
+  void setPocketsFor(String characterId, Pockets p) {
+    if (_activeGroup == null) {
+      _pockets = p;
+      return;
+    }
+    (_groupRealism[characterId] ??= GroupMemberRealism()).pockets = p;
+  }
+
   /// Runs the detection pass for the speaker who just replied.
   ///
   /// Gated HERE and nowhere else, so there is exactly one place the feature is

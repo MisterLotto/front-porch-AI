@@ -11402,3 +11402,34 @@ silent data loss.
 **Scope note:** the converter is shared by every eval, which is why this is its
 own commit rather than folded into the Afterglow fix.
 Commit: 55daadb
+
+## 2026-08-07 — chore: repair 21 damaged AGPL headers; leaf the movable shell state
+
+**Files:** 21 .dart files across lib/ + test/ (licence text); chat_service.dart
+(−26 lines) + chat_service_pockets.dart (the moved members).
+
+**Licence.** 20 files carried `// the Software Foundation, either version 3` —
+"Free" dropped from the AGPL notice — and generation_status_bar.dart carried a
+literal `// ... full standard header ...` placeholder instead of the notice at
+all. Both repaired; a sweep now confirms every .dart file mentioning the AGPL
+carries the full "Free Software Foundation" line. Text only, no code touched.
+
+**Shell.** 977 → 951, so 49 lines of headroom under the CI-enforced 1,000
+ratchet. `removePocketItem` and `setPocketsFor` moved into the existing pockets
+part.
+
+**What could NOT move, and why it is written into the file:**
+- `_pockets`, `_pocketsEval`, `_climaxEval` are FIELDS. A Dart extension cannot
+  declare instance state, so there is no version of this that moves them.
+- `pocketsFor`, `characterIdFor` and `standingMoodSummary` are FAKE-PINNED —
+  the golden harness's `FakeChatService implements ChatService` overrides them,
+  and extension members are statically dispatched, so an extension version
+  would reach ChatService privates from the fake and throw mid-build. That is
+  the `objectivesActive` failure: an 87% pixel diff on character_state, an
+  error box where the panel belongs.
+
+Climax and Standing Mood were already leaves — between them they contribute 8
+lines to the shell (two part directives, one late final, one forwarder and
+their docs), all of them in one of the two categories above. A comment now says
+so at the site, so the next person to come shrinking does not try and rediscover
+the trap.

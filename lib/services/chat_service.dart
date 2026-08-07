@@ -599,12 +599,32 @@ class ChatService extends ChangeNotifier {
 
   /// The Pockets detection pass. Its own eval by design — see PocketsEval.
   late final _pocketsEval = _buildPocketsEval();
+
+  /// Afterglow's climax check. Its own pass — see ClimaxEval.
   late final _climaxEval = _buildClimaxEval();
 
   /// The 1:1 speaker's pockets. In a group each member's record lives in their
   /// `_groupRealism` slot instead, which is what keeps it session-scoped and
   /// deleted with the chat; this scalar is the same record for the host.
   Pockets? _pockets;
+
+  // WHY THESE THREE STAY IN THE SHELL while the rest of Pockets, Climax and
+  // Standing Mood live in `chat/chat_service_{pockets,climax,mood}.dart`:
+  //
+  //   * `_pockets`, `_pocketsEval`, `_climaxEval` are FIELDS, and a Dart
+  //     extension cannot declare instance state. There is no version of this
+  //     that moves them.
+  //   * `pocketsFor` and `characterIdFor` (and `standingMoodSummary` further
+  //     down) are FAKE-PINNED: the golden harness's
+  //     `FakeChatService implements ChatService` overrides them, and extension
+  //     members are statically dispatched, so an extension version would reach
+  //     into ChatService privates from the fake and throw mid-build. That is
+  //     exactly how `objectivesActive` produced an 87% pixel diff on
+  //     character_state — an error box where the panel should be.
+  //
+  // Everything that was neither a field nor fake-pinned HAS been moved out.
+  // If you are here to shrink this file further, the remaining lines are load
+  // bearing; look at a different feature.
 
   /// The record for [characterId], whichever mode the chat is in — the ONE
   /// read every Pockets surface uses, so 1:1 and group cannot diverge about
@@ -617,34 +637,6 @@ class ChatService extends ChangeNotifier {
   /// The stable id for a card, exposed so UI can look a record up without
   /// reaching for a private. Same resolver every Pockets surface uses.
   String characterIdFor(CharacterCard c) => _getCharacterIdFromCard(c);
-
-  /// Strike one item off by hand. The detection eval is a model doing
-  /// bookkeeping; when it misses, this is what stops a wrong entry becoming
-  /// permanent. Routed through the same setter the pass uses, so there is no
-  /// second write path.
-  Future<void> removePocketItem(
-    String characterId, {
-    required bool worn,
-    required int index,
-  }) async {
-    final p = pocketsFor(characterId);
-    if (p == null) return;
-    final list = worn ? p.worn : p.carrying;
-    if (index < 0 || index >= list.length) return;
-    list.removeAt(index);
-    setPocketsFor(characterId, p);
-    await _saveChat();
-    notifyListeners();
-  }
-
-  /// Persist [p] back to wherever that character's record lives.
-  void setPocketsFor(String characterId, Pockets p) {
-    if (_activeGroup == null) {
-      _pockets = p;
-      return;
-    }
-    (_groupRealism[characterId] ??= GroupMemberRealism()).pockets = p;
-  }
 
   // ── Promise & debt ledger (Train B) — builder in chat_service_wiring_memory.dart ──
   late final _promiseDebtService = _buildPromiseDebtService();
