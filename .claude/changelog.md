@@ -67,7 +67,7 @@
   `RealismFormSection — enabled/light+dark`, reproduced identically on a pristine `origin/Rawhide`
   worktree (0.17%, ~1419px) — PRE-EXISTING on Rawhide, not from this change, and deliberately not
   "fixed" here since the baseline is protected and the cause is unrelated.**
-- **Commit hash:** (pending)
+- **Commit hash:** f719416
 
 ## 2026-08-06 — fix(e2e): the REAL macOS stoop failure — a lazy ListView, not the field race
 - **Files changed:** `integration_test/stoop_test.dart`
