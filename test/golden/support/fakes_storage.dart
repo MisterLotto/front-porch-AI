@@ -44,6 +44,7 @@ import 'package:flutter/material.dart';
 import 'package:front_porch_ai/services/storage/settings/backend_settings.dart';
 import 'package:front_porch_ai/services/storage/settings/generation_settings.dart';
 import 'package:front_porch_ai/services/storage/settings/image_gen_settings.dart';
+import 'package:front_porch_ai/services/storage/settings/realism_settings.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 
 /// Minimal [StorageService] double. Implements only the getters that widget
@@ -188,6 +189,17 @@ class FakeStorageService extends ChangeNotifier implements StorageService {
   String get drawThingsGrpcHost => '';
   @override
   int get drawThingsGrpcPort => 8080;
+
+  // The character editor and both creators read the realism settings SUB-OBJECT
+  // in build() to decide whether the 18+ "Intimate preferences" chip section is
+  // shown. Same reasoning as imageGenSettings above and objectivesEnabled below
+  // — a member the real class grew but the fake did not falls through to
+  // noSuchMethod and throws while BUILDING the page, taking down tests that have
+  // nothing to do with preferences. A real instance carries production defaults
+  // (18+ off), so the section stays hidden and existing goldens are unmoved.
+  @override
+  RealismSettings get realismSettings => _realismSettings;
+  final _realismSettings = RealismSettings();
 
   // Porch Life reads this in build(). Added with the v45 Objectives switch:
   // this fake tracks StorageService's surface, and a getter the real class

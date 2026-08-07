@@ -17,18 +17,24 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:front_porch_ai/models/models.dart';
+import 'speaker_resolution.dart';
 import 'package:front_porch_ai/services/chat/promise_debt_service.dart';
 
 /// Words-only fragment: open commitments weighing on the speaker (Train B).
 /// Empty when none. Never lists numbers, statuses, or quest-log chrome —
 /// one short line the model can feel, not a checklist.
-class PromiseDebtInjection {
+class PromiseDebtInjection with SpeakerCardResolver {
   final PromiseDebtService promiseDebtService;
   final String? Function() getSessionId;
+  @override
   final CharacterCard? Function() getActiveCharacter;
+  @override
   final bool Function() getIsGroupNonObserverMode;
+  @override
   final String Function() getCurrentSpeakerIdForRealism;
+  @override
   final List<CharacterCard> Function() getGroupCharacters;
+  @override
   final String Function(CharacterCard) getCharacterIdFromCard;
   final String Function() getUserName;
 
@@ -43,18 +49,8 @@ class PromiseDebtInjection {
     required this.getUserName,
   });
 
-  CharacterCard? _speakerCard() {
-    if (getIsGroupNonObserverMode()) {
-      final id = getCurrentSpeakerIdForRealism();
-      return getGroupCharacters()
-          .where((c) => getCharacterIdFromCard(c) == id)
-          .firstOrNull;
-    }
-    return getActiveCharacter();
-  }
-
   String buildPromiseDebtInjection() {
-    final card = _speakerCard();
+    final card = speakerCard();
     final sessionId = getSessionId();
     if (card == null || sessionId == null) return '';
     final charId = getCharacterIdFromCard(card);

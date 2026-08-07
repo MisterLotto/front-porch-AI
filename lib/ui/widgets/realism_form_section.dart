@@ -19,7 +19,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/chip_list_editor.dart';
+import 'package:front_porch_ai/ui/widgets/identity_chip_lists.dart';
 import 'package:front_porch_ai/ui/widgets/story_begins_row.dart';
 
 /// Shared Realism Engine configuration form.
@@ -63,6 +63,20 @@ class RealismFormSection extends StatelessWidget {
   /// rendered rather than rendered empty and dead.
   final List<String>? ambitions;
   final ValueChanged<List<String>>? onAmbitionsChanged;
+
+  /// Likes & Dislikes, and the 18+ pair — same optional-pair convention as
+  /// [ambitions]: pass values + callback or the section is absent, so surfaces
+  /// that predate these fields keep compiling and rendering unchanged.
+  /// [showIntimate] carries the install's adult-themes switch.
+  final List<String>? likes;
+  final ValueChanged<List<String>>? onLikesChanged;
+  final List<String>? dislikes;
+  final ValueChanged<List<String>>? onDislikesChanged;
+  final List<String>? intimateInto;
+  final ValueChanged<List<String>>? onIntimateIntoChanged;
+  final List<String>? intimateNotInto;
+  final ValueChanged<List<String>>? onIntimateNotIntoChanged;
+  final bool showIntimate;
 
   // Realism Verification (Director/Verifier) toggle — shown under Optional Features like other optionals.
   // Sliders for max reprocesses + strictness live in the Details dialog (right-click edit); form surfaces the toggle for creator/edit flows.
@@ -112,6 +126,15 @@ class RealismFormSection extends StatelessWidget {
     required this.onChaosModeChanged,
     this.ambitions,
     this.onAmbitionsChanged,
+    this.likes,
+    this.onLikesChanged,
+    this.dislikes,
+    this.onDislikesChanged,
+    this.intimateInto,
+    this.onIntimateIntoChanged,
+    this.intimateNotInto,
+    this.onIntimateNotIntoChanged,
+    this.showIntimate = false,
     required this.realismVerificationEnabled,
     required this.onRealismVerificationChanged,
     this.showVerificationToggle = true,
@@ -683,36 +706,23 @@ class RealismFormSection extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          // ── Ambitions (approved sketch §4) ──
-          // "Ambitions — long-term goals, one per chip (replaces 'Current
-          // Task / Quest' in this editor)". The mountain, not the next step:
-          // quests are per-chat and live in the sidebar's Objectives panel.
-          if (ambitions != null && onAmbitionsChanged != null) ...[
-            _sectionHeader(Icons.flag, 'Ambitions', AppColors.taskAccent),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.cardOf(context),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.borderOf(context)),
-              ),
-              child: ChipListEditor(
-                label: 'Long-term goals',
-                accent: true,
-                values: ambitions!,
-                onChanged: onAmbitionsChanged!,
-                hintText: 'e.g. open her own bakery',
-                helper:
-                    'What this character is working toward across the whole '
-                    'story. They colour how the character steers a scene, and '
-                    'they inch forward when objectives complete. Not a to-do '
-                    'list — quests live in the chat sidebar.',
-              ),
-            ),
-            const SizedBox(height: 20),
-          ],
-
+          // The card-authored identity lists — Ambitions, Likes & Dislikes,
+          // and the 18+ pair. All chips, all optional, all in one leaf
+          // (identity_chip_lists.dart) so this file stops growing a section
+          // per field.
+          IdentityChipLists(
+            ambitions: ambitions,
+            onAmbitionsChanged: onAmbitionsChanged,
+            likes: likes,
+            onLikesChanged: onLikesChanged,
+            dislikes: dislikes,
+            onDislikesChanged: onDislikesChanged,
+            intimateInto: intimateInto,
+            onIntimateIntoChanged: onIntimateIntoChanged,
+            intimateNotInto: intimateNotInto,
+            onIntimateNotIntoChanged: onIntimateNotIntoChanged,
+            showIntimate: showIntimate,
+          ),
         ],
       ],
     );

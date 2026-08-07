@@ -109,6 +109,10 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
 
   /// Long-term ambitions (approved sketch §4) — a list, not newline text.
   List<String> _realismAmbitions = const [];
+  List<String> _realismLikes = const [];
+  List<String> _realismDislikes = const [];
+  List<String> _realismIntimateInto = const [];
+  List<String> _realismIntimateNotInto = const [];
   bool _realismVerificationEnabled = false;
   int _realismVerificationMaxReprocesses = 1;
   int _realismVerificationStrictness = 3;

@@ -28,6 +28,13 @@ export interface RealismValues {
   currentTask: string;
   /** Long-term goals, one per chip (approved sketch §4). */
   ambitions: string[];
+  // Likes & Dislikes, and the 18+ pair. Flat over this bridge (the Dart side's
+  // frontPorchFromFields expects camelCase keys); the CARD nests the intimate
+  // pair under intimate_preferences, which is the Dart model's business.
+  likes: string[];
+  dislikes: string[];
+  intimateInto: string[];
+  intimateNotInto: string[];
   realismVerificationEnabled: boolean;
   realismVerificationMaxReprocesses: number;
   realismVerificationStrictness: number;
@@ -67,6 +74,10 @@ export const REALISM_DEFAULTS: RealismValues = {
   chaosModeEnabled: false,
   currentTask: '',
   ambitions: [],
+  likes: [],
+  dislikes: [],
+  intimateInto: [],
+  intimateNotInto: [],
   realismVerificationEnabled: false,
   realismVerificationMaxReprocesses: 1,
   realismVerificationStrictness: 3,

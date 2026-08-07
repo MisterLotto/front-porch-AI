@@ -22,6 +22,7 @@ import 'package:front_porch_ai/services/chat/prompt_injection/behavioral_injecti
 import 'package:front_porch_ai/services/chat/prompt_injection/emotion_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/needs_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/nsfw_injection.dart';
+import 'package:front_porch_ai/services/chat/prompt_injection/preferences_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/promise_debt_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/relationship_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/time_injection.dart';
@@ -71,6 +72,7 @@ class RealismStateInjection {
   final TimeInjection timeInjection;
   final WeatherInjection weatherInjection;
   final AmbitionInjection ambitionInjection;
+  final PreferencesInjection preferencesInjection;
   final PromiseDebtInjection promiseDebtInjection;
   final BehavioralInjection behavioralInjection;
   final NsfwInjection nsfwInjection;
@@ -127,6 +129,7 @@ class RealismStateInjection {
     this.getAmbitionsEnabled,
     this.getPromisesEnabled,
     required this.ambitionInjection,
+    required this.preferencesInjection,
     required this.promiseDebtInjection,
     required this.behavioralInjection,
     required this.nsfwInjection,
@@ -211,6 +214,11 @@ class RealismStateInjection {
       if (_characterStateEnabled) nsfwInjection.buildNsfwCooldownInjection(),
       if (getAmbitionsEnabled?.call() ?? true)
         ambitionInjection.buildAmbitionInjection(),
+      // Likes & Dislikes. UNGATED on purpose — see the class doc on
+      // PreferencesInjection: acting on a taste is characterisation, not
+      // scoring, so it must survive the Realism Engine being off. It
+      // self-gates on the card carrying any.
+      preferencesInjection.buildPreferencesInjection(),
       if (getPromisesEnabled?.call() ?? true)
         promiseDebtInjection.buildPromiseDebtInjection(),
       if (_characterStateEnabled)

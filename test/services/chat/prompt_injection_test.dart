@@ -28,6 +28,7 @@ import 'package:front_porch_ai/services/chat/prompt_injection/behavioral_injecti
 import 'package:front_porch_ai/services/chat/prompt_injection/time_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/weather_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/ambition_injection.dart';
+import 'package:front_porch_ai/services/chat/prompt_injection/preferences_injection.dart';
 import 'package:front_porch_ai/services/chat/prompt_injection/promise_debt_injection.dart';
 import 'package:front_porch_ai/services/chat/ambition_service.dart';
 import 'package:front_porch_ai/services/chat/promise_debt_service.dart';
@@ -663,6 +664,18 @@ void main() {
           getCurrentSpeakerIdForRealism: () => '',
           getGroupCharacters: () => const [],
           getCharacterIdFromCard: (c) => c.name,
+        ),
+        // Preferences off in composer tests — the active char carries no
+        // likes/dislikes, so the fragment contributes '' and the block shape
+        // stays identical (weather/ambition precedent). Preference-on paths
+        // live in preferences_injection_test.dart.
+        preferencesInjection: PreferencesInjection(
+          getActiveCharacter: () => active,
+          getIsGroupNonObserverMode: () => false,
+          getCurrentSpeakerIdForRealism: () => '',
+          getGroupCharacters: () => const [],
+          getCharacterIdFromCard: (c) => c.name,
+          getNsfwEnabled: () => false,
         ),
         // Promises off in composer tests — null session → '' (ambition/weather
         // precedent). Promise-on paths live in promise_debt_service_test.dart.

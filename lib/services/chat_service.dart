@@ -48,20 +48,7 @@ import 'package:front_porch_ai/services/memory_service.dart';
 import 'package:front_porch_ai/database/database.dart' hide AvatarImage, World;
 import 'package:front_porch_ai/services/expression_classifier.dart'; // top-level for ExpressionClassifierService type in @Dep shim (pre-existing)
 import 'package:front_porch_ai/services/live_gen_progress.dart';
-import 'package:front_porch_ai/services/chat/prompt_injection/author_note_builder.dart';
-import 'package:front_porch_ai/services/chat/prompt_injection/relationship_injection.dart';
-import 'package:front_porch_ai/services/chat/prompt_injection/emotion_injection.dart';
-import 'package:front_porch_ai/services/chat/prompt_injection/behavioral_injection.dart';
-import 'package:front_porch_ai/services/chat/prompt_injection/time_injection.dart';
-import 'package:front_porch_ai/services/chat/prompt_injection/weather_injection.dart';
-import 'package:front_porch_ai/services/chat/prompt_injection/world_injection.dart';
-import 'package:front_porch_ai/services/chat/prompt_injection/ambition_injection.dart';
-import 'package:front_porch_ai/services/chat/prompt_injection/promise_debt_injection.dart';
-import 'package:front_porch_ai/services/chat/prompt_injection/nsfw_injection.dart';
-import 'package:front_porch_ai/services/chat/prompt_injection/chaos_injection.dart';
-import 'package:front_porch_ai/services/chat/prompt_injection/needs_injection.dart';
-import 'package:front_porch_ai/services/chat/prompt_injection/realism_state_injection.dart';
-import 'package:front_porch_ai/services/chat/prompt_injection/journal_injection.dart';
+import 'package:front_porch_ai/services/chat/prompt_injection/prompt_injection.dart';
 import 'package:front_porch_ai/services/macro_resolver.dart';
 import 'package:drift/drift.dart' as drift;
 
@@ -599,6 +586,9 @@ class ChatService extends ChangeNotifier {
       _ambitionsForImpl(card);
 
   late final _ambitionInjection = _buildAmbitionInjection();
+
+  /// Likes & Dislikes fragment — NOT realism-gated (see PreferencesInjection).
+  late final _preferencesInjection = _buildPreferencesInjection();
 
   // ── Promise & debt ledger (Train B) — builder in chat_service_wiring_memory.dart ──
   late final _promiseDebtService = _buildPromiseDebtService();

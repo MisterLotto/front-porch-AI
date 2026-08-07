@@ -102,6 +102,17 @@ FrontPorchExtensions frontPorchFromFields(
     chaosModeEnabled: asBool('chaosModeEnabled', b.chaosModeEnabled),
     currentTask: asStr('currentTask', b.currentTask),
     ambitions: asStrList('ambitions', b.ambitions),
+    likes: asStrList('likes', b.likes),
+    dislikes: asStrList('dislikes', b.dislikes),
+    // The 18+ pair travels FLAT over this bridge (`intimateInto` /
+    // `intimateNotInto`) even though the CARD nests it under
+    // `intimate_preferences`. This bridge is the web editor's own wire format,
+    // not the portable card JSON — every other field here is flat camelCase,
+    // and nesting one pair would earn a special case in asStrList for nothing.
+    // CharacterCard.toJson still emits the nested object, so what ships to The
+    // Stoop is unchanged.
+    intimateInto: asStrList('intimateInto', b.intimateInto),
+    intimateNotInto: asStrList('intimateNotInto', b.intimateNotInto),
 
     // Realism verification (Director/Verifier).
     realismVerificationEnabled: asBool(
@@ -158,6 +169,10 @@ Map<String, dynamic> frontPorchToJson(FrontPorchExtensions e) => {
   'chaosModeEnabled': e.chaosModeEnabled,
   'currentTask': e.currentTask,
   'ambitions': e.ambitions,
+  'likes': e.likes,
+  'dislikes': e.dislikes,
+  'intimateInto': e.intimateInto,
+  'intimateNotInto': e.intimateNotInto,
   'realismVerificationEnabled': e.realismVerificationEnabled,
   'realismVerificationMaxReprocesses': e.realismVerificationMaxReprocesses,
   'realismVerificationStrictness': e.realismVerificationStrictness,

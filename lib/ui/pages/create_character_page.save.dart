@@ -70,6 +70,10 @@ extension _CreateCharacterSave on _CreateCharacterPageState {
         needsSimEnabled: _realismNeedsSim,
         enjoysLowHygiene: _realismEnjoysLowHygiene,
         ambitions: _realismAmbitions,
+        likes: _realismLikes,
+        dislikes: _realismDislikes,
+        intimateInto: _realismIntimateInto,
+        intimateNotInto: _realismIntimateNotInto,
         realismVerificationEnabled: _realismVerificationEnabled,
         realismVerificationMaxReprocesses: _realismVerificationMaxReprocesses,
         realismVerificationStrictness: _realismVerificationStrictness,
@@ -208,6 +212,10 @@ extension _CreateCharacterSave on _CreateCharacterPageState {
       _realismNsfwCooldown = false;
       _realismChaosMode = false;
       _realismAmbitions = const [];
+      _realismLikes = const [];
+      _realismDislikes = const [];
+      _realismIntimateInto = const [];
+      _realismIntimateNotInto = const [];
       _realismVerificationEnabled = false;
       _realismVerificationMaxReprocesses = 1;
       _realismVerificationStrictness = 3;

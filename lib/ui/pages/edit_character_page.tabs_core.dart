@@ -239,24 +239,31 @@ extension _EditCharacterCoreTabs on _EditCharacterPageState {
               ),
               const SizedBox(height: 20),
 
-              // ── Ambitions (Living Time §6) ──
-              // Chips, not a newline-encoded TextField: this is who the
-              // character IS, and the approved sketch gives it one goal per
+              // ── The card-authored identity lists (Living Time §6 +
+              //    Likes & Dislikes) ──
+              // Chips, not newline-encoded TextFields: this is who the
+              // character IS, and the approved sketch gives it one phrase per
               // chip. See ChipListEditor for why the old shape misled authors.
-              ChipListEditor(
-                label: 'Ambitions',
-                accent: true,
-                values: _ambitions,
-                onChanged: (v) => rebuildState(() => _ambitions = v),
-                hintText: 'e.g. open her own bakery',
-                helper:
-                    'The long-term goals that define this character — the '
-                    'mountain, not the next step. They colour how the '
-                    'character steers a scene, and they inch forward when '
-                    'objectives complete. Not a to-do list: quests live in '
-                    'the chat sidebar.',
+              // One shared widget (identity_chip_lists.dart) so the editor,
+              // both creators and the web form cannot drift apart.
+              IdentityChipLists(
+                ambitions: _ambitions,
+                onAmbitionsChanged: (v) =>
+                    rebuildState(() => _ambitions = v),
+                likes: _likes,
+                onLikesChanged: (v) => rebuildState(() => _likes = v),
+                dislikes: _dislikes,
+                onDislikesChanged: (v) => rebuildState(() => _dislikes = v),
+                intimateInto: _intimateInto,
+                onIntimateIntoChanged: (v) =>
+                    rebuildState(() => _intimateInto = v),
+                intimateNotInto: _intimateNotInto,
+                onIntimateNotIntoChanged: (v) =>
+                    rebuildState(() => _intimateNotInto = v),
+                // The install's 18+ master switch — the same one that shows
+                // or hides the After Dark group in Settings.
+                showIntimate: adultThemesEnabledOf(context),
               ),
-              const SizedBox(height: 20),
 
               // ── Realism Engine Summary ── (hidden for group members, whose
               // realism/needs are group state edited in Group Settings)

@@ -22,7 +22,17 @@ import {
 
 type Patch = (patch: Partial<RealismValues>) => void;
 
-export function RealismFormSection({ v, set }: { v: RealismValues; set: Patch }) {
+export function RealismFormSection({
+  v,
+  set,
+  showIntimate = false,
+}: {
+  v: RealismValues;
+  set: Patch;
+  /// The install's 18+ master switch, mirroring desktop: the intimate pair is
+  /// absent (not disabled) unless the user opted into 18+ themes.
+  showIntimate?: boolean;
+}) {
   return (
     <div className="realism-section">
       <ToggleRow
@@ -172,6 +182,42 @@ export function RealismFormSection({ v, set }: { v: RealismValues; set: Patch })
             placeholder="e.g. open her own bakery"
             helper="What this character is working toward across the whole story. They colour how the character steers a scene, and they inch forward when objectives complete. Not a to-do list — quests live in the chat sidebar."
           />
+          {/* ── Likes & Dislikes ── mirrors identity_chip_lists.dart. Two
+              plain (non-accent) chip lists, exactly as the sketch draws them. */}
+          <ChipList
+            label="Drawn to"
+            values={v.likes}
+            onChange={(a) => set({ likes: a })}
+            placeholder="e.g. thunderstorms"
+            helper="Small, specific things this character warms to. They colour how she reacts to what is already happening — and, with the Realism Engine on, how much a moment moves her."
+          />
+          <ChipList
+            label="Put off by"
+            values={v.dislikes}
+            onChange={(a) => set({ dislikes: a })}
+            placeholder="e.g. being interrupted"
+            helper="What makes her bristle. Phrases, not paragraphs — one thing per chip reads best in a scene."
+          />
+
+          {/* The 18+ pair, only for an install that asked for it. */}
+          {showIntimate && (
+            <>
+              <ChipList
+                label="Warms to"
+                values={v.intimateInto}
+                onChange={(a) => set({ intimateInto: a })}
+                placeholder="e.g. slow mornings"
+                helper="Suggestive tastes for 18+ scenes. These stay out of the prompt entirely unless 18+ themes are switched on."
+              />
+              <ChipList
+                label="Not interested in"
+                values={v.intimateNotInto}
+                onChange={(a) => set({ intimateNotInto: a })}
+                placeholder="e.g. an audience"
+              />
+            </>
+          )}
+
           {/* Ambitions replaced the "Current task / quest" textarea here, exactly
               as on desktop. `currentTask` stays in RealismValues (seeded from
               /detail, sent straight back on save) so a card authored before the

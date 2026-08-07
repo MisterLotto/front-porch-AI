@@ -119,6 +119,13 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   /// with the card; per-chat progress lives in the Journal.
   // Ambitions are a LIST, not newline-encoded text (see ChipListEditor).
   List<String> _ambitions = const [];
+
+  /// Likes & Dislikes and the 18+ pair — card-authored identity, same shape
+  /// and same chip editor as [_ambitions].
+  List<String> _likes = const [];
+  List<String> _dislikes = const [];
+  List<String> _intimateInto = const [];
+  List<String> _intimateNotInto = const [];
   final ValueNotifier<int> _tokenNotifier = ValueNotifier<int>(0);
 
   // ── Realism Engine state ──
@@ -267,6 +274,18 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     _ambitions = List<String>.from(
       widget.character.frontPorchExtensions?.ambitions ?? const [],
     );
+    _likes = List<String>.from(
+      widget.character.frontPorchExtensions?.likes ?? const [],
+    );
+    _dislikes = List<String>.from(
+      widget.character.frontPorchExtensions?.dislikes ?? const [],
+    );
+    _intimateInto = List<String>.from(
+      widget.character.frontPorchExtensions?.intimateInto ?? const [],
+    );
+    _intimateNotInto = List<String>.from(
+      widget.character.frontPorchExtensions?.intimateNotInto ?? const [],
+    );
 
     _tabController = TabController(length: 4, vsync: this);
 
@@ -413,6 +432,22 @@ class _EditCharacterPageState extends State<EditCharacterPage>
         enjoysLowHygiene: _realismEnjoysLowHygiene,
         ambitions: [
           for (final a in _ambitions)
+            if (a.trim().isNotEmpty) a.trim(),
+        ],
+        likes: [
+          for (final a in _likes)
+            if (a.trim().isNotEmpty) a.trim(),
+        ],
+        dislikes: [
+          for (final a in _dislikes)
+            if (a.trim().isNotEmpty) a.trim(),
+        ],
+        intimateInto: [
+          for (final a in _intimateInto)
+            if (a.trim().isNotEmpty) a.trim(),
+        ],
+        intimateNotInto: [
+          for (final a in _intimateNotInto)
             if (a.trim().isNotEmpty) a.trim(),
         ],
         currentTask: _realismCurrentTask,

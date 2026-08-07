@@ -154,6 +154,27 @@ class RealismStep extends StatelessWidget {
                   state.realismAmbitions = v;
                   state.notify();
                 },
+                likes: state.realismLikes,
+                onLikesChanged: (v) {
+                  state.realismLikes = v;
+                  state.notify();
+                },
+                dislikes: state.realismDislikes,
+                onDislikesChanged: (v) {
+                  state.realismDislikes = v;
+                  state.notify();
+                },
+                intimateInto: state.realismIntimateInto,
+                onIntimateIntoChanged: (v) {
+                  state.realismIntimateInto = v;
+                  state.notify();
+                },
+                intimateNotInto: state.realismIntimateNotInto,
+                onIntimateNotIntoChanged: (v) {
+                  state.realismIntimateNotInto = v;
+                  state.notify();
+                },
+                showIntimate: adultThemesEnabledOf(context),
                 realismVerificationEnabled: state.realismVerificationEnabled,
                 onRealismVerificationChanged: (v) {
                   state.realismVerificationEnabled = v;

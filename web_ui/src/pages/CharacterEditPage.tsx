@@ -15,6 +15,7 @@ import { AltGreetingsEditor } from '../components/AltGreetingsEditor';
 import { MacroField } from '../components/MacroField';
 import { LoreEntriesEditor, type LoreEntry } from '../components/LoreEntriesEditor';
 import { RealismFormSection } from '../components/realism/RealismFormSection';
+import { useAdultThemes } from '../components/realism/useAdultThemes';
 import { NeedsFormSection } from '../components/realism/NeedsFormSection';
 import { TokenBadge } from '../components/realism/controls';
 import { type RealismValues, realismFromDetail } from '../components/realism/realismTypes';
@@ -55,6 +56,7 @@ const FIELDS: { key: keyof CharDetail; label: string; rows: number }[] = [
 ];
 
 export function CharacterEditPage() {
+  const adultThemes = useAdultThemes();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [c, setC] = useState<CharDetail | null>(null);
@@ -251,7 +253,7 @@ export function CharacterEditPage() {
       )}
 
       <h3 className="section-label">Realism Engine</h3>
-      <RealismFormSection v={rv} set={patch} />
+      <RealismFormSection v={rv} set={patch} showIntimate={adultThemes} />
 
       <h3 className="section-label">Needs Simulation</h3>
       <NeedsFormSection v={rv} set={patch} />

@@ -94,6 +94,18 @@ extension _CreateCharacterRealismStep on _CreateCharacterPageState {
                 ambitions: _realismAmbitions,
                 onAmbitionsChanged: (v) =>
                     rebuildState(() => _realismAmbitions = v),
+                likes: _realismLikes,
+                onLikesChanged: (v) => rebuildState(() => _realismLikes = v),
+                dislikes: _realismDislikes,
+                onDislikesChanged: (v) =>
+                    rebuildState(() => _realismDislikes = v),
+                intimateInto: _realismIntimateInto,
+                onIntimateIntoChanged: (v) =>
+                    rebuildState(() => _realismIntimateInto = v),
+                intimateNotInto: _realismIntimateNotInto,
+                onIntimateNotIntoChanged: (v) =>
+                    rebuildState(() => _realismIntimateNotInto = v),
+                showIntimate: adultThemesEnabledOf(context),
                 realismVerificationEnabled: _realismVerificationEnabled,
                 onRealismVerificationChanged: (v) =>
                     rebuildState(() => _realismVerificationEnabled = v),

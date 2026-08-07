@@ -401,6 +401,22 @@ extension ChatServiceWiringInjection on ChatService {
     );
   }
 
+  PreferencesInjection _buildPreferencesInjection() {
+    return PreferencesInjection(
+      getActiveCharacter: () => _activeCharacter,
+      getIsGroupNonObserverMode: () => (_activeGroup != null && !_observerMode),
+      getCurrentSpeakerIdForRealism: _getCurrentSpeakerIdForRealism,
+      getGroupCharacters: () => _groupCharacters,
+      getCharacterIdFromCard: _getCharacterIdFromCard,
+      // The install's 18+ master switch — the SAME one that shows or hides
+      // the After Dark group in Settings. A card may carry intimate
+      // preferences; with 18+ off they stay out of the prompt entirely rather
+      // than relying on the model's discretion.
+      getNsfwEnabled: () =>
+          _storageService.realismSettings.adultThemesEnabled,
+    );
+  }
+
   PromiseDebtInjection _buildPromiseDebtInjection() {
     return PromiseDebtInjection(
       promiseDebtService: _promiseDebtService,
@@ -475,6 +491,7 @@ extension ChatServiceWiringInjection on ChatService {
       timeInjection: _timeInjection,
       weatherInjection: _weatherInjection,
       ambitionInjection: _ambitionInjection,
+      preferencesInjection: _preferencesInjection,
       promiseDebtInjection: _promiseDebtInjection,
       behavioralInjection: _behavioralInjection,
       nsfwInjection: _nsfwInjection,
