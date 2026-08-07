@@ -38,6 +38,8 @@ interface PorchLifeState {
   weatherEnabled: boolean;
   weatherFahrenheit: boolean;
   journalEnabled: boolean;
+  characterEvolutionEnabled: boolean;
+  adultThemesEnabled: boolean;
   dreamsEnabled: boolean;
   promiseLedgerEnabled: boolean;
   ambitionsEnabled: boolean;
@@ -59,6 +61,8 @@ const DEFAULTS: PorchLifeState = {
   weatherEnabled: true,
   weatherFahrenheit: false,
   journalEnabled: true,
+  characterEvolutionEnabled: false,
+  adultThemesEnabled: false,
   dreamsEnabled: true,
   promiseLedgerEnabled: true,
   ambitionsEnabled: true,
@@ -201,6 +205,7 @@ export function PorchLifeSettings() {
   // Objectives depend on nothing but their own eval cost; Ambitions hang off
   // them, since finishing a quest is the only thing that moves progress.
   const objectivesOn = st.objectivesEnabled;
+  const adultOn = st.adultThemesEnabled;
   // Weather and dreams gate on the Passage of Time FLAG, deliberately not on
   // whether the clock is currently moving — gating on the latter greys Story
   // Weather out again with the engine off, which is the dead-switch problem
@@ -232,16 +237,6 @@ export function PorchLifeSettings() {
           blurb="Hunger, energy, comfort and the rest, Sims-style — they drift through a scene and colour how the character feels. The engine is what turns a need into a mood, so needs run with it or not at all. Individual chats can still switch them off in the sidebar."
           value={st.needsSimDefault}
           onChange={(v) => set('needsSimDefault', v)}
-        />
-        <FeatureRow
-          icon="🔥"
-          label="Afterglow"
-          need="needs"
-          dependsOn="the Realism Engine"
-          satisfied={engineOn}
-          blurb="Desire builds through a scene and settles afterwards instead of resetting — so intimacy keeps a believable rhythm and a character is not instantly ready to go again. The engine is what scores desire, so this cannot run without it. (18+ themes only.)"
-          value={st.nsfwCooldownDefault}
-          onChange={(v) => set('nsfwCooldownDefault', v)}
         />
       </FeatureGroup>
 
@@ -328,6 +323,14 @@ export function PorchLifeSettings() {
           onChange={(v) => set('promiseLedgerEnabled', v)}
         />
         <FeatureRow
+          icon="🌱"
+          label="Growth Rings"
+          need="alone"
+          blurb="Slow character evolution — rings, not rewrites. What they live through is added as a new layer instead of overwriting who they were."
+          value={st.characterEvolutionEnabled}
+          onChange={(v) => set('characterEvolutionEnabled', v)}
+        />
+        <FeatureRow
           icon="🎯"
           label="Objectives"
           need="alone"
@@ -374,6 +377,25 @@ export function PorchLifeSettings() {
       <div className="pl-note">
         Chaos Mode and Growth Rings are set per chat rather than globally — open a chat and use its sidebar to switch them for that story.
       </div>
+      {/* After Dark — the approved sketch gives the 18+ feature its own group,
+          "shown only when 18+ themes are enabled": absent, not greyed out, for
+          anyone who has not asked for adult content. The master switch is in
+          desktop Settings → General so it stays reachable while this is hidden. */}
+      {adultOn && (
+        <FeatureGroup title="After Dark" subtitle="shown only when 18+ themes are on">
+          <FeatureRow
+            icon="🔥"
+            label="Afterglow"
+            need="needs"
+            dependsOn="Realism's arousal"
+            satisfied={engineOn}
+            blurb="Desire builds through a scene and settles afterwards instead of resetting — so intimacy keeps a believable rhythm and a character is not instantly ready to go again. The engine is what scores desire, so this cannot run without it."
+            value={st.nsfwCooldownDefault}
+            onChange={(v) => set('nsfwCooldownDefault', v)}
+          />
+        </FeatureGroup>
+      )}
+
     </section>
   );
 }

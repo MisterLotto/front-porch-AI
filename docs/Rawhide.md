@@ -4,6 +4,10 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🔞 **Adult switches are now hidden unless you ask for them** — The Afterglow setting sat in the middle of the main feature list where everyone saw it, whether or not they use 18+ themes at all. There's now a plain **18+ themes** switch in **Settings → General**, and the adult features live in their own **After Dark** group that simply isn't there when it's off. If you already had Afterglow turned on, nothing changes and nothing is hidden from you — the app takes that as your answer. Turning it off never erases what you set; it only hides the switches.
+
+- 🌱 **Growth Rings has a switch in Porch Life at last** — Slow character evolution was already a real setting, but the only way to reach it was the chat sidebar, and the Porch Life tab wrongly said it was per-chat only. It's now a row like everything else, on desktop and the web app.
+
 - 👋 **Fixed: "you've been away a while" never actually reached the character** — If you turned on the option for a character to notice you'd been gone, the note telling them so was tucked inside the story-clock line — so whenever the clock wasn't running, the note vanished with it. The feature saved, confirmed, and did nothing. It now stands on its own and works whenever you've switched it on, clock or no clock.
 
 - 🤝 **Promises no longer move trust and bond while the Realism Engine is off** — Keeping or breaking a promise nudged those scores even in chats where you'd turned the engine off and the sidebar plainly said nothing was being tracked. Promises still work completely — they're detected, logged, marked kept or broken, and remembered — they just stop quietly editing numbers you asked the app not to keep.

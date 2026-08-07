@@ -199,6 +199,21 @@ class FakeStorageService extends ChangeNotifier implements StorageService {
   @override
   bool get objectivesEnabled => true;
 
+  /// 18+ themes. TRUE in the fake on purpose: this gates whether Porch Life's
+  /// "After Dark" group renders at all, and before that group existed the
+  /// Afterglow row was unconditionally present. Returning true keeps the fake's
+  /// rendered surface identical to what it was, so a net that walks every row
+  /// still finds every row. Subclasses that specifically test the hidden state
+  /// override it.
+  @override
+  bool get adultThemesEnabled => true;
+
+  /// Growth Rings global (production default is false). The row renders either
+  /// way — it is a plain switch, not a gated one — so the truthful value is
+  /// fine here.
+  @override
+  bool get characterEvolutionEnabled => false;
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

@@ -3,6 +3,53 @@
 
 # Changelog
 
+## 2026-08-07 — fix(settings): Porch Life back in line with the approved sketch (After Dark + Growth Rings)
+- **Files changed:** `lib/ui/settings/tabs/porch_life_tab.dart`, `lib/ui/settings/tabs/general_tab.dart`,
+  `lib/services/storage/settings/realism_settings.dart`, `lib/services/storage_service.dart`,
+  `lib/services/web/facade/settings_facade.dart`, `web_ui/src/components/PorchLifeSettings.tsx`,
+  `assets/web_app/*` (rebuilt), `test/golden/support/fakes_storage.dart`,
+  `test/ui/settings/after_dark_group_test.dart` (new)
+- **Why:** audited the shipped tab against the approved design artifact
+  (`Porch Life — settings tab & new-features sketch`, 3bee9e58) and found two rows had drifted.
+  Not decisions — oversights.
+- **After Dark restored.** The sketch gives the 18+ feature its OWN group, "shown only when 18+
+  themes are enabled". We had shipped it inside "The Engine", visible to everyone — so a user who
+  never asked for adult content still saw an 18+ switch. Absent is the requirement, not dimmed: the
+  tab's dim-and-disable idiom is for an unmet DEPENDENCY, which is a different thing from content
+  nobody opted into. Chip now reads "needs Realism's arousal", matching the sketch's wording. (The
+  Afterglow rename was a later maintainer decision and stands; only the group and gate regressed.)
+- **The gate had to be built.** VERIFIED there is no app-level 18+ concept anywhere in the codebase
+  — only `nsfwCooldownDefault` (the feature itself), per-chat `chaosNsfwEnabled`, and a Stoop account
+  flag. So a new global `adultThemesEnabled` was added. It is a shared prerequisite, not scope creep:
+  Stage B's intimate-preferences section needs the same gate.
+- **Master switch lives in Settings → General**, beside the Porch Life pointer, deliberately: it
+  HIDES the After Dark group, so putting it inside the group it hides would leave no way to turn it
+  back on. Placement was my call — the sketch shows the gated group but not the switch.
+- **The seed is the subtle part.** A plain `false` default would have hidden the Afterglow switch
+  from every existing user already running it — silently stripping a setting they deliberately
+  turned on. So `adultThemesEnabled` is `_adultThemesExplicit ?? nsfwCooldownDefault`, evaluated on
+  READ rather than snapshotted at load (so enabling Afterglow mid-session reveals the group), and an
+  explicit choice overrides it permanently.
+- **Growth Rings restored** — and it needed nothing new: `memorySettings.characterEvolutionEnabled`
+  already existed and already gated the growth pass (`chat_service_growth.dart:143`); it had simply
+  never been surfaced in Porch Life. Pure UI addition with the sketch's own copy ("Slow character
+  evolution — rings, not rewrites."). The closing card, which claimed Growth Rings was per-chat only,
+  was corrected.
+- **Shared fake maintenance (third time this session):** `FakeStorageService` gained
+  `adultThemesEnabled` (true — keeps the fake's rendered surface identical to before the group
+  existed, so nets that walk every row still find every row) and `characterEvolutionEnabled`. A
+  getter the real StorageService grows but the fake does not throws while BUILDING the tab and takes
+  every Porch Life test down with it.
+- **Recorded as superseded, so they are not re-added:** the sketch's one-tap "turn both on" for an
+  unmet requirement (overruled as a "wall of nags"); Needs chipped "pairs with Realism" (later ruled
+  a hard gate); Ambitions "works alone" (now needs Objectives); Passage of Time's "no mode to pick"
+  note (that described the deterministic-fallback design, replaced by the standalone eval).
+- **Verification:** analyze 0; 11/11 settings tests incl. the protected interaction net; golden
+  94/94; 5 new guards with TWO negative checks — forcing the group always-visible went red, and
+  replacing the seed with a plain `false` went red on exactly the "existing user keeps their switch"
+  case; both restored green. Web tsc + vitest 34/34 + bundle rebuilt.
+- **Commit hash:** (pending)
+
 ## 2026-08-07 — refactor(chat): Scene Guest state out of the shell (998 → 927 lines)
 - **Files changed:** `lib/services/chat/scene_guest_state.dart` (new), `lib/services/chat_service.dart`,
   `lib/services/chat/chat.dart` (barrel), + 18 chat/ part files (mechanical renames only)

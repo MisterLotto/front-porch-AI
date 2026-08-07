@@ -303,6 +303,30 @@ class GeneralTab extends StatelessWidget {
           const SizedBox(height: 24),
           const SectionHeader('Porch Life'),
           const SizedBox(height: 8),
+          // The 18+ master switch. It lives HERE rather than in the Porch Life
+          // tab on purpose: it hides that tab's "After Dark" group entirely
+          // (the approved sketch: shown only when 18+ themes are enabled), so
+          // putting it inside the thing it hides would leave no way back on.
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(
+              '18+ themes',
+              style: TextStyle(color: AppColors.textPrimary(context)),
+            ),
+            subtitle: Text(
+              'Shows the adult features — the After Dark group in Porch Life, '
+              'and intimate preferences in the character editor. Off means '
+              'they are simply not there. Turning this off never erases what '
+              'you already set; it only hides the switches.',
+              style: TextStyle(
+                fontSize: 12.5,
+                color: AppColors.textSecondary(context),
+              ),
+            ),
+            value: storageService.adultThemesEnabled,
+            onChanged: (v) => storageService.setAdultThemesEnabled(v),
+          ),
+          const SizedBox(height: 8),
           _buildPorchLifePointer(context),
           const SizedBox(height: 24),
           const SectionHeader('Model Instructions'),

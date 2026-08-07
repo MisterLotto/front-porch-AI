@@ -59,6 +59,22 @@ class RealismSettings with SettingsBase {
   /// it off deliberately. Ambitions hang off this, since quest completion is
   /// the only thing that moves ambition progress.
   bool _objectivesEnabled = true;
+
+  /// Whether 18+ themes are on for this install. Gates the Porch Life
+  /// "After Dark" group (approved sketch: that group is "shown only when 18+
+  /// themes are enabled"), and will gate the intimate-preferences section in
+  /// the character editors.
+  ///
+  /// Defaults FALSE — the whole point is that adult switches are not shown to
+  /// someone who has not asked for them. But it SEEDS from
+  /// [_nsfwCooldownDefault] on first read: anyone already running Afterglow has
+  /// plainly opted into 18+ content, and hiding their existing switch behind a
+  /// flag they were never shown would strand a setting they deliberately
+  /// turned on. The master switch lives in Settings → General (next to the
+  /// Porch Life pointer) so it is always reachable even when the group is
+  /// hidden.
+  /// Null = never explicitly chosen, so the seed below applies.
+  bool? _adultThemesExplicit;
   bool _realismOneShotEval = false;
   bool _weatherEnabled = true;
   bool _weatherFahrenheit = false;
@@ -81,6 +97,12 @@ class RealismSettings with SettingsBase {
 
   /// See [_objectivesEnabled]. The switch Objectives never had.
   bool get objectivesEnabled => _objectivesEnabled;
+
+  /// See [_adultThemesExplicit]. The seed is evaluated on READ, not snapshotted
+  /// at load: until the user makes an explicit choice, "do you want adult
+  /// switches shown" simply tracks "are you running an adult feature", which
+  /// stays true even if Afterglow is enabled later in the same session.
+  bool get adultThemesEnabled => _adultThemesExplicit ?? _nsfwCooldownDefault;
   bool get realismOneShotEval => _realismOneShotEval;
 
   /// Living Time story weather (living-time-features.md §3). Effective
@@ -132,6 +154,7 @@ class RealismSettings with SettingsBase {
     _standaloneClockEnabled =
         prefs?.getBool(k('standalone_clock_enabled')) ?? false;
     _objectivesEnabled = prefs?.getBool(k('objectives_enabled')) ?? true;
+    _adultThemesExplicit = prefs?.getBool(k('adult_themes_enabled'));
     _realismOneShotEval = prefs?.getBool(k('realism_one_shot_eval')) ?? false;
     _weatherEnabled = prefs?.getBool(k('weather_enabled')) ?? true;
     _weatherFahrenheit = prefs?.getBool(k('weather_fahrenheit')) ?? false;
@@ -236,6 +259,12 @@ class RealismSettings with SettingsBase {
   Future<void> setStandaloneClockEnabled(bool value) async {
     _standaloneClockEnabled = value;
     await prefs?.setBool(k('standalone_clock_enabled'), value);
+    notify();
+  }
+
+  Future<void> setAdultThemesEnabled(bool value) async {
+    _adultThemesExplicit = value;
+    await prefs?.setBool(k('adult_themes_enabled'), value);
     notify();
   }
 

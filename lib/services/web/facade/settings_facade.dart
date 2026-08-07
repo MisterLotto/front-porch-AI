@@ -91,6 +91,7 @@ class SettingsFacade {
         'standaloneClockEnabled':
             _storage.realismSettings.standaloneClockEnabled,
         'objectivesEnabled': _storage.realismSettings.objectivesEnabled,
+        'adultThemesEnabled': _storage.realismSettings.adultThemesEnabled,
         'weatherEnabled': _storage.realismSettings.weatherEnabled,
         'weatherFahrenheit': _storage.realismSettings.weatherFahrenheit,
         'dreamsEnabled': _storage.realismSettings.dreamsEnabled,
@@ -102,6 +103,8 @@ class SettingsFacade {
         // desktop does: the promise pass needs the Journal, and with realism
         // off there is no passage of time.
         'journalEnabled': _storage.memorySettings.journalEnabled,
+        'characterEvolutionEnabled':
+            _storage.memorySettings.characterEvolutionEnabled,
         'realismDefault': _storage.realismSettings.realismDefault,
       },
       // Spell check language. The browser does its own spell checking, so the
@@ -162,6 +165,12 @@ class SettingsFacade {
       // open conversation picks it up on its next turn.
       final sc = realism['standaloneClockEnabled'];
       if (sc is bool) await _storage.setStandaloneClockEnabled(sc);
+      final adult = realism['adultThemesEnabled'];
+      if (adult is bool) await _storage.setAdultThemesEnabled(adult);
+      final growth = realism['characterEvolutionEnabled'];
+      if (growth is bool) {
+        await _storage.setCharacterEvolutionEnabled(growth);
+      }
       final objs = realism['objectivesEnabled'];
       if (objs is bool) {
         await _storage.setObjectivesEnabled(objs);

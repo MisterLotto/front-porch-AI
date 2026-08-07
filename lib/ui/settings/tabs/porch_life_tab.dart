@@ -72,6 +72,7 @@ class PorchLifeTab extends StatelessWidget {
     // 2026-08-07), and Ambitions hang off them: finishing a quest is the only
     // thing that moves ambition progress.
     final objectivesOn = storage.objectivesEnabled;
+    final adultOn = storage.adultThemesEnabled;
 
     // Weather and dreams gate on the Passage of Time FLAG, deliberately not on
     // whether the clock is currently moving (ChatService._clockRunning). An
@@ -133,24 +134,6 @@ class PorchLifeTab extends StatelessWidget {
               onChanged: (v) {
                 storage.realismSettings.setNeedsSimDefault(v);
                 chat.setNeedsSimEnabled(v);
-              },
-            ),
-            FeatureRow(
-              icon: Icons.local_fire_department,
-              label: 'Afterglow',
-              need: FeatureNeed.needs,
-              dependsOn: 'the Realism Engine',
-              satisfied: engineOn,
-              blurb:
-                  'Desire builds through a scene and settles afterwards '
-                  'instead of resetting — so intimacy keeps a believable '
-                  'rhythm and a character is not instantly ready to go again. '
-                  'The engine is what scores desire, so this cannot run '
-                  'without it. (18+ themes only.)',
-              value: storage.nsfwCooldownDefault,
-              onChanged: (v) {
-                storage.setNsfwCooldownDefault(v);
-                chat.setNsfwCooldownEnabled(v);
               },
             ),
           ],
@@ -258,6 +241,17 @@ class PorchLifeTab extends StatelessWidget {
               onChanged: realism.setPromiseLedgerEnabled,
             ),
             FeatureRow(
+              icon: Icons.spa_outlined,
+              label: 'Growth Rings',
+              need: FeatureNeed.alone,
+              blurb:
+                  'Slow character evolution — rings, not rewrites. What they '
+                  'live through is added as a new layer instead of overwriting '
+                  'who they were.',
+              value: storage.characterEvolutionEnabled,
+              onChanged: storage.setCharacterEvolutionEnabled,
+            ),
+            FeatureRow(
               icon: Icons.track_changes,
               label: 'Objectives',
               need: FeatureNeed.alone,
@@ -323,6 +317,37 @@ class PorchLifeTab extends StatelessWidget {
           ],
         ),
 
+        // ── After Dark ──────────────────────────────────────────────────
+        // The approved sketch gives the 18+ feature its own group, "shown only
+        // when 18+ themes are enabled" — deliberately absent, not greyed out,
+        // for anyone who has not asked for adult content. The master switch is
+        // in Settings → General so it stays reachable while this is hidden.
+        if (adultOn)
+          FeatureGroupCard(
+            title: 'After Dark',
+            subtitle: 'shown only when 18+ themes are on',
+            rows: [
+              FeatureRow(
+                icon: Icons.local_fire_department,
+                label: 'Afterglow',
+                need: FeatureNeed.needs,
+                dependsOn: "Realism's arousal",
+                satisfied: engineOn,
+                blurb:
+                    'Desire builds through a scene and settles afterwards '
+                    'instead of resetting — so intimacy keeps a believable '
+                    'rhythm and a character is not instantly ready to go '
+                    'again. The engine is what scores desire, so this cannot '
+                    'run without it.',
+                value: storage.nsfwCooldownDefault,
+                onChanged: (v) {
+                  storage.setNsfwCooldownDefault(v);
+                  chat.setNsfwCooldownEnabled(v);
+                },
+              ),
+            ],
+          ),
+
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -339,9 +364,9 @@ class PorchLifeTab extends StatelessWidget {
             ),
           ),
           child: Text(
-            'Chaos Mode and Growth Rings are set per chat rather than globally '
-            '— open a chat and use the sidebar to switch them for that story. '
-            'Needs can be switched off per chat there too.',
+            'Chaos Mode is set per chat rather than globally — open a chat and '
+            'use the sidebar to switch it for that story. Needs, Objectives '
+            'and Growth Rings can be switched per chat there too.',
             style: TextStyle(
               fontSize: 12.5,
               color: AppColors.textSecondary(context),
