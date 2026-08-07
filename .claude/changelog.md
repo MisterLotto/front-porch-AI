@@ -88,7 +88,7 @@
 - **Verification:** `flutter analyze` clean; `flutter test --concurrency=4 --exclude-tags golden`
   → 2945 passed / 14 skipped / 0 failed; Linux golden gate green after regeneration;
   `npm run lint` clean; `npm test` 34 passed; `npm run build` run so `assets/web_app` carries it.
-- **Commit:** _(pending)_
+- **Commit:** `7b160a06`
 
 ## 2026-08-07 — feat(editor): Ambitions promoted to a chip editor, and reachable from the creator at last
 - **Files changed:** `lib/ui/widgets/chip_list_editor.dart` (new), `lib/ui/widgets/widgets.dart`,
