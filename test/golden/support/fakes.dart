@@ -217,6 +217,16 @@ class FakeChatService extends ChangeNotifier implements ChatService {
 
   @override
   final bool realismEnabled;
+
+  /// Objectives running for this chat (v45). CharacterStateGroup reads this in
+  /// build() to decide whether the Ambitions row renders, so the fake must
+  /// answer it or the whole sidebar panel throws mid-build — which is exactly
+  /// how it failed: an 87% pixel diff on character_state.{dark,light}, because
+  /// the widget rendered an error box instead of the panel. Defaults true,
+  /// matching production.
+  @override
+  bool get objectivesActive => true;
+
   @override
   final bool isGenerating;
   @override

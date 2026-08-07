@@ -900,6 +900,8 @@ class ChatService extends ChangeNotifier {
   // delegation to the respective *Service, 1:1 vs group parity via the
   // services' cbs + god impersonation dance, unchanged)
   bool get realismEnabled => _realismEnabled;
+  // Fake-pinned (see the class doc): body in accessors, member stays here.
+  bool get objectivesActive => _objectivesActiveImpl;
 
   bool get isEvaluatingRealism => _isEvaluatingRealism;
   bool get isProcessingGreeting => _isProcessingGreeting;

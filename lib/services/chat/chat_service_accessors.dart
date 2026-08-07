@@ -160,7 +160,7 @@ extension ChatServiceAccessors on ChatService {
   /// running, which for Needs is merely surprising but here would defeat the
   /// switch's whole purpose — stopping a recurring model call. Checking live
   /// means "off" takes effect on the next turn, everywhere.
-  bool get objectivesActive =>
+  bool get _objectivesActiveImpl =>
       _objectivesEnabled && _storageService.realismSettings.objectivesEnabled;
 
   bool get isCancellingRealismEval => _isCancellingRealismEval;
