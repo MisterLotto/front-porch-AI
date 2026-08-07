@@ -142,6 +142,15 @@ class ChatToolsFacade {
                   },
               ];
             }(),
+      // Pockets & Wardrobe for the focused participant. Same record and same
+      // per-character resolution the desktop sidebar reads, so the two
+      // surfaces cannot disagree about what she is holding. Absent when the
+      // switch is off, so the web panel vanishes rather than going stale.
+      'pockets':
+          focusedCard == null ||
+              !_storage.realismSettings.pocketsEnabled
+          ? null
+          : _chat.pocketsFor(_chat.characterIdFor(focusedCard))?.toJson(),
       'time': {
         'timeOfDay': time.timeOfDay,
         'dayCount': time.dayCount,

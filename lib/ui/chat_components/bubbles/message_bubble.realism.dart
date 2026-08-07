@@ -418,6 +418,42 @@ extension _BubbleRealism on _MessageBubbleState {
         ),
       );
     }
+    // Pockets & Wardrobe receipts. Written by the post-generation pass as
+    // plain phrases ("picked up: car keys"), so nothing here parses or
+    // re-derives anything — the applier already decided what changed, and this
+    // shows exactly that. Absent on every turn nothing moved, which is most.
+    final pocketChanges = metadata['pocket_changes'];
+    if (pocketChanges is List) {
+      for (final raw in pocketChanges) {
+        final text = raw is String ? raw.trim() : '';
+        if (text.isEmpty) continue;
+        chips.add(
+          maybeTooltip(
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.checkroom_outlined,
+                  size: 11,
+                  color: AppColors.porchAmberOf(context),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  text,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.porchAmberOf(context),
+                  ),
+                ),
+              ],
+            ),
+            'Pockets & Wardrobe',
+          ),
+        );
+      }
+    }
+
     return _realismChipLayout(chips, needsChipList);
   }
 }

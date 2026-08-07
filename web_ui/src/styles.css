@@ -2242,6 +2242,17 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
   background: color-mix(in srgb, var(--border) 60%, transparent);
   overflow: hidden;
 }
+/* Pockets & Wardrobe items — desktop parity with the sidebar PocketsRow. */
+.pocket-items { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 6px; }
+.pocket-item {
+  font-size: 11px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
 .ambition-bar-fill {
   height: 100%;
   background: var(--accent);

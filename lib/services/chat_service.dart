@@ -611,6 +611,29 @@ class ChatService extends ChangeNotifier {
     return _groupRealism[characterId]?.pockets;
   }
 
+  /// The stable id for a card, exposed so UI can look a record up without
+  /// reaching for a private. Same resolver every Pockets surface uses.
+  String characterIdFor(CharacterCard c) => _getCharacterIdFromCard(c);
+
+  /// Strike one item off by hand. The detection eval is a model doing
+  /// bookkeeping; when it misses, this is what stops a wrong entry becoming
+  /// permanent. Routed through the same setter the pass uses, so there is no
+  /// second write path.
+  Future<void> removePocketItem(
+    String characterId, {
+    required bool worn,
+    required int index,
+  }) async {
+    final p = pocketsFor(characterId);
+    if (p == null) return;
+    final list = worn ? p.worn : p.carrying;
+    if (index < 0 || index >= list.length) return;
+    list.removeAt(index);
+    setPocketsFor(characterId, p);
+    await _saveChat();
+    notifyListeners();
+  }
+
   /// Persist [p] back to wherever that character's record lives.
   void setPocketsFor(String characterId, Pockets p) {
     if (_activeGroup == null) {

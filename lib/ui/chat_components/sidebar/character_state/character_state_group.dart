@@ -24,6 +24,7 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import '../porch_accordion.dart';
 import 'ambitions_row.dart';
+import 'pockets_row.dart';
 import 'bond_bars.dart';
 import 'character_state_settings.dart';
 import 'time_strip.dart';
@@ -230,6 +231,25 @@ class _CharacterStateGroupState extends State<CharacterStateGroup> {
               steps: AmbitionService.activeStepsFrom(
                 chat.getObjectivesForGroupCharacter(chat.activeCharacter!),
               ),
+            ),
+          ],
+          // Pockets & Wardrobe — answers to its own switch, so it sits OUTSIDE
+          // the realism branch for the same reason Ambitions does.
+          if (!widget.isGroup && chat.activeCharacter != null) ...[
+            Builder(
+              builder: (context) {
+                final id = chat.characterIdFor(chat.activeCharacter!);
+                final p = chat.pocketsFor(id);
+                if (p == null || p.isEmpty) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: PocketsRow(
+                    pockets: p,
+                    onRemove: ({required worn, required index}) =>
+                        chat.removePocketItem(id, worn: worn, index: index),
+                  ),
+                );
+              },
             ),
           ],
           if (realismOn || widget.isGroup) ...[

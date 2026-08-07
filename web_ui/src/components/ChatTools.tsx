@@ -60,6 +60,8 @@ interface ToolsState {
   // Ambitions (Living Time §6, additive — absent on older facades).
   // `step` is the open quest climbing this ambition (v46); null when none.
   ambitions?: Array<{ text: string; progress: number; stage: string; step?: string | null }>;
+  // Pockets & Wardrobe (additive, null when the switch is off).
+  pockets?: { worn?: Array<{ name: string; state?: string }>; carrying?: Array<{ name: string; state?: string }> } | null;
   time: {
     timeOfDay: string;
     dayCount: number;
@@ -307,6 +309,41 @@ export function ChatTools({
           </div>
         </details>
       )}
+
+      {(() => {
+        const worn = t.pockets?.worn ?? [];
+        const carrying = t.pockets?.carrying ?? [];
+        if (worn.length === 0 && carrying.length === 0) return null;
+        const label = (i: { name: string; state?: string }) =>
+          i.state ? `${i.name} (${i.state})` : i.name;
+        return (
+          <details className="tool-section" open>
+            <summary>Pockets &amp; Wardrobe</summary>
+            <div className="tool-body">
+              {worn.length > 0 && (
+                <>
+                  <div className="muted small side-quest-label">Wearing</div>
+                  <div className="pocket-items">
+                    {worn.map((i, n) => (
+                      <span className="pocket-item" key={`w${n}`}>{label(i)}</span>
+                    ))}
+                  </div>
+                </>
+              )}
+              {carrying.length > 0 && (
+                <>
+                  <div className="muted small side-quest-label">Carrying</div>
+                  <div className="pocket-items">
+                    {carrying.map((i, n) => (
+                      <span className="pocket-item" key={`c${n}`}>{label(i)}</span>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </details>
+        );
+      })()}
 
       <details className="tool-section">
         <summary>Our story</summary>

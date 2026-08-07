@@ -27,6 +27,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/database/database.dart' show Objective;
+import 'package:front_porch_ai/services/chat/pockets.dart';
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/chat_generation_settings.dart';
 import 'package:front_porch_ai/models/chat_message.dart';
@@ -318,6 +319,17 @@ class FakeChatService extends ChangeNotifier implements ChatService {
       const [];
   // getArousalForGroupCharacter is an extension on ChatService (resolves on the
   // static type), so it needs no fake override.
+
+  // Pockets & Wardrobe surface. The 1:1 Character State panel calls both of
+  // these in build(), and they are CLASS members on ChatService rather than
+  // extension members, so noSuchMethod cannot dispatch them and the panel
+  // throws mid-render without these — the same maintenance this file already
+  // does for every other class member the real service grew. Null pockets
+  // means the row renders nothing, so existing goldens are unmoved.
+  @override
+  String characterIdFor(CharacterCard c) => c.name;
+  @override
+  Pockets? pocketsFor(String characterId) => null;
 
   // Objective surface — empty by default (renders the "propose an objective" UI).
   @override
