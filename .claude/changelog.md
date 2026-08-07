@@ -11362,3 +11362,4 @@ only the tool asked about changed.
 
 **Gates:** analyze 0 · 11 guards, negative-checked (removing the post-gen call
 turns the placement guard red) · 92 green across the five affected suites.
+Commit: e943ba2
