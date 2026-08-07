@@ -51,6 +51,7 @@ const String kSceneTimeTool = 'report_scene_time';
 const String kExpressionTool = 'report_expression_label';
 const String kCastDetectTool = 'report_detected_character';
 const String kClimaxToolName = 'report_climax';
+const String kPocketsToolName = 'report_inventory';
 
 Map<String, dynamic> _intField(String description) => {
   'type': 'integer',
@@ -357,6 +358,18 @@ final List<Map<String, dynamic>> kClimaxEvalTools = [
   ),
 ];
 
+/// Pockets & Wardrobe (PocketsEval). Declared here for the same reason the
+/// climax fields are: [_fieldsByTool] is what makes the tools transport work,
+/// and an unregistered tool converts to null and falls back to text forever,
+/// silently. Pockets shipped that way — its calls never once used tools.
+final Map<String, Map<String, dynamic>> kPocketsFields = {
+  'inventory_ops': {
+    'type': 'array',
+    'items': {'type': 'object'},
+    'description': 'Every change this reply made to worn/carried items.',
+  },
+};
+
 /// The whitelisted keys per tool (anything else the model invents is
 /// dropped, mirroring how the regex extractors ignore unknown text keys).
 final Map<String, Map<String, Map<String, dynamic>>> _fieldsByTool = {
@@ -369,7 +382,16 @@ final Map<String, Map<String, Map<String, dynamic>>> _fieldsByTool = {
   kExpressionTool: _expressionFields,
   kCastDetectTool: _castDetectFields,
   kClimaxToolName: kClimaxFields,
+  kPocketsToolName: kPocketsFields,
 };
+
+/// Is [toolName] known to the converter?
+///
+/// Exposed for the registry guard: an unregistered tool makes
+/// [realismToolCallToJson] return null on every call, so the feature silently
+/// uses the text transport forever. Pockets shipped that way. Cheap to assert,
+/// impossible to notice otherwise.
+bool toolIsRegistered(String toolName) => _fieldsByTool.containsKey(toolName);
 
 /// Convert the first matching tool call into the canonical flat-JSON text
 /// the text transport would have produced — the single normalization point
@@ -408,7 +430,25 @@ String? realismToolCallToJson(String toolName, List<LlmToolCall> calls) {
           }
           break;
         case 'array':
-          if (v is List) {
+          // An array of OBJECTS passes through intact; only arrays of scalars
+          // get stringified.
+          //
+          // The blanket `e.toString()` below was written when every array here
+          // was a list of strings (`activities`). Pockets then declared
+          // `inventory_ops` as a list of objects, and stringifying those would
+          // produce Dart map literals — `{op: pickup, item: keys}` — which are
+          // not JSON, do not decode, and are silently dropped by the op parser.
+          // The feature was saved from that only because its tool was never
+          // registered below, so the whole call converted to null and fell back
+          // to text. Registering it without this branch would have turned a
+          // working fallback into silent data loss.
+          final itemType = (spec['items'] as Map?)?['type'];
+          if (v is List && itemType == 'object') {
+            out[entry.key] = [
+              for (final e in v)
+                if (e is Map) Map<String, dynamic>.from(e),
+            ];
+          } else if (v is List) {
             out[entry.key] = v.map((e) => e.toString()).toList();
           } else if (v.toString().trim().isNotEmpty) {
             out[entry.key] = [v.toString().trim()];

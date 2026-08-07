@@ -11363,3 +11363,41 @@ only the tool asked about changed.
 **Gates:** analyze 0 · 11 guards, negative-checked (removing the post-gen call
 turns the placement guard red) · 92 green across the five affected suites.
 Commit: e943ba2
+
+## 2026-08-07 — fix(tools): Pockets' tool transport never worked; arrays of objects were unconvertible
+
+**Files:** realism_tools.dart (`case 'array'` now passes objects through;
+`kPocketsToolName`/`kPocketsFields` declared + REGISTERED in `_fieldsByTool`;
+NEW `toolIsRegistered` predicate); NEW test/services/chat/tool_registry_test.dart.
+
+**Why:** `realismToolCallToJson` opens `if (fields == null) return null;`.
+`report_inventory` was never in `_fieldsByTool`, so every Pockets tool call
+converted to null and fell back to text — from its first commit. Nothing
+throws, nothing logs; the feature works via the slower, more fragile transport
+it was given a tools lane to avoid, and the probe round trip is wasted every
+turn.
+
+**Measured before/after with a throwaway probe against the real converter:**
+- before — output `null`, ops parsed `0`
+- after  — output `{"inventory_ops":[{"op":"pickup","item":"car keys"}]}`, ops parsed `1`
+
+**The trap that made the obvious fix WRONG.** Registering the tool alone would
+have been worse than the bug. `case 'array'` did `v.map((e) => e.toString())`,
+written when every array here was a list of strings (`activities`).
+`inventory_ops` is a list of OBJECTS, so each op would have become a Dart map
+literal — `{op: pickup, item: keys}` — which is not JSON, does not decode, and
+is silently dropped by `PocketsEval.parseOps`. A working fallback would have
+become silent data loss. Pockets was protected from that only by the very bug
+being fixed. So the array branch passes objects through intact FIRST, and
+scalar arrays keep their old behaviour (guarded, since `activities` depends
+on it).
+
+**Guard:** `tool_registry_test.dart` asserts EVERY declared tool is registered
+— the check that would have caught this on day one — plus a real round-trip for
+the two newest tools and a pin that scalar arrays are unchanged.
+Negative-checked both halves: unregistering Pockets reddens 6 tests; keeping it
+registered while stringifying objects produces the empty op list that was the
+silent data loss.
+
+**Scope note:** the converter is shared by every eval, which is why this is its
+own commit rather than folded into the Afterglow fix.
