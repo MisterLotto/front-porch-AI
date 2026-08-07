@@ -143,6 +143,40 @@ extension ChatServiceSpeakerObjectives on ChatService {
     notifyListeners();
   }
 
+  /// Import a card's authored "Current Task / Quest" as that character's
+  /// primary objective.
+  ///
+  /// The authoring box was retired from every editor (approved sketch §4:
+  /// Ambitions replaced it, and a per-chat quest belongs in the sidebar's
+  /// Objectives panel, not baked into the card). The FIELD is still read, so a
+  /// quest an author typed before the swap still arrives — quietly, in the one
+  /// place quests now live. No prompt, no banner: it is exactly what they asked
+  /// for when they typed it.
+  ///
+  /// Shared by all three fresh-chat entry points. Two of them (1:1 first entry
+  /// and startNewChat) had carried their own copy of this since V2.5; group
+  /// entry never seeded at all, so a member card's task was dropped on the
+  /// floor — invisible while the editor existed, permanent data loss once it
+  /// was gone.
+  ///
+  /// Deferred to a microtask for the reason the 1:1 copies always were: the
+  /// session row must exist before the objective write. [target] pins a group
+  /// member's task to THEM rather than to whoever happens to speak first; 1:1
+  /// leaves it null and [setObjective] resolves the active character. Not gated
+  /// on [objectivesActive] — this is a data-preservation write, and an
+  /// objective costs nothing while the feature is off.
+  void _importAuthoredTask(FrontPorchExtensions? ext, {CharacterCard? target}) {
+    final task = ext?.currentTask.trim() ?? '';
+    if (task.isEmpty) return;
+    Future.microtask(() async {
+      await setObjective(task, isPrimary: true, targetCharacter: target);
+      debugPrint(
+        '[ChatService] Imported authored task'
+        '${target != null ? ' for ${target.name}' : ''}: $task',
+      );
+    });
+  }
+
   /// One-time seeding of objectives that were carried in an imported Group Card.
   /// Called after group state is loaded for a freshly imported group.
   Future<void> _seedImportedMemberObjectivesIfPresent() async {

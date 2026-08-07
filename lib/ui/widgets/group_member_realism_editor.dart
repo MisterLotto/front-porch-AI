@@ -19,7 +19,7 @@ import 'package:front_porch_ai/ui/widgets/realism_form_section.dart';
 /// one wiring).
 ///
 /// Reads every value from [seed] (a member's realism seed map: `affection`,
-/// `trust`, `emotion`, `emotionIntensity`, `currentTask`, `verification*`,
+/// `trust`, `emotion`, `emotionIntensity`, `verification*`,
 /// `needsSimStrength`, `enjoysLowHygiene`, `needsBaseline*`, `needsDecay*`, …) and
 /// reports each edit through [onUpdate] as a `{key: value}` delta that the caller
 /// merges back into the seed (and rebuilds). Needs enabled/disabled is group-wide,
@@ -71,8 +71,6 @@ class GroupMemberRealismEditor extends StatelessWidget {
       showChaosToggle: false,
       showTimeAndDay: false,
       showMasterEnabledToggle: false,
-      currentTask: _s('currentTask', ''),
-      onCurrentTaskChanged: (v) => onUpdate({'currentTask': v}),
       realismVerificationEnabled:
           (seed['verificationEnabled'] as bool?) ?? false,
       onRealismVerificationChanged: (v) =>

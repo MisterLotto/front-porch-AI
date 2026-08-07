@@ -261,7 +261,6 @@ class CreatorState extends ChangeNotifier {
   bool realismChaosMode = false;
   bool realismNeedsSim = false;
   bool realismEnjoysLowHygiene = false;
-  String realismCurrentTask = '';
 
   /// Long-term ambitions authored in the creator's realism step (approved
   /// sketch §4). Card-resident like the rest of this state.

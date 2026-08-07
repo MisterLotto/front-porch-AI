@@ -69,7 +69,6 @@ extension _CreateCharacterSave on _CreateCharacterPageState {
         chaosModeEnabled: _realismChaosMode,
         needsSimEnabled: _realismNeedsSim,
         enjoysLowHygiene: _realismEnjoysLowHygiene,
-        currentTask: _realismCurrentTask,
         ambitions: _realismAmbitions,
         realismVerificationEnabled: _realismVerificationEnabled,
         realismVerificationMaxReprocesses: _realismVerificationMaxReprocesses,
@@ -208,7 +207,6 @@ extension _CreateCharacterSave on _CreateCharacterPageState {
       _realismEmotionIntensity = 'mild';
       _realismNsfwCooldown = false;
       _realismChaosMode = false;
-      _realismCurrentTask = '';
       _realismAmbitions = const [];
       _realismVerificationEnabled = false;
       _realismVerificationMaxReprocesses = 1;

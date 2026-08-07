@@ -140,6 +140,13 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   bool _realismChaosMode = false;
   bool _realismNeedsSim = false;
   bool _realismEnjoysLowHygiene = false;
+
+  /// Read-and-write-back only — no editor writes this any more (Ambitions
+  /// replaced the "Current Task / Quest" box). It is loaded from the card and
+  /// saved straight back so editing anything else about an older character
+  /// does not erase the starting quest their chats still import. The create
+  /// flows dropped their copies because a NEW card has no task to preserve;
+  /// this one is load-bearing.
   String _realismCurrentTask = '';
   bool _realismVerificationEnabled = false;
   int _realismVerificationMaxReprocesses = 1;

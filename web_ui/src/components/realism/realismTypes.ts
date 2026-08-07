@@ -20,6 +20,11 @@ export interface RealismValues {
   nsfwCooldownEnabled: boolean;
   passageOfTimeEnabled: boolean;
   chaosModeEnabled: boolean;
+  /**
+   * No longer authored anywhere (Ambitions replaced the field in both editors);
+   * carried through create/update untouched so an older card's task survives an
+   * edit and can still be imported as a starting objective.
+   */
   currentTask: string;
   /** Long-term goals, one per chip (approved sketch §4). */
   ambitions: string[];

@@ -305,16 +305,7 @@ extension ChatServiceChatEntry on ChatService {
             'bond=${_relationshipService.affectionScore}, trust=${_relationshipService.trustLevel}, day=${_timeService.dayCount}, time=${_timeService.timeOfDay}',
           );
 
-          // Seed initial quest/task as a primary objective
-          if (ext.currentTask.isNotEmpty) {
-            // Defer so the session ID is ready before the DB write
-            Future.microtask(() async {
-              await setObjective(ext.currentTask, isPrimary: true);
-              debugPrint(
-                '[ChatService] V2.5 seeded initial task: ${ext.currentTask}',
-              );
-            });
-          }
+          _importAuthoredTask(ext);
         }
 
         if (_activeCharacter!.firstMessage.isNotEmpty) {

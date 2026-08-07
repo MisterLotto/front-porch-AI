@@ -133,6 +133,21 @@ is buried while "Current Task / Quest" holds a whole prominent section — the
 maintainer didn't know the editor existed, which is the design verdict.
 
 ### Scope
+
+> **Status 2026-08-07 — the first three bullets have SHIPPED.** Ambitions is a
+> chip editor in the character editor, the creator's realism step and the web
+> form; the "Current Task / Quest" section is gone from all of them; the FIELD
+> is untouched and now imports on fresh chat entry through one shared
+> `_importAuthoredTask` — **including group entry, which never seeded it at
+> all** (a member card's task was silently dropped; harmless while the box
+> existed, permanent data loss once it went). Two findings from the wiring
+> audit: the group wizard's copy of the box wrote `currentTask` into the member
+> seed map, which **no code has ever read**, so it was decorative in every
+> build; and both create flows held `realismCurrentTask` state that could only
+> ever be `''` once the editor was gone — deleted. The remaining bullets (the
+> sidebar "starting objective" affordance, and the Stoop card detail showing
+> ambitions) are still open.
+
 - **Promote Ambitions** in the character editor: chip-style list editor
   (same component as Likes/Dislikes), prominent placement, copy explaining
   identity-not-quests + that objective completions tick progress.

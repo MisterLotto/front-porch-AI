@@ -76,9 +76,6 @@ extension _GroupWizardMemberRealismCard on _CreateGroupChatPageState {
               showChaosToggle: false,
               showTimeAndDay: false,
               showMasterEnabledToggle: false,
-              currentTask: (seed['currentTask'] as String?) ?? '',
-              onCurrentTaskChanged: (v) =>
-                  _updateMemberRealism(id, {'currentTask': v}),
               realismVerificationEnabled:
                   (seed['verificationEnabled'] as bool?) ?? false,
               onRealismVerificationChanged: (v) =>

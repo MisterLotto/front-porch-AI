@@ -56,8 +56,6 @@ class RealismFormSection extends StatelessWidget {
   final ValueChanged<bool> onNsfwCooldownChanged;
   final bool chaosModeEnabled;
   final ValueChanged<bool> onChaosModeChanged;
-  final String currentTask;
-  final ValueChanged<String> onCurrentTaskChanged;
 
   /// Long-term ambitions, edited as chips (approved sketch §4). Optional so
   /// the surfaces that have no ambitions state yet — the group-member card,
@@ -112,8 +110,6 @@ class RealismFormSection extends StatelessWidget {
     required this.onNsfwCooldownChanged,
     required this.chaosModeEnabled,
     required this.onChaosModeChanged,
-    required this.currentTask,
-    required this.onCurrentTaskChanged,
     this.ambitions,
     this.onAmbitionsChanged,
     required this.realismVerificationEnabled,
@@ -717,73 +713,6 @@ class RealismFormSection extends StatelessWidget {
             const SizedBox(height: 20),
           ],
 
-          // Task / Quest Section
-          _sectionHeader(
-            Icons.flag,
-            'Current Task / Quest',
-            AppColors.taskAccent,
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.cardOf(context),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.borderOf(context)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Task', style: labelStyle),
-                const SizedBox(height: 8),
-                Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceContainerOf(context),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.borderOf(context)),
-                  ),
-                  child: TextField(
-                    controller: TextEditingController(text: currentTask)
-                      ..selection = TextSelection.fromPosition(
-                        TextPosition(offset: currentTask.length),
-                      ),
-                    style: TextStyle(
-                      color: AppColors.textPrimary(context),
-                      fontSize: 14,
-                    ),
-                    maxLines: 3,
-                    minLines: 1,
-                    onChanged: onCurrentTaskChanged,
-                    decoration: InputDecoration(
-                      hintText:
-                          'e.g. Find the missing artifact, Survive the first day at school',
-                      hintStyle: TextStyle(
-                        color: AppColors.textTertiary(
-                          context,
-                        ).withValues(alpha: 0.6),
-                        fontSize: 13,
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Sets the initial quest or objective when a new conversation starts.',
-                  style: TextStyle(
-                    color: AppColors.textTertiary(
-                      context,
-                    ).withValues(alpha: 0.7),
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ],
     );

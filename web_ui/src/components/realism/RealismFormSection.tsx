@@ -172,17 +172,11 @@ export function RealismFormSection({ v, set }: { v: RealismValues; set: Patch })
             placeholder="e.g. open her own bakery"
             helper="What this character is working toward across the whole story. They colour how the character steers a scene, and they inch forward when objectives complete. Not a to-do list — quests live in the chat sidebar."
           />
-
-          {/* ── Current task / quest ── */}
-          <h4 className="realism-head">Current task / quest</h4>
-          <label className="realism-field">
-            <textarea
-              rows={2}
-              value={v.currentTask}
-              placeholder="e.g. Find the missing artifact, Survive the first day at school"
-              onChange={(e) => set({ currentTask: e.target.value })}
-            />
-          </label>
+          {/* Ambitions replaced the "Current task / quest" textarea here, exactly
+              as on desktop. `currentTask` stays in RealismValues (seeded from
+              /detail, sent straight back on save) so a card authored before the
+              swap keeps its task on disk — the chat now imports it as a starting
+              objective instead of asking the author to maintain it by hand. */}
         </>
       )}
     </div>

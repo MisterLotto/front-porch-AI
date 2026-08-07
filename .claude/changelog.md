@@ -10828,3 +10828,69 @@ of nags. The `.pl-warning` CSS and its Dart twin were deleted, not left dead.
 dead while an independent row stays live) · full suite · golden container ·
 web lint + 34 tests + build.
 Commit: 6d0ddeec
+
+## 2026-08-07 — feat(realism): retire the Current Task authoring box; import authored tasks as objectives
+
+**Files:** lib/ui/widgets/realism_form_section.dart (−67 LOC: the whole "Current
+Task / Quest" section + both params `currentTask`/`onCurrentTaskChanged`);
+5 callers de-argued (realism_step.dart, edit_character_page.realism_section.dart,
+create_group_chat_page.member_realism_card.dart,
+create_character_page.step_realism.dart, group_member_realism_editor.dart);
+NEW `_importAuthoredTask` in chat_service_speaker_objectives.dart replacing
+three near-identical seed blocks in chat_service_chat_entry.dart,
+chat_service_session_manage.dart and chat_service_group_entry.dart (the third
+being new — see below); web RealismFormSection.tsx + realismTypes.ts
+(+ assets/web_app rebuilt); regenerated
+_goldens/leaf_widgets/realism_form_section.{dark,light}.png (8.49%, the removed
+section); leaf_widgets_golden_test.dart (2 stale ctor args — PROTECTED FILE,
+would need `approved-test-change` if routed through a PR); NEW
+test/ui/widgets/current_task_retired_test.dart + NEW
+test/services/chat/authored_task_import_test.dart.
+
+**Why:** two boxes sitting side by side asked for the same kind of sentence.
+"Current Task / Quest" was card-permanent, so authors typed a per-chat errand
+into a property that follows the character into every conversation they will
+ever have — and the Objectives panel in the chat sidebar, which is where a
+quest actually belongs, already did the job better. Ambitions (sketch §4) is
+what a card-level goal should be; the task box was the redundant half.
+
+**The data-loss trap this closes:** the FIELD is not deleted — cards on disk
+and on The Stoop still carry tasks. 1:1 chats have seeded them as a primary
+objective since V2.5, but **group entry never did**, so a member card's task
+was silently dropped. Invisible while the editor existed (you could retype it);
+permanent once it was gone. Group entry now imports every member's task,
+pinned to that member via `targetCharacter` rather than to whoever speaks first.
+
+**Consolidation:** three copies of the seed is exactly how the third came to be
+forgotten, so all three now route through one `_importAuthoredTask`. Net −18
+LOC. Not gated on `objectivesActive`: this is a data-preservation write, and an
+objective costs nothing while the feature is off.
+
+**Finding — the group wizard's copy of the box was decorative.** It wrote
+`currentTask` into the member realism seed map (`_updateMemberRealism(id,
+{'currentTask': v})`), and NOTHING has ever read that key back: it is not in
+`GroupRealismKeys`, no leaf consumes it, and it survived only because unknown
+seed keys ride through verbatim by design. So a task typed in the group wizard
+never did anything, in any build. The import added here reads the CARD
+(`frontPorchExtensions.currentTask`) — the field that was always real — which
+is also exactly the scope the request asked for ("if they exist on cards").
+
+**Also deleted (dead state found while auditing):** `_realismCurrentTask` in
+create_character_page.dart + creator_state.dart's `realismCurrentTask`, with
+their two write sites. With the editor gone nothing could assign them, so both
+create flows were writing a permanent `''` onto every new card. The
+edit_character_page copy is KEPT and now carries a comment saying why — it is
+the read-from-card/write-back-to-card path that stops a phone or desktop edit
+from erasing an older character's quest.
+
+**Web:** the React form's textarea is gone too, but `currentTask` stays in
+`RealismValues` and in `realism_extensions_json.dart` — every save from the web
+is now a partial payload w.r.t. this field, so the base-value fallback is the
+only thing keeping an old card's quest alive through a phone edit. Guarded.
+
+**Gates:** analyze 0 · 8 new guards, both data-loss ones negative-checked
+(blanked the bridge fallback → red; commented out `'current_task'` in toJson →
+red) and the widget guard negative-checked (re-added the section header → red)
+· full unit suite · full golden suite green on linux/amd64 (93/94 pixel-identical
+before regen, which is the evidence the regen matches the CI container) ·
+web lint + 34 tests + build.

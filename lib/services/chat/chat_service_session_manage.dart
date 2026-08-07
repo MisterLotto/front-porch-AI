@@ -499,16 +499,7 @@ extension ChatServiceSessionManage on ChatService {
       // Tiers are maintained inside RelationshipService after the seed, so
       // there is nothing to recalculate here.
 
-      // Seed initial quest/task as a primary objective
-      if (extSeed.currentTask.isNotEmpty) {
-        // Defer so the session ID is ready before the DB write
-        Future.microtask(() async {
-          await setObjective(extSeed.currentTask, isPrimary: true);
-          debugPrint(
-            '[ChatService] V2.5 seeded initial task: ${extSeed.currentTask}',
-          );
-        });
-      }
+      _importAuthoredTask(extSeed);
     } else {
       // Group mode or no active character: reset to defaults but preserve existing extensions-based values
       // (pending covered by service.resetForFreshChat below)

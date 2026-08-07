@@ -120,11 +120,6 @@ extension _EditCharacterRealismSection on _EditCharacterPageState {
             _realismChaosMode = v;
             _realismSettingsModified = true;
           }),
-          currentTask: _realismCurrentTask,
-          onCurrentTaskChanged: (v) => rebuildState(() {
-            _realismCurrentTask = v;
-            _realismSettingsModified = true;
-          }),
           realismVerificationEnabled: _realismVerificationEnabled,
           onRealismVerificationChanged: (v) => rebuildState(() {
             _realismVerificationEnabled = v;

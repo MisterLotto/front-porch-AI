@@ -104,7 +104,6 @@ extension CreatorEngine on CreatorState {
         chaosModeEnabled: realismChaosMode,
         needsSimEnabled: realismNeedsSim,
         enjoysLowHygiene: realismEnjoysLowHygiene,
-        currentTask: realismCurrentTask,
         ambitions: realismAmbitions,
         realismVerificationEnabled: realismVerificationEnabled,
         realismVerificationMaxReprocesses: realismVerificationMaxReprocesses,

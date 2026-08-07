@@ -251,6 +251,11 @@ extension ChatServiceGroupEntry on ChatService {
 
     // If no session, create a greeting
     if (_messages.isEmpty && _groupCharacters.isNotEmpty) {
+      // Each member's authored starting quest, imported once per fresh chat.
+      for (final c in _groupCharacters) {
+        _importAuthoredTask(c.frontPorchExtensions, target: c);
+      }
+
       String greetingText;
       String greetingSender;
       String? greetingCharId;
