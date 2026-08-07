@@ -10895,3 +10895,46 @@ red) and the widget guard negative-checked (re-added the section header → red)
 before regen, which is the evidence the regen matches the CI container) ·
 web lint + 34 tests + build.
 Commit: 138c813
+
+## 2026-08-07 — ci(test-integrity): refresh the protected-path baseline
+
+**Files:** .github/workflows/test-integrity.yml (predicate + header),
+.github/CODEOWNERS (web_ui rules).
+
+**Why:** the guarded set had drifted from the repo. Three gaps, all verified
+unguarded under the OLD predicate before the change:
+- **The WebUI vitest suite** — `web_ui/src/**/*.test.ts`, 5 files (chatColors,
+  rpText, messageEdit, chargenForm, stoopApi). They live beside the code they
+  test, so no `test/` prefix and no `_test.dart` suffix ever matched them,
+  while the `web-tests` CI job depends on them and desktop↔web parity is
+  non-negotiable per CLAUDE.md. A PR could have gutted `stoopApi.test.ts` with
+  nothing objecting.
+- **`web_ui/vitest.config.ts`** — the config deciding what that suite runs;
+  same category as `analysis_options.yaml`, which was already covered.
+- **`.github/CODEOWNERS`** — the SECOND gate on these same paths. The predicate
+  covered `.github/workflows/` only, so a PR could delete the companion gate.
+  Widened to `.github/`.
+
+Also documented that `test/baselines/god_files.json` (the god-file ratchet,
+created after this workflow was written) and `test/services/embedding/goldens`
+are already covered by the `test/` prefix.
+
+**Deliberately NOT added, and now said so in the file:** `scripts/`,
+`pubspec.yaml`, `pubspec.lock`, `lib/database/`. CODEOWNERS already requires
+maintainer review on all four; they are code/packaging rather than regression
+evidence and move in ordinary work (a lock file on every dependency bump,
+lib/database/ on every schema change). A blocking gate that fires on routine
+PRs is a gate someone switches off. A lock that downgrades below a floor is
+already caught by dependency_floor_test.dart failing — which is the check this
+workflow exists to keep un-editable.
+
+**CODEOWNERS** gained matching `web_ui` rules. The catch-all `*` already routed
+them to the maintainer, so this adds no teeth — it exists so the omission is
+not repeated by someone reading that file to learn what the net covers.
+
+**Gates:** the predicate was extracted verbatim from the YAML and run over all
+1898 tracked files — 573 protected, all 555 test-ish files caught, and nothing
+over-caught (lib/, pubspec, scripts, web source, docs, assets all correctly
+excluded). YAML parses; the embedded github-script block passes `node --check`.
+Negative check: the seven newly-covered paths were each confirmed UNGUARDED
+under the previous predicate.

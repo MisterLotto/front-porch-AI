@@ -37,6 +37,18 @@ name: Test integrity
 # THIS JOB ONLY HAS TEETH IF IT IS A REQUIRED STATUS CHECK.
 # Settings -> Branches -> protect `main`, `Rawhide`, `dev`, `*-Beta` ->
 # "Require status checks to pass" -> add "Guard protected paths".
+#
+# BASELINE REFRESH 2026-08-07 — the guarded set had drifted from the repo.
+# Three things were unguarded and are now covered:
+#   * The WebUI vitest suite (web_ui/src/**/*.test.ts, 5 files) — it lives
+#     beside the code it tests, so no `test/` prefix and no `_test.dart`
+#     suffix ever matched it, while the `web-tests` CI job depended on it and
+#     desktop<->web parity became mandatory in CLAUDE.md.
+#   * web_ui/vitest.config.ts — the config deciding what that suite runs.
+#   * .github/CODEOWNERS — the second gate on these same paths. Widening
+#     `.github/workflows/` to `.github/` means a PR can no longer delete it.
+# When you add a new kind of test, check it against this list. The predicate
+# is the baseline; if a suite is not in it, CI is guarding nothing.
 
 on:
   pull_request_target:
@@ -59,16 +71,46 @@ jobs:
 
             // Paths whose WHOLE POINT is to fail when the code regresses.
             // Editing one is editing the evidence, not the code.
+            //
+            // The Dart clauses also cover things added since this file was
+            // written, by prefix: test/baselines/god_files.json (the CI-enforced
+            // god-file ratchet — its baseline is {} and adding an entry is
+            // supposed to be a maintainer event) and test/services/embedding/
+            // goldens (the pinned nomic vectors).
             const isProtected = (p) =>
               p.startsWith('test/') ||
               p.startsWith('integration_test/') ||
               p.endsWith('_test.dart') ||
               p.includes('/goldens/') ||
               p.includes('/_goldens/') ||
-              p.endsWith('.png') && p.includes('golden') ||
-              p.startsWith('.github/workflows/') ||
+              (p.endsWith('.png') && p.includes('golden')) ||
+              // The WebUI suite is evidence too. It lives in web_ui/src beside
+              // the code it tests, so NONE of the Dart clauses above see it —
+              // five vitest files (chatColors, rpText, messageEdit,
+              // chargenForm, stoopApi) sat unguarded while the `web-tests` CI
+              // job depended on them, and desktop<->web parity is not optional.
+              /(^|\/)__tests__\//.test(p) ||
+              /\.(test|spec)\.[cm]?[jt]sx?$/.test(p) ||
+              // The config that decides what the web suite even runs — same
+              // category as analysis_options.yaml below.
+              p === 'web_ui/vitest.config.ts' ||
+              // Whole directory, not just workflows/: CODEOWNERS is the SECOND
+              // gate on these same paths, and a PR that can delete it has
+              // removed half the net.
+              p.startsWith('.github/') ||
               p === 'analysis_options.yaml' ||
               p === 'test/deps/dependency_floors.json';
+
+            // DELIBERATELY NOT PROTECTED HERE: scripts/, pubspec.yaml,
+            // pubspec.lock and lib/database/. CODEOWNERS already requires the
+            // maintainer's review on all four. They are code and packaging, not
+            // regression evidence, and they change in the course of ordinary
+            // work — a lock file moves on every dependency bump, lib/database/
+            // on every schema change. Adding them would make this gate fire on
+            // routine PRs, and a gate that cries wolf is a gate someone turns
+            // off. A lock that downgrades below a floor is already caught, by
+            // dependency_floor_test.dart failing — which is exactly the check
+            // this workflow exists to keep un-editable.
 
             const files = await github.paginate(
               github.rest.pulls.listFiles,
