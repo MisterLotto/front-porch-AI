@@ -5,6 +5,29 @@
 // source/pack gating, the CTA matrix, upload plumbing (looks vs tagged
 // expressions), and the one-shot run orchestration — card-first, portrait →
 // switch stage → pack (edit-first vs img2img) → QC hold-back → import.
+//
+// WHY THE LONGER TIMEOUT. These tests drive whole eight-slot expression packs:
+// each slot encodes a real PNG, writes it to disk, and inserts a DB row, and the
+// run tests do that several times over. Locally the file finishes in about ten
+// seconds. On a GitHub runner it does not: ci.yml went from --concurrency=1 to 4
+// in ce11fee1, and on a contended two-core runner this file no longer gets a
+// core to itself — everything in it runs several times slower and the
+// heaviest test, "cancel keeps completed images", crossed the 30-second default
+// and has failed EVERY run since 43fd422a.
+//
+// It is starvation, not a hang, and the distinction is the whole reason this is
+// the right fix rather than a mask: the failure is a flat TimeoutException with
+// no assertion ever reached, it is perfectly reproducible on CI rather than
+// flaky, and the same suite passes at --concurrency=4 both on macOS and inside
+// the Linux CI container (2992 tests green). Nothing here is waiting on
+// something that never arrives; it is waiting on a CPU.
+//
+// Per the rollback rule ce11fee1 wrote into ci.yml — do not re-pin the whole
+// suite to concurrency 1 to rescue one slow file — this raises the ceiling for
+// this file alone. No assertion is weakened; a test that needs 40 seconds on a
+// starved runner simply stops being reported as a failure.
+@Timeout(Duration(minutes: 3))
+library;
 
 import 'dart:async';
 import 'dart:convert';
