@@ -139,7 +139,18 @@ void main() {
     'every Porch Life row renders, survives Realism Engine OFF, and takes '
     'real taps',
     (tester) async {
-      await tester.binding.setSurfaceSize(const Size(900, 1400));
+      // Tall enough that the whole tab is reachable. This sweep hunts labels
+      // with scrollUntilVisible, which travels ONE WAY, and Pin 3 deliberately
+      // checks them out of top-to-bottom order ('Welcome-back recap' → 'Story
+      // Weather' → …). That only ever worked because at 1400px everything from
+      // 'Story Weather' down shared a viewport, so the "scroll" was a no-op.
+      //
+      // This tab exists to accumulate feature switches, so that accident was
+      // going to fail whichever row was added next regardless of its merits —
+      // Pockets & Wardrobe is simply the one that found it (2026-08-07).
+      // Raising the surface restores the assumption the sweep was written
+      // against instead of reshaping how it searches. No assertion changes.
+      await tester.binding.setSurfaceSize(const Size(900, 2200));
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
       final storage = _PorchLifeStorage();

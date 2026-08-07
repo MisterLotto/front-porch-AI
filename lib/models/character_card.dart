@@ -105,6 +105,17 @@ class FrontPorchExtensions {
   List<String> intimateInto;
   List<String> intimateNotInto;
 
+  /// Starting Pockets & Wardrobe — what the character already has when a chat
+  /// opens: `{worn: [...], carrying: [...]}`, entries either plain strings or
+  /// `{name, state}`. Optional and additive, so older apps and The Stoop
+  /// ignore it and a card without one simply starts empty.
+  ///
+  /// Kept as a raw map rather than a typed Pockets: this is the MODEL layer and
+  /// it must not depend on a chat service leaf. The one place that reads it
+  /// (chat_service_pockets.dart) parses it through Pockets.fromJson, which
+  /// already tolerates both shapes.
+  Map<String, dynamic> inventory;
+
   // Optional director/verifier thread for Realism Engine + Needs (ingests full latent context + deltas JSON;
   // rules + optional reprocess with corrections up to full per-eval clamp limits; per-char in Optional Features).
   bool realismVerificationEnabled;
@@ -205,6 +216,7 @@ class FrontPorchExtensions {
     this.dislikes = const [],
     this.intimateInto = const [],
     this.intimateNotInto = const [],
+    this.inventory = const {},
 
     // Realism Verification (Director/Verifier) — optional, off by default (zero cost when off)
     this.realismVerificationEnabled = false,
@@ -285,6 +297,7 @@ class FrontPorchExtensions {
           'into': intimateInto,
           'not_into': intimateNotInto,
         },
+        if (inventory.isNotEmpty) 'inventory': inventory,
         'realism_verification_enabled': realismVerificationEnabled,
         'realism_verification_max_reprocesses':
             realismVerificationMaxReprocesses,
@@ -360,6 +373,9 @@ class FrontPorchExtensions {
       dislikes: _phrases(realism['dislikes']),
       intimateInto: _phrases(_intimate(realism)['into']),
       intimateNotInto: _phrases(_intimate(realism)['not_into']),
+      inventory: realism['inventory'] is Map
+          ? Map<String, dynamic>.from(realism['inventory'] as Map)
+          : const {},
       realismVerificationEnabled:
           realism['realism_verification_enabled'] as bool? ?? false,
       realismVerificationMaxReprocesses:
@@ -436,6 +452,7 @@ class FrontPorchExtensions {
     List<String>? dislikes,
     List<String>? intimateInto,
     List<String>? intimateNotInto,
+    Map<String, dynamic>? inventory,
     bool? realismVerificationEnabled,
     int? realismVerificationMaxReprocesses,
     int? realismVerificationStrictness,
@@ -494,6 +511,7 @@ class FrontPorchExtensions {
       dislikes: dislikes ?? this.dislikes,
       intimateInto: intimateInto ?? this.intimateInto,
       intimateNotInto: intimateNotInto ?? this.intimateNotInto,
+      inventory: inventory ?? this.inventory,
       realismVerificationEnabled:
           realismVerificationEnabled ?? this.realismVerificationEnabled,
       realismVerificationMaxReprocesses:

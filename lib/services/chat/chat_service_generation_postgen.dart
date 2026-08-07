@@ -204,6 +204,12 @@ extension ChatServiceGenerationPostGen on ChatService {
           // the chips are not re-attached on a continuation.
           if (t.mode != GenerationMode.continue_) {
             await _runPostGenNeedsChecks(finalResponse);
+            // Pockets & Wardrobe — its own pass, skipped on Continue for the
+            // SAME reason as the needs checks above: a continuation extends
+            // this exchange rather than being a new one, and re-reading it
+            // would apply the same item changes twice (she would pick the
+            // keys up again). Answers to its own switch and nothing else.
+            await _runPocketsPass(finalResponse);
           }
 
           // Keep this message's realism_state snapshot TRUTHFUL now that the

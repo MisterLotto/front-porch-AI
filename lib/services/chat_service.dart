@@ -82,6 +82,7 @@ part 'chat/chat_service_generation_rag.dart';
 part 'chat/chat_service_generation_request.dart';
 part 'chat/chat_service_generation_stream.dart';
 part 'chat/chat_service_generation_postgen.dart';
+part 'chat/chat_service_pockets.dart';
 part 'chat/chat_service_cast.dart';
 part 'chat/chat_service_images.dart';
 part 'chat/chat_service_photo.dart';
@@ -593,6 +594,9 @@ class ChatService extends ChangeNotifier {
   /// Pockets & Wardrobe — the per-turn record fragment. Answers to its own
   /// switch only (see PocketsEval for why it depends on nothing else).
   late final _inventoryInjection = _buildInventoryInjection();
+
+  /// The Pockets detection pass. Its own eval by design — see PocketsEval.
+  late final _pocketsEval = _buildPocketsEval();
 
   /// The 1:1 speaker's pockets. In a group each member's record lives in their
   /// `_groupRealism` slot instead, which is what keeps it session-scoped and

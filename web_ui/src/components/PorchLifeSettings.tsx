@@ -39,6 +39,7 @@ interface PorchLifeState {
   weatherFahrenheit: boolean;
   journalEnabled: boolean;
   characterEvolutionEnabled: boolean;
+  pocketsEnabled: boolean;
   adultThemesEnabled: boolean;
   dreamsEnabled: boolean;
   promiseLedgerEnabled: boolean;
@@ -62,6 +63,7 @@ const DEFAULTS: PorchLifeState = {
   weatherFahrenheit: false,
   journalEnabled: true,
   characterEvolutionEnabled: false,
+  pocketsEnabled: false,
   adultThemesEnabled: false,
   dreamsEnabled: true,
   promiseLedgerEnabled: true,
@@ -321,6 +323,14 @@ export function PorchLifeSettings() {
           blurb={"Commitments either of you make are remembered, and kept or broken ones come back later. Uses one extra AI request per reply to spot them, so it is slower and costs more on a paid API. You can settle one yourself in the Journal's Promises tab."}
           value={st.promiseLedgerEnabled}
           onChange={(v) => set('promiseLedgerEnabled', v)}
+        />
+        <FeatureRow
+          icon="🧥"
+          label="Pockets & Wardrobe"
+          need="alone"
+          blurb="What they are wearing and carrying is remembered instead of scrolling out of the conversation — so the keys she picked up an hour ago are still in her pocket, and the coat she took off is still off. Items can change: a candy bar becomes a wrapper, a sword gets notched. Uses one extra AI request per reply to notice what changed, so it is slower and costs more on a paid API. Kept per chat and cleared with it."
+          value={st.pocketsEnabled}
+          onChange={(v) => set('pocketsEnabled', v)}
         />
         <FeatureRow
           icon="🌱"

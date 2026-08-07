@@ -91,6 +91,7 @@ class SettingsFacade {
         'standaloneClockEnabled':
             _storage.realismSettings.standaloneClockEnabled,
         'objectivesEnabled': _storage.realismSettings.objectivesEnabled,
+        'pocketsEnabled': _storage.realismSettings.pocketsEnabled,
         'adultThemesEnabled': _storage.realismSettings.adultThemesEnabled,
         'weatherEnabled': _storage.realismSettings.weatherEnabled,
         'weatherFahrenheit': _storage.realismSettings.weatherFahrenheit,
@@ -170,6 +171,10 @@ class SettingsFacade {
       final growth = realism['characterEvolutionEnabled'];
       if (growth is bool) {
         await _storage.setCharacterEvolutionEnabled(growth);
+      }
+      final pockets = realism['pocketsEnabled'];
+      if (pockets is bool) {
+        await _storage.realismSettings.setPocketsEnabled(pockets);
       }
       final objs = realism['objectivesEnabled'];
       if (objs is bool) {

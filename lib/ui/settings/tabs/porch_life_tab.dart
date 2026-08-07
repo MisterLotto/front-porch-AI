@@ -241,6 +241,28 @@ class PorchLifeTab extends StatelessWidget {
               onChanged: realism.setPromiseLedgerEnabled,
             ),
             FeatureRow(
+              icon: Icons.checkroom_outlined,
+              label: 'Pockets & Wardrobe',
+              need: FeatureNeed.alone,
+              blurb:
+                  'What they are wearing and carrying is remembered instead of '
+                  'scrolling out of the conversation — so the keys she picked '
+                  'up an hour ago are still in her pocket, and the coat she '
+                  'took off is still off. Items can change: a candy bar becomes '
+                  'a wrapper, a sword gets notched. Uses one extra AI request '
+                  'per reply to notice what changed, so it is slower and costs '
+                  'more on a paid API. Kept per chat and cleared with it.',
+              value: realism.pocketsEnabled,
+              onChanged: realism.setPocketsEnabled,
+            ),
+          ],
+        ),
+
+        FeatureGroupCard(
+          title: 'Presence',
+          subtitle: 'noticing you, nothing more',
+          rows: [
+            FeatureRow(
               icon: Icons.spa_outlined,
               label: 'Growth Rings',
               need: FeatureNeed.alone,
@@ -283,13 +305,6 @@ class PorchLifeTab extends StatelessWidget {
               value: realism.ambitionsEnabled,
               onChanged: realism.setAmbitionsEnabled,
             ),
-          ],
-        ),
-
-        FeatureGroupCard(
-          title: 'Presence',
-          subtitle: 'noticing you, nothing more',
-          rows: [
             FeatureRow(
               icon: Icons.history,
               label: 'Welcome-back recap',
