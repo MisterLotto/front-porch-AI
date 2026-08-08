@@ -11546,3 +11546,48 @@ single exact-version tracker, and is the one place a bump should need to touch.
 container was unavailable, no Docker daemon in this environment) · 13 new
 guards, the three orchestration ones negative-checked one at a time (each went
 red on removal, green on restore, and each failed only its own test).
+
+---
+
+## 2026-08-08 — A web save wiped a character's starting inventory
+
+**Files:** `lib/services/web/util/realism_extensions_json.dart` (both
+directions) · `web_ui/src/components/realism/realismTypes.ts`
+(`InventoryEntry` / `InventoryRecord`, field + default) ·
+`test/services/web/inventory_bridge_test.dart` (new, 9 guards) ·
+`web_ui/src/components/realism/realismTypes.test.ts` (new, 5 guards) ·
+`docs/Rawhide.md`
+
+**The bug.** `inventory` was missing from `frontPorchFromFields`' constructor
+call entirely, so it silently took its `const {}` default on every save routed
+through the web facade. The update path passes the current extensions as
+`base:` for exactly this reason — a partial edit must not wipe unrelated state
+— and every other field honours it. This one never saw it.
+
+Visible effect: open a character in the web/mobile editor, change one word of
+the description, save, and whatever starting Pockets & Wardrobe the author had
+written was gone. There is no inventory control on that page, so nothing
+suggested the edit had touched it. The desktop editor was unaffected.
+
+**The fix** is symmetric — `frontPorchToJson` now emits the key, and
+`frontPorchFromFields` reads it with the same shallow, shape-tolerant cast
+`CharacterCard.fromJson` uses. Two readers of one field disagreeing about what
+counts as valid is its own bug, and `Pockets.fromJson` (the only consumer)
+already tolerates both entry shapes. Junk falls back to the base; an explicit
+`{}` does clear it, since "she starts with nothing" is a thing an authoring UI
+has to be able to say.
+
+**Why the web side changed too, when it did not have to.** `CharacterEditPage`
+posts `{...fields, ...rv}` and `realismFromDetail` spreads the server block, so
+once Dart emitted the key it round-tripped on its own — invisibly to
+TypeScript, purely because both ends happen to spread. Declared explicitly in
+`RealismValues` instead, on the `currentTask` precedent (also carried, also not
+authored there): a field this model does not name is a field the next save
+drops, and relying on an accident to protect user data is how the original bug
+got in.
+
+**Gates:** analyze 0 · 3119 unit tests · 94 goldens · web tsc + 44 tests +
+build. 14 new guards. Negative-checked three separate ways on the Dart side —
+restoring the original bug, dropping only the outbound key, and the subtle
+variant that falls back to `{}` instead of the base — each reddening a
+different set. The web guard reddens on dropping the field from the model.

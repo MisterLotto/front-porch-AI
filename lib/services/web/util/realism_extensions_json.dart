@@ -113,6 +113,25 @@ FrontPorchExtensions frontPorchFromFields(
     // Stoop is unchanged.
     intimateInto: asStrList('intimateInto', b.intimateInto),
     intimateNotInto: asStrList('intimateNotInto', b.intimateNotInto),
+    // Starting Pockets & Wardrobe. Nested (`{worn: [...], carrying: [...]}`)
+    // rather than flat, because unlike the 18+ pair above this is not two lists
+    // of strings — entries can be `{name, state}` — and flattening it would
+    // lose the condition half of every item.
+    //
+    // Read with the same shallow, shape-tolerant cast CharacterCard.fromJson
+    // uses for this field, deliberately: two readers of one field that disagree
+    // about what counts as valid is its own bug. Anything unusable falls back
+    // to the base rather than throwing, and Pockets.fromJson (the only consumer)
+    // already tolerates both entry shapes.
+    //
+    // Falling back to `b.inventory` is the actual fix here: the field was absent
+    // from this constructor entirely, so it silently took its `const {}` default
+    // on every web save. Editing a character from a phone wiped whatever
+    // starting inventory its author had written, with nothing on screen to
+    // suggest the edit had touched it.
+    inventory: fields['inventory'] is Map
+        ? Map<String, dynamic>.from(fields['inventory'] as Map)
+        : b.inventory,
 
     // Realism verification (Director/Verifier).
     realismVerificationEnabled: asBool(
@@ -173,6 +192,7 @@ Map<String, dynamic> frontPorchToJson(FrontPorchExtensions e) => {
   'dislikes': e.dislikes,
   'intimateInto': e.intimateInto,
   'intimateNotInto': e.intimateNotInto,
+  'inventory': e.inventory,
   'realismVerificationEnabled': e.realismVerificationEnabled,
   'realismVerificationMaxReprocesses': e.realismVerificationMaxReprocesses,
   'realismVerificationStrictness': e.realismVerificationStrictness,

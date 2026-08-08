@@ -8,6 +8,16 @@
 // `realism` block with no intermediate mapping. Consumed by RealismFormSection
 // and NeedsFormSection, which are reused by character create + edit.
 
+/** One thing a character has: a bare name, or a name plus its condition. */
+export type InventoryEntry = string | { name: string; state?: string };
+
+/** Starting Pockets & Wardrobe, as the Dart `FrontPorchExtensions.inventory`
+ *  map: `{worn: [...], carrying: [...]}`, either key optional. */
+export interface InventoryRecord {
+  worn?: InventoryEntry[];
+  carrying?: InventoryEntry[];
+}
+
 export interface RealismValues {
   realismEnabled: boolean;
   timeOfDay: string;
@@ -35,6 +45,19 @@ export interface RealismValues {
   dislikes: string[];
   intimateInto: string[];
   intimateNotInto: string[];
+  /**
+   * Starting Pockets & Wardrobe. Not authored here — there is no inventory
+   * control in this form — but declared and carried for the same reason
+   * `currentTask` is: the edit page sends `...rv` wholesale, so a field this
+   * model does not know about is a field the next save drops.
+   *
+   * It did exactly that until now, from the other end: the Dart bridge omitted
+   * `inventory` entirely, so editing a character from a phone wiped whatever
+   * starting pockets its author had written. Both halves are declared now, and
+   * the Dart side additionally falls back to the stored value for any client
+   * that omits the key.
+   */
+  inventory: InventoryRecord;
   realismVerificationEnabled: boolean;
   realismVerificationMaxReprocesses: number;
   realismVerificationStrictness: number;
@@ -78,6 +101,7 @@ export const REALISM_DEFAULTS: RealismValues = {
   dislikes: [],
   intimateInto: [],
   intimateNotInto: [],
+  inventory: {},
   realismVerificationEnabled: false,
   realismVerificationMaxReprocesses: 1,
   realismVerificationStrictness: 3,
