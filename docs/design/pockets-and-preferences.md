@@ -96,9 +96,22 @@ inventory fragment ("carrying a candy bar") in the same
 was down to the model: frontier models usually noticed, smaller local ones
 narrated the hunger and walked past the food in their own pocket.
 
-`RealismStateInjection` emits ONE extra sentence, directly after the inventory
-line: *"If something they are already carrying or wearing would ease any of
-that, they would reach for it before looking elsewhere."*
+`RealismStateInjection` emits ONE extra sentence: *"If something they are
+already carrying or wearing would ease any of that, they would reach for it
+before looking elsewhere."*
+
+**Order matters, and it shipped backwards for a day.** The inventory fragment
+originally sat FOUR fragments below the needs line, past nsfw/ambitions/
+preferences. So the model met a vivid, directive hunger line and only learned
+about the candy bar three lines later — by which point a small local model had
+usually already sent her to the kitchen. What a character carries is standing
+knowledge; a need is something that arrives. Nobody discovers the contents of
+their own pocket at the moment they get hungry, and that prior knowledge is what
+makes reaching for it obvious. The fragment now sits directly ABOVE the needs
+line, with the join sentence after both, so the block reads: she has this — she
+needs that — if the first eases the second she would reach for it. It matters
+least for frontier models, which connect them either way, and most for small
+local ones, which are exactly who the pairing exists for.
 
 **This does not re-couple the engines, and the placement is the reason.** The
 composer's entire job is assembling both fragments; it already held them. So

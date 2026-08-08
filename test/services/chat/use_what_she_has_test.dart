@@ -270,6 +270,32 @@ void main() {
       expect(block, contains(_join));
     });
 
+    test('she knows what she has BEFORE she is told she is hungry', () {
+      // The ordering question, and it is not cosmetic. What she is carrying is
+      // standing knowledge; a need is something that arrives. Nobody discovers
+      // the contents of their own pocket at the moment they get hungry.
+      //
+      // Told the other way round — which is how this shipped first — the model
+      // met a vivid, directive hunger line and only learned about the candy bar
+      // three fragments later, past ambitions and preferences, by which point a
+      // small local model had usually already sent her to the kitchen. A
+      // frontier model connects them either way; the weak ones are exactly who
+      // this pairing exists for.
+      final block = composer(
+        needsOn: true,
+        realismOn: true,
+        needsVector: starving,
+        pockets: candyBar(),
+      ).buildRealismStateInjection();
+
+      expect(
+        block.indexOf('candy bar'),
+        lessThan(block.indexOf('Hunger:')),
+        reason: 'possessions are standing fact and must precede the state they '
+            'might answer',
+      );
+    });
+
     test('the line comes AFTER what she has, so "that" has an antecedent', () {
       final block = composer(
         needsOn: true,

@@ -258,7 +258,37 @@ class RealismStateInjection {
       if (_characterStateEnabled)
         relationshipInjection.buildTrustBehaviorInjection(),
       if (_characterStateEnabled) emotionInjection.buildEmotionInjection(),
+      // Pockets & Wardrobe, deliberately ABOVE the needs line rather than in
+      // its old slot four fragments below it.
+      //
+      // What she is carrying is standing knowledge; a need is something that
+      // arrives. Nobody discovers the contents of their own pocket at the
+      // moment they get hungry — they already knew, and that is what makes
+      // reaching for it obvious. Told the other way round the model met a
+      // vivid, directive line ("thoughts drifting uncontrollably to food") and
+      // only learned about the candy bar three lines later, past the ambitions
+      // and preferences fragments, by which point it had usually decided she
+      // was going to the kitchen.
+      //
+      // It matters least for the models that never needed the help: a frontier
+      // model reads the whole block and connects them regardless. It matters
+      // most for a small local model, which is exactly who this pairing exists
+      // for.
+      //
+      // Ungated here for the same reason preferences are (it answers to its own
+      // switch and nothing else); the leaf self-gates on the record being
+      // non-empty, which it is only when the feature is on.
+      inventoryLine,
       needsLine,
+      // The join reads backwards over both, so it has to follow whichever comes
+      // second — which is now the needs line. "Already carrying" points up at
+      // the inventory two lines above; "any of that" covers everything above it.
+      // This is the ONLY place the two features meet, and it is the right
+      // place: neither engine reads the other's state, and no LLM call is
+      // added — the composer, whose whole job is assembling both, joins them in
+      // one sentence.
+      if (needsLine.trim().isNotEmpty && inventoryLine.trim().isNotEmpty)
+        _useWhatSheHasLine,
       if (_characterStateEnabled) nsfwInjection.buildNsfwCooldownInjection(),
       if (getAmbitionsEnabled?.call() ?? true)
         ambitionInjection.buildAmbitionInjection(),
@@ -267,17 +297,6 @@ class RealismStateInjection {
       // scoring, so it must survive the Realism Engine being off. It
       // self-gates on the card carrying any.
       preferencesInjection.buildPreferencesInjection(),
-      // Pockets & Wardrobe. Ungated here for the same reason preferences are:
-      // it answers to its own switch and nothing else. The leaf self-gates on
-      // the record being non-empty, which it is only when the feature is on.
-      inventoryLine,
-      // Directly after it, so "any of that" reads against a list that ends with
-      // what she has. This is the ONLY place the two features meet, and it is
-      // the right place: neither engine reads the other's state, and no LLM
-      // call is added — the composer, whose whole job is assembling both, joins
-      // them in one sentence.
-      if (needsLine.trim().isNotEmpty && inventoryLine.trim().isNotEmpty)
-        _useWhatSheHasLine,
       if (getPromisesEnabled?.call() ?? true)
         promiseDebtInjection.buildPromiseDebtInjection(),
       if (_characterStateEnabled)

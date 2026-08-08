@@ -11856,3 +11856,40 @@ compromise was needed here). Negative-checked four ways — removing the line,
 ungating it, gating it on needs only so it fires with empty pockets, and placing
 it before the inventory line so "any of that" loses its antecedent — each
 reddening its own correct set.
+
+---
+
+## 2026-08-08 — Inventory now precedes needs in the state block
+
+**Files:** `lib/services/chat/prompt_injection/realism_state_injection.dart`
+(fragment moved) · `test/services/chat/use_what_she_has_test.dart` (+1 guard) ·
+`docs/design/pockets-and-preferences.md`
+
+**Maintainer question:** "Does the character know what is in their inventory
+before they get told they are hungry though?" No — she did not, and that was the
+wrong way round.
+
+The join line shipped this morning, but the inventory fragment sat FOUR
+fragments below the needs line (needs → nsfw → ambitions → preferences →
+inventory → join). So the model met a vivid, directive hunger line
+("thoughts drifting uncontrollably to food") and only learned about the candy
+bar three lines later, by which point a small local model had usually already
+committed to sending her to the kitchen.
+
+What a character carries is standing knowledge; a need is something that
+arrives. Nobody discovers the contents of their own pocket at the moment they
+get hungry — they already knew, and that prior knowledge is what makes reaching
+for it the obvious move. The fragment now sits directly ABOVE the needs line
+with the join after both, so the block reads: she has this, she needs that, if
+the first eases the second she would reach for it.
+
+Matters least for frontier models, which connect them either way, and most for
+small local ones — exactly who this pairing exists for.
+
+Safe to reorder: nothing pinned the internal fragment order (the two suites that
+touch the block use `contains`, or a stubbed `[How Alice is right now: ...]`
+placeholder), so no existing test needed touching.
+
+**Gates:** analyze 0 · 3188 unit tests · 94 goldens. One new guard, negative-
+checked by restoring the original position — it reddens along with the
+antecedent guard.
