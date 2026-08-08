@@ -784,5 +784,27 @@ extension _AppDatabaseMigrationLadder on AppDatabase {
           // already present (re-run / dual-version)
         }
       }
+
+      if (from < 47) {
+        // v46→v47: the 1:1 speaker's Pockets record.
+        //
+        // Group chats already persisted theirs inside group_realism_state, so
+        // this closes a parity hole rather than adding a feature: a 1:1 chat
+        // had nowhere to keep the record, so reopening the chat emptied her
+        // pockets. NULL for every existing row is exactly right — nothing was
+        // ever saved, so there is nothing to claim otherwise, and the pass
+        // simply re-seeds from the card as it does for a brand new chat.
+        //
+        // Additive and nullable, so a downgrade to v46 keeps reading and
+        // writing `sessions` normally; the column is just ignored.
+        try {
+          await customStatement(
+            'ALTER TABLE sessions ADD COLUMN pockets TEXT',
+          );
+          debugPrint('[DB] v47: added sessions.pockets');
+        } catch (_) {
+          // already present (re-run / dual-version)
+        }
+      }
   }
 }

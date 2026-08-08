@@ -1832,6 +1832,17 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _pocketsMeta = const VerificationMeta(
+    'pockets',
+  );
+  @override
+  late final GeneratedColumn<String> pockets = GeneratedColumn<String>(
+    'pockets',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _evolvedPersonalityMeta =
       const VerificationMeta('evolvedPersonality');
   @override
@@ -2055,6 +2066,7 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     chaosPressure,
     needsSimEnabled,
     needsVector,
+    pockets,
     evolvedPersonality,
     evolvedScenario,
     evolutionCount,
@@ -2430,6 +2442,12 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         ),
       );
     }
+    if (data.containsKey('pockets')) {
+      context.handle(
+        _pocketsMeta,
+        pockets.isAcceptableOrUnknown(data['pockets']!, _pocketsMeta),
+      );
+    }
     if (data.containsKey('evolved_personality')) {
       context.handle(
         _evolvedPersonalityMeta,
@@ -2733,6 +2751,10 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         DriftSqlType.string,
         data['${effectivePrefix}needs_vector'],
       ),
+      pockets: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pockets'],
+      ),
       evolvedPersonality: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}evolved_personality'],
@@ -2851,6 +2873,22 @@ class Session extends DataClass implements Insertable<Session> {
   final int chaosPressure;
   final bool needsSimEnabled;
   final String? needsVector;
+
+  /// v47 — the 1:1 speaker's Pockets record, as `{worn: [...], carrying: [...]}`.
+  ///
+  /// The mirror of [needsVector], and it exists for the same reason. Group
+  /// chats persist their per-member pockets inside `group_realism_state`, so
+  /// they always survived a reload; a 1:1 chat had NO home for the record at
+  /// all. It lived in memory, snapshotted into each message's `realism_state`
+  /// — but that snapshot is only restored on regen, swipe and delete, never on
+  /// session load. So closing a 1:1 chat and reopening it emptied her pockets,
+  /// while the feature's own description promised the opposite. Straight
+  /// 1:1-vs-group parity break.
+  ///
+  /// Nullable with no default: NULL means "nothing recorded", which is the
+  /// honest value both for every chat that predates this column and for any
+  /// chat where Pockets is switched off.
+  final String? pockets;
   final String evolvedPersonality;
   final String evolvedScenario;
   final int evolutionCount;
@@ -2928,6 +2966,7 @@ class Session extends DataClass implements Insertable<Session> {
     required this.chaosPressure,
     required this.needsSimEnabled,
     this.needsVector,
+    this.pockets,
     required this.evolvedPersonality,
     required this.evolvedScenario,
     required this.evolutionCount,
@@ -3010,6 +3049,9 @@ class Session extends DataClass implements Insertable<Session> {
     map['needs_sim_enabled'] = Variable<bool>(needsSimEnabled);
     if (!nullToAbsent || needsVector != null) {
       map['needs_vector'] = Variable<String>(needsVector);
+    }
+    if (!nullToAbsent || pockets != null) {
+      map['pockets'] = Variable<String>(pockets);
     }
     map['evolved_personality'] = Variable<String>(evolvedPersonality);
     map['evolved_scenario'] = Variable<String>(evolvedScenario);
@@ -3107,6 +3149,9 @@ class Session extends DataClass implements Insertable<Session> {
       needsVector: needsVector == null && nullToAbsent
           ? const Value.absent()
           : Value(needsVector),
+      pockets: pockets == null && nullToAbsent
+          ? const Value.absent()
+          : Value(pockets),
       evolvedPersonality: Value(evolvedPersonality),
       evolvedScenario: Value(evolvedScenario),
       evolutionCount: Value(evolutionCount),
@@ -3195,6 +3240,7 @@ class Session extends DataClass implements Insertable<Session> {
       chaosPressure: serializer.fromJson<int>(json['chaosPressure']),
       needsSimEnabled: serializer.fromJson<bool>(json['needsSimEnabled']),
       needsVector: serializer.fromJson<String?>(json['needsVector']),
+      pockets: serializer.fromJson<String?>(json['pockets']),
       evolvedPersonality: serializer.fromJson<String>(
         json['evolvedPersonality'],
       ),
@@ -3272,6 +3318,7 @@ class Session extends DataClass implements Insertable<Session> {
       'chaosPressure': serializer.toJson<int>(chaosPressure),
       'needsSimEnabled': serializer.toJson<bool>(needsSimEnabled),
       'needsVector': serializer.toJson<String?>(needsVector),
+      'pockets': serializer.toJson<String?>(pockets),
       'evolvedPersonality': serializer.toJson<String>(evolvedPersonality),
       'evolvedScenario': serializer.toJson<String>(evolvedScenario),
       'evolutionCount': serializer.toJson<int>(evolutionCount),
@@ -3335,6 +3382,7 @@ class Session extends DataClass implements Insertable<Session> {
     int? chaosPressure,
     bool? needsSimEnabled,
     Value<String?> needsVector = const Value.absent(),
+    Value<String?> pockets = const Value.absent(),
     String? evolvedPersonality,
     String? evolvedScenario,
     int? evolutionCount,
@@ -3402,6 +3450,7 @@ class Session extends DataClass implements Insertable<Session> {
     chaosPressure: chaosPressure ?? this.chaosPressure,
     needsSimEnabled: needsSimEnabled ?? this.needsSimEnabled,
     needsVector: needsVector.present ? needsVector.value : this.needsVector,
+    pockets: pockets.present ? pockets.value : this.pockets,
     evolvedPersonality: evolvedPersonality ?? this.evolvedPersonality,
     evolvedScenario: evolvedScenario ?? this.evolvedScenario,
     evolutionCount: evolutionCount ?? this.evolutionCount,
@@ -3543,6 +3592,7 @@ class Session extends DataClass implements Insertable<Session> {
       needsVector: data.needsVector.present
           ? data.needsVector.value
           : this.needsVector,
+      pockets: data.pockets.present ? data.pockets.value : this.pockets,
       evolvedPersonality: data.evolvedPersonality.present
           ? data.evolvedPersonality.value
           : this.evolvedPersonality,
@@ -3630,6 +3680,7 @@ class Session extends DataClass implements Insertable<Session> {
           ..write('chaosPressure: $chaosPressure, ')
           ..write('needsSimEnabled: $needsSimEnabled, ')
           ..write('needsVector: $needsVector, ')
+          ..write('pockets: $pockets, ')
           ..write('evolvedPersonality: $evolvedPersonality, ')
           ..write('evolvedScenario: $evolvedScenario, ')
           ..write('evolutionCount: $evolutionCount, ')
@@ -3693,6 +3744,7 @@ class Session extends DataClass implements Insertable<Session> {
     chaosPressure,
     needsSimEnabled,
     needsVector,
+    pockets,
     evolvedPersonality,
     evolvedScenario,
     evolutionCount,
@@ -3755,6 +3807,7 @@ class Session extends DataClass implements Insertable<Session> {
           other.chaosPressure == this.chaosPressure &&
           other.needsSimEnabled == this.needsSimEnabled &&
           other.needsVector == this.needsVector &&
+          other.pockets == this.pockets &&
           other.evolvedPersonality == this.evolvedPersonality &&
           other.evolvedScenario == this.evolvedScenario &&
           other.evolutionCount == this.evolutionCount &&
@@ -3815,6 +3868,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
   final Value<int> chaosPressure;
   final Value<bool> needsSimEnabled;
   final Value<String?> needsVector;
+  final Value<String?> pockets;
   final Value<String> evolvedPersonality;
   final Value<String> evolvedScenario;
   final Value<int> evolutionCount;
@@ -3874,6 +3928,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.chaosPressure = const Value.absent(),
     this.needsSimEnabled = const Value.absent(),
     this.needsVector = const Value.absent(),
+    this.pockets = const Value.absent(),
     this.evolvedPersonality = const Value.absent(),
     this.evolvedScenario = const Value.absent(),
     this.evolutionCount = const Value.absent(),
@@ -3934,6 +3989,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.chaosPressure = const Value.absent(),
     this.needsSimEnabled = const Value.absent(),
     this.needsVector = const Value.absent(),
+    this.pockets = const Value.absent(),
     this.evolvedPersonality = const Value.absent(),
     this.evolvedScenario = const Value.absent(),
     this.evolutionCount = const Value.absent(),
@@ -3994,6 +4050,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Expression<int>? chaosPressure,
     Expression<bool>? needsSimEnabled,
     Expression<String>? needsVector,
+    Expression<String>? pockets,
     Expression<String>? evolvedPersonality,
     Expression<String>? evolvedScenario,
     Expression<int>? evolutionCount,
@@ -4061,6 +4118,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       if (chaosPressure != null) 'chaos_pressure': chaosPressure,
       if (needsSimEnabled != null) 'needs_sim_enabled': needsSimEnabled,
       if (needsVector != null) 'needs_vector': needsVector,
+      if (pockets != null) 'pockets': pockets,
       if (evolvedPersonality != null) 'evolved_personality': evolvedPersonality,
       if (evolvedScenario != null) 'evolved_scenario': evolvedScenario,
       if (evolutionCount != null) 'evolution_count': evolutionCount,
@@ -4126,6 +4184,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Value<int>? chaosPressure,
     Value<bool>? needsSimEnabled,
     Value<String?>? needsVector,
+    Value<String?>? pockets,
     Value<String>? evolvedPersonality,
     Value<String>? evolvedScenario,
     Value<int>? evolutionCount,
@@ -4189,6 +4248,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       chaosPressure: chaosPressure ?? this.chaosPressure,
       needsSimEnabled: needsSimEnabled ?? this.needsSimEnabled,
       needsVector: needsVector ?? this.needsVector,
+      pockets: pockets ?? this.pockets,
       evolvedPersonality: evolvedPersonality ?? this.evolvedPersonality,
       evolvedScenario: evolvedScenario ?? this.evolvedScenario,
       evolutionCount: evolutionCount ?? this.evolutionCount,
@@ -4347,6 +4407,9 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     if (needsVector.present) {
       map['needs_vector'] = Variable<String>(needsVector.value);
     }
+    if (pockets.present) {
+      map['pockets'] = Variable<String>(pockets.value);
+    }
     if (evolvedPersonality.present) {
       map['evolved_personality'] = Variable<String>(evolvedPersonality.value);
     }
@@ -4449,6 +4512,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
           ..write('chaosPressure: $chaosPressure, ')
           ..write('needsSimEnabled: $needsSimEnabled, ')
           ..write('needsVector: $needsVector, ')
+          ..write('pockets: $pockets, ')
           ..write('evolvedPersonality: $evolvedPersonality, ')
           ..write('evolvedScenario: $evolvedScenario, ')
           ..write('evolutionCount: $evolutionCount, ')
@@ -16919,6 +16983,7 @@ typedef $$SessionsTableCreateCompanionBuilder =
       Value<int> chaosPressure,
       Value<bool> needsSimEnabled,
       Value<String?> needsVector,
+      Value<String?> pockets,
       Value<String> evolvedPersonality,
       Value<String> evolvedScenario,
       Value<int> evolutionCount,
@@ -16980,6 +17045,7 @@ typedef $$SessionsTableUpdateCompanionBuilder =
       Value<int> chaosPressure,
       Value<bool> needsSimEnabled,
       Value<String?> needsVector,
+      Value<String?> pockets,
       Value<String> evolvedPersonality,
       Value<String> evolvedScenario,
       Value<int> evolutionCount,
@@ -17214,6 +17280,11 @@ class $$SessionsTableFilterComposer
 
   ColumnFilters<String> get needsVector => $composableBuilder(
     column: $table.needsVector,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get pockets => $composableBuilder(
+    column: $table.pockets,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -17512,6 +17583,11 @@ class $$SessionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get pockets => $composableBuilder(
+    column: $table.pockets,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get evolvedPersonality => $composableBuilder(
     column: $table.evolvedPersonality,
     builder: (column) => ColumnOrderings(column),
@@ -17793,6 +17869,9 @@ class $$SessionsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get pockets =>
+      $composableBuilder(column: $table.pockets, builder: (column) => column);
+
   GeneratedColumn<String> get evolvedPersonality => $composableBuilder(
     column: $table.evolvedPersonality,
     builder: (column) => column,
@@ -17933,6 +18012,7 @@ class $$SessionsTableTableManager
                 Value<int> chaosPressure = const Value.absent(),
                 Value<bool> needsSimEnabled = const Value.absent(),
                 Value<String?> needsVector = const Value.absent(),
+                Value<String?> pockets = const Value.absent(),
                 Value<String> evolvedPersonality = const Value.absent(),
                 Value<String> evolvedScenario = const Value.absent(),
                 Value<int> evolutionCount = const Value.absent(),
@@ -17992,6 +18072,7 @@ class $$SessionsTableTableManager
                 chaosPressure: chaosPressure,
                 needsSimEnabled: needsSimEnabled,
                 needsVector: needsVector,
+                pockets: pockets,
                 evolvedPersonality: evolvedPersonality,
                 evolvedScenario: evolvedScenario,
                 evolutionCount: evolutionCount,
@@ -18053,6 +18134,7 @@ class $$SessionsTableTableManager
                 Value<int> chaosPressure = const Value.absent(),
                 Value<bool> needsSimEnabled = const Value.absent(),
                 Value<String?> needsVector = const Value.absent(),
+                Value<String?> pockets = const Value.absent(),
                 Value<String> evolvedPersonality = const Value.absent(),
                 Value<String> evolvedScenario = const Value.absent(),
                 Value<int> evolutionCount = const Value.absent(),
@@ -18112,6 +18194,7 @@ class $$SessionsTableTableManager
                 chaosPressure: chaosPressure,
                 needsSimEnabled: needsSimEnabled,
                 needsVector: needsVector,
+                pockets: pockets,
                 evolvedPersonality: evolvedPersonality,
                 evolvedScenario: evolvedScenario,
                 evolutionCount: evolutionCount,

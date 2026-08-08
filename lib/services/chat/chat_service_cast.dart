@@ -227,6 +227,12 @@ extension ChatServiceCast on ChatService {
     final bool soleNsfwEnabled =
         _groupRealism[soleId]?.nsfwCooldownEnabled ??
         _nsfwService.nsfwCooldownEnabled;
+    // Same reasoning for her Pockets record, and read here for the same reason:
+    // step 4 re-enters as a 1:1, which clears _groupRealism. Carried regardless
+    // of realism because Pockets does not depend on it — the pass is gated on
+    // pocketsEnabled alone, so a survivor can be holding her keys with the
+    // engine off. Dropping this is how a collapse would empty her hands.
+    final Pockets? solePockets = _groupRealism[soleId]?.pockets;
     final bool solePassageEnabled = _timeService.passageOfTimeEnabled;
     final bool soleChaosEnabled = _chaosModeService.chaosModeEnabled;
     final int soleChaosPressure = _chaosModeService.chaosPressure;
@@ -330,6 +336,7 @@ extension ChatServiceCast on ChatService {
     // Enable-flags + author note (persisted by _doSaveChat below) — carry
     // regardless of realism so the NSFW toggle, passage-of-time, chaos, and the
     // note are not reset to defaults on collapse.
+    _pockets = solePockets;
     _nsfwService.setNsfwCooldownEnabled(soleNsfwEnabled);
     _timeService.setPassageOfTimeEnabled(solePassageEnabled);
     _chaosModeService.loadScalars(

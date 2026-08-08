@@ -418,6 +418,18 @@ extension ChatServiceSessionLoad on ChatService {
       _needsSimulation.clearVector();
     }
 
+    // v47 — restore the 1:1 pockets record. Group members' records ride
+    // groupRealismState and are restored with it; this is the half that had no
+    // home and so was silently dropped on every reload.
+    //
+    // Restored regardless of whether Pockets is currently switched on: a
+    // record only exists because it was on at the time, and rolling a chat
+    // open must not be the thing that empties her hands.
+    final pj = s.pockets;
+    _pockets = (pj is String && pj.isNotEmpty)
+        ? Pockets.fromJson(jsonDecode(pj))
+        : null;
+
     // Re-sync from the character's current setting so that toggling
     // "Enjoys low hygiene" on the character affects existing chats on next load.
     _enjoysLowHygiene =

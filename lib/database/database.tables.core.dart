@@ -158,6 +158,22 @@ class Sessions extends Table {
   TextColumn get needsVector =>
       text().nullable()(); // JSON map of current need levels
 
+  /// v47 — the 1:1 speaker's Pockets record, as `{worn: [...], carrying: [...]}`.
+  ///
+  /// The mirror of [needsVector], and it exists for the same reason. Group
+  /// chats persist their per-member pockets inside `group_realism_state`, so
+  /// they always survived a reload; a 1:1 chat had NO home for the record at
+  /// all. It lived in memory, snapshotted into each message's `realism_state`
+  /// — but that snapshot is only restored on regen, swipe and delete, never on
+  /// session load. So closing a 1:1 chat and reopening it emptied her pockets,
+  /// while the feature's own description promised the opposite. Straight
+  /// 1:1-vs-group parity break.
+  ///
+  /// Nullable with no default: NULL means "nothing recorded", which is the
+  /// honest value both for every chat that predates this column and for any
+  /// chat where Pockets is switched off.
+  TextColumn get pockets => text().nullable()();
+
   // Per-session character evolution (v19)
   // 1:1 chats: plain evolved text
   TextColumn get evolvedPersonality => text().withDefault(const Constant(''))();

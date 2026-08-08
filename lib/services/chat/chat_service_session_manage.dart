@@ -473,6 +473,10 @@ extension ChatServiceSessionManage on ChatService {
         _needsSimulation.clearVector();
       }
       _needsSimulation.resetBuffers();
+      // v47: the 1:1 Pockets record is per-chat and re-seeds from the card on
+      // the first pass, so a fresh chat must start empty. See the chat_entry
+      // twin — now that the record persists, a bleed here would be saved.
+      _pockets = null;
       // needs_impact_evaluator is stateless/prompt-only (no reset calls needed on it;
       // see full list in "keep reset blocks in sync" comments + cross-ref setActiveCharacter:1572 + evolution_service (stateless or prompt-only; no reset calls needed) + realism_verification (stateless or prompt-only; no reset calls needed) + " ; read live from ext on active/group speaker; incomplete zeroing... now complete (see CLAUDE.md) (no extra scalar)") + "needsSimulation. (reason support kept for Director chips) ; cleared via sim initializeFresh/clearVector/resetBuffers on all paths; now complete)".
 
@@ -546,6 +550,9 @@ extension ChatServiceSessionManage on ChatService {
         _enjoysLowHygiene = false;
         _needsSimulation.clearVector();
         _needsSimulation.resetBuffers();
+        // v47: same as the ext-seed branch above — a fresh chat starts with
+        // empty hands and re-seeds from the card on the first pass.
+        _pockets = null;
         // Fresh group chat: reset each member's per-character realism (bond/trust/
         // emotion/needs/FIXATION) back to the group's default member baselines so
         // the previous session's evolved state — most visibly an active fixation

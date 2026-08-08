@@ -194,6 +194,12 @@ extension ChatServiceChatEntry on ChatService {
       _enjoysLowHygiene = false;
       _needsSimulation.clearVector();
       _needsSimulation.resetBuffers();
+      // v47: clear the 1:1 Pockets record too. A fresh chat re-seeds from the
+      // card, and leaving the previous chat's record in the scalar meant she
+      // walked into the new conversation still holding the last one's props.
+      // Harmless while the record was memory-only; now that it is saved, the
+      // bleed would be written to the new chat's row and become permanent.
+      _pockets = null;
       _realismEnabled = false;
       _characterEmotion = '';
       _emotionIntensity = '';

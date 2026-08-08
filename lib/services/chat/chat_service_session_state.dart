@@ -352,6 +352,17 @@ extension ChatServiceSessionState on ChatService {
         needsVector: drift.Value(
           _needsSimEnabled ? jsonEncode(_needsSimulation.vector) : null,
         ),
+        // v47 — the 1:1 record. Group members keep theirs inside
+        // groupRealismState above, which is why groups always survived a
+        // reload and 1:1 chats did not: the scalar had nowhere to go. Written
+        // unconditionally rather than behind the Pockets switch, because
+        // toggling the feature off mid-chat must not erase what she was
+        // already carrying — turning it back on should find the record intact.
+        pockets: drift.Value(
+          _activeGroup == null && _pockets != null && !_pockets!.isEmpty
+              ? jsonEncode(_pockets!.toJson())
+              : null,
+        ),
         groupRealismState: drift.Value(groupRealismJson),
         arousalLevel: drift.Value(_nsfwService.arousalLevel),
         cooldownTurnsRemaining: drift.Value(

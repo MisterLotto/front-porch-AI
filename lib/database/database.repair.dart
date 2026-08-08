@@ -119,6 +119,10 @@ extension AppDatabaseMaintenance on AppDatabase {
         // definition and the ladder exactly — objectives ran unconditionally
         // before v45, so 1 is the only value that preserves existing chats.
         'objectives_enabled INTEGER NOT NULL DEFAULT 1',
+        // v47 — matches the Table definition and the ladder: nullable, no
+        // default. NULL means nothing was recorded, which is true for every
+        // chat older than the column.
+        'pockets TEXT',
       ],
       'group_members': [
         // Per current GroupMembers Dart definition + created_at (to match the repair-path CREATE TABLE).

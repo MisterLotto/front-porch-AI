@@ -67,7 +67,15 @@ void main() {
       //      the Table, the ladder and the repair path agree — that is the
       //      test that would catch a BAD schema change; this one only notices
       //      that a change happened at all.
-      expect(db.schemaVersion, 46);
+      // v47: sessions.pockets — the 1:1 Pockets record. Same reasoning again:
+      //      this assertion tracks schemaVersion by definition, so once the
+      //      version really is 47 the old value is false rather than merely
+      //      failing. The column itself is guarded by
+      //      test/database/pockets_persist_migration_test.dart, which checks
+      //      the Table/ladder/repair trio AND that the save and load wires
+      //      exist — the wires being the part that was actually missing and
+      //      that made 1:1 chats forget her pockets on every reload.
+      expect(db.schemaVersion, 47);
     });
 
     test('journal_memories table exists and round-trips (v35)', () async {

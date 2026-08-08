@@ -150,12 +150,18 @@ void main() {
       expect(repair, contains("'served_ambition TEXT'"));
     });
 
-    test('schemaVersion advanced to 46', () {
-      expect(
-        File('lib/database/database.dart').readAsStringSync(),
-        contains('schemaVersion => 46'),
-        reason: 'the ladder step is dead code if the version never asks for it',
-      );
+    test('schemaVersion is at least 46, so the v46 step runs', () {
+      // Deliberately >= rather than == 46. This guard is about THIS column's
+      // ladder step being reachable, which stays true at every later version;
+      // pinning the exact number made it stale the moment v47 landed and turned
+      // an unrelated schema change into a failure in the served_ambition file.
+      // The exact-version tracker lives in avatar_repository_test.dart and is
+      // the one place that should need touching on a bump.
+      final m = RegExp(
+        r'schemaVersion => (\d+)',
+      ).firstMatch(File('lib/database/database.dart').readAsStringSync());
+      expect(m, isNotNull);
+      expect(int.parse(m!.group(1)!), greaterThanOrEqualTo(46));
     });
   });
 }

@@ -11477,3 +11477,72 @@ strictly harder than noticing what changed.
 a future contributor would reach for (startsWith/contains) — it hands Sam's
 coat to Samantha and reddens two tests · web lint + 34 tests + build.
 Commit: 4b830fd
+
+---
+
+## 2026-08-08 — Schema v47: a 1:1 chat forgot her pockets on every reload
+
+**Files:** `lib/database/database.dart` (schemaVersion 46 → 47) ·
+`database.tables.core.dart` (`sessions.pockets`) · `database.migrations.dart`
+(v46→v47 step) · `database.repair.dart` · `database.g.dart` (regenerated,
+purely additive) · `chat/chat_service_session_state.dart` (save wire) ·
+`chat/chat_service_session_load.dart` (load wire) ·
+`chat/chat_service_chat_entry.dart` + `chat/chat_service_session_manage.dart`
+(fresh-chat resets) · `chat/chat_service_cast.dart` (group-collapse carry) ·
+`test/database/pockets_persist_migration_test.dart` (new, 13 guards) ·
+`test/services/avatar_repository_test.dart` (version tracker → 47) ·
+`test/database/served_ambition_migration_test.dart` (== 46 → >= 46) ·
+`docs/Rawhide.md`
+
+**The bug.** Group chats persisted each member's Pockets record inside
+`group_realism_state`, so they always survived a reload. A 1:1 chat had no home
+for the record at all: `ChatService._pockets` lived in memory and was
+snapshotted into each message's `realism_state` — but that snapshot is only
+ever read back by `_restoreRealismStateForSpeaker`, which runs on regen, swipe
+and delete, and never on session load. Closing a 1:1 chat and reopening it
+emptied her pockets and the next pass re-seeded from the card as though the
+chat were brand new.
+
+That is a straight 1:1-vs-group parity break, and it made the feature's own
+release note false for exactly the users most likely to try it — "the keys stay
+in her pocket", until you closed the tab.
+
+**The fix** mirrors how Needs solved the identical problem: a nullable
+`sessions.pockets` TEXT column, additive, saved beside `needs_vector` and
+loaded beside it. Written whenever the record is non-empty rather than behind
+the Pockets switch, so toggling the feature off mid-chat does not erase what
+she was already carrying; restored regardless of the switch's current state,
+because opening a chat must not be the thing that empties her hands.
+
+**Two adjacent leaks fixed in the same change, because persistence promoted
+them from invisible to permanent.** Neither was reachable from the column
+itself, and both are the same "the 1:1 record has nowhere to live" bug wearing
+a different hat:
+
+1. **Fresh-chat bleed.** `_pockets` was absent from all three fresh-chat reset
+   blocks, so a new conversation opened with the *previous* chat's props still
+   in her hands. Harmless while the record was memory-only and re-seeded from
+   the card anyway — but with a save wire in place the bleed gets written into
+   the new chat's row, where it is indistinguishable from something she
+   actually picked up.
+2. **Group collapse.** When a group shrinks to one member, `chat_service_cast`
+   carries the survivor's realism snapshot, enable-flags, author note and
+   growth rings back to the 1:1 — but dropped her Pockets record on the floor,
+   emptying her hands. Captured now alongside `soleNsfwEnabled`, which is read
+   at the same point and for the same reason: step 4 re-enters as a 1:1, which
+   clears `_groupRealism`, so reading it afterwards finds nothing. Carried
+   regardless of realism, since the Pockets pass is gated on `pocketsEnabled`
+   alone and a survivor can be holding her keys with the engine off.
+
+**On the version-tracker test.** `served_ambition_migration_test.dart` asserted
+`schemaVersion == 46` and went stale the moment v47 landed, turning an
+unrelated schema change into a failure in the served_ambition file. Loosened to
+`>= 46`: that guard is about *this column's ladder step being reachable*, which
+stays true at every later version. `avatar_repository_test.dart` remains the
+single exact-version tracker, and is the one place a bump should need to touch.
+
+**Gates:** analyze 0 · `dart fix --dry-run` nothing to fix · 3110 unit tests ·
+94 goldens (run natively on Linux — same platform CI uses; the fpai-golden
+container was unavailable, no Docker daemon in this environment) · 13 new
+guards, the three orchestration ones negative-checked one at a time (each went
+red on removal, green on restore, and each failed only its own test).
