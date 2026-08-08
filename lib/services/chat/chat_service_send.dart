@@ -76,6 +76,11 @@ extension ChatServiceSend on ChatService {
     // not cancel.
     _realismEvalCancelled = false;
     clearSuggestions();
+    // Before ANY prompt is built for this turn. Counting the greeting as
+    // turn 0, this is what puts an authored wardrobe into turn 1's prompt —
+    // the pass that used to do it runs after the reply exists, so the first
+    // real answer was generated blind to what she was wearing.
+    seedPocketsFromCards();
 
     // A new message while an /image prompt review is parked cancels it —
     // the desktop dialog is modal, but the web modal can be typed around.

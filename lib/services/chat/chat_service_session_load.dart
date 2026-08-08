@@ -429,6 +429,11 @@ extension ChatServiceSessionLoad on ChatService {
     _pockets = (pj is String && pj.isNotEmpty)
         ? Pockets.fromJson(jsonDecode(pj))
         : null;
+    // No saved record means this chat has never run the pass, so fall back to
+    // what the card starts her with — otherwise the sidebar reads empty until
+    // after the first reply and an author who just set a wardrobe concludes it
+    // did not save. Skipped when a record exists: the chat has moved on.
+    seedPocketsFromCards();
 
     // Re-sync from the character's current setting so that toggling
     // "Enjoys low hygiene" on the character affects existing chats on next load.

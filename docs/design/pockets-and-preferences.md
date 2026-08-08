@@ -107,6 +107,21 @@ record, inject it every turn, apply deltas.
     information-preserving in the naive sense ("pepper spray (small)" re-splits)
     and does not need to be: what round-trips exactly is the DISPLAY string,
     and display is what gets injected and shown.
+  - **Seeded BEFORE turn 1, not after it (fixed 2026-08-08).** The card seed
+    originally lived only inside `_runPocketsPass`, which runs *after* a reply
+    is generated. Counting the greeting as turn 0, that left turn 1 — the
+    character's first real reply — built from a prompt with no inventory
+    fragment at all: dressed from turn 2 onward, bare for the turn that sets
+    the scene, and a blank sidebar for exactly as long. `seedPocketsFromCards()`
+    now runs at the top of `sendMessage` (before any prompt is built) and on
+    session load (so the sidebar is populated at turn 0). Idempotent, gated on
+    the Pockets switch, identical for 1:1 and group by construction — one loop
+    over one speaker list through the same `setPocketsFor` the pass uses.
+    Deliberately NOT a fallback inside `pocketsFor`: that getter is read from
+    the sidebar's `build`, which rebuilds once per streamed token, so parsing
+    the card there would be the per-frame-work pattern the `coverImageFileFor`
+    regression exists to warn about. The pass keeps its own `??` seed for
+    characters who ARRIVE mid-turn (Scene Guest, cast change).
   - **An empty wardrobe stays absent from the card.** `cardJsonFrom` returns an
     empty map when nothing survives, so `CharacterCard.toJson`'s conditional
     emit keeps a card without a wardrobe byte-identical to one written before

@@ -53,6 +53,59 @@ extension ChatServicePockets on ChatService {
     (_groupRealism[characterId] ??= GroupMemberRealism()).pockets = p;
   }
 
+  /// What [c]'s card says they START a chat with.
+  ///
+  /// One expression, named once, because three places need it and a card that
+  /// disagrees with itself about its own starting kit is the kind of bug that
+  /// only shows up as "sometimes she has the keys".
+  Pockets startingPocketsFor(CharacterCard c) =>
+      Pockets.fromJson(c.frontPorchExtensions?.inventory);
+
+  /// Give every speaker in this chat the record their card starts them with,
+  /// unless the chat already has one for them.
+  ///
+  /// WHY THIS EXISTS. The card seed used to happen only inside
+  /// [_runPocketsPass], which runs AFTER a reply is generated. Counting the
+  /// greeting as turn 0, that meant the character's first real reply — turn 1 —
+  /// was generated with no inventory fragment in its prompt at all: an author
+  /// could dress a character in a flour-dusted apron and she would answer the
+  /// first message knowing nothing about it, then be wearing it from turn 2
+  /// onward. The sidebar was blank for exactly as long. Authoring made that
+  /// visible; before there was an editor, nobody could hit it.
+  ///
+  /// Deliberately NOT a fallback inside [pocketsFor]. That getter is read from
+  /// the sidebar's `build`, which rebuilds on every `notifyListeners()` — once
+  /// per streamed token — so parsing the card there would be the exact
+  /// per-frame-work pattern the `coverImageFileFor` regression taught us to
+  /// avoid: invisible on a dev Mac, expensive on Windows. This runs once per
+  /// turn and short-circuits to a map lookup the moment a record exists.
+  ///
+  /// Idempotent, and identical for 1:1 and group by construction — one loop
+  /// over one speaker list, writing through the same [setPocketsFor] the pass
+  /// uses, so the two modes cannot diverge about what a character starts with.
+  void seedPocketsFromCards() {
+    // The one switch Pockets answers to. Seeding while it is off would let the
+    // v47 save wire persist a record the user never asked for.
+    if (!_storageService.realismSettings.pocketsEnabled) return;
+
+    final speakers = _activeGroup == null
+        ? [?_activeCharacter]
+        : _groupCharacters;
+
+    for (final c in speakers) {
+      final id = _getCharacterIdFromCard(c);
+      // Already has a record: this chat has moved on from whatever the card
+      // said, and re-seeding would hand back things she put down.
+      if (pocketsFor(id) != null) continue;
+      final seed = startingPocketsFor(c);
+      // Nothing authored — leave the record ABSENT rather than empty. Every
+      // reader treats null and empty alike, but the web facade sends `null` to
+      // hide its panel, so an empty record would show an empty panel instead.
+      if (seed.isEmpty) continue;
+      setPocketsFor(id, seed);
+    }
+  }
+
   /// Runs the detection pass for the speaker who just replied.
   ///
   /// Gated HERE and nowhere else, so there is exactly one place the feature is
@@ -70,9 +123,10 @@ extension ChatServicePockets on ChatService {
     // Seed from the card the first time this chat asks: an author who wrote
     // `frontPorchExtensions.inventory` expects her to START with those things,
     // not to acquire them by accident later.
-    final record =
-        pocketsFor(charId) ??
-        Pockets.fromJson(speaker.frontPorchExtensions?.inventory);
+    // Still `??`-lazy, and still load-bearing: seedPocketsFromCards runs at
+    // the top of a user turn, so a character who ARRIVES mid-turn (a Scene
+    // Guest, a cast change) reaches this without having been seeded.
+    final record = pocketsFor(charId) ?? startingPocketsFor(speaker);
 
     // Hand-offs (Porch Life -> "Hand things between characters"). Only ever in
     // a group: in a 1:1 the only other party is the user, who has no record to
@@ -113,8 +167,7 @@ extension ChatServicePockets on ChatService {
       if (matches.isEmpty) continue;
       final recipient = matches.first;
       final rid = _getCharacterIdFromCard(recipient);
-      final theirs =
-          pocketsFor(rid) ?? Pockets.fromJson(recipient.frontPorchExtensions?.inventory);
+      final theirs = pocketsFor(rid) ?? startingPocketsFor(recipient);
       theirs.carrying.add(entry.value);
       while (theirs.carrying.length > kMaxCarrying) {
         theirs.carrying.removeAt(0);

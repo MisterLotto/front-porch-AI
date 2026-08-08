@@ -11704,3 +11704,56 @@ rather than pasted a second time.
 bundle rebuilt. 9 new guards, negative-checked three ways — restoring the
 escaped-dollar bug (1 red), reading inventory through `stoopPhrases` (6 red),
 and dropping item condition (1 red).
+
+---
+
+## 2026-08-08 — An authored wardrobe now reaches turn 1
+
+**Files:** `lib/services/chat/chat_service_pockets.dart`
+(`seedPocketsFromCards`, `startingPocketsFor`) ·
+`lib/services/chat/chat_service_send.dart` (start-of-turn call) ·
+`lib/services/chat/chat_service_session_load.dart` (chat-open call) ·
+`test/services/chat/wardrobe_turn_one_test.dart` (new, 8) ·
+`docs/design/pockets-and-preferences.md` · `docs/Rawhide.md`
+
+**Numbering** (maintainer's, adopted in the code comments): the greeting is
+turn 0; turn 1 is the character's first real reply.
+
+**The bug.** The card seed lived only inside `_runPocketsPass`, which runs
+AFTER a reply is generated. So: user sends their first message → the prompt is
+built with no inventory fragment, because no record exists yet → the model
+writes turn 1 knowing nothing about the apron its author put on her → only then
+does the pass seed. She was dressed from turn 2 onward and bare for the turn
+that sets the scene. The sidebar was blank for exactly as long, which is when an
+author who just saved a wardrobe goes to check it worked.
+
+Unreachable before the authoring UI existed, since nothing wrote the field.
+Authoring made it reachable, so it is fixed alongside authoring.
+
+**The fix.** `seedPocketsFromCards()` runs at the top of `sendMessage` (before
+any prompt is built) and on session load (so turn 0's sidebar is populated).
+Idempotent, gated on the Pockets switch alone, and identical for 1:1 and group
+by construction — one loop over one speaker list, writing through the same
+`setPocketsFor` the pass uses, so the two modes cannot diverge about what a
+character starts with.
+
+**Why not a fallback inside `pocketsFor`.** That was the obvious one-line
+version and it is wrong: `pocketsFor` is read from the sidebar's `build`, which
+rebuilds on every `notifyListeners()` — once per streamed token — so parsing the
+card there is exactly the per-frame-work pattern the `coverImageFileFor`
+regression exists to warn about (invisible on a dev Mac, expensive on Windows).
+It also would have forced a null→empty semantic change: two consumers
+distinguish them (`chat_tools_facade` sends `null` to HIDE the web panel, and
+the realism snapshot omits the key), so an empty record would have shown an
+empty panel and changed message metadata.
+
+**Kept deliberately:** the pass's own `??` seed. The top-of-turn seed cannot
+cover a character who ARRIVES mid-turn (Scene Guest, cast change). The three
+inline copies of `Pockets.fromJson(card.inventory)` collapsed into
+`startingPocketsFor`.
+
+**Gates:** analyze 0 · 3167 unit tests · 94 goldens. 8 new guards,
+negative-checked four ways — moving the seed to after generation (the original
+bug, reproduced exactly), removing it from `sendMessage`, removing the
+session-load call, and dropping condition from the injection — each reddening
+its own correct set.
