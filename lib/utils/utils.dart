@@ -42,6 +42,7 @@ export 'png_metadata_utils.dart';
 export 'spell_check_languages.dart';
 export 'startup_trace.dart';
 export 'think_tags.dart';
+export 'world_cover.dart';
 export 'world_ref_resolver.dart';
 export 'character_linked_world.dart';
 export 'vram_estimator.dart';

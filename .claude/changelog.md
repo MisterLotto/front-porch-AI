@@ -12605,3 +12605,251 @@ happen, an event always outpaces drift (the soda case by name), the caps are not
 one flat number, restoration and the raw mutator stay unbounded, decay still
 moves at its own documented rate, and an absent or nonsense strength degrades to
 1x rather than crashing.
+## 2026-08-08 — Stoop hub: the 18+ predicate picked the cast list nobody reads
+
+**Files:** `website/src/stoop/completeness.js`, `website/src/stoop/views-my.js`,
+`website/src/stoop/views-browse.js` (hub only; no Dart, no `web_ui/`)
+
+A group card carries its cast under BOTH `members` and `raw_member_data` —
+`GroupCard.toJson` writes `members` unconditionally and `raw_member_data`
+whenever it is non-empty, so a genuine export always has both. Every consumer
+prefers `raw_member_data`: `GroupCard.fromJson`, the importer, the desktop Stoop
+panel, and this hub's own card page. The new 18+ predicate was written as
+`members OR raw_member_data` — it picked ONE list, and it picked the one nobody
+reads. Strip the extensions out of the exported JSON's `members[]`, leave the
+payload in `raw_member_data[]`, and the card published as SFW while every
+downloader's importer installed a character with intimate preferences. Both
+lists are now scanned; a duplicate scan is free and a missed member is not.
+
+Same file: the V2 unwrap was single-scope. `unwrapCard` only prefers the nested
+`data` object when that object also carries persona fields, so a card keeping
+its persona at the ROOT with `extensions` hidden under `data` came back
+unwrapped and the key-chain missed it. The server (`card-nsfw.ts`) already walks
+two scopes plus the same per member, so the hub was LAXER than the API, not
+stricter: the box stayed unticked, no banner showed, the payload shipped
+`nsfw:false`, and the server silently rewrote it — exactly the surprise the
+banner exists to prevent. Now matched, root and per member.
+
+`views-my.js`: releasing the 18+ lock re-enabled the checkbox but never unticked
+it, and the code could not tell a tick IT set from a tick the author chose. Drop
+a card with intimate preferences, then a clean one, and the box stayed ticked
+and the payload OR'd to `nsfw:true` — publishing a card with zero intimate
+preferences as 18+. A one-flag "was this tick mine?" (stored on the checkbox, so
+it cannot leak between the card flow and the world flow) withdraws the
+programmatic tick while an author's own tick survives untouched.
+
+`views-browse.js`, the card page: `card.raw_member_data || card.members || []`
+had no `Array.isArray` guard, so a truthy non-array reached `.map`, threw, and
+replaced the whole card page with the error state — reachable by shipping
+`members:[{name,description}]` (which passes the server's completeness gate)
+alongside `raw_member_data:'oops'`. The page now renders the deduped UNION of
+both lists (a member present in only one is still part of the cast), `m.name`
+and `m.description` come off the same unwrapped node `realismBlock` uses (a
+V2-nested member used to read "Unnamed / —" while rendering its own ambitions
+underneath), and the per-member loop is capped at 24 with an honest "Showing the
+first 24 of N" line — measured, a 5,000-member cast built 520,031 DOM nodes in
+2.5s before the cap and 2,528 nodes in 123ms after it. Silent truncation on a
+page moderators read was not an option.
+
+Deliberately NOT unioned: `groupCompleteness`. That gate decides whether Submit
+is allowed and must agree with the server's `card-completeness.ts`, which picks
+a single list; unioning there would wall off uploads the API accepts. Over-
+tagging 18+ costs nothing, under-tagging is an evasion — the two gates want
+opposite defaults, and the file now says so.
+
+**Gates:** `node --check` on all three · `node build.mjs` green · all 15
+truth-table rows PASS against the real `completeness.js` in a vm (plus 17
+hostile shapes, none throwing, and a control proving a genuine clean group export
+still reads SFW) · 21 jsdom assertions on the real `views-browse.js` · 13 on the
+real submit form. Every fix negative-checked: reverting the union turns rows 8
+and 10 red; dropping the second scope turns row 12 red; dropping the per-member
+`data` scope turns row 13 red; the old tick logic publishes the clean card as
+`nsfw:true`; and the verbatim pre-fix member block fails the error-state,
+V2-name, boundedness and union assertions together.
+
+## 2026-08-08 — Stoop share wizard: the 18+ lock's Dart twin, plus a group-card crash
+
+**Files:** `lib/ui/pages/repository/stoop_upload_page.dart`,
+`lib/ui/pages/repository/stoop_adult_lock_banner.dart`,
+`lib/ui/pages/repository/stoop_wizard_steps.dart` (new),
+`lib/ui/pages/repository/repository.dart`, `lib/models/group_card.dart`,
+`test/ui/stoop_adult_lock_test.dart`, `test/models/group_card_hostile_json_test.dart` (new)
+
+Four defects found by an adversarial review of the desktop half of the 18+ lock.
+
+**A — the forced flag was sticky across picks.** `_nsfw` was never reset, so
+pick a character with intimate preferences (forced on), tap Next, tap Back, pick
+a CLEAN character: the banner and the lock were gone but the `true` stayed, and
+the payload OR'd to `nsfw:true`. A card with zero intimate preferences went up
+18+ and was hidden from everyone who hasn't opted in. Same via a PLACE, which has
+no cast at all. This is the identical bug the hub side already fixed
+(`views-my.js`), so the two surfaces disagreed. Same shape of fix: a
+`StoopAdultFlag` that records whether the tick is the RULE's or the AUTHOR's —
+`reconcile(forced:)` withdraws a programmatic tick when the force releases,
+`setByAuthor()` marks a human tick that survives a force coming and going. Every
+path that can change the selection now reconciles, including the world applier.
+
+**B — the group force read the wrong bytes.** `_applyGroupSelection` fired
+`getMembersForGroup(...).then(...)` with no await and no completion gate, and
+that repository method catches its own errors and returns `[]` — which the 18+
+rule cannot tell from a clean cast. Meanwhile `_publishGroup` awaited
+`GroupCardExporter.buildGroupCard`, whose own successful read wrote the dirty
+cast into both `members` and `raw_member_data`. A transient DB hiccup therefore
+shipped `nsfw:false` with a card that plainly carried intimate preferences; the
+server rewrote it and the author was never told. The ordering only ever worked
+because Drift happens to complete the two reads FIFO — an emergent property of
+the executor, not a guarantee. Fixed structurally: new
+`stoopGroupCardForcesAdult(GroupCard)` decides from the card the method already
+awaited (both cast lists, since both travel in the payload). The pre-publish read
+survives only as the BANNER's advisory input — the wizard has to show something
+before Submit — and now says so in a comment.
+
+**C — group update mode flashed the wrong state.** Update mode jumps straight to
+the Content step and kicks the async member load, so the first frames rendered an
+unlocked, OFF switch — actively the opposite of the truth — and then snapped on.
+`StoopAdultSwitch` gained a `pending` state: disabled, with "Checking who's in
+this group…" as the subtitle, until the cast is known.
+
+**D — `GroupCard.fromJson` crashed on a stranger's card.**
+`turnOrder: json['turn_order'] ?? 'roundRobin'` assigned into a `String` with no
+type check, so `"turn_order": []` threw
+`type 'List<dynamic>' is not a subtype of type 'String'` out of the factory —
+and both Stoop download callers build this from a downloaded card
+(`stoop_card_detail_page.dart:212`, `services/web/facade/stoop_facade.dart:219`),
+so one bad field killed the whole download. Coerced like its neighbours, and the
+same pass hardened the identical holes beside it (name/first_message/scenario/
+system_prompt, the five bools, the `members`/`raw_member_data`/`world_*` list
+casts, the `member_objectives` inner casts, and the nested `data['data']['name']`
+dig) via three local coercion helpers. One bad field now costs that field.
+
+**Ratchet:** `stoop_upload_page.dart` was at 991 of the 1,000-line CI limit, so
+the fixes went into the leaf instead of the page, and the wizard's step
+indicator (63 lines of pure chrome, three private builders, used nowhere else)
+moved to a new `stoop_wizard_steps.dart`. Page: 991 → 955.
+
+**Gates:** `flutter analyze` clean on all touched paths · 19 tests in
+`stoop_adult_lock_test.dart` (4 of them widget tests driving the real wizard —
+real tiles, real Back/Next) + 8 in `group_card_hostile_json_test.dart`, all
+green · every new guard negative-checked: restoring the old sticky rule turns 3
+red; an over-eager `value = forced` turns the author's-tick guard red (and only
+that one); dropping `pending` turns the loading guard red; defeating
+`stoopGroupCardForcesAdult` turns 2 red; restoring the old `turn_order` line
+reproduces the exact `List<dynamic> is not a subtype of String` crash.
+
+**Barrels (same-visit duty):** `stoop_upload_page.dart` was reaching into
+`utils/` twice by hand; `utils.dart` gained the missing `world_cover.dart`
+export (4 direct importers, none of its five names collide) and the page now
+imports the barrel once. That surfaced a now-redundant direct import in
+`ui/pages/worlds/world_place_card.dart`, removed in the same change. Files
+inside `ui/pages/repository/` keep their direct sibling imports — importing
+their own barrel would be circular, which `repository.dart` says in its header.
+
+## 2026-08-08 — The Stoop website was dropping half of every card, and 18+ was a self-declaration
+
+**Files:** `website/src/stoop/views-browse.js`, `website/src/stoop/stoop.css`
+(this repo) · `src/lib/card-nsfw.ts`, `src/routes/characters.ts`,
+`src/scripts/ingest-fp.ts`, `public/admin/js/card-fields.js`,
+`public/admin/js/app.js`, `public/admin/styles.css`, `moderation/**`
+(backporch-server, deployed separately)
+
+Two problems that turned out to be one problem.
+
+**1. The hub showed a card's prose and nothing else.** A character's authored
+Ambitions, Likes & Dislikes and starting Pockets & Wardrobe were already
+arriving at the website — the API returns the card blob verbatim, so they were
+sitting in `c.card.extensions.front_porch.realism_engine` the whole time — and
+`renderCard` simply never looked. The desktop panel and the PWA had shipped
+these sections a day earlier, so the website was the odd one out. Added, in the
+same collapsible `hub-sect` shape as Description/Personality/Lorebook, between
+Example dialogue and the lorebook, with byte-identical titles, glyphs,
+sub-labels and counts to the other two clients. Group casts get the same three
+sections per member, built from the SAME helpers, rendered collapsed so a large
+cast costs nothing. The 18+ pair is deliberately NOT rendered — guests reach
+this page, and opening a card is not opting into 18+ content, which is the
+settled rule on both other clients. Caps are copied, not invented: 24 phrases at
+160 chars, 8 inventory entries at 60, sliced off the RAW list, because a
+stranger's card can carry fifty thousand of anything.
+
+**2. Whether a card was 18+ was whatever the uploader ticked.** A character
+carrying intimate preferences is 18+ regardless of the rest of the card, but
+nothing enforced that: leave the box unticked — by accident, by disagreement, or
+because your app predates the rule — and it published SFW. Now `cardForcesNsfw`
+decides, at `parseCard`, the one choke point all three write routes funnel
+through (create, idempotent re-upload, new version), which also closes a quieter
+hole: `versionSchema.nsfw` is optional and the version path only writes fields it
+is given, so a card that GAINED intimate preferences in a later version kept its
+original SFW label forever. Both upload UIs got an advisory banner and a locked
+checkbox; the server is the authority and says so.
+
+**The test is on CONTENT, never on the key.** `intimate_preferences` is emitted
+unconditionally onto every Front Porch card, usually as the empty
+`{into: [], not_into: []}`, so a key-existence check would have marked the entire
+catalogue 18+ in one deploy. It is: at least one entry that is a string
+containing a non-whitespace character.
+
+**No backfill.** The feature landed 2026-08-07 on Rawhide only (`b4f37b46`), so
+there is no catalogue of mislabelled cards to sweep — the exposure is one day of
+nightly builds. Deliberately not written; a boot-time sweep that flips live cards
+to 18+ removes them from SFW browse, 404s their art and degrades their share
+unfurls, and there was nothing to gain.
+
+**The moderator dashboard now shows everything.** It rendered 11 hand-picked
+fields and never opened `card.extensions`, so ambitions, wardrobe and — the point
+— intimate preferences were invisible to whoever was approving the card. Every
+realism key now renders, grouped; anything not explicitly styled falls through a
+generic dump derived by DIFFING the card's actual keys against the ones rendered,
+so a future card field appears by itself instead of silently vanishing. A loud
+callout fires when a card carries intimate preferences but is flagged SFW. Fixed
+in the same pass: a group's lorebook had NEVER been visible (`group_lorebook` is
+a JSON *string*, and the renderer bailed on `typeof !== "object"`).
+
+**The review rubric was unenforceable because the reviewer was blind.**
+`extract_card.py` printed six card fields, cut at 2,200 characters with no
+marker, and never touched `extensions` — so text parked in an intimate
+preference, an inventory item name or an ambition was never shown to the
+reviewing model, and every dimension could be "assessed" on a card nobody had
+fully read. The printer now dumps every leaf: the missing V2 fields, alternate
+greetings, lorebook entries, each group member's FULL definition, the whole
+realism free-text set, an unknown-key sweep, and the member portraits carried
+inside the card as base64 (previously reviewed by nobody). The rubric's scope
+sentence now defines "text" as every string anywhere in the card JSON, and the
+"NSFW not marked NSFW" check is restated: post-force, that combination is
+evidence of a bypass, not a judgement call. A display cap is never a scan cap —
+the printer's own new rule 4, after the 200-member print cap was found also
+truncating the 18+ scan.
+
+**THE DEFECT THAT MATTERED, found by adversarial review and not by me.** The
+predicate is implemented five times, in four languages, and the laxest one is the
+one an attacker uses. Two independent reviewers proved the same hole from
+different directions: a group card ships its cast under BOTH `members` and
+`raw_member_data`, every consumer reads `raw_member_data` first, and the first
+cut of every predicate picked ONE list — the one nobody imports from. Strip
+`extensions` out of `members[]` in a text editor, leave the payload in
+`raw_member_data[]`, publish as SFW, and every downloader still installs the
+character with its intimate preferences. Then a cross-language consistency run
+found a second, deeper one: the two-scope V2 unwrap used `unwrapCard(root)`,
+which MERGES `data` over `root`, so appending an inert-looking
+`"data": {"first_mes": "...", "members": [], "raw_member_data": []}` to an honest
+export replaced the real cast lists with empty decoys — verified end-to-end
+against the real Dart importer under `flutter test`. Both closed: the lists are
+UNIONed and never deduped, and the RAW ROOT is scanned as its own scope before
+anything can shadow it. This errs toward 18+ on one shape where a downloader
+would install nothing; over-tagging costs a badge, under-tagging ships 18+
+content to people who asked not to see it, and only one of those is recoverable.
+
+**Gates:** a 59-fixture cross-language harness runs all four implementations
+(TypeScript authority, hub JS, dashboard JS, Python printer) over the same JSON
+files — **0 disagreements, 0 expected-value misses**, including the
+catalogue-killer row FALSE everywhere and every group-evasion row TRUE
+everywhere. `flutter analyze` clean · 3,261 tests green · `npx tsc --noEmit`
+clean · every hub JS file `node --check` clean · `node build.mjs` green ·
+`./scripts/ci-local.sh` (the Linux-gated pixel goldens) **94 tests passed** ·
+hub card detail rendered in a real headless browser and confirmed: sections in
+the right order, `{name, state}` renders as `microphone (News Channel 69 cube)`,
+and the 18+ pair does not leak.
+
+**Also fixed while in there:** `views-browse.js` carried a literal NUL byte as a
+dedupe-key separator, which made `git`, `grep` and every diff tool treat the file
+as binary — and caused one reviewer to wrongly conclude the group-member
+renderer did not exist. It is now written as a backslash-u escape instead: identical at
+runtime, plain text on disk.

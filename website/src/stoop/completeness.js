@@ -1,7 +1,12 @@
-/* The Stoop hub — card completeness gate.
-   Mirrors backporch-server/src/lib/card-completeness.ts so the website and
-   API reject the same incomplete shells (empty first_mes / persona / scenario,
-   empty world lore, thin group casts). Keep the two in sync when rules change. */
+/* The Stoop hub — card completeness gate + the 18+ intimate-preferences rule.
+   Mirrors TWO server rules so the website and the API agree about a card:
+     - backporch-server/src/lib/card-completeness.ts — reject the same
+       incomplete shells (empty first_mes / persona / scenario, empty world
+       lore, thin group casts);
+     - backporch-server/src/lib/card-nsfw.ts — a card carrying intimate
+       preferences is 18+ regardless of everything else on it.
+   The server is the authority in both cases; this copy exists so the submit
+   form can say so before you hit send. Keep them in sync when rules change. */
 (function () {
   'use strict';
   window.Stoop = window.Stoop || {};
@@ -37,6 +42,97 @@
       return out;
     }
     return root;
+  }
+
+  /** An intimate-preference list counts only when it holds a real phrase.
+      Deliberately stricter than present(): a bare string, a number, or an
+      object in there is malformed input, not an authored preference. */
+  function prefListFilled(v) {
+    return Array.isArray(v) && v.some(function (item) {
+      return typeof item === 'string' && item.trim().length > 0;
+    });
+  }
+
+  /** True when THIS one node — never its members — carries a filled intimate
+      preference list. Type-check every hop rather than cast: a hostile upload's
+      wrong-typed field must cost that one field, never throw and take the page
+      down with it. */
+  function carriesIntimate(node) {
+    var n = asObj(node);
+    var ext = n && asObj(n.extensions);
+    var fp = ext && asObj(ext.front_porch);
+    var re = fp && asObj(fp.realism_engine);
+    var prefs = re && asObj(re.intimate_preferences);
+    if (!prefs) return false;
+    return prefListFilled(prefs.into) || prefListFilled(prefs.not_into);
+  }
+
+  /** One cast list, scanned. Each member is a full character card with its own
+      extensions, and a member may itself be V2-nested — so the member and its
+      `data` sibling are both checked, exactly as the server does.
+      No array, no members: a wrong-typed field is simply nothing here. */
+  function scanCast(list) {
+    if (!Array.isArray(list)) return false;
+    for (var i = 0; i < list.length; i++) {
+      var m = asObj(list[i]);
+      if (!m) continue;
+      if (carriesIntimate(m) || carriesIntimate(m.data)) return true;
+    }
+    return false;
+  }
+
+  /** A card carrying ANY intimate preference is 18+, no exception.
+      Testing for the KEY would be wrong and expensive: every Front Porch export
+      writes `intimate_preferences` whether or not the author filled it in, so a
+      key-existence check would drag the entire catalogue over the 18+ line. Only
+      a non-blank phrase in `into` / `not_into` counts.
+
+      TWO SCOPES, not one. `unwrapCard` only prefers the nested `data` object
+      when that object also carries persona fields, so a card that keeps its
+      persona at the ROOT and hides `extensions` under `data` comes back
+      unwrapped and a root-only chain misses the preferences. Checking the raw
+      `data` sibling too is two extra property reads and closes that hole — and
+      it is what the server already does (card-nsfw.ts), so this makes the two
+      EQUAL rather than making the form stricter than the API.
+
+      BOTH CAST LISTS, not one. A group card carries its members under
+      `members` AND `raw_member_data` — GroupCard.toJson writes both — while
+      every consumer (GroupCard.fromJson, the importer, the desktop Stoop panel,
+      this hub's card page) prefers `raw_member_data`. Picking one list means
+      picking the one nobody reads: strip the extensions out of `members[]`,
+      leave them in `raw_member_data[]`, and the card would publish as SFW while
+      every downloader installs a character with intimate preferences. Both are
+      scanned; a duplicate scan is free, a missed member is not.
+
+      Group casts keep their preferences PER MEMBER — never at the root — so
+      without the member walk anyone could dodge the tag by shipping a character
+      inside a two-member group. */
+  function hasIntimatePreferences(cardJson) {
+    try {
+      var root = asObj(cardJson);
+      if (!root) return false;
+      // The RAW ROOT IS A SCOPE OF ITS OWN, and it has to be. unwrapCard MERGES
+      // (`{...root, ...data}`), so any key `data` also carries replaces the
+      // root's copy — append `"data": {"first_mes":"…","members":[],
+      // "raw_member_data":[]}` to an honest export and the unwrapped scope's
+      // cast lists are the empty decoys while the real cast sits at the root,
+      // which is exactly where GroupCard.fromJson reads it. Scanning the root
+      // first, before anything can shadow it, is what closes that. Keep this in
+      // step with card-nsfw.ts on the server — the two are meant to agree.
+      var scopes = [root, unwrapCard(root), asObj(root.data)];
+      for (var s = 0; s < scopes.length; s++) {
+        var scope = scopes[s];
+        if (!scope) continue;
+        if (carriesIntimate(scope)) return true;
+        if (scanCast(scope.members)) return true;
+        if (scanCast(scope.raw_member_data)) return true;
+      }
+      return false;
+    } catch (e) {
+      // A stranger's upload is allowed to be any shape at all; a weird one must
+      // never take the submit form down with it.
+      return false;
+    }
   }
 
   function field(key, label, value, critical) {
@@ -111,6 +207,12 @@
   }
 
   function groupCompleteness(card) {
+    // Deliberately ONE list, unlike hasIntimatePreferences above. This gate
+    // decides whether Submit is allowed, and it has to agree with the server's
+    // groupCompleteness (card-completeness.ts), which picks the same single
+    // list. Unioning here would block uploads the API would have accepted —
+    // a false wall in front of the author. The 18+ predicate unions because
+    // over-tagging costs nothing and under-tagging is an evasion.
     var members =
       (Array.isArray(card.members) && card.members) ||
       (Array.isArray(card.raw_member_data) && card.raw_member_data) ||
@@ -193,6 +295,7 @@
   window.Stoop.completeness = {
     assess: assess,
     unwrapCard: unwrapCard,
+    hasIntimatePreferences: hasIntimatePreferences,
     message: message,
   };
 })();

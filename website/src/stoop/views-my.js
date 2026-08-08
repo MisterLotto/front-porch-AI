@@ -117,6 +117,52 @@
       host.replaceChildren(el('div', null, kids));
     }
 
+    /* The 18+ lock, shared by both submit flows so there is exactly one wording.
+       A card carrying intimate preferences is 18+ no matter how tame the rest of
+       it is, so the checkbox is ticked and frozen — and this explains that above
+       the form, before you reach the box and wonder why it won't move. */
+    var FORCED_18_NOTE = 'Locked on — this card carries intimate preferences.';
+
+    function applyForced18(host, nsfwIn, noteEl, forced) {
+      // Ticking is a PROPERTY, not an el() attribute: el() calls setAttribute,
+      // and the `checked` attribute only seeds defaultChecked — it never ticks
+      // a live box.
+      //
+      // Releasing the lock has to tell MY tick from the author's. Drop a card
+      // carrying intimate preferences, then drop a clean one: without a flag the
+      // box stays ticked, the payload ORs it to nsfw:true, and a card with no
+      // intimate preferences at all publishes as 18+. So remember the tick that
+      // was mine — the box was clear before I touched it — and withdraw exactly
+      // that one. A box the author ticked themselves is never unticked; quietly
+      // turning a genuinely 18+ card back to SFW is the one mistake here with
+      // real consequences. The flag lives on the checkbox so it cannot leak
+      // between the card flow and the world flow.
+      if (forced) {
+        if (!nsfwIn.checked) {
+          nsfwIn.checked = true;
+          nsfwIn.stoopAutoTicked = true;
+        }
+      } else if (nsfwIn.stoopAutoTicked) {
+        nsfwIn.checked = false;
+        nsfwIn.stoopAutoTicked = false;
+      }
+      nsfwIn.disabled = !!forced;
+      noteEl.textContent = forced ? FORCED_18_NOTE : '';
+      noteEl.className = forced ? 'hub-forced18-note' : 'hub-hidden';
+      host.className = forced ? 'hub-forced18' : 'hub-forced18 hub-hidden';
+      if (!forced) return host.replaceChildren();
+      host.replaceChildren(
+        el('span', { class: 'hub-forced18-ico' }, '🔞'),
+        el('div', { class: 'hub-forced18-text' }, [
+          el('strong', null, 'I’ve tagged this one 18+ for you'),
+          el('p', null, 'This card carries intimate preferences, so it has to be tagged 18+ '
+            + 'regardless of the rest of the character — I’ve ticked the box and locked it. '
+            + 'If you’d rather share this one as SFW, remove the intimate preferences from the '
+            + 'card in Front Porch AI, re-export, and drop the new file here.'),
+        ])
+      );
+    }
+
     function renderSubmit(mount, updateId) {
       var parsed = null; // { type, card, pngBytes }
       var avatarOverride = null; // File (required for .json uploads)
@@ -127,11 +173,13 @@
       var tagsIn = el('input', { type: 'text', placeholder: 'Comma-separated tags, e.g. fantasy, slow-burn' });
       var creatorIn = el('input', { type: 'text', maxlength: '120', placeholder: 'Leave blank if this is your own work' });
       var nsfwIn = el('input', { type: 'checkbox' });
+      var nsfwNote = el('span', { class: 'hub-hidden' });
       var changelogIn = el('textarea', { class: 'hub-textarea', rows: '2', maxlength: '500', placeholder: updateId ? 'What changed in this version?' : 'Anything reviewers should know? (optional)' });
       var errBox = el('p', { class: 'hub-form-err', role: 'alert' });
       var fileInfo = el('p', { class: 'hub-dim' }, 'No card loaded yet.');
       var preview = el('div', { class: 'hub-submit-preview' });
       var completenessHost = el('div', { class: 'hub-completeness hub-hidden' });
+      var forced18Host = el('div', { class: 'hub-forced18 hub-hidden' });
       var avatarRow = el('div', { class: 'hub-hidden' });
 
       var fileIn = el('input', { type: 'file', accept: '.png,.json', class: 'hub-hidden' });
@@ -158,6 +206,9 @@
           var card = res.card || {};
           completeness = S.completeness.assess(card, res.type);
           renderCompletenessPanel(completenessHost, completeness);
+          // The card decides its own 18+ tag — and a clean re-drop must hand the
+          // checkbox back, so this runs on every load, not only the forced ones.
+          applyForced18(forced18Host, nsfwIn, nsfwNote, S.completeness.hasIntimatePreferences(card));
           if (!nameIn.value) nameIn.value = card.name || '';
           // Card files often carry the author in their V2 `creator` field —
           // prefill the credit when it isn't the signed-in user's own handle.
@@ -166,8 +217,16 @@
           if (!creatorIn.value && embedded && embedded.toLowerCase() !== myName.toLowerCase()) {
             creatorIn.value = embedded;
           }
-          fileInfo.textContent = f.name + ' · ' + (res.type === 'GROUP' ? 'Group cast ('
-            + ((card.raw_member_data || card.members || []).length) + ' members)' : 'Solo character')
+          // Both spellings of the cast, guarded: a genuine export writes the same
+          // members under both, so the larger list is the cast size — and an
+          // unguarded `raw_member_data || members` would read `.length` off a
+          // string and caption the drop "(undefined members)".
+          var castSize = Math.max(
+            Array.isArray(card.raw_member_data) ? card.raw_member_data.length : 0,
+            Array.isArray(card.members) ? card.members.length : 0
+          );
+          fileInfo.textContent = f.name + ' · ' + (res.type === 'GROUP'
+            ? 'Group cast (' + castSize + ' members)' : 'Solo character')
             + (completeness.incomplete ? ' · incomplete' : '');
           preview.replaceChildren();
           if (res.pngBytes) {
@@ -187,6 +246,9 @@
           parsed = null;
           completeness = null;
           renderCompletenessPanel(completenessHost, null);
+          // Unlock too: a parse error after a forced card would otherwise leave a
+          // frozen checkbox with the explanation gone from the page.
+          applyForced18(forced18Host, nsfwIn, nsfwNote, false);
           submitBtn.disabled = true;
           setError(e.message);
         });
@@ -223,7 +285,10 @@
           name: name,
           summary: summary,
           type: parsed.type,
-          nsfw: nsfwIn.checked,
+          // The card has the last word, not the box. Deliberately NOT part of
+          // refreshSubmitEnabled: being 18+ fixes the value, it never blocks the
+          // submit.
+          nsfw: nsfwIn.checked || S.completeness.hasIntimatePreferences(parsed.card),
           tags: tags,
           card: parsed.card,
           changelog: changelogIn.value.trim() || (updateId ? 'Updated' : 'Initial upload'),
@@ -290,7 +355,9 @@
             }
           },
         }, [el('span', { class: 'hub-drop-ico' }, '🎴'), el('span', null, 'Drop a card file here, or click to choose'), fileInfo]),
-        fileIn, avatarIn, avatarRow, preview, completenessHost,
+        // The 18+ notice sits directly under the checklist so the reason lands
+        // before the locked checkbox does.
+        fileIn, avatarIn, avatarRow, preview, completenessHost, forced18Host,
         el('div', { class: 'hub-form' }, [
           el('label', { class: 'hub-field' }, [el('span', null, 'Name'), nameIn]),
           el('label', { class: 'hub-field' }, [el('span', null, 'Summary'), summaryIn]),
@@ -301,7 +368,12 @@
             el('span', { class: 'hub-dim hub-small' },
               'Sharing someone else’s character? Credit them here — the card will show “created by …”. The AUP requires this for reposts.'),
           ]),
-          el('label', { class: 'hub-aup-check' }, [nsfwIn, el('span', null, 'This card is NSFW (mislabeling is an AUP violation)')]),
+          el('label', { class: 'hub-aup-check' }, [nsfwIn, el('span', null, [
+            'This card is NSFW (mislabeling is an AUP violation)',
+            // Empty and hidden until the card forces the tag — a disabled box
+            // with no explanation next to it reads as a bug.
+            nsfwNote,
+          ])]),
           el('label', { class: 'hub-field' }, [el('span', null, updateId ? 'Changelog' : 'Note to reviewers'), changelogIn]),
           errBox,
           submitBtn,
@@ -344,11 +416,18 @@
       var tagsIn = el('input', { type: 'text', placeholder: 'Comma-separated tags, e.g. sci-fi, volcanic' });
       var creatorIn = el('input', { type: 'text', maxlength: '120', placeholder: 'Leave blank if this is your own work' });
       var nsfwIn = el('input', { type: 'checkbox' });
+      var nsfwNote = el('span', { class: 'hub-hidden' });
       var changelogIn = el('textarea', { class: 'hub-textarea', rows: '2', maxlength: '500', placeholder: 'Anything reviewers should know? (optional)' });
       var errBox = el('p', { class: 'hub-form-err', role: 'alert' });
       var fileInfo = el('p', { class: 'hub-dim' }, 'No world loaded yet.');
       var preview = el('div', { class: 'hub-submit-preview' });
       var completenessHost = el('div', { class: 'hub-completeness hub-hidden' });
+      // A real .fpworld carries cover art, lore, climate and place traits — no
+      // realism_engine block, so this gate stays quiet on every genuine export.
+      // It is wired anyway because this flow accepts ANY JSON with a lorebook /
+      // biome / place_traits object plus a cover data URL, and a hand-built file
+      // could carry a character's extensions into the world path.
+      var forced18Host = el('div', { class: 'hub-forced18 hub-hidden' });
       var fileIn = el('input', { type: 'file', accept: '.fpworld,.json', class: 'hub-hidden' });
       var submitBtn = el('button', { class: 'btn btn-amber', type: 'button', disabled: true, onclick: doSubmit }, 'Submit for review');
 
@@ -368,6 +447,7 @@
         if (f.size > 10 * 1024 * 1024) {
           envelope = null; cover = null; completeness = null;
           renderCompletenessPanel(completenessHost, null);
+          applyForced18(forced18Host, nsfwIn, nsfwNote, false);
           submitBtn.disabled = true;
           preview.replaceChildren();
           fileInfo.textContent = 'No world loaded yet.';
@@ -386,6 +466,7 @@
           envelope = j;
           completeness = S.completeness.assess(j, 'WORLD');
           renderCompletenessPanel(completenessHost, completeness);
+          applyForced18(forced18Host, nsfwIn, nsfwNote, S.completeness.hasIntimatePreferences(j));
           if (!nameIn.value) nameIn.value = String(j.name || '');
           if (!summaryIn.value && typeof j.description === 'string') summaryIn.value = j.description.slice(0, 280);
           var entries = (isObj(j.lorebook) && Array.isArray(j.lorebook.entries)) ? j.lorebook.entries.length : 0;
@@ -403,6 +484,7 @@
           cover = null;
           completeness = null;
           renderCompletenessPanel(completenessHost, null);
+          applyForced18(forced18Host, nsfwIn, nsfwNote, false);
           submitBtn.disabled = true;
           preview.replaceChildren();
           // Reset the dropzone caption too — a stale "Cindermaw.fpworld · 5 lore
@@ -433,7 +515,7 @@
           name: name,
           summary: summary,
           type: 'WORLD',
-          nsfw: nsfwIn.checked,
+          nsfw: nsfwIn.checked || S.completeness.hasIntimatePreferences(envelope),
           tags: tags,
           card: envelope,
           changelog: changelogIn.value.trim() || 'Initial upload',
@@ -481,7 +563,7 @@
             }
           },
         }, [el('span', { class: 'hub-drop-ico' }, '🏞️'), el('span', null, 'Drop a .fpworld file here, or click to choose'), fileInfo]),
-        fileIn, preview, completenessHost,
+        fileIn, preview, completenessHost, forced18Host,
         el('div', { class: 'hub-form' }, [
           el('label', { class: 'hub-field' }, [el('span', null, 'Name'), nameIn]),
           el('label', { class: 'hub-field' }, [el('span', null, 'Summary'), summaryIn]),
@@ -492,7 +574,10 @@
             el('span', { class: 'hub-dim hub-small' },
               'Sharing someone else’s world? Credit them here — the AUP requires this for reposts.'),
           ]),
-          el('label', { class: 'hub-aup-check' }, [nsfwIn, el('span', null, 'This world is NSFW — suggestive cover art or 18+ themes in its lore (mislabeling is an AUP violation)')]),
+          el('label', { class: 'hub-aup-check' }, [nsfwIn, el('span', null, [
+            'This world is NSFW — suggestive cover art or 18+ themes in its lore (mislabeling is an AUP violation)',
+            nsfwNote,
+          ])]),
           el('label', { class: 'hub-field' }, [el('span', null, 'Note to reviewers'), changelogIn]),
           errBox,
           submitBtn,

@@ -287,6 +287,181 @@
     ]);
   }
 
+  /* ---- card-authored identity: Ambitions, Likes & Dislikes, Pockets ----
+     These live in the card blob the API already returns verbatim, under
+     extensions.front_porch.realism_engine — no backend field is involved, the
+     hub was simply dropping them. Deliberately NOT gated on the engine's
+     `enabled` flag: ambitions, likes and a wardrobe are identity, they travel
+     with the card and work the moment it is downloaded, so copying that guard
+     would hide real authored content on every card whose creator left the
+     Realism Engine off.
+
+     The 18+ pair (intimate_preferences) is deliberately NOT rendered — guests
+     reach this page, and opening a card is not opting into 18+ content. The
+     desktop panel and the app's PWA omit it for the same reason.
+
+     Bounds are not decoration: a card is a stranger's upload, and a list with
+     fifty thousand entries or a multi-megabyte phrase would freeze the page of
+     whoever opened it. Same caps as the other two clients. */
+  var MAX_PHRASES = 24;
+  var MAX_PHRASE_CHARS = 160;
+  var MAX_ITEMS = 8;      // per inventory list, applied to the RAW list
+  var MAX_ITEM_CHARS = 60;
+  // Members rendered with their three identity sections. The loop used to be
+  // unbounded, and a hostile cast that still fits under the 24 MB upload ceiling
+  // measured ~5.2 million DOM nodes — a dead tab for whoever opened the card.
+  // 24 is far past any real group (the desktop panel shows one member at a time
+  // through a carousel); past it the page says how many more there are, because
+  // silently dropping members on a page moderators read is worse than the wall.
+  var MAX_MEMBERS = 24;
+  // How far into the two cast lists the union walk looks at all. Bounds the
+  // dedupe pass the same way; beyond it the count is reported as "N+".
+  var MAX_MEMBER_SCAN = 400;
+
+  /** extensions -> front_porch -> realism_engine, or {} at the first bad hop.
+      Fed through the shared unwrapCard so a V2 card that nests everything
+      under `data` resolves the same way the completeness gate sees it. */
+  function realismBlock(cardJson) {
+    var node = S.completeness.unwrapCard(cardJson);
+    var hops = ['extensions', 'front_porch', 'realism_engine'];
+    for (var i = 0; i < hops.length; i++) {
+      if (!node || typeof node !== 'object') return {};
+      node = node[hops[i]];
+    }
+    return node && typeof node === 'object' && !Array.isArray(node) ? node : {};
+  }
+
+  function tidy(s, cap) {
+    var t = (typeof s === 'string' ? s : '').replace(/\s+/g, ' ').trim();
+    return t.length <= cap ? t : t.slice(0, cap).replace(/\s+$/, '');
+  }
+
+  /** One authored phrase list (ambitions / likes / dislikes), bounded.
+      Array.isArray and typeof rather than casts: a present-but-wrong-typed
+      field must cost that one section, never the whole page. */
+  function cardPhrases(raw) {
+    var out = [];
+    (Array.isArray(raw) ? raw : []).forEach(function (a) {
+      if (out.length >= MAX_PHRASES || typeof a !== 'string') return;
+      var s = a.replace(/\s+/g, ' ').trim();
+      if (!s) return;
+      out.push(s.length > MAX_PHRASE_CHARS ? tidy(s, MAX_PHRASE_CHARS) + '…' : s);
+    });
+    return out;
+  }
+
+  /** One inventory list as display text — `name` or `name (state)`. Entries are
+      either a bare string or {name, state}, which is why the phrase reader
+      cannot be reused here (it would return [] for every card, silently). The
+      RAW list is sliced first so a hostile 50k-entry list costs 8 conversions,
+      mirroring Pockets.fromJson in the app. */
+  function cardItems(raw) {
+    return (Array.isArray(raw) ? raw : []).slice(0, MAX_ITEMS).map(function (e) {
+      if (typeof e === 'string') return tidy(e, MAX_ITEM_CHARS);
+      if (!e || typeof e !== 'object') return '';
+      var name = tidy(e.name, MAX_ITEM_CHARS);
+      var state = tidy(e.state, MAX_ITEM_CHARS);
+      if (!name) return '';
+      return state ? name + ' (' + state + ')' : name;
+    }).filter(Boolean);
+  }
+
+  /** The one section shape all three share: a collapsible whose summary carries
+      the total count, and per group an optional uppercase sub-label plus one
+      glyphed line per item. Null when every group is empty, so an absent
+      section costs nothing. */
+  function glyphSection(title, groups) {
+    var rows = [];
+    var total = 0;
+    groups.forEach(function (g) {
+      if (!g.items.length) return;
+      total += g.items.length;
+      if (g.subLabel) rows.push(el('div', { class: 'hub-sublabel' }, g.subLabel));
+      g.items.forEach(function (item) {
+        rows.push(el('div', null, g.glyph + ' ' + item));
+      });
+    });
+    if (!total) return null;
+    return el('details', { class: 'hub-sect' }, [
+      el('summary', null, title + ' (' + total + ')'),
+      el('div', { class: 'hub-glyphlist' }, rows),
+    ]);
+  }
+
+  /** The three identity sections for one character. Used for the card itself
+      and, unchanged, for every member of a group cast — a cast's ambitions and
+      wardrobe live per member, never at the group root. */
+  function identitySections(re) {
+    var inv = re.inventory && typeof re.inventory === 'object' ? re.inventory : {};
+    var likes = cardPhrases(re.likes);
+    var dislikes = cardPhrases(re.dislikes);
+    var worn = cardItems(inv.worn);
+    var carrying = cardItems(inv.carrying);
+    return [
+      glyphSection('Ambitions', [{ glyph: '🧭', items: cardPhrases(re.ambitions) }]),
+      glyphSection('Likes & Dislikes', [
+        { subLabel: 'Drawn to', glyph: '♥', items: likes },
+        { subLabel: 'Put off by', glyph: '✕', items: dislikes },
+      ]),
+      glyphSection('Pockets & Wardrobe', [
+        { subLabel: 'Wearing', glyph: '🧥', items: worn },
+        { subLabel: 'Carrying', glyph: '🎒', items: carrying },
+      ]),
+    ];
+  }
+
+  /** Identity for de-duplication only: name plus the opening of the description,
+      normalised. Sliced BEFORE the whitespace collapse so a hostile
+      multi-megabyte description costs a short scan instead of a copy of itself. */
+  function memberKey(m) {
+    return tidy(typeof m.name === 'string' ? m.name.slice(0, 80) : '', 80).toLowerCase()
+      + '\u0000'
+      + tidy(typeof m.description === 'string' ? m.description.slice(0, 200) : '', 64).toLowerCase();
+  }
+
+  /** A group's cast as the UNION of both spellings, deduped and bounded.
+      A card carries its members under `members` AND `raw_member_data`, and a
+      member present in only one of them is still part of the cast — the same
+      reason the 18+ predicate scans both. `raw_member_data` goes first because
+      it is the high-fidelity list every importer and the desktop panel read, so
+      the page shows what a downloader actually gets.
+      Genuine exports write the SAME cast into both lists, so a plain concat
+      would show every member twice; entries from `members` are therefore kept
+      only when nothing in `raw_member_data` matched their name + description.
+      Duplicates WITHIN a list are left alone — a cast really can hold two
+      characters with one name, and dropping one silently is not this page's
+      call to make.
+      Returns the members to draw from plus an honest total: `exact` is false
+      only when both lists are populated AND one of them runs past the scan cap,
+      because that is the only case where the size of the union isn't knowable
+      without walking it. One-list casts — every real card, and every hostile
+      one seen so far — count off `.length`, which is free. */
+  function castOf(card) {
+    var raw = Array.isArray(card.raw_member_data) ? card.raw_member_data : [];
+    var mem = Array.isArray(card.members) ? card.members : [];
+    var rawN = Math.min(raw.length, MAX_MEMBER_SCAN);
+    var memN = Math.min(mem.length, MAX_MEMBER_SCAN);
+    var out = [];
+    var seen = {};
+    var i, m;
+    for (i = 0; i < rawN; i++) {
+      m = S.completeness.unwrapCard(raw[i]);
+      seen['k:' + memberKey(m)] = true;   // prefixed: a member named "constructor" is not a hit
+      out.push(m);
+    }
+    for (i = 0; i < memN; i++) {
+      m = S.completeness.unwrapCard(mem[i]);
+      if (seen['k:' + memberKey(m)]) continue;
+      out.push(m);
+    }
+    var oneList = !raw.length || !mem.length;
+    return {
+      members: out,
+      total: oneList ? Math.max(raw.length, mem.length) : out.length,
+      exact: oneList || (raw.length === rawN && mem.length === memN),
+    };
+  }
+
   /* V2 character_book — the section the detail page silently dropped (a card
      with lore looked loreless on the hub). Disabled entries stay hidden; an
      entry with no trigger keys is constant/always-active lore. */
@@ -389,15 +564,30 @@
       /* --- group members --- */
       var membersBlock = null;
       if (isGroup) {
-        var members = card.raw_member_data || card.members || [];
+        var cast = castOf(card);
+        var shown = cast.members.slice(0, MAX_MEMBERS);
+        var castLabel = cast.total + (cast.exact ? '' : '+');
         membersBlock = el('div', { class: 'hub-members' }, [
-          el('h3', null, 'The cast (' + members.length + ')'),
-          el('div', { class: 'hub-member-list' }, members.map(function (m) {
+          el('h3', null, 'The cast (' + castLabel + ')'),
+          // Each member is a full character card map with its own extensions,
+          // so the cast gets the same identity sections the solo card does —
+          // a root-only read would show nothing for a group. Collapsed, so a
+          // twelve-hander costs nothing until someone opens one. Unwrapped ONCE
+          // per member: the name and description have to come off the same node
+          // the realism block does, or a V2-nested member reads "Unnamed / —"
+          // while its ambitions render right underneath.
+          el('div', { class: 'hub-member-list' }, shown.map(function (m) {
+            var desc = typeof m.description === 'string' ? m.description : '';
             return el('div', { class: 'hub-member' }, [
-              el('b', null, m.name || 'Unnamed'),
-              el('span', { class: 'hub-dim' }, (m.description || '').slice(0, 140) || '—'),
-            ]);
+              el('b', null, (typeof m.name === 'string' && m.name) || 'Unnamed'),
+              el('span', { class: 'hub-dim' }, desc.slice(0, 140) || '—'),
+            ].concat(identitySections(realismBlock(m))));
           })),
+          shown.length < cast.total || !cast.exact
+            ? el('p', { class: 'hub-dim hub-small' },
+                'Showing the first ' + shown.length + ' of ' + castLabel
+                + ' — the whole cast is in the card and comes with the download.')
+            : null,
         ]);
       }
 
@@ -440,6 +630,9 @@
         : [shareBtn('card', id), el('a', { class: 'hub-signin-nudge', href: '#/signin' }, 'Sign in to vote, follow & report')];
 
       var alts = Array.isArray(card.alternate_greetings) ? card.alternate_greetings.filter(Boolean).join('\n\n———\n\n') : '';
+      // Read once and share — the three identity sections all come out of the
+      // same block, and unwrapping a V2 card three times would be waste.
+      var re = realismBlock(c.card);
 
       mount.replaceChildren(el('div', { class: 'hub-detail' }, [
         el('a', { class: 'hub-back', href: '#/' }, '← Back to browsing'),
@@ -477,8 +670,7 @@
           textSection('First message', card.first_mes || card.first_message),
           textSection('Alternate greetings', alts),
           textSection('Example dialogue', card.mes_example),
-          lorebookSection(card.character_book),
-        ]),
+        ].concat(identitySections(re), lorebookSection(card.character_book))),
       ]));
     }).catch(function (e) {
       mount.replaceChildren(ui.emptyState('🌫️', 'Couldn’t load that card', e.message));
