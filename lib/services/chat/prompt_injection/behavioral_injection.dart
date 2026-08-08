@@ -46,28 +46,41 @@ class BehavioralInjection {
     required this.getRealismEnabled,
   });
 
-  String buildBehavioralMechanicsInjection() {
+  /// The background thought — MENTAL state, and it says so itself: "colors
+  /// mood and reactions". It belongs beside the mood and emotion lines it
+  /// claims to colour.
+  String buildFixationInjection() {
     if (!getRealismEnabled()) return '';
-    final lines = <String>[];
-
-    if (relationshipService.activeFixation.isNotEmpty &&
-        relationshipService.fixationLifespan > 0) {
-      lines.add(
-        'On the mind lately: "${relationshipService.activeFixation}" — a '
+    if (relationshipService.activeFixation.isEmpty ||
+        relationshipService.fixationLifespan <= 0) {
+      return '';
+    }
+    return 'On the mind lately: "${relationshipService.activeFixation}" — a '
         'background thought that colors mood and reactions; it never '
         'overrides the scene, surfacing openly only if conversation '
-        'naturally touches it.',
-      );
-    }
-
-    if (relationshipService.spatialStance.isNotEmpty) {
-      lines.add(
-        'Position: ${relationshipService.spatialStance} — ground actions in '
-        'this, but moving and changing position is fine as the scene '
-        'demands.',
-      );
-    }
-
-    return lines.join('\n');
+        'naturally touches it.';
   }
+
+  /// Where she physically is — SCENE staging, and it says so itself: "ground
+  /// actions in this". It belongs with the time and weather lines, because the
+  /// model needs to know where everyone is standing before it decides what
+  /// happens, not after it has already written the scene.
+  String buildPositionInjection() {
+    if (!getRealismEnabled()) return '';
+    if (relationshipService.spatialStance.isEmpty) return '';
+    return 'Position: ${relationshipService.spatialStance} — ground actions in '
+        'this, but moving and changing position is fine as the scene demands.';
+  }
+
+  /// Both mechanics as one fragment — the original shape.
+  ///
+  /// The composer no longer uses this: the two lines above are unrelated to
+  /// each other (one is a thought, one is a floor position) and belong in
+  /// different parts of the block, so it emits them separately. Kept because it
+  /// is the surface `prompt_injection_test.dart` asserts against, and it
+  /// delegates rather than duplicating, so the two paths cannot drift.
+  String buildBehavioralMechanicsInjection() => [
+    buildFixationInjection(),
+    buildPositionInjection(),
+  ].where((l) => l.isNotEmpty).join('\n');
 }

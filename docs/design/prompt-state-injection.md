@@ -59,7 +59,61 @@ Express all of this only through <Name>'s behavior, body language, and voice —
 meters, scores, percentages, turn counts, or system terms.]
 ```
 
-### Line inventory (in order, each salience-gated)
+### Canonical order (revised 2026-08-08 — read the whole block, not one line)
+
+The fragments below accumulated one at a time over months, each appended where
+it happened to be written, and the emitted result was never read end to end. It
+showed: the block told a character she was starving four lines before telling
+her what was in her pocket; it staged her physical position dead last, after
+everything she might do from it; it stated "she came in not at her best" above
+the weather and needs that explain why; and it split how-she-feels-about-people
+across the very top and the very bottom.
+
+Every one of those was invisible to a per-fragment test, because every fragment
+was individually correct.
+
+**The contract: a fact that explains another fact comes first, and a directive
+comes after everything it refers to.** A model reads the block top to bottom and
+each line is conditioned by what came before. This matters least for frontier
+models, which read the whole block regardless, and most for small local ones —
+which are exactly the models these fragments exist to prop up.
+
+The order, and the reason for each group:
+
+| # | Group | Fragments | Why here |
+|---|---|---|---|
+| 1 | The scene | time · absence note · weather · **position** | When, where, and where everyone is standing. Position moved up from LAST: "ground actions in this" is staging, and the model needs it before it decides what happens. |
+| 2 | Her people | bond · trust · **inter-character feelings** | One subject, previously told in two places nine fragments apart. |
+| 3 | Her word | open commitments | Adjacent to §2 — a commitment is owed to one of those people. |
+| 4 | Who she is | ambitions · tastes | Standing facts, ahead of the volatile state they colour. |
+| 5 | How she is | **standing mood** · mood · **fixation** · inventory · needs · body · **join** | Last, so the volatile state sits against the closing "express all of this". Her head, then her body and what she has for it. |
+
+Placements worth not undoing:
+
+- **standing mood** opens §5 ("Before this conversation started, …") and is
+  DERIVED from the weather and needs; it used to be stated third overall, above
+  both. Conclusion before evidence.
+- **fixation** describes itself as "a background thought that colors mood and
+  reactions" and now sits directly under the mood it colours, instead of nine
+  fragments below it.
+- **inventory** is placed by function, not category: it is standing knowledge
+  and would otherwise belong in §4, but it sits immediately above needs because
+  nobody discovers the contents of their own pocket at the moment they get
+  hungry.
+- **the join** ("if something they are carrying would ease any of that…") closes
+  the block, reading backwards over inventory, needs and body.
+
+`behavioral_injection` emits fixation and position, which are unrelated to each
+other and now go to §5 and §1 respectively; it gained
+`buildFixationInjection()` / `buildPositionInjection()` for that, with the
+original combined method delegating to both.
+
+Pinned end to end by `test/services/chat/state_block_order_test.dart`, which
+builds ONE block with 15 of the 17 fragments live — the thing no per-fragment
+test could do.
+
+### Per-line rendering rules (the table below is the RENDERING spec; for
+### ordering see the section above)
 
 | Line | Gate | Rendering rules |
 |---|---|---|

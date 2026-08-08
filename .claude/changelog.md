@@ -11893,3 +11893,57 @@ placeholder), so no existing test needed touching.
 **Gates:** analyze 0 · 3188 unit tests · 94 goldens. One new guard, negative-
 checked by restoring the original position — it reddens along with the
 antecedent guard.
+
+---
+
+## 2026-08-08 — The state block, read end to end for the first time
+
+**Files:** `lib/services/chat/prompt_injection/realism_state_injection.dart`
+(full reorder + section comments) ·
+`lib/services/chat/prompt_injection/behavioral_injection.dart`
+(`buildFixationInjection` / `buildPositionInjection` split out; the combined
+method delegates) · `test/services/chat/state_block_order_test.dart` (new, 8) ·
+`docs/design/prompt-state-injection.md` · `docs/Rawhide.md`
+
+**Maintainer:** "Go through the whole block and fix everything so it makes
+logical sense."
+
+**What was wrong.** The seventeen fragments accumulated one at a time over
+months, each appended where it happened to be written, and the emitted result
+had never been read end to end. Four concrete inversions:
+
+1. **Position stated dead last** — "Position: leaning against the counter —
+   ground actions in this" arrived after everything she might do from it. It is
+   staging; it belongs with time and weather.
+2. **Fixation stated dead last** — a line that describes itself as "a background
+   thought that colors mood and reactions", sitting nine fragments below the
+   mood it colours.
+3. **Standing mood above its own evidence** — "[Before this conversation
+   started, they slept badly]" was third overall, above the weather and eight
+   above the needs it is DERIVED from. Conclusion before evidence.
+4. **Relationship split across the block** — bond and trust at the top,
+   inter-character feelings at the very bottom, nine fragments apart, one
+   subject.
+
+Every one of these was invisible to a per-fragment test, because every fragment
+was individually correct. That is the actual lesson: the suite had a test for
+each line and none for the block.
+
+**The contract now:** a fact that explains another fact comes first; a directive
+comes after everything it refers to. Order: the scene (when/where/standing) →
+her people → her word → who she is → how she is right now, with the volatile
+state last against the closing "express all of this".
+
+**Structural change:** `behavioral_injection` was emitting two unrelated things
+(a thought and a floor position) as one fragment, so they could not be placed
+separately. Split into `buildFixationInjection()` and
+`buildPositionInjection()`; the original `buildBehavioralMechanicsInjection()`
+is kept and delegates to both, because it is the surface an existing (protected)
+test asserts against — no logic is duplicated.
+
+**Gates:** analyze 0 · 3196 unit tests · 94 goldens. Every fragment gate is
+BYTE-IDENTICAL — this pass moved lines, it did not change when any of them
+appear. 8 new guards in a test that builds ONE block with 15 of the 17 fragments
+live, which nothing in the suite did before. Negative-checked by moving each
+relocated fragment back to where it was: position, fixation, standing mood and
+weather each redden the full-sequence test plus their own named inversion.
