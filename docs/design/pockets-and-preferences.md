@@ -193,6 +193,20 @@ record, inject it every turn, apply deltas.
     the card there would be the per-frame-work pattern the `coverImageFileFor`
     regression exists to warn about. The pass keeps its own `??` seed for
     characters who ARRIVE mid-turn (Scene Guest, cast change).
+  - **Condition is model-editable, and the eval must SEE the change (fixed
+    2026-08-08).** The `update` op always rewrote an item in place and always
+    searched worn AND carrying, so "red sundress" → "red sundress
+    (rain-soaked)" and "chain mail armour" → "chain mail armour (dented)" were
+    always applicable. What was missing was the model being in a position to ask
+    for it: the pass was handed ONLY the character's reply. "You step out into
+    the downpour" / "Wait for me!" left nothing in the eval's view mentioning
+    rain, so the dress stayed recorded dry and the feature looked broken while
+    working exactly as written. `recentExchange` is now a required parameter on
+    `PocketsEval.buildPrompt`, and the update examples cover weather, wear and
+    damage rather than only food — small local models lean hard on the examples.
+    Afterglow's climax check had the identical hole from the identical cause;
+    both now take the window from one shared `recentExchange()` helper in
+    `llm_eval_engine.dart` instead of three hand-rolled copies.
   - **An empty wardrobe stays absent from the card.** `cardJsonFrom` returns an
     empty map when nothing survives, so `CharacterCard.toJson`'s conditional
     emit keeps a card without a wardrobe byte-identical to one written before

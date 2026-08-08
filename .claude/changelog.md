@@ -12053,3 +12053,49 @@ clear it, and a PR carrying it still needs the label once.
 
 **Gates:** analyze 0 · 3204 unit tests · 94 goldens · YAML parses · the embedded
 github-script body syntax-checks under the async wrapper the action applies.
+
+---
+
+## 2026-08-08 — Wardrobe condition: the eval could not see the rain
+
+**Files:** `lib/services/chat/llm_eval_engine.dart` (extracted
+`recentExchange()`) · `lib/services/chat/pockets_eval.dart` (required
+`recentExchange` + broader examples) · `lib/services/chat/chat_service_pockets.dart`
+· `lib/services/chat/chat_service_climax.dart` (drops its hand-rolled copy) ·
+`test/services/chat/wardrobe_condition_test.dart` (new, 9) ·
+`pockets_eval_test.dart` + `pocket_transfers_test.dart` (signature only) ·
+`docs/design/pockets-and-preferences.md` · `docs/Rawhide.md`
+
+**Maintainer:** a red sundress that goes into the rain should become a
+rain-soaked red sundress; chain mail after a battle, dented chain mail.
+
+**What was already true.** The `update` op rewrites an item in place and
+searches worn AND carrying, so both cases were always applicable — and
+"rain-soaked" was already an example in the prompt.
+
+**What was missing.** The pass was handed only the character's REPLY. The case
+that matters most is:
+
+    You:      you step out into the downpour
+    Jennifer: "Wait for me!"
+
+Nothing in that reply mentions weather, so the dress stayed recorded dry and the
+feature looked broken while behaving exactly as written.
+
+**Identical to the Afterglow bug fixed hours earlier**, from the identical
+cause: a standalone eval given the reply and not the exchange. A survey found
+these were the only two — every other eval routes through `llm_eval_engine`,
+which always built the window. Rather than add a third hand-rolled copy, the
+window is now one exported `recentExchange()` helper that the needs eval, the
+climax pass and the pockets pass all share.
+
+**Also broadened the update examples** past food ("half-eaten") to weather, wear
+and damage ("rain-soaked", "dented", "mud-caked"). A small local model leans
+hard on examples, and every one of them was about eating.
+
+**Gates:** analyze 0 · 3213 unit tests · 94 goldens. 9 new guards
+negative-checked three ways — dropping the exchange from the prompt (the
+reported bug), narrowing the examples back to food, and making `update` stop
+searching worn items (4 red, which is what a clothing-blind applier would look
+like). Two existing test files gained the new required argument; no assertion
+changed.

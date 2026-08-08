@@ -225,6 +225,7 @@ void main() {
         charName: 'Alice',
         current: Pockets(),
         reply: 'she handed him the keys',
+        recentExchange: '',
         toolsMode: false,
         others: const ['Bob Vance', 'Samantha'],
       );
@@ -243,6 +244,7 @@ void main() {
         charName: 'Alice',
         current: Pockets(),
         reply: 'she handed him the keys',
+        recentExchange: '',
         toolsMode: false,
       );
 

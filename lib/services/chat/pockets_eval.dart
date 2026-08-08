@@ -114,10 +114,18 @@ class PocketsEval {
   /// [others] is the rest of the cast, by name, when hand-offs are on. Empty
   /// otherwise — and then the model is never invited to name a recipient at
   /// all, because a `to` nobody can resolve is a `to` that does nothing.
+  /// [recentExchange] is the last few turns. REQUIRED, and the reason is a
+  /// bug that shipped twice: an eval given only the character's reply cannot
+  /// see a change the USER narrated. "You step out into the downpour" followed
+  /// by a half-line of dialogue leaves the red sundress recorded bone-dry
+  /// forever, because nothing in the text the eval was shown says otherwise.
+  /// Afterglow's climax check had the identical hole and went red on three
+  /// platforms for it.
   static String buildPrompt({
     required String charName,
     required Pockets current,
     required String reply,
+    required String recentExchange,
     required bool toolsMode,
     List<String> others = const [],
   }) {
@@ -140,13 +148,16 @@ class PocketsEval {
               'else — the person you are talking to, a passer-by, nobody in '
               'particular — leave "to" empty rather than guessing a name from '
               'that list.\n'}'
-        '  update — the same item, new condition ("state": "half-eaten", '
-        '"rain-soaked")\n'
+        '  update — the same item, new condition. Weather, wear and damage '
+        'all count, not just food: ("state": "half-eaten"), a dress caught in '
+        'the rain ("state": "rain-soaked"), armour after a fight '
+        '("state": "dented"), boots after a road ("state": "mud-caked")\n'
         '  transform — the item BECAME something else ("item": "candy bar", '
         '"state": "sweet wrapper")\n\n'
         'Name items the way they are already listed above when they appear '
         'there, so the same thing is not recorded twice.\n\n'
         'The reply:\n$reply\n\n'
+        '${recentExchange.trim().isEmpty ? '' : 'Recent exchange for context:\n$recentExchange\n\n'}'
         '${toolsMode ? 'Report by calling the $kPocketsTool tool. Use ONLY the tool — no plain-text reply.' : 'Respond with ONLY a flat JSON object containing "inventory_ops" (an array). '
               'Do NOT use markdown code blocks — return raw JSON only.'}';
   }
@@ -200,6 +211,7 @@ class PocketsEval {
     required String charName,
     required Pockets pockets,
     required String reply,
+    required String recentExchange,
     List<String> others = const [],
     void Function(String to, PocketItem item)? onTransfer,
   }) async {
@@ -212,6 +224,7 @@ class PocketsEval {
           charName: charName,
           current: pockets,
           reply: reply,
+          recentExchange: recentExchange,
           toolsMode: toolsMode,
           others: others,
         ),

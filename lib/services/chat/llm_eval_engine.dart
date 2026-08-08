@@ -146,6 +146,28 @@ const Duration kEvalToolCallTimeout = Duration(minutes: 6);
 /// Some objective mgmt / prompt coordination stayed thin in god per plan for step9/11
 /// (qualify everywhere; full objective proposal in step 11 sibling leaf).
 /// Realism evals (step 10) own their 5 calls + prompts.
+/// The last few turns as `sender: text`, the shape every eval that needs scene
+/// context uses.
+///
+/// Extracted because it was being written out by hand in three places and the
+/// copies had already drifted into a bug. When Afterglow's climax check was
+/// split out of the needs eval it inherited the reply and NOT this, so a climax
+/// the user narrated became invisible to it and E2E went red on three platforms.
+/// The Pockets pass had the same narrow view for the same reason.
+///
+/// Three turns is the window the needs eval has always used: enough to carry
+/// the user's message and the reply it prompted, short enough that an eval
+/// prompt stays an eval prompt.
+String recentExchange(List<ChatMessage> msgs, {int take = 3}) {
+  final n = msgs.length < take ? msgs.length : take;
+  return msgs.reversed
+      .take(n)
+      .toList()
+      .reversed
+      .map((m) => '${m.sender}: ${m.displayText}')
+      .join('\n');
+}
+
 class LlmEvalEngine {
   // (onNotify/onSaveChat removed here post step11 objective_proposal extraction;
   // they were only used by the moved checkTaskCompletionInBackground finally;
@@ -476,14 +498,7 @@ class LlmEvalEngine {
       return null; // Director
     }
 
-    final msgs = getMessages();
-    final recentCount = msgs.length < 3 ? msgs.length : 3;
-    final recent = msgs.reversed
-        .take(recentCount)
-        .toList()
-        .reversed
-        .map((m) => '${m.sender}: ${m.displayText}')
-        .join('\n');
+    final recent = recentExchange(getMessages());
 
     final char = getActiveCharacter();
     final charName = char?.name ?? 'the character';

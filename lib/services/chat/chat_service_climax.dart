@@ -47,21 +47,12 @@ extension ChatServiceClimax on ChatService {
     final speaker = _activeCharacter;
     if (speaker == null) return;
 
-    // The same three-message window the needs-impact eval builds for this
-    // question (llm_eval_engine.dart), formatted identically, so extracting
-    // the check into its own pass did not quietly change what it can see.
-    final recentCount = _messages.length < 3 ? _messages.length : 3;
-    final recentExchange = _messages.reversed
-        .take(recentCount)
-        .toList()
-        .reversed
-        .map((m) => '${m.sender}: ${m.displayText}')
-        .join('\n');
-
     final turns = await _climaxEval.detect(
       charName: speaker.name,
       reply: reply,
-      recentExchange: recentExchange,
+      // The same window the needs eval uses, from the one shared helper — this
+      // was a hand-rolled copy until Pockets needed a third.
+      recentExchange: recentExchange(_messages),
     );
     if (turns == null) return;
 

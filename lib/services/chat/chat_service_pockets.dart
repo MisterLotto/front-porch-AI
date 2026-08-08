@@ -147,6 +147,9 @@ extension ChatServicePockets on ChatService {
       charName: speaker.name,
       pockets: record,
       reply: reply,
+      // Without this a change the USER narrated — walking her out into the
+      // rain — is invisible to the eval, and the dress stays recorded dry.
+      recentExchange: recentExchange(_messages),
       others: others,
       onTransfer: transfersOn
           // Resolve against the roster the model was actually shown. An

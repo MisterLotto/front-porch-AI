@@ -55,6 +55,7 @@ void main() {
         charName: 'Alice',
         current: p,
         reply: 'She pockets the keys.',
+        recentExchange: '',
         toolsMode: false,
       );
       expect(txt, contains('sundress (rain-soaked)'));
@@ -67,6 +68,7 @@ void main() {
         charName: 'Alice',
         current: Pockets(),
         reply: 'x',
+        recentExchange: '',
         toolsMode: false,
       );
       expect(txt, contains('(nothing recorded)'));
@@ -80,6 +82,7 @@ void main() {
         charName: 'Alice',
         current: Pockets(),
         reply: 'x',
+        recentExchange: '',
         toolsMode: false,
       );
       expect(txt, contains('empty list'));
@@ -91,6 +94,7 @@ void main() {
         charName: 'Alice',
         current: Pockets(),
         reply: 'x',
+        recentExchange: '',
         toolsMode: tools,
       );
       expect(p(true), contains(PocketsEval.kPocketsTool));
@@ -160,7 +164,12 @@ void main() {
         '{"inventory_ops":['
         '{"op":"transform","item":"candy bar","state":"sweet wrapper"},'
         '{"op":"pickup","item":"car keys"}]}',
-      ).evaluateAndApply(charName: 'Alice', pockets: p, reply: 'She eats it.');
+      ).evaluateAndApply(
+        charName: 'Alice',
+        pockets: p,
+        reply: 'She eats it.',
+        recentExchange: '',
+      );
 
       expect(receipts, ['candy bar → sweet wrapper', 'picked up: car keys']);
       expect(
@@ -181,6 +190,7 @@ void main() {
         charName: 'Alice',
         pockets: Pockets(),
         reply: '   ',
+        recentExchange: '',
       );
       expect(out, isEmpty);
       expect(fired, isFalse, reason: 'this feature bills per turn — do not');
@@ -200,6 +210,7 @@ void main() {
           charName: 'Alice',
           pockets: p,
           reply: 'She looks around.',
+          recentExchange: '',
         ),
         returnsNormally,
       );
@@ -208,6 +219,7 @@ void main() {
         charName: 'Alice',
         pockets: p,
         reply: 'She looks around.',
+        recentExchange: '',
       );
       expect(out, isEmpty);
       expect([for (final i in p.carrying) i.name], ['car keys']);
@@ -217,7 +229,12 @@ void main() {
       final p = Pockets(worn: [const PocketItem('coat')]);
       final out = await evalReturning(
         null,
-      ).evaluateAndApply(charName: 'Alice', pockets: p, reply: 'She waits.');
+      ).evaluateAndApply(
+        charName: 'Alice',
+        pockets: p,
+        reply: 'She waits.',
+        recentExchange: '',
+      );
       expect(out, isEmpty);
       expect(p.worn.single.name, 'coat');
     });
