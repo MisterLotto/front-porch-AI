@@ -587,6 +587,18 @@ extension ChatServiceSessionManage on ChatService {
       }
     }
 
+    // Both branches above cleared the record; put back what the CARDS say she
+    // starts with, so the fresh chat's greeting is drawn with her wardrobe
+    // already in the sidebar rather than empty until the first message.
+    //
+    // Placed HERE, after the if/else closes, and that placement is the whole
+    // trick: the group branch nulls `_pockets` and then rebuilds `_groupRealism`
+    // from the group's member baselines a dozen lines later, so seeding beside
+    // the null would have been wiped for every group and silently worked for
+    // every 1:1 — the shape of bug that looks fixed until somebody opens a
+    // group. One call after both branches cannot go half-right.
+    seedPocketsFromCards();
+
     // Drop the previous session's growth cache so the new chat starts with
     // the original (ungrown) personality. A fresh session has no rings and
     // no legacy blob, so an empty cache IS the correct state — the next

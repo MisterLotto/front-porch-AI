@@ -245,6 +245,12 @@ extension ChatServiceGroupEntry on ChatService {
     // Try to load last session for this group
     await _loadLastSession();
 
+    // Same as the 1:1 twin in chat_service_chat_entry: message 0 needs every
+    // member's authored wardrobe in place, and after the load so a restored
+    // session wins. Parity is not optional here — a group member dressed by her
+    // author must arrive dressed exactly as she would in a 1:1.
+    seedPocketsFromCards();
+
     // Load the objectives for whoever is the initial next speaker (or first char)
     if (_activeGroup != null) {
       await _loadObjectivesForCurrentSpeaker();

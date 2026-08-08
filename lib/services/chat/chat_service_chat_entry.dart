@@ -231,6 +231,13 @@ extension ChatServiceChatEntry on ChatService {
       // Try to load last session
       await _loadLastSession();
 
+      // Message 0 needs her wardrobe too. AFTER the load, so a restored
+      // session's own record always wins — this only fills a gap. With no
+      // prior session there is nothing to load and this is the only thing
+      // standing between an authored wardrobe and a sidebar that draws
+      // nothing until the user's first message. See seedPocketsFromCards.
+      seedPocketsFromCards();
+
       // If no session loaded, start fresh
       if (_messages.isEmpty) {
         // Seed Realism Engine state from V2.5 card extensions (new conversations only)

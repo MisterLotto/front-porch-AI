@@ -12263,3 +12263,70 @@ its two private sub-controls — `_StandaloneClockSwitch` and `_AwayThreshold` �
 moved to `lib/ui/settings/widgets/porch_life_row_children.dart` and joined that
 barrel. The tab is 477: back UNDER the cap while gaining a row, which is the
 `character_grid_card.dart` precedent.
+
+---
+
+## 2026-08-08 — An authored wardrobe was invisible at message 0
+
+**Files:** `lib/services/chat/chat_service_pockets.dart`,
+`lib/services/chat/chat_service_chat_entry.dart`,
+`lib/services/chat/chat_service_group_entry.dart`,
+`lib/services/chat/chat_service_session_manage.dart`,
+`test/services/chat/wardrobe_message_zero_test.dart` (new)
+
+Reported: *"why do I not see pockets or wardrobe in the chat sidebar on message
+0 when pockets and wardrobe is enabled?"* — with the character dressed.
+
+This is a HALF-FINISHED FIX OF MINE, not a fresh bug. `seedPocketsFromCards()`
+was written earlier today (d274f4c) so an authored wardrobe reaches turn 1's
+PROMPT, and it was wired at exactly the two places prompts get built: the top of
+`sendMessage`, and session restore. Neither runs when a chat is merely OPENED.
+Meanwhile all three fresh-chat reset blocks set `_pockets = null` and stopped
+there, each carrying a comment promising the record would "re-seed from the card
+on the first pass" — true when the seed lived inside `_runPocketsPass`, false
+from the moment it moved earlier. Nobody updated the comments, and the comments
+were what made the gap look handled.
+
+So a freshly dressed character stood there empty-handed until the user typed
+something: `pocketsFor` returned null, `PocketsRow` rendered
+`SizedBox.shrink()`, and the sidebar showed nothing at all — at exactly the
+moment an author who has just set a wardrobe goes to check that it saved. Twice
+in one day the same feature failed at the point where somebody verifies their
+own work.
+
+Worse, the turn-1 test file states this hole in its own header ("The sidebar had
+the same hole: blank until after the first reply") and never asserts it, because
+every assertion in it is against `InventoryInjection` — the prompt. The sentence
+was written; the guard was not. That is the "verified via source review"
+anti-pattern CLAUDE.md names, in my own new code.
+
+Fixed by calling the existing seed from the three ENTRY paths —
+`setActiveCharacter`, `setActiveGroup` and `startNewChat` — bringing it to five
+call sites total, and no new method (a `seedPocketsOnEntry()` wrapper was
+written and deleted: it added a name and nothing else). Each entry call sits
+AFTER `_loadLastSession()` so a restored session's own record always wins; the
+seed only ever fills a gap.
+
+**The placement in `startNewChat` is load-bearing and was negative-checked on
+its own.** That method's group branch nulls the record and then rebuilds
+`_groupRealism` from the group's member baselines a dozen lines later, so a seed
+placed beside the null is wiped for every group while working perfectly for
+every 1:1. Moving the call there turns the group test red and leaves all three
+1:1 tests green — the exact "looks fixed until somebody opens a group" shape.
+The call therefore sits after the if/else closes, where it cannot go half-right.
+
+**Gates:** analyze 0 · 6 new tests against the REAL ChatService + in-memory
+Drift (a fake `pocketsFor` would only prove the fake). Run RED FIRST: the two
+1:1 tests failed with `Expected: not null / Actual: <null>` before the fix, and
+the group ordering was separately negative-checked as described. Three control
+tests pin the contract the fix must not break — an undressed card still gets no
+record rather than an empty one, the switch off still means nothing, and a chat
+that has moved on is never re-dressed from the card.
+
+Two fixture bugs found while writing it, both mine and both worth recording
+because each would have made the test assert nothing: `setActiveGroup` returns
+early without a `CharacterRepository` (zero members resolve, `firstWhere`
+throws), and its no-repo fallback reads `AppDatabase.instance()` — the
+singleton, not the test's in-memory database. And the member's extensions JSON
+needs the `realism_engine` envelope; a bare top-level `inventory` parses to `{}`
+and fails against correct code.

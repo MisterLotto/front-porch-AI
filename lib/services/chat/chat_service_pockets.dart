@@ -83,6 +83,28 @@ extension ChatServicePockets on ChatService {
   /// Idempotent, and identical for 1:1 and group by construction — one loop
   /// over one speaker list, writing through the same [setPocketsFor] the pass
   /// uses, so the two modes cannot diverge about what a character starts with.
+  ///
+  /// CALL SITES — there are FIVE and every one of them is load-bearing. Two are
+  /// about generating (the top of `sendMessage`, and the pass's own `??` for a
+  /// character who arrives mid-turn); three are about ENTERING a conversation:
+  /// `setActiveCharacter`, `setActiveGroup` and `startNewChat`, each straight
+  /// after the point where a restored session would have won.
+  ///
+  /// The entry three were missing until 2026-08-08, and the report was exact:
+  /// "why do I not see pockets or wardrobe in the chat sidebar on message 0
+  /// when pockets and wardrobe is enabled?" This function was written to fix
+  /// turn 1's PROMPT and wired only where prompts get built — but the sidebar
+  /// draws the moment a chat opens, and all three fresh-chat reset blocks set
+  /// `_pockets = null` and stopped, each promising in a comment that the record
+  /// would "re-seed from the card on the first pass". That was true when the
+  /// seed lived inside [_runPocketsPass] and false the moment it moved earlier.
+  /// So a freshly dressed character stood there empty-handed until the user
+  /// typed something — precisely when her author was looking to check the
+  /// wardrobe had saved.
+  ///
+  /// If you add a sixth entry path, call this from it.
+  /// `test/services/chat/wardrobe_message_zero_test.dart` drives the real
+  /// ChatService through entry and will catch a path that forgets.
   void seedPocketsFromCards() {
     // The one switch Pockets answers to. Seeding while it is off would let the
     // v47 save wire persist a record the user never asked for.
@@ -105,6 +127,7 @@ extension ChatServicePockets on ChatService {
       setPocketsFor(id, seed);
     }
   }
+
 
   /// Runs the detection pass for the speaker who just replied.
   ///
