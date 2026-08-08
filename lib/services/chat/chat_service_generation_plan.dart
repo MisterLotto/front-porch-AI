@@ -118,17 +118,33 @@ extension ChatServiceGenerationPlan on ChatService {
       // salience-gated natural language only, no simulation scalars. Macro-
       // resolved HERE (spec §5a) — the fragments carry {{user}}, and this
       // block previously reached the model with the braces literal.
-      String realismBlock = '';
-      if (_realismActiveThisMode) {
-        final rawRealism = _getRealismStateInjection();
-        realismBlock = rawRealism.isEmpty
-            ? ''
-            : _macroResolver.resolve(
-                rawRealism,
-                macroCtx,
-                section: 'realism',
-              );
-      }
+      // BUILT UNCONDITIONALLY since 2026-08-08, and that is the fix for a
+      // whole class of "the switch is on and nothing happens".
+      //
+      // This used to be wrapped in `if (_realismActiveThisMode)`. The composer
+      // had already been taught to gate each of its eleven fragments
+      // individually — its own comment says a blanket early return "silently
+      // deleted all eleven fragments, including the four that are not realism
+      // features" — but that blanket gate had simply MOVED here, to the caller,
+      // where the composer's careful per-fragment gating never got to run.
+      //
+      // So with the Realism Engine off, every one of these was built and thrown
+      // away: Pockets & Wardrobe (Porch Life: "works alone"), Likes & Dislikes
+      // (whose fragment is commented "DELIBERATELY NOT REALISM-GATED"),
+      // Ambitions ("needs Objectives"), Promises ("needs the Journal"), the
+      // real-absence note that was lifted out of TimeInjection to escape
+      // exactly this kind of gate, and the story clock's own time and weather
+      // lines — which meant the standalone clock spent an LLM call every turn
+      // to advance a clock whose reading could never reach the model.
+      //
+      // The engine's OWN fragments are unaffected: they answer to
+      // `_characterStateEnabled` inside the composer, wired to
+      // `_realismActiveThisMode`, so Director mode and AFK auto-response stay
+      // exactly as silent as they were.
+      final rawRealism = _getRealismStateInjection();
+      final realismBlock = rawRealism.isEmpty
+          ? ''
+          : _macroResolver.resolve(rawRealism, macroCtx, section: 'realism');
 
       // Living Worlds — place prose from attached worlds (budget-capped).
       final attachedWorlds = [

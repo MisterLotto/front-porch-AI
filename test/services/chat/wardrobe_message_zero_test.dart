@@ -259,6 +259,43 @@ void main() {
     );
   });
 
+
+  test('a group New Chat re-reads the Porch Life Chaos default', () async {
+    // The 1:1 branch of startNewChat re-seeded Chaos from card-or-global; the
+    // group branch touched Chaos at all. It simply inherited whatever
+    // setActiveGroup had left in the service — usually right, which is why it
+    // went unnoticed, and wrong the moment the global CHANGES while a group is
+    // open. "New Chat" is exactly when a user expects their defaults re-applied.
+    await db.insertGroup(
+      GroupsCompanion.insert(id: 'grp-chaos', name: 'The Bakery'),
+    );
+    await db.insertGroupMember(
+      GroupMembersCompanion.insert(
+        id: 'mem-c',
+        groupId: 'grp-chaos',
+        name: 'Jennifer',
+      ),
+    );
+
+    await chat.setActiveGroup(
+      GroupChat(id: 'grp-chaos', name: 'The Bakery'),
+      groupRepo: GroupChatRepository(storage, db),
+    );
+    expect(chat.chaosModeService.chaosModeEnabled, isFalse);
+
+    // The user turns Chaos on globally with the group already open, then starts
+    // a fresh chat in it.
+    await storage.realismSettings.setChaosModeDefault(true);
+    await chat.startNewChat();
+
+    expect(
+      chat.chaosModeService.chaosModeEnabled,
+      isTrue,
+      reason: 'the group branch never re-read the global, so a fresh group chat '
+          'started with Chaos off however the user had set it',
+    );
+  });
+
   test('a chat that has moved on is not re-dressed from the card', () async {
     // The other half of the seed's contract: it must never hand back something
     // she put down. Simulate a chat that has already recorded a change, then

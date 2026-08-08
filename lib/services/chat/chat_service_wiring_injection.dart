@@ -523,7 +523,22 @@ extension ChatServiceWiringInjection on ChatService {
       behavioralInjection: _behavioralInjection,
       nsfwInjection: _nsfwInjection,
       needsInjection: _needsInjection,
-      getRealismEnabled: () => _realismEnabled,
+      // `_realismActiveThisMode`, NOT the bare `_realismEnabled` flag, and the
+      // difference became load-bearing on 2026-08-08 when the caller's blanket
+      // `if (_realismActiveThisMode)` around this whole block was removed.
+      //
+      // That wrapper was the only thing keeping the engine's fragments out of
+      // the prompt in group Director mode and during AFK auto-responses, where
+      // the engine is deliberately paused (`_realismActiveThisMode` is false
+      // while `_realismEnabled` stays true). Un-gating the block without moving
+      // this would have started injecting bond, trust, emotion, position and
+      // fixation into two modes that have never seen them — a behaviour change
+      // for engine-ON users, smuggled in under a fix for engine-OFF ones.
+      //
+      // Wired here, the engine fragments answer to exactly the condition they
+      // always did, while the fragments that are not realism features keep
+      // reaching the model in every mode.
+      getRealismEnabled: () => _realismActiveThisMode,
       getClockRunningOverride: () => _clockRunning,
       // One-shot, opt-in (default OFF), coarse-worded, speculation-forbidding —
       // living-time-features.md §2 "Privacy by design". Lifted here from the

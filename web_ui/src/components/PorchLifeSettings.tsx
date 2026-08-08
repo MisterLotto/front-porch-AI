@@ -45,6 +45,7 @@ interface PorchLifeState {
   pocketTransfersEnabled: boolean;
   intimateAgencyEnabled: boolean;
   chaosModeDefault: boolean;
+  sceneGuestDetectionEnabled: boolean;
   adultThemesEnabled: boolean;
   dreamsEnabled: boolean;
   promiseLedgerEnabled: boolean;
@@ -73,6 +74,7 @@ const DEFAULTS: PorchLifeState = {
   pocketTransfersEnabled: false,
   intimateAgencyEnabled: false,
   chaosModeDefault: false,
+  sceneGuestDetectionEnabled: true,
   adultThemesEnabled: false,
   dreamsEnabled: true,
   promiseLedgerEnabled: true,
@@ -388,6 +390,14 @@ export function PorchLifeSettings() {
       </FeatureGroup>
 
       <FeatureGroup title="Presence" subtitle="noticing you, nothing more">
+        <FeatureRow
+          icon="🔎"
+          label="Notice new characters"
+          need="alone"
+          blurb="Every few messages the app reads what was just narrated and, if a new named character has turned up in the story, offers to bring them in so they can speak for themselves. Switch this off and it stops asking — you can still invite someone in yourself at any time with the /scan command or the guest button. On by default; turn it off if the offers interrupt more than they help."
+          value={st.sceneGuestDetectionEnabled}
+          onChange={(v) => set('sceneGuestDetectionEnabled', v)}
+        />
         <FeatureRow
           icon="🎲"
           label="Chaos Mode"

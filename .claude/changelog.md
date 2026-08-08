@@ -12330,3 +12330,186 @@ throws), and its no-repo fallback reads `AppDatabase.instance()` — the
 singleton, not the test's in-memory database. And the member's extensions JSON
 needs the `realism_engine` envelope; a bare top-level `inventory` parses to `{}`
 and fails against correct code.
+
+---
+
+## 2026-08-08 — The state block was gated on the Realism Engine; four features never reached the model
+
+**Files:** `lib/services/chat/chat_service_generation_plan.dart`,
+`lib/services/chat/chat_service_wiring_injection.dart`,
+`test/services/chat/state_block_independence_test.dart` (new)
+
+Found by an adversarial audit of everything shipped this session, hunting the
+class the PNG data-loss bug belonged to: correct code that a guard means nobody
+ever reaches. This is the largest instance yet.
+
+`chat_service_generation_plan.dart` wrapped the whole
+`[How <name> is right now: …]` block in `if (_realismActiveThisMode)`. The
+composer had ALREADY been taught to gate each of its eleven fragments
+individually — its own comment says a blanket early return "silently deleted all
+eleven fragments, including the four that are not realism features" — but that
+blanket gate had simply MOVED to the caller, where the composer's careful
+per-fragment gating never got a chance to run.
+
+With the Realism Engine off, all of this was built and thrown away:
+* **Pockets & Wardrobe** — Porch Life calls it "works alone", and it bills a
+  model request every turn. A user paying for it with the engine off got
+  nothing in the prompt at all.
+* **Likes & Dislikes** — whose fragment carries the comment "DELIBERATELY NOT
+  REALISM-GATED", sitting inside the realism gate.
+* **Ambitions** (chipped "needs Objectives") and **Promises** ("needs the
+  Journal").
+* **The real-absence note**, lifted out of TimeInjection on 2026-08-07
+  precisely so it would stop inheriting a gate it had nothing to do with. It
+  landed inside a second one, so the lift changed nothing observable.
+* **The story clock's time and weather lines** — so the standalone clock, an
+  opt-in feature whose entire purpose is to run with the engine off, spent one
+  LLM call every turn advancing a clock whose reading could not reach the model.
+
+The feature-independence campaign un-gated the SWITCHES and the SCORING. Nobody
+un-gated the DELIVERY VEHICLE.
+
+Fixed by building the block unconditionally and moving the composer's
+`getRealismEnabled` from the bare `_realismEnabled` flag to
+`_realismActiveThisMode`. That second half is not cosmetic: the removed wrapper
+was the only thing keeping bond, trust, emotion, position and fixation out of
+group Director mode and AFK auto-responses, where the engine is deliberately
+paused. Un-gating without moving it would have smuggled a behaviour change for
+engine-ON users in under a fix for engine-OFF ones.
+
+**Gates:** analyze 0 · 10 new tests driving the REAL composer with real
+injections (every fragment's own unit tests were green throughout — the bug was
+never in a fragment). Negative-checked by restoring the blanket gate: 7 red.
+Three of the ten pin the other direction — engine fragments must stay OUT with
+the engine off, including Needs, which genuinely does require it.
+
+---
+
+## 2026-08-08 — Plain imported cards got none of the global defaults
+
+**Files:** `lib/services/chat/chat_service_chat_entry.dart`,
+`test/services/chat/plain_card_globals_test.dart` (new)
+
+The seed block in `setActiveCharacter` ran only
+`if (_activeCharacter!.frontPorchExtensions != null)`, while the comment three
+lines inside it explains that the OR-override exists "to force realism ON for
+imported cards (Chub/V2 PNG/BYAF) that carry no realism setup".
+
+A card that carries no realism setup has no extensions object at all. The guard
+excluded precisely the population the code inside it was written to serve: every
+plain PNG downloaded from Chub or exported from another app fell through and got
+none of the globals — not Realism, not Afterglow, not Needs, and not the new
+Chaos default. Turn a global on, open a card you just downloaded, nothing
+happens, nothing on screen explains why.
+
+Fixed with an `else if (_currentSessionId == null)` branch that applies ONLY the
+global feature switches — the OR-overrides plus the Needs AND-gate — and
+deliberately not the numeric seeds (bond, trust, day, needs baselines), which a
+plain card has no opinion about and which already hold their defaults.
+
+**THE FIRST DRAFT OF THIS FIX WAS WRONG AND SEVEN EXISTING TESTS CAUGHT IT.**
+It read a default-constructed `FrontPorchExtensions` into the whole block above,
+on the assumption that the enclosing `if (_messages.isEmpty)` meant "no session
+was loaded". It does not: a session row with zero messages still hydrates every
+stored scalar, so the card defaults overwrote a saved chat's bond of 77 with 0,
+and a saved passage-of-time OFF came back ON. `session_scalar_parity_test` and
+`session_load_regression_test` went red on exactly that. They were right and the
+change was wrong — which is the rule working as intended, and the reason the
+guard is now `_currentSessionId == null` (only true when `_loadLastSession`
+genuinely found nothing) instead of a message count.
+
+**Gates:** 5 new tests, negative-checked by restoring the null guard (2 red).
+Three pin the boundaries: a card with its own extensions still decides for
+itself (OR-override, not AND-gate), globals off leave a plain card alone, and
+the card object itself never gains an extensions block — writing one would
+change the JSON shape, which ripples to the PNG, The Stoop and every external
+reader, and would quietly convert a user's whole library of plain imports.
+
+---
+
+## 2026-08-08 — Group chats had no Pockets & Wardrobe surface at all
+
+**Files:** `lib/ui/widgets/group_member_card.dart`,
+`lib/ui/chat_components/sidebar/character_state/character_state.dart` (new
+barrel), `lib/ui/chat_components/sidebar/sidebar_body.dart`
+
+The only mount was `if (!widget.isGroup && …)` in the Character State
+accordion. Meanwhile the eval ran every turn per member, the injection told the
+model what each of them was wearing, and the web drawer displayed it — so on
+desktop a group member's pockets were invisible, and the hand-remove that
+"stops a wrong entry becoming permanent" was unreachable for them.
+
+Needs and Ambitions were already rendered per member on `GroupMemberCard`;
+wardrobe simply never followed them across. It now sits with them, using the
+same `PocketsRow` and the same remove callback as 1:1.
+
+Barrel work while in there (CLAUDE.md's self-extending rule): the card now needs
+two siblings from `character_state/`, which had no barrel, so one was added and
+both importers converted. `edit_group_page.dart` also became `pages.dart`.
+
+---
+
+## 2026-08-08 — "Notice new characters": a switch for Scene Guest detection
+
+**Files:** `lib/services/storage/settings/realism_settings.dart`,
+`lib/services/chat_service.dart`, `lib/services/chat/chat_service_turn_flow.dart`,
+`lib/services/web/facade/settings_facade.dart`,
+`lib/ui/settings/tabs/porch_life_tab.dart`,
+`web_ui/src/components/PorchLifeSettings.tsx`,
+`test/services/chat/scene_guest_toggle_test.dart` (new)
+
+Maintainer: *"we also need a toggle for disabling detection of scene guests.
+Some users find it annoying."*
+
+Every few turns the app reads the narration, spots a newly-introduced named side
+character and offers to bring them in. There was no way to stop it. What there
+WAS: `ChatService.sceneDetectionEnabled` — an in-memory bool, default true, that
+no code ever wrote and no surface ever exposed. Scaffolding for a setting nobody
+built, and the gate read it, so it looked wired.
+
+That field is DELETED rather than wired up beside the new one: two switches for
+one behaviour is how the two end up disagreeing. `sceneGuestDetectionEnabled`
+persists, defaults TRUE (this is existing behaviour; the switch exists to turn it
+off, not to make people opt back in), depends on nothing, and is read at the one
+gate. Scope is the AUTOMATIC scan only — `/scan` still works with it off,
+because the complaint is unprompted offers and typing a command is a prompt.
+
+Porch Life row + web row + facade round-trip, all in the same change.
+
+**Gates:** 4 new tests — default, persistence, stored-false vs missing-key, and
+a source check that the dead stand-in stays deleted and the gate reads the
+setting.
+
+---
+
+## 2026-08-08 — A group's "New Chat" never re-read the Chaos global
+
+**Files:** `lib/services/chat/chat_service_session_manage.dart`,
+`test/services/chat/wardrobe_message_zero_test.dart`
+
+The 1:1 branch of `startNewChat` re-seeded Chaos from card-or-global; the group
+branch never touched Chaos at all, inheriting whatever `setActiveGroup` had left
+in the service. Usually the right answer — which is why it went unnoticed — and
+wrong the moment the global CHANGES while a group is open. "New Chat" is exactly
+when a user expects their defaults re-applied.
+
+Note the shape of the fix, because the obvious version is wrong: the seed can
+NOT be hoisted below the if/else beside the Pockets re-seed, because down there
+`extSeed` is out of scope and the only readable value is the service's own —
+which still holds the previous chat's chaos state. That would trade a missing
+re-seed for a bleed. Each branch seeds from its own source instead: the card for
+1:1, the group's flags for a group.
+
+**Gates:** 1 new test, negative-checked by deleting the group-branch seed (red).
+
+**Extraction that came with the group Pockets mount:** `group_member_card.dart`
+was already 681 lines (past the 500 cap) and the new mount took it to 708. Its
+three pure presentational leaves — `_miniTier`, `_miniNeed` and
+`_emotionRingColor` — moved verbatim to
+`lib/ui/widgets/group_member_chips.dart` as `MiniTierChip`, `MiniNeedChip` and
+`emotionRingColor`, and joined the widgets barrel. The card is now 638: it
+gained a feature and ended up SMALLER than it started. The hardcoded emotion
+hues moved byte-for-byte and carry a `// theme-keep:` marker — they are a
+semantic legend (grief and anger must not look alike), they predate the
+warm-porch standard, and recolouring them here would change golden pixels as a
+side effect of a move.

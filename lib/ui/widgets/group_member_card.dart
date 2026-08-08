@@ -22,13 +22,14 @@ import 'package:flutter/material.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/chat/chat.dart';
-import 'package:front_porch_ai/ui/pages/edit_group_page.dart';
+import 'package:front_porch_ai/ui/pages/pages.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/theme/tier_colors.dart';
 import 'package:front_porch_ai/ui/widgets/realism_progress_row.dart';
 import 'package:front_porch_ai/ui/widgets/needs_bar.dart';
 import 'package:front_porch_ai/ui/widgets/fixation_chip.dart';
-import 'package:front_porch_ai/ui/chat_components/sidebar/character_state/ambitions_row.dart';
+import 'package:front_porch_ai/ui/widgets/group_member_chips.dart';
+import 'package:front_porch_ai/ui/chat_components/sidebar/character_state/character_state.dart';
 import 'package:front_porch_ai/utils/utils.dart';
 
 /// First-class representation of a group chat member in the sidebar.
@@ -154,7 +155,7 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
     final opacity = isDirector ? 0.38 : 1.0;
 
     final ringColor = (emotion != null && isRealism)
-        ? _emotionRingColor(emotion)
+        ? emotionRingColor(emotion)
         : widget.avatarColor;
 
     return Opacity(
@@ -355,7 +356,7 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: _emotionRingColor(emotion ?? 'neutral'),
+                          color: emotionRingColor(emotion ?? 'neutral'),
                         ),
                       ),
                       if (isDirector) ...[
@@ -467,6 +468,33 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                     ),
                   ],
 
+                  // Pockets & Wardrobe — per-member, the same widget the 1:1
+                  // Character State accordion uses.
+                  //
+                  // A group had NO wardrobe surface at all until 2026-08-08:
+                  // the only mount was gated `!isGroup`, so the eval ran every
+                  // turn per member, the injection told the model what each of
+                  // them was wearing, the web drawer displayed it — and on
+                  // desktop a group member's pockets were invisible, with the
+                  // hand-remove that "stops a wrong entry becoming permanent"
+                  // unreachable. Needs and Ambitions were already per-member
+                  // here; wardrobe simply never followed them across.
+                  Builder(
+                    builder: (context) {
+                      final id = chat.characterIdFor(widget.character);
+                      final p = chat.pocketsFor(id);
+                      if (p == null || p.isEmpty) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: PocketsRow(
+                          pockets: p,
+                          onRemove: ({required worn, required index}) => chat
+                              .removePocketItem(id, worn: worn, index: index),
+                        ),
+                      );
+                    },
+                  ),
+
                   // Objectives quick access
                   if (widget.onOpenObjectives != null) ...[
                     const SizedBox(height: 6),
@@ -515,7 +543,7 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                           emotion[0].toUpperCase() + emotion.substring(1),
                           style: TextStyle(
                             fontSize: 10,
-                            color: _emotionRingColor(emotion),
+                            color: emotionRingColor(emotion),
                           ),
                         ),
                         const Spacer(),
@@ -534,11 +562,11 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                       spacing: 8,
                       runSpacing: 2,
                       children: [
-                        _miniTier('B', affection, bondColor),
-                        _miniTier('T', trust, trustColor),
-                        if (lustOn) _miniTier('L', arousal, arousalColor),
+                        MiniTierChip(label: 'B', value: affection, color: bondColor),
+                        MiniTierChip(label: 'T', value: trust, color: trustColor),
+                        if (lustOn) MiniTierChip(label: 'L', value: arousal, color: arousalColor),
                         if (topNeeds.isNotEmpty)
-                          ...topNeeds.map((n) => _miniNeed(n.$1, n.$2)),
+                          ...topNeeds.map((n) => MiniNeedChip(name: n.$1, value: n.$2)),
                       ],
                     ),
                   ],
@@ -608,74 +636,4 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
   }
 
   // --- tiny helpers for compact row ---
-  Widget _miniTier(String label, int value, Color color) {
-    final isNeg = value < 0;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-      decoration: BoxDecoration(
-        color: (isNeg ? AppColors.negativeAccentOf(context) : color)
-            .withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(3),
-      ),
-      child: Text(
-        '$label${value.abs()}',
-        style: TextStyle(
-          fontSize: 9,
-          color: isNeg ? AppColors.negativeAccentOf(context) : color,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-
-  Widget _miniNeed(String name, int val) {
-    final isCrit = val <= needCriticalThreshold;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-      decoration: BoxDecoration(
-        color:
-            (isCrit
-                    ? AppColors.negativeAccentOf(context)
-                    : AppColors.porchAmberOf(context))
-                .withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(3),
-      ),
-      child: Text(
-        '${name[0].toUpperCase()}$val',
-        style: TextStyle(
-          fontSize: 9,
-          color: isCrit
-              ? AppColors.negativeAccentOf(context)
-              : AppColors.porchAmberOf(context),
-        ),
-      ),
-    );
-  }
-
-  Color _emotionRingColor(String emotion) {
-    switch (emotion.toLowerCase()) {
-      case 'joy':
-      case 'amusement':
-      case 'excitement':
-        return Colors.amber;
-      case 'sadness':
-      case 'grief':
-      case 'disappointment':
-        return Colors.blueGrey;
-      case 'anger':
-      case 'annoyance':
-        return Colors.redAccent;
-      case 'fear':
-      case 'nervousness':
-        return Colors.deepPurpleAccent;
-      case 'affection':
-      case 'love':
-        return Colors.pinkAccent;
-      case 'anticipation':
-      case 'desire':
-        return Colors.orangeAccent;
-      default:
-        return Colors.grey;
-    }
-  }
 }

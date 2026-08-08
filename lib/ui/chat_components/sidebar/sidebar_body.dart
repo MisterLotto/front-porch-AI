@@ -27,7 +27,7 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/dialogs/dialogs.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
-import 'character_state/character_state_group.dart';
+import 'character_state/character_state.dart';
 import 'journal_memory/journal_memory_group.dart';
 import 'porch_accordion.dart';
 import 'sidebar_tokens.dart';

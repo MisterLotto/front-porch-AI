@@ -324,6 +324,45 @@ extension ChatServiceChatEntry on ChatService {
           );
 
           _importAuthoredTask(ext);
+        } else if (_currentSessionId == null) {
+          // A PLAIN IMPORTED CARD — no `frontPorchExtensions` at all, which is
+          // every PNG downloaded from Chub or exported from another app — and
+          // no prior session. Until 2026-08-08 it got NOTHING from this block,
+          // because the guard above is `!= null` while the comment inside it
+          // says the OR-override exists "to force realism ON for imported cards
+          // (Chub/V2 PNG/BYAF) that carry no realism setup". The guard excluded
+          // exactly the population the code was written to serve: turn a global
+          // on, open a card you just downloaded, nothing happens.
+          //
+          // Only the GLOBAL feature switches are applied — the pure
+          // OR-overrides plus the Needs AND-gate. Deliberately NOT the numeric
+          // seeds (bond, trust, day, needs baselines): a plain card has no
+          // opinion about those, and the defaults are already in place.
+          //
+          // `_currentSessionId == null` is the load-bearing part, and the first
+          // draft of this fix got it wrong by reusing a default-constructed
+          // extensions object for the whole block above. `_messages.isEmpty` is
+          // NOT "no session was loaded" — a session row with zero messages
+          // still hydrates every stored scalar, so that version let card
+          // defaults overwrite a saved chat's bond of 77 with 0. Seven existing
+          // tests caught it, and they were right; this branch runs only when
+          // `_loadLastSession` genuinely found nothing.
+          _realismEnabled =
+              _realismEnabled || _storageService.realismSettings.realismDefault;
+          _nsfwService.seedFromV2OrExt(
+            nsfwCooldownEnabled:
+                _nsfwService.nsfwCooldownEnabled ||
+                _storageService.realismSettings.nsfwCooldownDefault,
+          );
+          _chaosModeService.seedFromGroupOrExt(
+            _storageService.realismSettings.chaosModeDefault,
+            false,
+          );
+          _needsSimEnabled =
+              _needsSimEnabled &&
+              _storageService.realismSettings.needsSimDefault;
+          _objectivesEnabled =
+              _storageService.realismSettings.objectivesEnabled;
         }
 
         if (_activeCharacter!.firstMessage.isNotEmpty) {

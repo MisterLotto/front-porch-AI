@@ -98,6 +98,27 @@ class RealismSettings with SettingsBase {
   /// two prompt sentences, no extra model call.
   bool _intimateAgencyEnabled = false;
 
+  /// Whether the periodic Scene Guest cast-detection scan runs — the thing that
+  /// notices a named side character in the narration and offers to bring them
+  /// in as a guest.
+  ///
+  /// Defaults TRUE because that is what it has always done; this switch exists
+  /// to turn it OFF (maintainer, 2026-08-08: "some users find it annoying").
+  /// Being interrupted every few turns by an offer you did not ask for is a
+  /// reasonable thing to want to stop, and until now there was no way to.
+  ///
+  /// There WAS a `ChatService.sceneDetectionEnabled` field standing in for this
+  /// — default true, no writer, no UI. It has been deleted rather than wired,
+  /// because a second switch for one behaviour is how the two end up
+  /// disagreeing. This is now the only one, read at the single gate in
+  /// `_maybeRunCastDetection`.
+  ///
+  /// Scope: the AUTOMATIC scan only. `/scan` still works with this off — the
+  /// complaint is unprompted offers, and typing the command is a prompt.
+  /// Depends on nothing: detection reads narration text and triggers the
+  /// existing mint/enter flow, doing zero Realism or Needs work.
+  bool _sceneGuestDetectionEnabled = true;
+
   /// Global Chaos Mode default. Chaos had NO global switch at all — it was
   /// per-chat only, seeded from the card — so Porch Life could only apologise
   /// for it in a footer instead of offering it.
@@ -183,6 +204,9 @@ class RealismSettings with SettingsBase {
   /// See [_chaosModeDefault]. Depends on nothing.
   bool get chaosModeDefault => _chaosModeDefault;
 
+  /// See [_sceneGuestDetectionEnabled]. Depends on nothing; default ON.
+  bool get sceneGuestDetectionEnabled => _sceneGuestDetectionEnabled;
+
   /// See [_pocketTransfersEnabled]. Costs nothing extra — it rides the Pockets
   /// pass that is already running.
   bool get pocketTransfersEnabled => _pocketTransfersEnabled;
@@ -249,6 +273,8 @@ class RealismSettings with SettingsBase {
     _intimateAgencyEnabled =
         prefs?.getBool(k('intimate_agency_enabled')) ?? false;
     _chaosModeDefault = prefs?.getBool(k('chaos_mode_default')) ?? false;
+    _sceneGuestDetectionEnabled =
+        prefs?.getBool(k('scene_guest_detection_enabled')) ?? true;
     _pocketTransfersEnabled =
         prefs?.getBool(k('pocket_transfers_enabled')) ?? false;
     _adultThemesExplicit = prefs?.getBool(k('adult_themes_enabled'));
@@ -392,6 +418,12 @@ class RealismSettings with SettingsBase {
   Future<void> setChaosModeDefault(bool value) async {
     _chaosModeDefault = value;
     await prefs?.setBool(k('chaos_mode_default'), value);
+    notify();
+  }
+
+  Future<void> setSceneGuestDetectionEnabled(bool value) async {
+    _sceneGuestDetectionEnabled = value;
+    await prefs?.setBool(k('scene_guest_detection_enabled'), value);
     notify();
   }
 

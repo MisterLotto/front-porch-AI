@@ -451,6 +451,12 @@ extension ChatServiceSessionManage on ChatService {
             extSeed.nsfwCooldownEnabled ||
             _storageService.realismSettings.nsfwCooldownDefault,
       );
+      // Seeded from the CARD or-ed with the Porch Life global, exactly as the
+      // chat_entry twin does. Deliberately NOT hoisted below the if/else next
+      // to the Pockets re-seed: down there `extSeed` is out of scope and the
+      // only readable value is the service's own, which still holds the
+      // PREVIOUS chat's chaos state — hoisting it would trade a missing
+      // re-seed for a bleed, which is worse.
       _chaosModeService.seedFromGroupOrExt(
         extSeed.chaosModeEnabled ||
             _storageService.realismSettings.chaosModeDefault,
@@ -573,6 +579,18 @@ extension ChatServiceSessionManage on ChatService {
           _groupRealism = parseGroupRealismSeeds(
             _activeGroup!.defaultMemberRealismState,
           ).map((k, v) => MapEntry(k, GroupMemberRealism.fromJson(v)));
+          // The group's twin of the 1:1 chaos seed above, which this branch
+          // never had. A fresh chat inside a group simply inherited whatever
+          // setActiveGroup had left in the service — usually the right answer,
+          // which is why nobody noticed, but wrong the moment the Porch Life
+          // global changes while a group is open. "New Chat" is exactly when a
+          // user expects their defaults re-applied. Source is the GROUP's own
+          // flags rather than a card's, matching setActiveGroup.
+          _chaosModeService.seedFromGroupOrExt(
+            _activeGroup!.chaosModeEnabled ||
+                _storageService.realismSettings.chaosModeDefault,
+            _activeGroup!.chaosNsfwEnabled,
+          );
         }
         _activeObjectives = [];
         _messagesSinceLastCheck = 0;

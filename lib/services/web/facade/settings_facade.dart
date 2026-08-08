@@ -100,6 +100,8 @@ class SettingsFacade {
         'intimateAgencyEnabled':
             _storage.realismSettings.intimateAgencyEnabled,
         'chaosModeDefault': _storage.realismSettings.chaosModeDefault,
+        'sceneGuestDetectionEnabled':
+            _storage.realismSettings.sceneGuestDetectionEnabled,
         'adultThemesEnabled': _storage.realismSettings.adultThemesEnabled,
         'weatherEnabled': _storage.realismSettings.weatherEnabled,
         'weatherFahrenheit': _storage.realismSettings.weatherFahrenheit,
@@ -204,6 +206,10 @@ class SettingsFacade {
       final chaos = realism['chaosModeDefault'];
       if (chaos is bool) {
         await _storage.realismSettings.setChaosModeDefault(chaos);
+      }
+      final guests = realism['sceneGuestDetectionEnabled'];
+      if (guests is bool) {
+        await _storage.realismSettings.setSceneGuestDetectionEnabled(guests);
       }
       final objs = realism['objectivesEnabled'];
       if (objs is bool) {

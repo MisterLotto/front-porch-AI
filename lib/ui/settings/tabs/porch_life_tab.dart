@@ -351,6 +351,21 @@ class PorchLifeTab extends StatelessWidget {
               onChanged: realism.setAmbitionsEnabled,
             ),
             FeatureRow(
+              icon: Icons.person_search_outlined,
+              label: 'Notice new characters',
+              need: FeatureNeed.alone,
+              blurb:
+                  'Every few messages the app reads what was just narrated and, '
+                  'if a new named character has turned up in the story, offers '
+                  'to bring them in so they can speak for themselves. Switch '
+                  'this off and it stops asking — you can still invite someone '
+                  'in yourself at any time with the /scan command or the guest '
+                  'button. On by default; turn it off if the offers interrupt '
+                  'more than they help.',
+              value: realism.sceneGuestDetectionEnabled,
+              onChanged: realism.setSceneGuestDetectionEnabled,
+            ),
+            FeatureRow(
               icon: Icons.casino_outlined,
               label: 'Chaos Mode',
               need: FeatureNeed.alone,

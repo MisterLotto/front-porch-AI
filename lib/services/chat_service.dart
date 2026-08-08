@@ -245,9 +245,12 @@ class ChatService extends ChangeNotifier {
   // to promote it to a Scene Guest. Detection only reads text + triggers the
   // existing parity-safe mint/enter flow, so it adds ZERO Realism/Needs work.
 
-  /// Whether the periodic cast-detection scan runs. In-memory (default ON),
-  /// mirroring [autoChimeEnabled].
-  bool sceneDetectionEnabled = true;
+  // The switch lives in Porch Life as `realismSettings.sceneGuestDetectionEnabled`
+  // and is read at the ONE gate in `_maybeRunCastDetection`. There used to be an
+  // in-memory `sceneDetectionEnabled` field here, default true, which no code
+  // ever wrote and no surface ever exposed — scaffolding for a setting that was
+  // never built. It is deleted rather than left beside the real one, because two
+  // switches for one behaviour is how they end up disagreeing.
 
   // (_castScanInterval moved to chat_service_defaults.dart as a
   // library-top-level const)

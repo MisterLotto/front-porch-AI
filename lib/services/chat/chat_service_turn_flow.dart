@@ -283,7 +283,10 @@ extension ChatServiceTurnFlow on ChatService {
   /// already pending. The detector itself filters out the host/user/existing
   /// guests/already-offered names. Does ZERO Realism/Needs work.
   void _maybeRunCastDetection() {
-    if (!sceneDetectionEnabled) return;
+    // The one gate, and it is the AUTOMATIC path only. `/scan` deliberately
+    // still works with this off: the complaint this switch answers is being
+    // interrupted by offers nobody asked for, and typing `/scan` is asking.
+    if (!_storageService.realismSettings.sceneGuestDetectionEnabled) return;
     if (_activeGroup != null) return; // 1:1 only by design
     if (_activeCharacter == null) return;
     if (_sceneGuest.pendingDetection != null) return; // one offer at a time

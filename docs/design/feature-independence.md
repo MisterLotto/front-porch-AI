@@ -8,6 +8,40 @@ file:line by a three-agent audit, 2026-08-07), what independence costs, and
 the phased plan. Companion features doc: `pockets-and-preferences.md`.
 Mockup (approved layout pending): the "Porch Life" tab sketch artifact.
 
+> ## ⚠️ CORRECTION, 2026-08-08 — the campaign missed the delivery vehicle
+>
+> Everything below about switches and scoring gates stands. What it did NOT
+> check is whether the independent features' PROMPT TEXT ever reached the model,
+> and for six months it did not.
+>
+> `chat_service_generation_plan.dart` wrapped the whole
+> `[How <name> is right now: …]` block in `if (_realismActiveThisMode)`. That
+> one block carries Pockets & Wardrobe, Likes & Dislikes, Ambitions, Promises,
+> the real-absence note and the story clock's time/weather lines — every one of
+> them chipped in Porch Life as needing something other than the engine. The
+> composer had already been taught to gate each fragment individually (its own
+> comment says a blanket early return "silently deleted all eleven fragments,
+> including the four that are not realism features"), but that blanket gate had
+> simply moved up to the caller, where the per-fragment gating never ran.
+>
+> So the switches were live, the sidebars drew, the evals fired and billed — and
+> the model was told none of it. Two entries below are directly falsified by
+> this and are corrected in place: the **absence-note lift**, which escaped
+> `TimeInjection`'s gate and landed inside this one, and the **Passage of Time**
+> decoupling, whose standalone clock spent an LLM call per turn advancing a clock
+> whose reading could not be injected.
+>
+> Fixed by building the block unconditionally, with the composer's
+> `getRealismEnabled` moved from `_realismEnabled` to `_realismActiveThisMode`
+> so the engine's own fragments stay exactly as absent as before in Director
+> mode and AFK auto-responses. Guarded by
+> `test/services/chat/state_block_independence_test.dart` (10 tests,
+> negative-checked: restoring the blanket gate turns 7 red).
+>
+> **The lesson for any future entry in this document: a feature is not
+> independent because its switch and its scoring are independent. Trace it to
+> the prompt.**
+
 ## The verified dependency matrix
 
 | Feature | Today with Realism OFF | True dependency | Independence cost |
