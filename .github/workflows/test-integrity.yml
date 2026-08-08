@@ -49,6 +49,31 @@ name: Test integrity
 #     `.github/workflows/` to `.github/` means a PR can no longer delete it.
 # When you add a new kind of test, check it against this list. The predicate
 # is the baseline; if a suite is not in it, CI is guarding nothing.
+#
+# HARNESS vs EVIDENCE 2026-08-08 — maintainer decision.
+# `integration_test/support/` is not evidence. It holds the E2E harness: a
+# driver, a sandbox, and three fake servers (backend, HuggingFace, Stoop). None
+# of them assert anything — there is not one `expect(` in the directory, and
+# hygiene/e2e_support_has_no_assertions_test.dart now FAILS if that stops being
+# true, which is what keeps this carve-out honest.
+#
+# A fake server has to change whenever the app adds an API call, and that is
+# ordinary work, not evidence-editing. It just cost a real incident: Afterglow's
+# climax check became its own eval, the fake had no branch for it, answered the
+# new call with prose, and E2E went red on three platforms. Fixing the double is
+# the correct response to that, and blocking it behind a label is the "gate that
+# cries wolf" this file's own exclusion note warns about further down.
+#
+# So support/ REPORTS instead of BLOCKING: every change to it is printed as a
+# notice on the PR, visible in the checks output, but it does not fail the job.
+# The assertions themselves — integration_test/*_test.dart — still block, and a
+# `_test.dart` file inside support/ would block too.
+#
+# The cost, stated plainly: someone could make a fake return canned success and
+# get only a notice. The mitigations are that the notice is always printed, that
+# CODEOWNERS still requires maintainer review on `.github/` and the assertion
+# files, and that a fake rigged to pass would have to survive review of a diff
+# that says so in the check output.
 
 on:
   pull_request_target:
@@ -135,11 +160,33 @@ jobs:
               { ...context.repo, pull_number: context.issue.number, per_page: 100 }
             );
 
+            // The E2E harness — driver, sandbox, fakes. Protected enough to be
+            // REPORTED, not enough to BLOCK: see "HARNESS vs EVIDENCE" at the
+            // top. A `_test.dart` inside support/ is still an assertion and is
+            // deliberately excluded from this carve-out.
+            const isHarness = (p) =>
+              p.startsWith('integration_test/support/') &&
+              !p.endsWith('_test.dart');
+
             // "added" is safe: new coverage cannot weaken an existing gate.
             // "modified" / "removed" / "renamed" are the dangerous verbs.
-            const touched = files.filter(
+            const changed = files.filter(
               (f) => isProtected(f.filename) && f.status !== 'added'
             );
+            const harness = changed.filter((f) => isHarness(f.filename));
+            const touched = changed.filter((f) => !isHarness(f.filename));
+
+            // Printed whether or not anything else is wrong — the whole value
+            // of a non-blocking carve-out is that it stays visible.
+            if (harness.length) {
+              core.notice(
+                'E2E harness changed (reported, not blocking — these files ' +
+                'assert nothing and must track the app\'s API surface):\n' +
+                harness.map(
+                  (f) => `  ${f.status.padEnd(8)} ${f.filename} (+${f.additions} -${f.deletions})`
+                ).join('\n')
+              );
+            }
 
             const added = files.filter(
               (f) => isProtected(f.filename) && f.status === 'added'

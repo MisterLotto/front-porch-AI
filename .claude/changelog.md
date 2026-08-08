@@ -12005,3 +12005,51 @@ run here** — the app builds and launches under xvfb in this container but the
 test harness loses it about a second in, with CI's exact invocation. That is the
 same blind spot that let this ship; CI is the verification for the fake-backend
 half.
+
+---
+
+## 2026-08-08 — test-integrity: harness reports, evidence still blocks
+
+**Files:** `.github/workflows/test-integrity.yml` (an `isHarness` carve-out +
+the reasoning) · `test/hygiene/e2e_support_has_no_assertions_test.dart`
+(new, 2 — the thing that keeps the carve-out honest)
+
+**Maintainer decision**, taken after being shown the trade-off: split the E2E
+HARNESS from the EVIDENCE. `integration_test/support/**` is now REPORTED on a PR
+(a `core.notice` listing every change) instead of blocking; assertions —
+`integration_test/*_test.dart` and everything else — still block until a
+maintainer applies `approved-test-change`.
+
+**Why.** `support/` holds a driver, a sandbox and three fake servers. A fake has
+to change whenever the app adds an API call, which is ordinary work rather than
+evidence-editing, and it just cost a real incident: Afterglow's climax check
+became its own eval, the fake had no branch for it, answered the new call with
+prose, and E2E went red on three platforms. Blocking the fix behind a label is
+the "gate that cries wolf" the workflow's own exclusion note warns about.
+
+**A `_test.dart` inside support/ still blocks** — verified by driving the two
+predicates over real paths: `support/fake_backend.dart` → REPORTED,
+`support/sneaky_test.dart` → BLOCKS, `climax_refractory_test.dart` → BLOCKS,
+baselines/goldens/floors/CODEOWNERS unchanged, product code still unguarded.
+
+**The carve-out is a hole, so it is nailed shut from the other side.** The new
+hygiene test fails if anything in `integration_test/support/` ever contains an
+assertion, and also if the directory is renamed out from under the workflow's
+prefix. Both negative-checked: planting an `expect(` in the fake reddens it, and
+so does renaming the directory.
+
+**The first draft of that test was wrong and its own first run caught it.** It
+listed `fail(` as an assertion marker and went red on five real call sites — all
+of them the harness giving up and saying why (four timeouts, one post-mortem
+dump when sendMessage is refused eight times). `fail(` was dropped from the
+marker list only after checking the residual risk rather than assuming it: every
+one of those sits inside a `while (!condition())` with no other exit, so deleting
+one hangs the suite until CI kills it rather than producing a false pass. The
+reasoning is written into the test beside the list.
+
+**Still blocks, by design:** `afterglow_independence_test.dart`. It is an
+assertion file, so the chosen policy leaves it blocking — this change does not
+clear it, and a PR carrying it still needs the label once.
+
+**Gates:** analyze 0 · 3204 unit tests · 94 goldens · YAML parses · the embedded
+github-script body syntax-checks under the async wrapper the action applies.
