@@ -63,6 +63,24 @@ was only ever true for the subset of users who had already opted into both.
 - **Off means off.** With the switch off: no eval fires, no injection block is
   built, and the sidebar panel is absent — not greyed, absent. The Porch Life
   gating shape already established for the other rows applies.
+  - **The reader gate lives in ONE place: `ChatService.pocketsFor` (fixed
+    2026-08-08).** It was originally written at the call sites, and that failed
+    exactly as split gates do: the injection wiring and the web facade both
+    remembered to check the switch, and the sidebar did not — its comment
+    claimed it "answers to its own switch" while the code read nothing. A chat
+    that had run with Pockets ON therefore kept showing its Wardrobe row after
+    the switch went down, and desktop disagreed with web. `pocketsFor` returns
+    null when the switch is off, so every reader is gated by construction and
+    the two duplicate checks were removed.
+  - **Hiding is never erasing.** The persistence path deliberately bypasses that
+    gate: the v47 save wire writes the `_pockets` field directly, the load wire
+    restores it directly, and the swipe/regen rewind writes through
+    `setPocketsFor`. Switching Pockets off for a scene and back on finds
+    everything she was carrying intact. Routing any of those through the gated
+    read would turn "turn the feature off" into "delete her things".
+  - **The eval keeps its own gate**, and should: `pocketsFor` answers "may a
+    reader see this record", `_runPocketsPass` answers "should we spend an LLM
+    call". Different questions, different blast radius.
 
 ### Explicitly rejected alternatives — do not propose these again
 

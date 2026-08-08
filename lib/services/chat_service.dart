@@ -629,7 +629,24 @@ class ChatService extends ChangeNotifier {
   /// The record for [characterId], whichever mode the chat is in — the ONE
   /// read every Pockets surface uses, so 1:1 and group cannot diverge about
   /// whose pockets are whose.
+  ///
+  /// **Absent when the feature is off, and that is the whole gate.** The design
+  /// doc's rule is "off means off: no eval fires, no injection block is built,
+  /// and the sidebar panel is absent — not greyed, absent", and putting it here
+  /// is what makes that true by construction rather than by three call sites
+  /// remembering to ask. Two of them did remember (the injection wiring and the
+  /// web facade) and the sidebar did not, so a chat that had run with Pockets ON
+  /// went on showing its Wardrobe row after the switch went down — a panel for a
+  /// disabled feature, and a desktop/web split, since the web facade hid it
+  /// correctly.
+  ///
+  /// This HIDES, it never erases. `_pockets` and the per-member records are left
+  /// exactly as they were, the v47 save wire writes `_pockets` directly, and the
+  /// load wire restores it directly — all deliberately outside this gate — so
+  /// switching Pockets off and back on finds everything she was carrying still
+  /// there. The rewind path likewise writes through `setPocketsFor`, not here.
   Pockets? pocketsFor(String characterId) {
+    if (!_storageService.realismSettings.pocketsEnabled) return null;
     if (_activeGroup == null) return _pockets;
     return _groupRealism[characterId]?.pockets;
   }

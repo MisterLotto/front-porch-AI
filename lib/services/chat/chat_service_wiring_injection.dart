@@ -425,10 +425,10 @@ extension ChatServiceWiringInjection on ChatService {
       getGroupCharacters: () => _groupCharacters,
       getCharacterIdFromCard: _getCharacterIdFromCard,
       // Off means off: with the switch down the record is never read, so the
-      // fragment is absent rather than stale. Pockets answers to this ONE
-      // switch and nothing else.
-      getPockets: (charId) =>
-          _storageService.realismSettings.pocketsEnabled ? pocketsFor(charId) : null,
+      // fragment is absent rather than stale. The check itself now lives in
+      // pocketsFor — one gate for every surface, rather than each caller
+      // remembering to ask (the sidebar forgot).
+      getPockets: pocketsFor,
     );
   }
 

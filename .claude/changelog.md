@@ -11757,3 +11757,52 @@ negative-checked four ways — moving the seed to after generation (the original
 bug, reproduced exactly), removing it from `sendMessage`, removing the
 session-load call, and dropping condition from the injection — each reddening
 its own correct set.
+
+---
+
+## 2026-08-08 — Off means off: the Pockets sidebar ignored its own switch
+
+**Files:** `lib/services/chat_service.dart` (`pocketsFor` — the gate) ·
+`lib/services/chat/chat_service_wiring_injection.dart` (duplicate gate removed)
+· `lib/services/web/facade/chat_tools_facade.dart` (duplicate gate removed) ·
+`test/services/chat/pockets_off_means_off_test.dart` (new, 9) ·
+`docs/design/pockets-and-preferences.md` · `docs/Rawhide.md`
+
+**Reported by the maintainer:** "If pockets and wardrobe is off, there should be
+nothing in the sidebar having anything to do with pockets and wardrobe."
+Correct, and it was not true.
+
+**The bug.** The gate was written at the CALL SITES. Two of the three remembered
+to ask — the injection wiring and the web facade — and the sidebar did not. Its
+comment even said "Pockets & Wardrobe — answers to its own switch"; the code
+read no switch at all, only `p == null || p.isEmpty`. So any chat that had run
+with Pockets ON kept a record, and kept rendering the Wearing/Carrying row after
+the user switched Pockets off. It was also a desktop/web split: the web facade
+hid its panel correctly, so the same chat disagreed with itself across surfaces.
+
+Pre-existing (within one app session the in-memory record already did this), but
+v47 made the record survive reloads, which turned a session-scoped oddity into a
+permanent one.
+
+**The fix** puts the gate in `ChatService.pocketsFor` — the ONE read every
+surface goes through — so "off means off" is true by construction rather than by
+three callers each remembering. The two duplicate checks were deleted; the
+sidebar needed no change at all, which is the point.
+
+**Hiding is not erasing, and that is the subtle half.** The persistence path
+deliberately bypasses the gate: the v47 save wire writes the `_pockets` field
+directly, the load wire restores it directly, and the swipe/regen rewind writes
+through `setPocketsFor`. Toggle Pockets off for a scene and back on and
+everything she was carrying is still there. Routing any of those through the
+gated read would have turned "turn the feature off" into "delete her things" —
+which is why there is a guard for each of the three.
+
+**Left alone deliberately:** `_runPocketsPass` keeps its own switch check.
+`pocketsFor` answers "may a reader see this record"; the pass answers "should we
+spend an LLM call". Different questions, different blast radius.
+
+**Gates:** analyze 0 · 3176 unit tests · 94 goldens · web tsc + 59 tests.
+9 new guards, negative-checked four ways — removing the gate (the original bug),
+placing it AFTER the 1:1 return so only group is gated, a private second gate
+reappearing in the sidebar, and the dangerous one: routing the save wire through
+the gated read, which would erase the record on toggle-off.

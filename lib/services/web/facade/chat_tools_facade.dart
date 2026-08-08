@@ -151,9 +151,10 @@ class ChatToolsFacade {
       // per-character resolution the desktop sidebar reads, so the two
       // surfaces cannot disagree about what she is holding. Absent when the
       // switch is off, so the web panel vanishes rather than going stale.
-      'pockets':
-          focusedCard == null ||
-              !_storage.realismSettings.pocketsEnabled
+      // The switch check lives in pocketsFor now, so `null` here still means
+      // both "no focused participant" and "feature off" — and the web panel
+      // still vanishes rather than going stale.
+      'pockets': focusedCard == null
           ? null
           : _chat.pocketsFor(_chat.characterIdFor(focusedCard))?.toJson(),
       'time': {
