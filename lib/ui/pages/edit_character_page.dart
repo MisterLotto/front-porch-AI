@@ -420,9 +420,37 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     // configured-but-disabled values survive the PNG round-trip. Skipped when
     // the Realism section is hidden (group member): the member's existing
     // realism/needs ext is group state and must be preserved untouched.
+    // The identity chips — Ambitions, Likes & Dislikes, the 18+ pair and
+    // Pockets & Wardrobe — are written into frontPorchExtensions but live
+    // OUTSIDE the realism section, and not one of them sets
+    // `_realismSettingsModified` (every control that does is in
+    // edit_character_page.realism_section.dart).
+    //
+    // So for a character with the Realism Engine off, no realism control
+    // touched, and no extensions yet, this whole block was skipped: everything
+    // typed into those chips was discarded before the PNG was written. The
+    // symptom is exactly what the report showed —
+    //   About to save PNG with extensions: false
+    //   ✗ PNG verification FAILED: no extensions in saved file!
+    // — with no "Saving realism:" line above it, because the block never ran.
+    //
+    // Checked as DATA rather than by setting the modified flag in seven
+    // callbacks. A flag has to be remembered by every chip added later; "did
+    // the user author any of this" cannot be forgotten. Clearing the last item
+    // on a card that HAS extensions still writes, via the clause below it.
+    final hasIdentityContent =
+        _ambitions.isNotEmpty ||
+        _likes.isNotEmpty ||
+        _dislikes.isNotEmpty ||
+        _intimateInto.isNotEmpty ||
+        _intimateNotInto.isNotEmpty ||
+        _worn.isNotEmpty ||
+        _carrying.isNotEmpty;
+
     if (widget.showRealismTab &&
         (_realismEnabled ||
             _realismSettingsModified ||
+            hasIdentityContent ||
             widget.character.frontPorchExtensions != null)) {
       debugPrint(
         '[_saveCharacter] Saving realism: enabled=$_realismEnabled, modified=$_realismSettingsModified',
