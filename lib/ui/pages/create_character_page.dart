@@ -21,6 +21,7 @@ import 'package:provider/provider.dart';
 import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/services/chat/chat.dart' show Pockets;
 import 'package:front_porch_ai/ui/avatar_creation/avatar_generation_panel.dart';
 import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
@@ -113,6 +114,11 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
   List<String> _realismDislikes = const [];
   List<String> _realismIntimateInto = const [];
   List<String> _realismIntimateNotInto = const [];
+
+  /// Starting Pockets & Wardrobe as chip text (`sundress (rain-soaked)`).
+  /// [Pockets] owns the conversion to and from the card's `{name, state}` map.
+  List<String> _realismWorn = const [];
+  List<String> _realismCarrying = const [];
   bool _realismVerificationEnabled = false;
   int _realismVerificationMaxReprocesses = 1;
   int _realismVerificationStrictness = 3;

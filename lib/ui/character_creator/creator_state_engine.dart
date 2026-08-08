@@ -21,6 +21,7 @@ import 'package:path/path.dart' as p;
 
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/services/chat/chat.dart' show Pockets;
 import 'package:front_porch_ai/services/lore_extraction_service.dart';
 import 'package:front_porch_ai/ui/character_creator/chargen_json.dart';
 import 'package:front_porch_ai/ui/character_creator/creator_state.dart';
@@ -109,6 +110,11 @@ extension CreatorEngine on CreatorState {
         dislikes: realismDislikes,
         intimateInto: realismIntimateInto,
         intimateNotInto: realismIntimateNotInto,
+        // Same shared normalizer as the other two authoring surfaces.
+        inventory: Pockets.cardJsonFrom(
+          worn: realismWorn,
+          carrying: realismCarrying,
+        ),
         realismVerificationEnabled: realismVerificationEnabled,
         realismVerificationMaxReprocesses: realismVerificationMaxReprocesses,
         realismVerificationStrictness: realismVerificationStrictness,

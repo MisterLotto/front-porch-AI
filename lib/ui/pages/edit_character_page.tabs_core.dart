@@ -246,24 +246,38 @@ extension _EditCharacterCoreTabs on _EditCharacterPageState {
               // chip. See ChipListEditor for why the old shape misled authors.
               // One shared widget (identity_chip_lists.dart) so the editor,
               // both creators and the web form cannot drift apart.
-              IdentityChipLists(
-                ambitions: _ambitions,
-                onAmbitionsChanged: (v) =>
-                    rebuildState(() => _ambitions = v),
-                likes: _likes,
-                onLikesChanged: (v) => rebuildState(() => _likes = v),
-                dislikes: _dislikes,
-                onDislikesChanged: (v) => rebuildState(() => _dislikes = v),
-                intimateInto: _intimateInto,
-                onIntimateIntoChanged: (v) =>
-                    rebuildState(() => _intimateInto = v),
-                intimateNotInto: _intimateNotInto,
-                onIntimateNotIntoChanged: (v) =>
-                    rebuildState(() => _intimateNotInto = v),
-                // The install's 18+ master switch — the same one that shows
-                // or hides the After Dark group in Settings.
-                showIntimate: adultThemesEnabledOf(context),
-              ),
+              // Gated on the same flag as the SAVE below, and that is the whole
+              // point of the condition. These chips used to render
+              // unconditionally while `_saveCharacter` wrote them only under
+              // `showRealismTab` (edit_character_page.dart), so opening a group
+              // MEMBER from Group Settings gave you fully editable Ambitions,
+              // Likes and Dislikes that were thrown away the moment you pressed
+              // Save — no error, no hint, the chips simply gone on reopen. A
+              // member's extensions are group state and are deliberately left
+              // untouched there; showing an editor for them was the bug.
+              if (widget.showRealismTab)
+                IdentityChipLists(
+                  ambitions: _ambitions,
+                  onAmbitionsChanged: (v) =>
+                      rebuildState(() => _ambitions = v),
+                  likes: _likes,
+                  onLikesChanged: (v) => rebuildState(() => _likes = v),
+                  dislikes: _dislikes,
+                  onDislikesChanged: (v) => rebuildState(() => _dislikes = v),
+                  intimateInto: _intimateInto,
+                  onIntimateIntoChanged: (v) =>
+                      rebuildState(() => _intimateInto = v),
+                  intimateNotInto: _intimateNotInto,
+                  onIntimateNotIntoChanged: (v) =>
+                      rebuildState(() => _intimateNotInto = v),
+                  // The install's 18+ master switch — the same one that shows
+                  // or hides the After Dark group in Settings.
+                  showIntimate: adultThemesEnabledOf(context),
+                  worn: _worn,
+                  onWornChanged: (v) => rebuildState(() => _worn = v),
+                  carrying: _carrying,
+                  onCarryingChanged: (v) => rebuildState(() => _carrying = v),
+                ),
 
               // ── Realism Engine Summary ── (hidden for group members, whose
               // realism/needs are group state edited in Group Settings)

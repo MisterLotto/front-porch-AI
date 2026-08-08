@@ -74,6 +74,15 @@ extension _CreateCharacterSave on _CreateCharacterPageState {
         dislikes: _realismDislikes,
         intimateInto: _realismIntimateInto,
         intimateNotInto: _realismIntimateNotInto,
+        // Through the shared normalizer, so a wardrobe typed here and the same
+        // wardrobe typed in the edit page land on the card identically. The
+        // neighbouring lists deliberately stay raw and are tidied at parse
+        // time; wardrobe cannot, because splitting `name (state)` apart is not
+        // something the card parser can do after the fact.
+        inventory: Pockets.cardJsonFrom(
+          worn: _realismWorn,
+          carrying: _realismCarrying,
+        ),
         realismVerificationEnabled: _realismVerificationEnabled,
         realismVerificationMaxReprocesses: _realismVerificationMaxReprocesses,
         realismVerificationStrictness: _realismVerificationStrictness,
@@ -216,6 +225,8 @@ extension _CreateCharacterSave on _CreateCharacterPageState {
       _realismDislikes = const [];
       _realismIntimateInto = const [];
       _realismIntimateNotInto = const [];
+      _realismWorn = const [];
+      _realismCarrying = const [];
       _realismVerificationEnabled = false;
       _realismVerificationMaxReprocesses = 1;
       _realismVerificationStrictness = 3;

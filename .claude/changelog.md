@@ -11591,3 +11591,71 @@ build. 14 new guards. Negative-checked three separate ways on the Dart side —
 restoring the original bug, dropping only the outbound key, and the subtle
 variant that falls back to `{}` instead of the base — each reddening a
 different set. The web guard reddens on dropping the field from the model.
+
+---
+
+## 2026-08-08 — Wardrobe authoring: the half of Pockets nobody could reach
+
+**Files:** `lib/services/chat/pockets.dart` (`PocketItem.parseDisplay`,
+`Pockets.wornDisplay`/`carryingDisplay`/`cardJsonFrom`) ·
+`lib/ui/widgets/identity_chip_lists.dart` (the section) ·
+`lib/ui/widgets/realism_form_section.dart` (params + forward) ·
+`edit_character_page.dart` + `.tabs_core.dart` ·
+`create_character_page.dart` + `.step_realism.dart` + `.save.dart` ·
+`character_creator/creator_state.dart` + `creator_state_engine.dart` +
+`steps/realism_step.dart` · `web_ui/.../realismTypes.ts` +
+`RealismFormSection.tsx` · `test/services/chat/wardrobe_authoring_test.dart`
+(new, 24) · `test/ui/widgets/wardrobe_editor_test.dart` (new, 6) ·
+`web_ui/.../realismTypes.test.ts` (+20) · `docs/design/pockets-and-preferences.md`
+· `docs/Rawhide.md`
+
+**The gap.** `FrontPorchExtensions.inventory` shipped with the feature and is
+read at runtime (`chat_service_pockets.dart` seeds a chat's record from it), but
+nothing ever WROTE it. So the release note's "characters you download can
+arrive already holding things, if their author set that up" described something
+no author could do without hand-editing card JSON. This is the authoring half;
+no new card field was added, and adding one would have orphaned the live reader.
+
+**The design decision.** Items carry a free-text condition; a chip editor holds
+plain strings. Rather than a second field per item, the chip IS the item as it
+reads — `sundress (rain-soaked)` — the same string the sidebar, the receipts and
+the prompt already show. `PocketItem.parseDisplay` inverts `display`. The split
+is deliberately not information-preserving in the naive sense ("pepper spray
+(small)" re-splits as name + state); what round-trips exactly is the DISPLAY
+string, and display is what is injected and shown, so the re-split is invisible
+from every direction a user or a model can look. That property is the first test
+group, stated as a table.
+
+`Pockets.cardJsonFrom` is the ONE normalization for all three surfaces plus the
+web mirror — same tidy, same 60-char caps, same 8-per-list trim as the runtime.
+The three surfaces already disagree about this for the neighbouring lists (the
+edit page trims inline; both creators pass raw text), and a fourth rule is how
+that drift becomes permanent.
+
+**Empty stays absent.** `cardJsonFrom` returns an empty map when nothing
+survives, so `CharacterCard.toJson`'s conditional emit keeps a wardrobe-less
+card byte-identical. Two PROTECTED goldens (`card/v25_full.golden.json`,
+`creator/saved_card.golden.json`) pin cards with no `inventory` key; an editor
+that wrote `{worn:[],carrying:[]}` would have changed both and needed a
+maintainer label to land. Verified: `git status test/golden/_goldens/` clean
+after a full golden run.
+
+**A silent data-loss bug fixed on the way past.** `IdentityChipLists` rendered
+unconditionally while `_saveCharacter` wrote it only under `showRealismTab`, so
+opening a group MEMBER from Group Settings gave fully editable Ambitions, Likes
+and Dislikes that were discarded on Save — no error, chips simply gone on
+reopen. The mount is now gated on the same flag as the save. Wardrobe would have
+inherited this exactly.
+
+**Web mirror.** `inventoryToChips` / `chipsToInventory` in `realismTypes.ts`
+mirror the Dart conversion, on the precedent this file already sets for the tier
+helpers (the browser cannot call Dart). Their test table is deliberately the
+SAME strings as the Dart file: the two editors write one field on one card, and
+a disagreement about where a condition starts would look wrong on neither side
+alone.
+
+**Gates:** analyze 0 · 3150 unit tests · 94 goldens (protected card goldens
+byte-identical) · web tsc + 59 tests + bundle rebuilt. 50 new guards.
+Negative-checked four ways: parseDisplay never splitting, cardJsonFrom emitting
+an empty record (the golden guard), the per-list cap dropped, and the widget's
+optional-pair gate forced true — each reddening a different, correct set.

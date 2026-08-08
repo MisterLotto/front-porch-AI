@@ -175,6 +175,16 @@ class RealismStep extends StatelessWidget {
                   state.notify();
                 },
                 showIntimate: adultThemesEnabledOf(context),
+                worn: state.realismWorn,
+                onWornChanged: (v) {
+                  state.realismWorn = v;
+                  state.notify();
+                },
+                carrying: state.realismCarrying,
+                onCarryingChanged: (v) {
+                  state.realismCarrying = v;
+                  state.notify();
+                },
                 realismVerificationEnabled: state.realismVerificationEnabled,
                 onRealismVerificationChanged: (v) {
                   state.realismVerificationEnabled = v;

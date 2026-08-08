@@ -78,6 +78,14 @@ class RealismFormSection extends StatelessWidget {
   final ValueChanged<List<String>>? onIntimateNotIntoChanged;
   final bool showIntimate;
 
+  /// Starting Pockets & Wardrobe, as chip text (`sundress (rain-soaked)`).
+  /// Same optional-pair convention again — the two group-member editors call
+  /// this widget with no identity params at all.
+  final List<String>? worn;
+  final ValueChanged<List<String>>? onWornChanged;
+  final List<String>? carrying;
+  final ValueChanged<List<String>>? onCarryingChanged;
+
   // Realism Verification (Director/Verifier) toggle — shown under Optional Features like other optionals.
   // Sliders for max reprocesses + strictness live in the Details dialog (right-click edit); form surfaces the toggle for creator/edit flows.
   final bool realismVerificationEnabled;
@@ -135,6 +143,10 @@ class RealismFormSection extends StatelessWidget {
     this.intimateNotInto,
     this.onIntimateNotIntoChanged,
     this.showIntimate = false,
+    this.worn,
+    this.onWornChanged,
+    this.carrying,
+    this.onCarryingChanged,
     required this.realismVerificationEnabled,
     required this.onRealismVerificationChanged,
     this.showVerificationToggle = true,
@@ -722,6 +734,10 @@ class RealismFormSection extends StatelessWidget {
             intimateNotInto: intimateNotInto,
             onIntimateNotIntoChanged: onIntimateNotIntoChanged,
             showIntimate: showIntimate,
+            worn: worn,
+            onWornChanged: onWornChanged,
+            carrying: carrying,
+            onCarryingChanged: onCarryingChanged,
           ),
         ],
       ],

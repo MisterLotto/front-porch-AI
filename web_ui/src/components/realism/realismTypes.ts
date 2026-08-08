@@ -125,6 +125,70 @@ export const REALISM_DEFAULTS: RealismValues = {
   needsDecayComfort: 2,
 };
 
+// ── Pockets & Wardrobe chip text ───────────────────────────────────────────
+// Mirrors PocketItem.display / PocketItem.parseDisplay / Pockets.cardJsonFrom
+// in lib/services/chat/pockets.dart, which is the source of truth — same
+// precedent as the tier-name helpers below, and for the same reason: the
+// browser cannot call Dart, and the desktop and web editors must put the
+// identical map on the card.
+//
+// The chip text is the item as it READS — "sundress (rain-soaked)" — because
+// that is already the string the sidebar, the receipts and the prompt all show.
+
+const MAX_ITEM_CHARS = 60;
+const MAX_PER_LIST = 8;
+
+function tidy(s: string): string {
+  const t = s.replace(/\s+/g, ' ').trim();
+  return t.length <= MAX_ITEM_CHARS ? t : t.slice(0, MAX_ITEM_CHARS).trimEnd();
+}
+
+/** One entry as chip text: `name` or `name (state)`. */
+function entryToChip(e: InventoryEntry): string {
+  if (typeof e === 'string') return tidy(e);
+  const name = tidy(e?.name ?? '');
+  const state = tidy(e?.state ?? '');
+  return state ? `${name} (${state})` : name;
+}
+
+/** Chip text back to an entry. Only a trailing `(...)` with both halves
+ *  non-empty counts as a condition — "(nothing)" and "keys ()" are names. */
+function chipToEntry(raw: string): { name: string; state?: string } | null {
+  const s = raw.trim();
+  if (!s) return null;
+  if (s.endsWith(')')) {
+    const open = s.lastIndexOf('(');
+    if (open > 0) {
+      const name = tidy(s.slice(0, open));
+      const state = tidy(s.slice(open + 1, -1));
+      if (name && state) return { name, state };
+    }
+  }
+  const name = tidy(s);
+  return name ? { name } : null;
+}
+
+/** Both lists as chip text — the seed side of the editor. */
+export function inventoryToChips(rec: InventoryRecord | null | undefined): {
+  worn: string[];
+  carrying: string[];
+} {
+  const list = (v: InventoryEntry[] | undefined) =>
+    (Array.isArray(v) ? v : []).slice(0, MAX_PER_LIST).map(entryToChip).filter(Boolean);
+  return { worn: list(rec?.worn), carrying: list(rec?.carrying) };
+}
+
+/** Chip text back to the card map. Empty when nothing survives, so the card
+ *  keeps omitting the key entirely rather than storing an empty record. */
+export function chipsToInventory(worn: string[], carrying: string[]): InventoryRecord {
+  const list = (v: string[]) =>
+    v.slice(0, MAX_PER_LIST).map(chipToEntry).filter((e): e is { name: string; state?: string } => !!e);
+  const w = list(worn);
+  const c = list(carrying);
+  if (!w.length && !c.length) return {};
+  return { worn: w, carrying: c };
+}
+
 export const TIME_OPTIONS = [
   'dawn',
   'morning',

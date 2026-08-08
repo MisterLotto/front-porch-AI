@@ -92,6 +92,25 @@ record, inject it every turn, apply deltas.
   (`{worn: [...], carrying: [...]}`). Additive/optional → old apps ignore it;
   Stoop-portable by construction. Absent field → seeded empty + a gentle
   first-turn inference (see Detection) so imported cards still work.
+  - **Authoring (shipped 2026-08-08).** The field shipped ahead of any UI to
+    fill it, so for a while the only way to give a character starting items was
+    to hand-edit the card JSON. All three surfaces now author it — the desktop
+    edit page, the manual creator and the AI creator — through the shared
+    `IdentityChipLists` "Pockets & Wardrobe" section, mirrored in the web
+    editor's `RealismFormSection.tsx`.
+  - **Condition rides the chip text.** Items carry a free-text condition but a
+    chip editor holds plain strings, so the chip IS the item as it reads:
+    `sundress (rain-soaked)`. `PocketItem.parseDisplay` is the inverse of
+    `PocketItem.display`, and `Pockets.cardJsonFrom` is the ONE normalization
+    all three surfaces (and the web mirror) route through — same tidy, same
+    60-char caps, same 8-per-list trim as the runtime. The split is not
+    information-preserving in the naive sense ("pepper spray (small)" re-splits)
+    and does not need to be: what round-trips exactly is the DISPLAY string,
+    and display is what gets injected and shown.
+  - **An empty wardrobe stays absent from the card.** `cardJsonFrom` returns an
+    empty map when nothing survives, so `CharacterCard.toJson`'s conditional
+    emit keeps a card without a wardrobe byte-identical to one written before
+    any of this existed. Two protected goldens depend on that.
 - **Injection**: one compact block in the character prompt
   (`[<char> is wearing: …. Carrying: ….]`), capped (8 worn / 8 carried),
   built by a new `prompt_injection/inventory_injection.dart` leaf.

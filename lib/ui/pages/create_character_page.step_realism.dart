@@ -106,6 +106,11 @@ extension _CreateCharacterRealismStep on _CreateCharacterPageState {
                 onIntimateNotIntoChanged: (v) =>
                     rebuildState(() => _realismIntimateNotInto = v),
                 showIntimate: adultThemesEnabledOf(context),
+                worn: _realismWorn,
+                onWornChanged: (v) => rebuildState(() => _realismWorn = v),
+                carrying: _realismCarrying,
+                onCarryingChanged: (v) =>
+                    rebuildState(() => _realismCarrying = v),
                 realismVerificationEnabled: _realismVerificationEnabled,
                 onRealismVerificationChanged: (v) =>
                     rebuildState(() => _realismVerificationEnabled = v),

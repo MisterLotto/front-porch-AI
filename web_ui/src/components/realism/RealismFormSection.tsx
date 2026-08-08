@@ -12,6 +12,8 @@ import { Slider, ToggleRow, SelectRow } from './controls';
 import { ChipList } from './ChipList';
 import {
   type RealismValues,
+  chipsToInventory,
+  inventoryToChips,
   INTENSITY_OPTIONS,
   TIME_OPTIONS,
   longTermTier,
@@ -197,6 +199,28 @@ export function RealismFormSection({
             onChange={(a) => set({ dislikes: a })}
             placeholder="e.g. being interrupted"
             helper="What makes her bristle. Phrases, not paragraphs — one thing per chip reads best in a scene."
+          />
+
+          {/* ── Pockets & Wardrobe ── mirrors identity_chip_lists.dart. What
+              the character already has when a chat opens; the runtime seeds
+              its record from exactly this map. */}
+          <ChipList
+            label="Wearing"
+            values={inventoryToChips(v.inventory).worn}
+            onChange={(a) =>
+              set({ inventory: chipsToInventory(a, inventoryToChips(v.inventory).carrying) })
+            }
+            placeholder="e.g. flour-dusted apron"
+            helper='What this character already has when a chat opens. Add a condition in brackets — "sundress (rain-soaked)" — and it is kept and updated as the story uses the item.'
+          />
+          <ChipList
+            label="Carrying"
+            values={inventoryToChips(v.inventory).carrying}
+            onChange={(a) =>
+              set({ inventory: chipsToInventory(inventoryToChips(v.inventory).worn, a) })
+            }
+            placeholder="e.g. car keys"
+            helper="Tracked once Pockets & Wardrobe is switched on in Settings → Porch Life. Up to 8 of each; the oldest drops off if a character picks up more."
           />
 
           {/* The 18+ pair, only for an install that asked for it. */}

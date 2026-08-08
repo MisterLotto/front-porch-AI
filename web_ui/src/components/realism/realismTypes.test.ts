@@ -16,7 +16,12 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { REALISM_DEFAULTS, realismFromDetail } from './realismTypes';
+import {
+  REALISM_DEFAULTS,
+  chipsToInventory,
+  inventoryToChips,
+  realismFromDetail,
+} from './realismTypes';
 
 describe('inventory survives detail -> form -> save body', () => {
   const stored = {
@@ -60,5 +65,105 @@ describe('inventory survives detail -> form -> save body', () => {
   it('a card with no realism block at all does not crash', () => {
     expect(() => realismFromDetail({}).inventory).not.toThrow();
     expect(realismFromDetail({}).inventory).toEqual({});
+  });
+});
+
+// ── Wardrobe chip text ──────────────────────────────────────────────────────
+// These cases are deliberately the SAME ones as
+// test/services/chat/wardrobe_authoring_test.dart. The desktop and web editors
+// write to one field on one card; if the two conversions disagree about where
+// a condition starts, a character edited on a phone and the same character
+// edited on the desktop end up with different items — and neither side would
+// look wrong on its own. Keeping the tables identical is what makes a drift
+// visible.
+
+describe('wardrobe chip text mirrors the Dart implementation', () => {
+  const roundTrips = [
+    'car keys',
+    'sundress (rain-soaked)',
+    'iron sword (notched, needs sharpening)',
+    'pepper spray (small)',
+    'a candy bar (half-eaten)',
+    '(nothing)',
+    'keys ()',
+    'a (b) c',
+  ];
+
+  it.each(roundTrips)('display round-trips exactly: %s', (text) => {
+    expect(inventoryToChips(chipsToInventory([text], [])).worn[0]).toBe(text);
+  });
+
+  it('a trailing bracket becomes the condition', () => {
+    expect(chipsToInventory(['sundress (rain-soaked)'], []).worn).toEqual([
+      { name: 'sundress', state: 'rain-soaked' },
+    ]);
+  });
+
+  it('no brackets means no condition', () => {
+    expect(chipsToInventory(['car keys'], []).worn).toEqual([{ name: 'car keys' }]);
+  });
+
+  it('an empty half on either side stays part of the name', () => {
+    expect(chipsToInventory(['(nothing)'], []).worn).toEqual([{ name: '(nothing)' }]);
+    expect(chipsToInventory(['keys ()'], []).worn).toEqual([{ name: 'keys ()' }]);
+  });
+
+  it('only the last bracket group is considered', () => {
+    expect(chipsToInventory(['flask (dented) (empty)'], []).worn).toEqual([
+      { name: 'flask (dented)', state: 'empty' },
+    ]);
+  });
+
+  it('collapses whitespace, as the prompt-hardening on the Dart side does', () => {
+    expect(chipsToInventory(['  car   keys \n'], []).worn).toEqual([{ name: 'car keys' }]);
+  });
+
+  it('drops blank chips', () => {
+    expect(chipsToInventory(['', '   ', 'apron'], []).worn).toHaveLength(1);
+  });
+
+  it('caps item text at 60 characters', () => {
+    const [item] = chipsToInventory([`${'x'.repeat(200)} (${'y'.repeat(200)})`], []).worn!;
+    expect((item as { name: string }).name.length).toBeLessThanOrEqual(60);
+    expect((item as { state: string }).state.length).toBeLessThanOrEqual(60);
+  });
+
+  it('caps each list at 8 items', () => {
+    const many = Array.from({ length: 13 }, (_, i) => `thing ${i}`);
+    expect(chipsToInventory(many, []).worn).toHaveLength(8);
+  });
+
+  it('an empty wardrobe stays ABSENT from the card', () => {
+    // Same load-bearing property as the Dart side: CharacterCard.toJson emits
+    // `inventory` only when non-empty, and two protected goldens pin cards
+    // without the key. An editor that wrote {worn:[],carrying:[]} would add a
+    // key to every card written anywhere.
+    expect(chipsToInventory([], [])).toEqual({});
+    expect(chipsToInventory(['', '  '], [''])).toEqual({});
+    expect(chipsToInventory(['apron'], [])).not.toEqual({});
+  });
+
+  it('reads the plain-string shape a hand-written card may use', () => {
+    expect(inventoryToChips({ worn: ['sundress'], carrying: ['car keys'] })).toEqual({
+      worn: ['sundress'],
+      carrying: ['car keys'],
+    });
+  });
+
+  it('survives a card with nothing, or junk, in the field', () => {
+    expect(inventoryToChips(undefined)).toEqual({ worn: [], carrying: [] });
+    expect(inventoryToChips({})).toEqual({ worn: [], carrying: [] });
+    expect(() => inventoryToChips({ worn: 'apron' as never })).not.toThrow();
+  });
+
+  it('a reopened editor saves the identical card', () => {
+    const worn = ['sundress (rain-soaked)'];
+    const carrying = ['car keys', 'a candy bar (half-eaten)'];
+
+    const first = chipsToInventory(worn, carrying);
+    const reopened = inventoryToChips(first);
+    expect(chipsToInventory(reopened.worn, reopened.carrying)).toEqual(first);
+    expect(reopened.worn).toEqual(worn);
+    expect(reopened.carrying).toEqual(carrying);
   });
 });

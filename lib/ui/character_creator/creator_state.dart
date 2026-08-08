@@ -273,6 +273,12 @@ class CreatorState extends ChangeNotifier {
   List<String> realismIntimateInto = const [];
   List<String> realismIntimateNotInto = const [];
 
+  /// Starting Pockets & Wardrobe as chip text (`sundress (rain-soaked)`).
+  /// Notify-only like the identity lists above — saveState() persists none of
+  /// them, and a half-persisted wardrobe would be worse than none.
+  List<String> realismWorn = const [];
+  List<String> realismCarrying = const [];
+
   // Needs simulation tuning — custom per-character baselines (0-100 starting
   // levels) and decay rates (drop per tick). Mirrors the character editor so
   // AI-created characters can ship the same custom needs setup; written into

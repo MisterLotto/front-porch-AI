@@ -25,6 +25,7 @@ import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/services/chat/chat.dart' show Pockets;
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/needs_form_section.dart';
 import 'package:front_porch_ai/utils/utils.dart';
@@ -126,6 +127,13 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   List<String> _dislikes = const [];
   List<String> _intimateInto = const [];
   List<String> _intimateNotInto = const [];
+
+  /// Starting Pockets & Wardrobe, held as the chip text the user sees
+  /// (`sundress (rain-soaked)`) rather than as parsed items. The card stores a
+  /// map of `{name, state}`; [Pockets] owns both directions of that conversion
+  /// so the editor never has to hold two representations at once.
+  List<String> _worn = const [];
+  List<String> _carrying = const [];
   final ValueNotifier<int> _tokenNotifier = ValueNotifier<int>(0);
 
   // ── Realism Engine state ──
@@ -286,6 +294,14 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     _intimateNotInto = List<String>.from(
       widget.character.frontPorchExtensions?.intimateNotInto ?? const [],
     );
+    // Through Pockets.fromJson rather than a hand-rolled cast: it is the one
+    // reader that already tolerates both entry shapes a card can carry (a bare
+    // string, or {name, state}) and applies the same caps the runtime does.
+    final startingPockets = Pockets.fromJson(
+      widget.character.frontPorchExtensions?.inventory,
+    );
+    _worn = startingPockets.wornDisplay;
+    _carrying = startingPockets.carryingDisplay;
 
     _tabController = TabController(length: 4, vsync: this);
 
@@ -450,6 +466,13 @@ class _EditCharacterPageState extends State<EditCharacterPage>
           for (final a in _intimateNotInto)
             if (a.trim().isNotEmpty) a.trim(),
         ],
+        // Not the inline trim the lists above use: wardrobe entries carry a
+        // condition, so normalizing them means parsing `name (state)` apart,
+        // capping both halves and applying the per-list caps. That belongs in
+        // one place shared with the two creators, not copied three times with
+        // three slightly different rules — which is exactly how the lists
+        // above ended up disagreeing.
+        inventory: Pockets.cardJsonFrom(worn: _worn, carrying: _carrying),
         currentTask: _realismCurrentTask,
         realismVerificationEnabled: _realismVerificationEnabled,
         realismVerificationMaxReprocesses: _realismVerificationMaxReprocesses,

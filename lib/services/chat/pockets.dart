@@ -83,6 +83,38 @@ class PocketItem {
     if (state.isNotEmpty) 'state': state,
   };
 
+  /// The inverse of [display]: `"iron sword (notched)"` -> name + state.
+  ///
+  /// This is what lets the character editor author condition through a plain
+  /// text chip instead of growing a second field per item. The convention is
+  /// already the one the user reads everywhere else — the sidebar row, the
+  /// receipts under a reply, and the prompt itself all render [display] — so
+  /// the editor teaches nothing new.
+  ///
+  /// **It round-trips exactly, which is the only losslessness that matters
+  /// here.** An item whose NAME ends in brackets ("pepper spray (small)")
+  /// re-splits as name "pepper spray" + state "small" rather than as one long
+  /// name — but [display] rebuilds the identical string, and [display] is what
+  /// is injected and shown. The split is invisible in every direction a user
+  /// or a model can look.
+  ///
+  /// Only a trailing `(...)` counts, and only when both halves are non-empty:
+  /// "(nothing)" and "keys ()" are names, not conditions.
+  factory PocketItem.parseDisplay(String raw) {
+    final s = raw.trim();
+    if (s.endsWith(')')) {
+      final open = s.lastIndexOf('(');
+      if (open > 0) {
+        final name = s.substring(0, open).trim();
+        final state = s.substring(open + 1, s.length - 1).trim();
+        if (name.isNotEmpty && state.isNotEmpty) {
+          return PocketItem.clean(name, state: state);
+        }
+      }
+    }
+    return PocketItem.clean(s);
+  }
+
   static PocketItem? fromJson(Object? raw) {
     if (raw is String) {
       final i = PocketItem.clean(raw);
@@ -217,6 +249,35 @@ class Pockets {
       worn: list(raw['worn'], kMaxWorn),
       carrying: list(raw['carrying'], kMaxCarrying),
     );
+  }
+
+  /// Both lists as editable chip text — the seed side of the character editor.
+  List<String> get wornDisplay => [for (final i in worn) i.display];
+  List<String> get carryingDisplay => [for (final i in carrying) i.display];
+
+  /// Chip text back to the card's `frontPorchExtensions.inventory` map.
+  ///
+  /// The ONE normalization for all three authoring surfaces (the edit page and
+  /// both creators). They already disagree about this for the neighbouring
+  /// lists — the edit page trims and drops blanks inline while both creators
+  /// pass raw text and lean on the card parser later — and a fourth, slightly
+  /// different rule here is how that kind of drift becomes permanent. Routing
+  /// every save through [fromJson] gives wardrobe the same tidy, the same
+  /// length caps and the same kMaxWorn/kMaxCarrying trim the runtime applies.
+  ///
+  /// Returns an EMPTY map when nothing survives, so the card keeps omitting the
+  /// key entirely (`CharacterCard.toJson` emits it only when non-empty). That
+  /// conditional emit is what keeps a card without a wardrobe byte-identical to
+  /// one written before this existed.
+  static Map<String, dynamic> cardJsonFrom({
+    required List<String> worn,
+    required List<String> carrying,
+  }) {
+    final p = Pockets.fromJson({
+      'worn': [for (final s in worn) PocketItem.parseDisplay(s).toJson()],
+      'carrying': [for (final s in carrying) PocketItem.parseDisplay(s).toJson()],
+    });
+    return p.isEmpty ? const {} : p.toJson();
   }
 }
 
