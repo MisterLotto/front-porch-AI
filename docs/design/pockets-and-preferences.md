@@ -82,6 +82,46 @@ was only ever true for the subset of users who had already opted into both.
     reader see this record", `_runPocketsPass` answers "should we spend an LLM
     call". Different questions, different blast radius.
 
+### The ONE place Pockets and Needs meet (2026-08-08)
+
+**Maintainer call:** *"if needs on (thus realism by requirement) and pockets
+enabled she should check her inventory for food before saying 'I'm hungry'. A
+normal person would eat what they have in their pocket before cooking something,
+going somewhere etc."*
+
+Both facts already reached the model — the needs fragment ("thoughts keep
+returning to when the next meal might come") sits a few lines above the
+inventory fragment ("carrying a candy bar") in the same
+`[How <name> is right now: …]` block. Nothing joined them, so whether she ate it
+was down to the model: frontier models usually noticed, smaller local ones
+narrated the hunger and walked past the food in their own pocket.
+
+`RealismStateInjection` emits ONE extra sentence, directly after the inventory
+line: *"If something they are already carrying or wearing would ease any of
+that, they would reach for it before looking elsewhere."*
+
+**This does not re-couple the engines, and the placement is the reason.** The
+composer's entire job is assembling both fragments; it already held them. So
+neither engine reads the other's state, no needs code path learns the word
+"inventory", the Pockets eval still asks only for `inventory_ops`, and **no LLM
+call is added** — the SETTLED ruling at the top of this document is untouched.
+
+**Gated on both fragments being non-empty**, which is exactly "Needs on (hence
+Realism), Pockets on, something actually biting, and she actually has
+something". Any of those missing and the sentence is absent, because an
+instruction to use what you have is noise when she has nothing and a lie when
+nothing is wrong with her.
+
+**It names no need and no item on purpose.** A food-word list here would be the
+wrong shape twice: a pantry vocabulary inside a prompt composer, and one that
+only ever serves hunger when the same instinct covers a coat in the cold, a
+bottle when thirsty, a painkiller for a headache. "If" and "would" leave the
+model free to decide nothing helps — the common answer.
+
+**It adds an option, it does not replace the state.** She still shows the
+hunger; the words-only contract still governs the block. Pinned by
+`test/services/chat/use_what_she_has_test.dart`.
+
 ### Explicitly rejected alternatives — do not propose these again
 
 | Proposal | Why it is rejected |

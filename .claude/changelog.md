@@ -11806,3 +11806,53 @@ spend an LLM call". Different questions, different blast radius.
 placing it AFTER the 1:1 return so only group is gated, a private second gate
 reappearing in the sidebar, and the dangerous one: routing the save wire through
 the gated read, which would erase the record on toggle-off.
+
+---
+
+## 2026-08-08 — Characters use what is already in their pockets
+
+**Files:** `lib/services/chat/prompt_injection/realism_state_injection.dart`
+(one const line + the gate) · `test/services/chat/use_what_she_has_test.dart`
+(new, 11) · `docs/design/pockets-and-preferences.md` · `docs/Rawhide.md`
+
+**Maintainer call:** "if needs on (thus realism by requirement) and pockets
+enabled she should check her inventory for food before saying 'I'm hungry'. A
+normal person would eat what they have in their pocket before cooking something,
+going somewhere etc."
+
+**The gap.** Both facts already reached the model, in the same block — the needs
+fragment ("thoughts keep returning to when the next meal might come") a few
+lines above the inventory fragment ("carrying a candy bar"). Nothing joined
+them, so whether she ate it was down to the model: frontier models usually
+noticed, smaller local ones narrated the hunger and walked past the food in
+their own pocket, or set off to cook something.
+
+**The fix** is one sentence emitted by `RealismStateInjection` directly after
+the inventory line: *"If something they are already carrying or wearing would
+ease any of that, they would reach for it before looking elsewhere."*
+
+**It does not re-couple the engines, and the placement is why.** The composer's
+whole job is assembling both fragments; it already held them. Neither engine
+reads the other's state, no needs code path learns the word "inventory", the
+Pockets eval still asks only for `inventory_ops`, and NO LLM call is added — the
+SETTLED "Pockets runs its own eval" ruling is untouched.
+
+**Gated on both fragments being non-empty**, which is exactly Needs on (hence
+Realism), Pockets on, something actually biting, and something actually in her
+hands. An instruction to use what you have is noise when she has nothing and a
+lie when nothing is wrong with her.
+
+**Names no need and no item on purpose.** A food-word list would be the wrong
+shape twice — a pantry vocabulary inside a prompt composer, and one that only
+ever serves hunger when the same instinct covers a coat in the cold or a bottle
+when thirsty. "If"/"would" leave the model free to decide nothing helps.
+
+**Adds an option, does not replace the state**: she still shows the hunger, and
+the words-only contract still governs the block.
+
+**Gates:** analyze 0 · 3187 unit tests · 94 goldens. 11 new guards, all
+behavioural against the real composer (it is a pure leaf, so no structural
+compromise was needed here). Negative-checked four ways — removing the line,
+ungating it, gating it on needs only so it fires with empty pockets, and placing
+it before the inventory line so "any of that" loses its antecedent — each
+reddening its own correct set.

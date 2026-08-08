@@ -202,7 +202,44 @@ class RealismStateInjection {
   /// correctly gated.
   bool get _characterStateEnabled => getRealismEnabled();
 
+  /// The one sentence that lets a character use what she is already carrying.
+  ///
+  /// Emitted ONLY when the needs fragment and the inventory fragment are both
+  /// present — which means Needs is on (so the Realism Engine is too), Pockets
+  /// is on, something is actually biting, and she actually has something. Any
+  /// of those missing and this is absent, because it would have nothing to
+  /// point at.
+  ///
+  /// WHY IT EXISTS. Both facts already reached the model — "thoughts keep
+  /// returning to when the next meal might come" a few lines above "carrying a
+  /// candy bar" — and nothing joined them. A frontier model usually noticed; a
+  /// smaller local one narrated the hunger and walked past the food in her own
+  /// pocket, or went off to cook something. A person eats what is in their
+  /// pocket before they go to the kitchen.
+  ///
+  /// WHY IT IS PHRASED THIS LOOSELY. It names no need and no item on purpose.
+  /// A food-word list here would be the wrong shape twice over: it would put a
+  /// pantry vocabulary in a prompt composer, and it would only ever cover
+  /// hunger, when the same instinct governs a coat in the cold, a bottle when
+  /// thirsty and a painkiller for a headache. Letting the model judge relevance
+  /// costs nothing and generalises; "if" and "would" leave it free to decide
+  /// that nothing she has helps, which is the common answer.
+  ///
+  /// It does NOT suppress the feeling — she still shows the hunger. It only
+  /// stops her from overlooking what is already in her hand.
+  static const _useWhatSheHasLine =
+      'If something they are already carrying or wearing would ease any of '
+      'that, they would reach for it before looking elsewhere.';
+
   String buildRealismStateInjection() {
+    // Hoisted out of the list below so the join-line can ask whether BOTH
+    // actually said anything. Each still self-gates exactly as before, so the
+    // emitted fragments are unchanged.
+    final needsLine = _characterStateEnabled
+        ? needsInjection.buildNeedsInjection()
+        : '';
+    final inventoryLine = inventoryInjection.buildInventoryInjection();
+
     // No blanket early return. One gate used to sit here and silently delete
     // all eleven fragments — including the four that are not realism features —
     // which made the coupling invisible to anyone reading a single builder.
@@ -221,7 +258,7 @@ class RealismStateInjection {
       if (_characterStateEnabled)
         relationshipInjection.buildTrustBehaviorInjection(),
       if (_characterStateEnabled) emotionInjection.buildEmotionInjection(),
-      if (_characterStateEnabled) needsInjection.buildNeedsInjection(),
+      needsLine,
       if (_characterStateEnabled) nsfwInjection.buildNsfwCooldownInjection(),
       if (getAmbitionsEnabled?.call() ?? true)
         ambitionInjection.buildAmbitionInjection(),
@@ -233,7 +270,14 @@ class RealismStateInjection {
       // Pockets & Wardrobe. Ungated here for the same reason preferences are:
       // it answers to its own switch and nothing else. The leaf self-gates on
       // the record being non-empty, which it is only when the feature is on.
-      inventoryInjection.buildInventoryInjection(),
+      inventoryLine,
+      // Directly after it, so "any of that" reads against a list that ends with
+      // what she has. This is the ONLY place the two features meet, and it is
+      // the right place: neither engine reads the other's state, and no LLM
+      // call is added — the composer, whose whole job is assembling both, joins
+      // them in one sentence.
+      if (needsLine.trim().isNotEmpty && inventoryLine.trim().isNotEmpty)
+        _useWhatSheHasLine,
       if (getPromisesEnabled?.call() ?? true)
         promiseDebtInjection.buildPromiseDebtInjection(),
       if (_characterStateEnabled)
