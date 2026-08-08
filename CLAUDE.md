@@ -251,6 +251,29 @@ A multi-component system spanning `chat_service.dart` (orchestration, `_groupRea
   `chat_service_session_manage.dart` and `chat_service_group_entry.dart`, one per way a
   conversation can begin; wire fewer and the switch is silently 1:1-only.
   `test/ui/settings/chaos_global_toggle_test.dart` reads all three call sites.
+- **DECAY OWNS DEPLETION, BUT AN EVENT MUST BEAT A TURN (maintainer, 2026-08-08).**
+  A need falling is slow and ambient and `tickDecay` models it; the scene eval
+  may take an extra bite only for something explicitly described as costing her.
+  BUT that bite has to READ as an event — "drinking a soda would cause bladder
+  to drop… more than on a standard turn" — so every entry in
+  `NeedsSimulation.sceneDepletionAt1x` is at least 2x (usually 3x) that need's
+  `needDecay` rate: hunger 12, bladder 18, energy 12, social 10, fun 10,
+  hygiene 15, comfort 12, scaling `base + 2 per strength notch` to a maximum of
+  26 (under the old fixed −30, so no setting regressed).
+  **Restoration is deliberately NOT bounded** — a meal really does fill you in
+  one go, and the eval prompt spends a paragraph fighting models that lowball it.
+  The bound lives in ONE helper (`NeedsImpactEvaluator._boundDeltas`) shared by
+  both eval paths, replacing two byte-identical call-site clamps; do not add a
+  third. It is deliberately NOT in `applySceneImpact`, which is a pure mutator —
+  putting it there bounds the whole vector and breaks callers that use it to
+  arrange state. The Director (opt-in, default off) is exempt.
+  WHY ANY OF THIS: the eval reads the character's OWN REPLY, which was written
+  FROM the needs, so narrating "sharp, gnawing hunger cramps" was scored as
+  BECOMING hungrier — a feedback loop producing 35–40-point single-turn drops.
+  The prompt now states outright that describing a state is not changing it.
+  Same principle already pinned for the Realism Engine ("the eval scores the
+  USER's message, never the character's own reply"), finally applied to Needs.
+  Guard: `test/services/chat/needs_depletion_cap_test.dart`.
 - Sims-style Needs Simulation (NeedsSimulation): straight per-turn decay ticks (needDecay plus exactly six `decayModifiers` — four cross-boosts `low_energy_hunger_boost` / `low_energy_comfort_boost` / `low_fun_social_boost` / `low_bladder_comfort_boost`, and two weather ones `weather_rough_comfort` / `weather_clear_fun` that vanish when weather is off. **There is no time-of-day decay term** — earlier wording here claimed one), scene deltas, stepped descriptions, hygiene inversion for "enjoys low hygiene". **The afterglow / lust-haze / post-climax-crash / arousal-suppression BUFFERS were removed** (see the class doc in `needs_simulation.dart`) — do not reason about buffer state.
 - Escape hatch: `cancelRealismEval()` aborts in-flight evals via `_isCancellingRealismEval` + `abortGeneration()`
 

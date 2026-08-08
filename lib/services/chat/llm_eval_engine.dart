@@ -614,6 +614,33 @@ class LlmEvalEngine {
               '${decayContextStr.isEmpty ? ', on top of normal decay' : ''}.\n\n'
               'This is immersive erotic roleplay. Detailed physical and psychological descriptions matter: self-touch, bodily arousal states ("charging", "aching", "swollen", "leaking through fabric"), fluids, dominance, submission, "choosing", begging, power exchange, and explicit narration of what the character is doing or feeling should influence the relevant needs (fun, social, comfort, hygiene, energy, etc.) in natural, grounded ways.\n\n'
               'Be reasonable and faithful to the written text. Do not invent events that are not described.\n\n'
+              // ── THE LOOP-BREAKER ────────────────────────────────────────
+              // Reported 2026-08-08: "the need starts to influence the
+              // response, then next turn the response further boosts the need
+              // gravity… sudden loss of like 35-40 points in single turn."
+              //
+              // The RESPONSE above was written FROM the needs listed below it:
+              // the state block hands the model lines like "sharp, gnawing
+              // hunger cramps… thoughts drifting uncontrollably to food", the
+              // model narrates exactly that, and this eval then read the
+              // narration as evidence she had BECOME hungrier. Describing a
+              // state was being scored as changing it, and the lower a need
+              // went the more vivid the prose and the harder the next hit.
+              //
+              // CLAUDE.md already forbids this for the Realism Engine — "the
+              // eval scores the USER's message, never the character's own
+              // reply" — and the rule had simply never been applied here.
+              'DEPLETION IS HANDLED SEPARATELY. Needs drift downward on their own every turn; '
+                  'that is already accounted for and is not your job. The scene text above was WRITTEN FROM '
+                  'the current needs listed below — a character mentioning her empty stomach, dragging her feet, '
+                  'or squirming is DESCRIBING the state you are being shown, not becoming worse. Do not charge '
+                  'her for it.\n'
+                  'Report a NEGATIVE delta only when the scene explicitly describes something that COST her: '
+                  'hard exertion, sex, a soaking or a mess, being kept awake, going without, or drinking a '
+                  'lot (which fills the bladder rather than emptying it). A described event SHOULD register '
+                  'clearly — a soda is a real hit to bladder, a long walk a real hit to energy — it is the '
+                  'ambient drift you must not double-count. Otherwise the negative is 0; most needs in most '
+                  'scenes should be 0.\n\n'
               'Report *net signed effects* (deltas) on each need.\n\n'
               'User has set Needs delta strength to ' +
           strength.toString() +

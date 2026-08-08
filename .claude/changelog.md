@@ -12513,3 +12513,95 @@ hues moved byte-for-byte and carry a `// theme-keep:` marker — they are a
 semantic legend (grief and anger must not look alike), they predate the
 warm-porch standard, and recolouring them here would change golden pixels as a
 side effect of a move.
+
+---
+
+## 2026-08-08 — The needs feedback loop: "35-40 points in a single turn"
+
+**Files:** `lib/services/chat/needs_simulation.dart`,
+`lib/services/chat/needs_impact_evaluator.dart`,
+`lib/services/chat/llm_eval_engine.dart`,
+`lib/services/chat/chat_service_wiring_realism.dart`,
+`test/services/chat/needs_depletion_cap_test.dart` (new)
+
+Reported by a user, verbatim: *"There's issue when the need starts to influence
+the response, then next turn the response further boosts the need gravity...
+which result in sudden loss of like 35-40 points of hunger, energy or bladder in
+single turn and... obvious results. Sometimes several of them affected."*
+Maintainer: *"It is still very whack a mole."*
+
+**THE LOOP.** The needs eval is handed the character's OWN REPLY and asked what
+the scene did to her needs. That reply was written FROM the needs — the state
+block gives the model lines like *"Sharp, gnawing hunger cramps; light-headed
+and shaky, thoughts drifting uncontrollably to food"*. The model narrates
+exactly that, and the eval scores the narration as her having BECOME hungrier.
+Describing a state was counted as changing it, so the lower a need went, the
+more vivid the prose, and the harder the next hit.
+
+CLAUDE.md already forbids precisely this for the Realism Engine — "the eval
+scores the USER's message, never the character's own reply", because otherwise
+"rerolling a line would reroll their feelings". The rule had never been applied
+to Needs, in the one place where the input is literally derived from the output.
+
+**The arithmetic matched the report exactly:**
+
+| source | per turn |
+|---|---|
+| eval delta, clamped at −30 | up to −30 |
+| decay (bladder 6, hunger 4, energy 3) | −3..−6 |
+| cross-boost modifiers (×1.25–1.4 when a neighbour is low) | up to −8 |
+| **worst single turn** | **≈ −38** |
+
+That −30 was itself the previous patch — it bounded the damage at exactly the
+number being complained about. And it lived at the CALL SITES: twice,
+byte-identical, in `needs_impact_evaluator`, and **not at all** on the third
+applier in `chat_service_needs_reprocess`. A rule enforced by whoever remembers
+it is the whack-a-mole, not a symptom of it.
+
+**THE FIX** (maintainer's ruling: decay owns depletion, caps scale with the
+strength slider):
+* **The prompt breaks the loop directly.** The eval is now told that the scene
+  it is reading was WRITTEN FROM the needs listed below it; that a character
+  mentioning her empty stomach is describing the state she was given rather than
+  becoming worse; and that a negative is reported only for something the scene
+  explicitly describes costing her. Most needs in most scenes should be 0.
+* **One bound, one place.** A single `_boundDeltas` helper in the evaluator,
+  shared by the normal pass and the reprocess pass. It replaced two
+  byte-identical `clamp(-30, 100)` call-site lines — a rule enforced by whoever
+  remembers it is what "whack-a-mole" actually means.
+* **PER-NEED caps, and the rule is "a described EVENT beats a standard turn".**
+  Maintainer: *"I would like needs to be variable still. For example drinking a
+  soda would cause bladder to drop… more than on a standard turn."* Every cap is
+  at least 2× — usually 3× — that need's decay rate:
+  hunger 12, bladder 18, energy 12, social 10, fun 10, hygiene 15, comfort 12.
+  Bladder is widest because it is both a fast clock and the need most obviously
+  moved by a described act; hygiene gets room despite decaying only 1/turn
+  because events are its entire mechanism. Scaling is `base + 2 per notch`, so
+  the widest tops out at 26 — under the old fixed 30, so no strength setting is
+  worse off than before. A multiplicative scale would have put bladder at 54.
+* **Restoration stays unbounded.** Eating a meal really does fill you in one go,
+  and the prompt spends a paragraph fighting models that lowball it. Capping the
+  fill would have been a worse bug than the one being fixed.
+* The Director is **exempt**, deliberately: "Needs Director authority" is a
+  per-card opt-in that defaults OFF, and enabling it is asking for a second,
+  scene-checked pass to overrule the evaluator. Stated cost — a user who enables
+  it can still see wide swings, and capping it is one `if` away plus a
+  maintainer-approved edit to the two authority tests.
+
+**TWO WRONG TURNS, both caught and both worth recording.** First, the bound was
+put on `NeedsSimulation.applySceneImpact` — the one door every delta passes —
+which sounded like the strongest structural position and instead bounded the
+whole vector. It broke a composer test and a golden that use the mutator merely
+to ARRANGE a state: the bound was reaching past the bug. What needs limiting is
+what a MODEL claims, not what the simulation may hold, so it moved to the
+evaluator and `applySceneImpact` is documented as a pure mutator.
+Second, the first per-need table set bladder to 6 — exactly its decay rate —
+which would have made drinking a soda indistinguishable from nothing happening.
+That is the flatness the maintainer was afraid of, and the test now asserts the
+2× margin rather than trusting the numbers.
+
+**Gates:** analyze 0 · 12 new tests. They pin both directions — the cliff cannot
+happen, an event always outpaces drift (the soda case by name), the caps are not
+one flat number, restoration and the raw mutator stay unbounded, decay still
+moves at its own documented rate, and an absent or nonsense strength degrades to
+1x rather than crashing.

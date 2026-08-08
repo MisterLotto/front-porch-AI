@@ -111,6 +111,10 @@ extension ChatServiceWiringRealism on ChatService {
       getEnjoysLowHygiene: () => enjoysLowHygiene,
       getNeedsSimEnabled: () => _needsSimEnabled,
       getCustomDecayRates: () => _activeDecayRates(),
+      // Same source the needs-impact eval reads for its prompt scaling, so the
+      // bound and the instruction can never disagree about what "5x" means.
+      getNeedsSimStrength: () =>
+          (_activeCharacter?.frontPorchExtensions?.needsSimStrength ?? 1),
       // Needs modifiers sample the CURRENT DAY-PART (v3): an afternoon storm
       // speeds comfort decay even on a day whose headline is "cloudy", and a
       // clear evening earns the fun bonus after a rainy morning. Same
