@@ -277,7 +277,12 @@ extension ChatServiceChatEntry on ChatService {
                 ext.nsfwCooldownEnabled ||
                 _storageService.realismSettings.nsfwCooldownDefault,
           );
-          _chaosModeService.seedFromGroupOrExt(ext.chaosModeEnabled, false);
+          _chaosModeService.seedFromGroupOrExt(
+            // OR-override: the card asks, or the global default does.
+            ext.chaosModeEnabled ||
+                _storageService.realismSettings.chaosModeDefault,
+            false,
+          );
           // AND-gated by the global Needs switch (Porch Life tab): the card
           // asks, the global setting can veto. Default true = no change.
           _needsSimEnabled =

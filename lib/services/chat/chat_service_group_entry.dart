@@ -174,7 +174,11 @@ extension ChatServiceGroupEntry on ChatService {
     // Seed group definition defaults for Chaos (can be overridden by per-session values loaded below).
     // This makes the chaosModeEnabled / chaosNsfwEnabled on the GroupChat model actually functional.
     _chaosModeService.seedFromGroupOrExt(
-      group.chaosModeEnabled,
+      // OR-override, matching the two 1:1 seed sites: the group asks, or the
+      // Porch Life global default does. A user who switched Chaos on globally
+      // means it for groups too — this is the third of three seed sites and
+      // missing it would have made the global switch quietly 1:1-only.
+      group.chaosModeEnabled || _storageService.realismSettings.chaosModeDefault,
       group.chaosNsfwEnabled,
     );
 

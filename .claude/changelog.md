@@ -12099,3 +12099,167 @@ reported bug), narrowing the examples back to food, and making `update` stop
 searching worn items (4 red, which is what a clothing-blind applier would look
 like). Two existing test files gained the new required argument; no assertion
 changed.
+
+---
+
+## 2026-08-08 — Wardrobe and pockets typed in the editor were silently discarded
+
+**Files:** `lib/ui/pages/edit_character_page.dart`,
+`test/ui/pages/edit_character_identity_save_test.dart` (new)
+
+Reported: *"When you edit characters to wear things or have things in their
+pockets it doesn't save the PNG and everything is lost."* With debug output:
+
+    [_saveCharacter] About to save PNG with extensions: false
+    PNG saved successfully for Malumbra the Oblivian to …/Malumbra_the_Oblivian_….png
+    ✗ PNG verification FAILED: no extensions in saved file!
+
+The absent line is the diagnosis: no `[_saveCharacter] Saving realism:` above
+it, so the extensions block never ran. Its guard was
+
+    if (showRealismTab && (_realismEnabled || _realismSettingsModified ||
+                           character.frontPorchExtensions != null))
+
+and the identity chips — Ambitions, Likes & Dislikes, the 18+ pair and Pockets
+& Wardrobe — all write INTO `frontPorchExtensions` while living outside the
+realism section, where nothing sets `_realismSettingsModified`. For the most
+ordinary character there is (engine off, no realism control touched, no
+extensions yet) all three conditions were false: everything the author typed
+was dropped before the PNG was written. A successful save, a written file, and
+the work gone, with nothing to react to.
+
+Fixed by testing the DATA (`hasIdentityContent`) rather than adding a
+`_realismSettingsModified = true` to seven chip callbacks. A flag has to be
+remembered by every chip added later; "did the user author any of this" cannot
+be forgotten. Clearing the last item on a card that already has extensions
+still writes, through the existing `!= null` clause.
+
+Note the shape of the miss: the wardrobe code was correct and its own unit
+tests (`wardrobe_authoring_test.dart`) were green throughout. The bug was in
+whether the correct code was REACHED — the same class as the 10-theme dead
+button, and only a test that types into the real chip field and presses the
+real Save button can tell the two apart. That is what the new guard does.
+
+**Gates:** analyze 0 · 3 new tests, negative-checked by reverting the fix (2
+red on `frontPorchExtensions == null`, and the "leave untouched cards alone"
+case correctly stayed green).
+
+---
+
+## 2026-08-08 — "Acts on desires": characters act on intimate preferences
+
+**Files:** `lib/services/chat/prompt_injection/preferences_injection.dart`,
+`lib/services/chat/realism_prompt_builder.dart`,
+`lib/services/chat/chat_service_wiring_injection.dart`,
+`lib/services/chat/chat_service_wiring_evals.dart`,
+`lib/services/storage/settings/realism_settings.dart`,
+`lib/services/web/facade/settings_facade.dart`,
+`lib/ui/settings/tabs/porch_life_tab.dart`,
+`web_ui/src/components/PorchLifeSettings.tsx`,
+`test/services/chat/intimate_agency_test.dart` (new),
+`test/services/chat/preferences_injection_test.dart` (one assertion changed —
+rationale below and inline)
+
+The maintainer's bet, and it was correct: intimate preferences did not guide
+the character into "I want this" or "I don't like that". The line read, in
+full, *"In intimate moments: warms to X; not interested in Y — only relevant
+when the scene is already there."* That is a scope limiter. It says WHEN the
+facts apply and never what to do with them.
+
+The asymmetry is what made it a bug rather than a gap. The SCORING side has
+always been directive — weigh the exchange against these, name the one that
+moved a score — and it reaches the relationship AND emotional-state evals. So
+bond, trust and emotion were already moving on whether a scene hit her
+preferences while she never voiced them: silently rewarding and penalising the
+user over things she would not say out loud.
+
+Both halves now ship, because the feature is a loop and either alone is dead
+weight: she asks → the user answers → being refused moves her mood → that mood
+is what she carries into the next reply.
+* Wanting: she pursues and may raise it herself, **in her own register** (a
+  dominant character presses, a soft-spoken one suggests or waits to be
+  noticed), declines what she is not into "rather than going along with it",
+  and being refused "marks her mood — sharper, or hurt, or cooler than before,
+  as fits who she is". The old prohibition "never raise them to start one" is
+  replaced by proportionality, not silence: she can initiate now, which is the
+  point, but a model told to pursue with no counterweight steers every scene
+  into the same place.
+* Scoring: a refusal is "a real moment, not a neutral exchange", direction
+  following character.
+
+HARD dependency on the Realism Engine, maintainer-directed, and a real one
+rather than an inherited gate: the judge that scores the answer IS the engine.
+Both call sites resolve `intimateAgencyEnabled && _realismEnabled`. Default
+OFF — it changes how a character behaves noticeably, and that is the user's
+call. Costs nothing per turn: two prompt sentences, no model call.
+
+**A truncation bug found on the way in.** `maxChars` (420) was applied to the
+ASSEMBLED fragment with a bare `substring`, which cuts from the END — and the
+end is the 18+ line. An author with five likes and five dislikes (400 chars
+each is allowed) blew past the cap and lost the entire intimate line plus the
+tail of the Tastes sentence. The richer the character, the less guidance
+survived, which is exactly backwards. Now `maxPhraseChars` bounds only the
+AUTHORED phrases — the part a stranger's card controls and the only part that
+can run away — and the sentences are always emitted whole.
+
+**Test change, declared:** one assertion in `preferences_injection_test.dart`
+was `expect(txt.length, lessThanOrEqualTo(maxChars + 1))` over the assembled
+fragment. It did not merely permit the truncation bug, it REQUIRED it — with
+long lists the only way to satisfy it is to cut instructions. Replaced with a
+bound on the same authored text plus a new test that the guidance survives
+however long the lists are. Rationale written at the test itself.
+
+**Gates:** analyze 0 · web tsc + vitest 59 · 10 new tests, both halves of the
+loop negative-checked (injection forced onto the OFF branch → 5 red; scorer's
+refusal clause dropped → 1 red).
+
+---
+
+## 2026-08-08 — Chaos Mode gets a global default; Porch Life stops apologising
+
+**Files:** `lib/services/storage/settings/realism_settings.dart`,
+`lib/services/chat/chat_service_chat_entry.dart`,
+`lib/services/chat/chat_service_session_manage.dart`,
+`lib/services/chat/chat_service_group_entry.dart`,
+`lib/services/web/facade/settings_facade.dart`,
+`lib/ui/settings/tabs/porch_life_tab.dart`,
+`web_ui/src/components/PorchLifeSettings.tsx`,
+`test/ui/settings/chaos_global_toggle_test.dart` (new)
+
+Maintainer: *"Chaos mode should have a global toggle in Porch life with no hard
+dep, then you can get rid of that annoying ChAoS mOde Is SeT pEr ChAt message
+at the bottom."*
+
+Chaos had no global setting anywhere — per-chat and per-card only — so the
+Porch Life tab ended with a paragraph apologising for it. That is the same
+shape as the dead-switch problem the tab exists to end: a user reading the
+feature list finds the one thing they cannot act on from there.
+
+It depends on nothing (2026-08-07 audit; it was only ever FILED beside the
+engine), so the row carries "works alone" and no gate.
+`realismSettings.chaosModeDefault` OR-overrides the seed — the
+`nsfwCooldownDefault` shape, not the `needsSimDefault` AND-gate — so a card
+that asks for Chaos still gets it and an existing user sees no change. Default
+false: Chaos injects unplanned events into a story and that is nobody's
+default.
+
+**Three seed sites**, one per way a conversation can begin: opening a 1:1
+character, starting a fresh session, entering a group. This change passed
+through a state with two of the three wired, which would have shipped a global
+switch that was silently 1:1-only — so the new test reads all three call sites
+and fails if any stops consulting the global.
+
+The closing card now states the relationship the right way round (globals
+here, per-chat override in the sidebar) instead of singling one feature out.
+
+**Gates:** analyze 0 · web tsc + vitest 59 · 3 new tests, negative-checked by
+unwiring the group seed site and deleting the row/restoring the old footer —
+all three red on their exact subject.
+
+**Extraction that came with it:** `porch_life_tab.dart` was already 532 lines
+(over the 500 cap) and the Chaos row pushed it to 575. CLAUDE.md's rule for a
+file already past the cap is not "add carefully" but "extract something", so
+its two private sub-controls — `_StandaloneClockSwitch` and `_AwayThreshold` —
+moved to `lib/ui/settings/widgets/porch_life_row_children.dart` and joined that
+barrel. The tab is 477: back UNDER the cap while gaining a row, which is the
+`character_grid_card.dart` precedent.

@@ -95,6 +95,11 @@ class SettingsFacade {
         'standingMoodEnabled': _storage.realismSettings.standingMoodEnabled,
         'pocketTransfersEnabled':
             _storage.realismSettings.pocketTransfersEnabled,
+        // 2026-08-08: "Acts on desires" (After Dark) and the global Chaos Mode
+        // default. Additive, as always — an older PWA ignores both keys.
+        'intimateAgencyEnabled':
+            _storage.realismSettings.intimateAgencyEnabled,
+        'chaosModeDefault': _storage.realismSettings.chaosModeDefault,
         'adultThemesEnabled': _storage.realismSettings.adultThemesEnabled,
         'weatherEnabled': _storage.realismSettings.weatherEnabled,
         'weatherFahrenheit': _storage.realismSettings.weatherFahrenheit,
@@ -186,6 +191,19 @@ class SettingsFacade {
       final mood = realism['standingMoodEnabled'];
       if (mood is bool) {
         await _storage.realismSettings.setStandingMoodEnabled(mood);
+      }
+      // No live-chat push for either of these, and for the same reason the
+      // standalone clock has none: both are read straight off StorageService at
+      // the moment they matter. "Acts on desires" is resolved per turn when the
+      // preferences fragment is built, and Chaos seeds when a chat is entered —
+      // so writing the setting IS the whole update.
+      final agency = realism['intimateAgencyEnabled'];
+      if (agency is bool) {
+        await _storage.realismSettings.setIntimateAgencyEnabled(agency);
+      }
+      final chaos = realism['chaosModeDefault'];
+      if (chaos is bool) {
+        await _storage.realismSettings.setChaosModeDefault(chaos);
       }
       final objs = realism['objectivesEnabled'];
       if (objs is bool) {

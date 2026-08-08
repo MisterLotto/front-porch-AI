@@ -244,8 +244,13 @@ A multi-component system spanning `chat_service.dart` (orchestration, `_groupRea
 - Character evolution (trait development) (EvolutionService)
 - Chaos Mode / "Chance Time" random events (ChaosModeService) — **filed here for location
   only; NOT a realism dependency.** The 2026-08-07 audit
-  (docs/design/feature-independence.md) confirmed Chaos runs fully with the engine off;
-  its switch is per-chat in the chat sidebar, not in Porch Life.
+  (docs/design/feature-independence.md) confirmed Chaos runs fully with the engine off.
+  It has BOTH a per-chat switch in the chat sidebar and, since 2026-08-08, a global
+  default in Porch Life (`realismSettings.chaosModeDefault`, OR-override, default false).
+  The global is seeded in **three** places — `chat_service_chat_entry.dart`,
+  `chat_service_session_manage.dart` and `chat_service_group_entry.dart`, one per way a
+  conversation can begin; wire fewer and the switch is silently 1:1-only.
+  `test/ui/settings/chaos_global_toggle_test.dart` reads all three call sites.
 - Sims-style Needs Simulation (NeedsSimulation): straight per-turn decay ticks (needDecay plus exactly six `decayModifiers` — four cross-boosts `low_energy_hunger_boost` / `low_energy_comfort_boost` / `low_fun_social_boost` / `low_bladder_comfort_boost`, and two weather ones `weather_rough_comfort` / `weather_clear_fun` that vanish when weather is off. **There is no time-of-day decay term** — earlier wording here claimed one), scene deltas, stepped descriptions, hygiene inversion for "enjoys low hygiene". **The afterglow / lust-haze / post-climax-crash / arousal-suppression BUFFERS were removed** (see the class doc in `needs_simulation.dart`) — do not reason about buffer state.
 - Escape hatch: `cancelRealismEval()` aborts in-flight evals via `_isCancellingRealismEval` + `abortGeneration()`
 

@@ -34,9 +34,16 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 /// features genuinely depend on the engine and which were merely filed under
 /// it; the chips on each row report that finding rather than a guess.
 ///
-/// Scope note: this tab holds the GLOBAL defaults. Chaos Mode and Growth Rings
-/// remain per-chat switches in the chat sidebar — the closing card points there
-/// instead of pretending otherwise.
+/// Scope note: this tab holds the GLOBAL defaults; every one of them can still
+/// be overruled by a single chat from its sidebar, which is what the closing
+/// card now says.
+///
+/// Chaos Mode joined the tab on 2026-08-08 (maintainer: "Chaos mode should have
+/// a global toggle in Porch life with no hard dep"). It was the last feature the
+/// closing card had to apologise for — a paragraph explaining that one switch
+/// lived somewhere else. `chaosModeDefault` OR-overrides the per-chat/per-group
+/// seed at all three seed sites, the same shape Afterglow already used, so
+/// leaving it off changes nothing for anyone.
 ///
 /// Needs got its global switch here (`needsSimDefault`, 2026-08-07): it had
 /// none at all, so the tab had nothing to show for the app's most visible
@@ -163,7 +170,7 @@ class PorchLifeTab extends StatelessWidget {
               // nothing.
               child: engineOn
                   ? null
-                  : _StandaloneClockSwitch(
+                  : StandaloneClockSwitch(
                       value: realism.standaloneClockEnabled,
                       onChanged: storage.setStandaloneClockEnabled,
                     ),
@@ -344,6 +351,21 @@ class PorchLifeTab extends StatelessWidget {
               onChanged: realism.setAmbitionsEnabled,
             ),
             FeatureRow(
+              icon: Icons.casino_outlined,
+              label: 'Chaos Mode',
+              need: FeatureNeed.alone,
+              blurb:
+                  'Pressure builds quietly as a scene goes on, and every so '
+                  'often something happens that neither of you planned — a '
+                  'knock at the door, a spilled drink, weather turning. The '
+                  '2026-08-07 audit confirmed it runs perfectly well with the '
+                  'Realism Engine off; it was only ever filed next to it. '
+                  'Switching it on here turns it on for new chats and groups; '
+                  'each chat can still overrule it in the sidebar.',
+              value: realism.chaosModeDefault,
+              onChanged: realism.setChaosModeDefault,
+            ),
+            FeatureRow(
               icon: Icons.history,
               label: 'Welcome-back recap',
               need: FeatureNeed.alone,
@@ -365,7 +387,7 @@ class PorchLifeTab extends StatelessWidget {
                   'were doing. Same local-only timestamp as the recap banner.',
               value: storage.absenceAckEnabled,
               onChanged: storage.setAbsenceAckEnabled,
-              child: _AwayThreshold(storage: storage),
+              child: AwayThreshold(storage: storage),
             ),
           ],
         ),
@@ -400,6 +422,27 @@ class PorchLifeTab extends StatelessWidget {
                   chat.setNsfwCooldownEnabled(v);
                 },
               ),
+              FeatureRow(
+                icon: Icons.favorite,
+                label: 'Acts on desires',
+                need: FeatureNeed.needs,
+                dependsOn: 'the Realism Engine',
+                satisfied: engineOn,
+                blurb:
+                    'A character with intimate preferences on her card acts on '
+                    'them instead of only reacting: she asks for what she '
+                    'wants, in her own voice — a dominant character presses '
+                    'where a soft-spoken one hints — and turns down what she '
+                    'is not interested in rather than going along with it. '
+                    'Being refused something she wanted shows in her mood '
+                    'afterwards, sharper or quieter as fits who she is. Needs '
+                    'the engine because that is what scores the answer she '
+                    'gets; without it she would ask and nothing would ever '
+                    'come of it. Costs nothing extra — no AI request, just '
+                    'two more lines in the prompt.',
+                value: realism.intimateAgencyEnabled,
+                onChanged: realism.setIntimateAgencyEnabled,
+              ),
             ],
           ),
 
@@ -419,112 +462,14 @@ class PorchLifeTab extends StatelessWidget {
             ),
           ),
           child: Text(
-            'Chaos Mode is set per chat rather than globally — open a chat and '
-            'use the sidebar to switch it for that story. Needs, Objectives '
-            'and Growth Rings can be switched per chat there too.',
+            'These are the defaults new chats start from. Any single chat can '
+            'overrule them from its sidebar — Chaos Mode, Needs, Objectives '
+            'and Growth Rings all have a switch there for that one story.',
             style: TextStyle(
               fontSize: 12.5,
               color: AppColors.textSecondary(context),
             ),
           ),
-        ),
-      ],
-    );
-  }
-}
-
-/// The opt-in that keeps the clock running with the Realism Engine off.
-///
-/// It exists as its own switch, rather than reading the Passage of Time row
-/// above, because that row already defaults ON — for years it meant nothing
-/// while the engine was off, so nobody chose it in a world where it cost a
-/// model call. Treating it as consent would hand every engine-off user a new
-/// per-turn call without asking. Hence a separate, deliberate yes, and copy
-/// that states the cost in the same breath as the benefit.
-class _StandaloneClockSwitch extends StatelessWidget {
-  const _StandaloneClockSwitch({required this.value, required this.onChanged});
-
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Keep the clock running without the engine',
-                style: TextStyle(
-                  color: AppColors.textSecondary(context),
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'The engine normally judges how long each exchange took as '
-                'part of work it is already doing. With it off, the clock '
-                'needs one short AI call of its own each turn — so this costs '
-                'a little speed. Left off, the clock simply holds still.',
-                style: TextStyle(
-                  color: AppColors.textTertiary(context),
-                  fontSize: 11,
-                  height: 1.35,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 12),
-        Switch(value: value, onChanged: onChanged),
-      ],
-    );
-  }
-}
-
-/// The "away for at least" dropdown that rides the absence-acknowledgement
-/// row. Values are clamped to a known item so a hand-edited preference cannot
-/// assert the dropdown (carried over verbatim from the old General tab).
-class _AwayThreshold extends StatelessWidget {
-  const _AwayThreshold({required this.storage});
-
-  final StorageService storage;
-
-  @override
-  Widget build(BuildContext context) {
-    const known = [12, 24, 72, 168];
-    return Row(
-      children: [
-        Text(
-          'Away for at least',
-          style: TextStyle(
-            color: AppColors.textSecondary(context),
-            fontSize: 12,
-          ),
-        ),
-        const Spacer(),
-        DropdownButton<int>(
-          value: known.contains(storage.absenceThresholdHours)
-              ? storage.absenceThresholdHours
-              : 24,
-          dropdownColor: AppColors.cardOf(context),
-          style: TextStyle(
-            color: AppColors.textPrimary(context),
-            fontSize: 12,
-          ),
-          items: const [
-            DropdownMenuItem(value: 12, child: Text('12 hours')),
-            DropdownMenuItem(value: 24, child: Text('a day')),
-            DropdownMenuItem(value: 72, child: Text('3 days')),
-            DropdownMenuItem(value: 168, child: Text('a week')),
-          ],
-          onChanged: (v) {
-            if (v != null) storage.setAbsenceThresholdHours(v);
-          },
         ),
       ],
     );

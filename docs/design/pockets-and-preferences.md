@@ -311,6 +311,71 @@ this feature makes that pattern author-editable data.
 - Eval prompt growth → token-budgeted block, measured before/after on the
   Context Budget viewer.
 
+### Part 2b — "Acts on desires" (SHIPPED 2026-08-08)
+
+The maintainer's bet, and it was right: *"I'm willing to bet intimate
+preferences doesn't guide the character into 'I want this' or 'I don't like
+that' in their responses."* The v1 line above promised the behaviour side
+("the character ACTS on them"), and for the everyday Likes & Dislikes lists it
+delivered. The 18+ pair did not. Its line read, in full:
+
+> In intimate moments: warms to X; not interested in Y — only relevant when
+> the scene is already there.
+
+That is a scope limiter and nothing else. It says WHEN the facts apply and
+never what to do with them, so the character never asked for anything and
+never turned anything down.
+
+**The asymmetry that made it a bug rather than a gap.** The SCORING side had
+been directive from day one — weigh the exchange against these, name the one
+that moved a score — and it reaches the relationship AND emotional-state
+evals. So bond, trust and emotion were already moving on whether a scene hit
+her preferences while she never voiced them: silently rewarding and penalising
+the user over things she would not say out loud.
+
+**What ships.** `realismSettings.intimateAgencyEnabled` ("Acts on desires",
+After Dark group, under Afterglow), default OFF, resolved at the two call
+sites as `intimateAgencyEnabled && _realismEnabled`:
+
+- **The wanting half** (`preferences_injection.dart`): she pursues what she
+  warms to and may raise it herself, **in her own register** — a dominant
+  character presses, a soft-spoken one suggests or waits to be noticed — and
+  declines what she is not interested in "rather than going along with it".
+  The old prohibition "never raise them to start one" is replaced by a
+  proportionality clause ("still one thread of her, not the only thing she
+  wants"): she can initiate now, which is the point, but a model told to
+  pursue with no counterweight steers every scene into the same place.
+- **The scoring half** (`realism_prompt_builder.preferencesBlock`): a refusal
+  is "a real moment, not a neutral exchange", with the direction following
+  character — anger or cold distance in a dominant character, hurt or retreat
+  in a gentler one.
+
+**Why the HARD realism dependency**, unusually for this doc, which otherwise
+argues features free of the engine. The feature is a loop — she asks, the user
+answers, being refused moves her mood, that mood is what she carries into the
+next reply — and the judge that scores the answer IS the engine. With it off
+she would ask for things and nothing would ever come of it: half a feature,
+and the worse half. Maintainer-directed (2026-08-08): *"Do put this particular
+feature having a hard dep on realism. And put its toggle in after dark right
+under afterglow."*
+
+**A truncation bug found on the way in and fixed with it.**
+`PreferencesInjection.maxChars` (420) was applied to the ASSEMBLED fragment
+with a bare `substring`, which cuts from the END — and the end is the 18+
+line. An author who filled in five likes and five dislikes (400 chars each is
+allowed) pushed past the cap and had the entire intimate line silently
+deleted, plus the tail of the Tastes sentence. The richer the character, the
+less guidance survived. The cap is now `maxPhraseChars` and bounds only the
+AUTHORED phrases — the part a stranger's card controls and the only part that
+can run away; the instruction sentences are always emitted whole. That change
+required editing one existing assertion, which had *required* the bug (the
+only way to satisfy it with long lists is to cut instructions); the rationale
+is written into `preferences_injection_test.dart` at the test itself.
+
+Guards: `test/services/chat/intimate_agency_test.dart` (10), both halves of
+the loop negative-checked — the injection by forcing the OFF branch, the
+scorer by dropping its refusal clause.
+
 ---
 
 ## Part 3 — Ambitions authoring & the Current Task swap

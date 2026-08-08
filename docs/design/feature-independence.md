@@ -12,7 +12,7 @@ Mockup (approved layout pending): the "Porch Life" tab sketch artifact.
 
 | Feature | Today with Realism OFF | True dependency | Independence cost |
 |---|---|---|---|
-| **Chaos / Chance Time** | fully functional | none — only *listed* under realism | **zero** (docs/UI relabel) |
+| **Chaos / Chance Time** | fully functional | none — only *listed* under realism | **DONE 2026-08-08**: relabelled, then given the global default it never had (`chaosModeDefault`, OR-override at all three seed sites). Porch Life's closing apology deleted |
 | **Welcome-back recap** | fully functional | none (wall-clock) | **zero** — but its toggle is INVISIBLE (nested in the realism settings block) |
 | **Promises** | fully functional | Journal | zero; optional 1-line gate so kept/broken doesn't write frozen bond/trust scalars |
 | **Growth Rings** | fully functional | none | zero (loses felt-window annotations only) |
@@ -130,6 +130,29 @@ the identical moment for an identical verdict.
   - ✅ **Chaos relabelled independent.** CLAUDE.md filed it under the Realism
     Engine; the audit found it fully functional with the engine off. The entry
     now says so and points at the per-chat sidebar switch.
+    - **Follow-up, 2026-08-08 — it got the global switch the relabel implied.**
+      Maintainer: *"Chaos mode should have a global toggle in Porch life with
+      no hard dep, then you can get rid of that annoying ChAoS mOde Is SeT pEr
+      ChAt message at the bottom"*. Chaos was the last feature the tab had to
+      APOLOGISE for: a closing paragraph explaining that one switch lived
+      somewhere else, which is the same shape as the dead-switch problem this
+      whole document exists to end — a user reading the feature list finds the
+      one thing they cannot act on from there. `realismSettings.chaosModeDefault`
+      (default false; Chaos injects unplanned events and that is nobody's
+      default) OR-overrides the seed, the `nsfwCooldownDefault` shape rather
+      than the `needsSimDefault` AND-gate, so a card that asks for Chaos still
+      gets it and an existing user sees no change.
+      **Three seed sites, one per way a conversation can begin** — opening a
+      1:1 character (`chat_service_chat_entry.dart`), starting a fresh session
+      (`chat_service_session_manage.dart`) and entering a group
+      (`chat_service_group_entry.dart`). Wiring two of the three ships a
+      global switch that is silently 1:1-only, which is exactly the state this
+      change passed through before it was finished;
+      `test/ui/settings/chaos_global_toggle_test.dart` reads all three call
+      sites and fails if any stops consulting the global.
+      The closing card now states the relationship the right way round —
+      globals here, per-chat override in the sidebar — instead of singling out
+      one feature.
   - ✅ **Absence-note fragment lift.** `getAbsenceNote` rode inside
     `TimeInjection`, so it inherited the scene-facts gate and was silently dead
     whenever the story clock was frozen — despite being computed from your last

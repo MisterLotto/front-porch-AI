@@ -451,7 +451,11 @@ extension ChatServiceSessionManage on ChatService {
             extSeed.nsfwCooldownEnabled ||
             _storageService.realismSettings.nsfwCooldownDefault,
       );
-      _chaosModeService.seedFromGroupOrExt(extSeed.chaosModeEnabled, false);
+      _chaosModeService.seedFromGroupOrExt(
+        extSeed.chaosModeEnabled ||
+            _storageService.realismSettings.chaosModeDefault,
+        false,
+      );
       // AND-gated by the global Needs switch (see chat_entry twin).
       _needsSimEnabled =
           extSeed.needsSimEnabled &&

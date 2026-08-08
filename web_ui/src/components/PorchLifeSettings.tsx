@@ -20,9 +20,10 @@
 // else queued in the page's big Save button.
 //
 // Scope note (mirrors the desktop doc comment): this card holds the GLOBAL
-// defaults. Needs, Chaos Mode and Growth Rings are per-chat switches and
-// live in the chat sidebar (ChatTools) — the closing note points there
-// instead of pretending otherwise.
+// defaults; every one of them can still be overruled by a single chat from
+// its sidebar (ChatTools), which is what the closing note now says. Chaos
+// Mode gained its global default on 2026-08-08 and moved into this card with
+// it, so the note no longer has to apologise for a switch living elsewhere.
 
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -42,6 +43,8 @@ interface PorchLifeState {
   pocketsEnabled: boolean;
   standingMoodEnabled: boolean;
   pocketTransfersEnabled: boolean;
+  intimateAgencyEnabled: boolean;
+  chaosModeDefault: boolean;
   adultThemesEnabled: boolean;
   dreamsEnabled: boolean;
   promiseLedgerEnabled: boolean;
@@ -68,6 +71,8 @@ const DEFAULTS: PorchLifeState = {
   pocketsEnabled: false,
   standingMoodEnabled: false,
   pocketTransfersEnabled: false,
+  intimateAgencyEnabled: false,
+  chaosModeDefault: false,
   adultThemesEnabled: false,
   dreamsEnabled: true,
   promiseLedgerEnabled: true,
@@ -384,6 +389,14 @@ export function PorchLifeSettings() {
 
       <FeatureGroup title="Presence" subtitle="noticing you, nothing more">
         <FeatureRow
+          icon="🎲"
+          label="Chaos Mode"
+          need="alone"
+          blurb="Pressure builds quietly as a scene goes on, and every so often something happens that neither of you planned — a knock at the door, a spilled drink, weather turning. The 2026-08-07 audit confirmed it runs perfectly well with the Realism Engine off; it was only ever filed next to it. Switching it on here turns it on for new chats and groups; each chat can still overrule it in the sidebar."
+          value={st.chaosModeDefault}
+          onChange={(v) => set('chaosModeDefault', v)}
+        />
+        <FeatureRow
           icon="🕰️"
           label="Welcome-back recap"
           blurb={'After you have been away a while, opening a chat shows a small "where we left off" banner. Uses the time of your last message, already saved with your chat. Nothing new is collected and nothing leaves your device.'}
@@ -407,7 +420,7 @@ export function PorchLifeSettings() {
       {error && <p className="error pl-error">{error}</p>}
 
       <div className="pl-note">
-        Chaos Mode and Growth Rings are set per chat rather than globally — open a chat and use its sidebar to switch them for that story.
+        These are the defaults new chats start from. Any single chat can overrule them from its sidebar — Chaos Mode, Needs, Objectives and Growth Rings all have a switch there for that one story.
       </div>
       {/* After Dark — the approved sketch gives the 18+ feature its own group,
           "shown only when 18+ themes are enabled": absent, not greyed out, for
@@ -424,6 +437,16 @@ export function PorchLifeSettings() {
             blurb="Desire builds through a scene and settles afterwards instead of resetting — so intimacy keeps a believable rhythm and a character is not instantly ready to go again. The engine is what scores desire, so this cannot run without it."
             value={st.nsfwCooldownDefault}
             onChange={(v) => set('nsfwCooldownDefault', v)}
+          />
+          <FeatureRow
+            icon="💗"
+            label="Acts on desires"
+            need="needs"
+            dependsOn="the Realism Engine"
+            satisfied={engineOn}
+            blurb="A character with intimate preferences on her card acts on them instead of only reacting: she asks for what she wants, in her own voice — a dominant character presses where a soft-spoken one hints — and turns down what she is not interested in rather than going along with it. Being refused something she wanted shows in her mood afterwards, sharper or quieter as fits who she is. Needs the engine because that is what scores the answer she gets; without it she would ask and nothing would ever come of it. Costs nothing extra — no AI request, just two more lines in the prompt."
+            value={st.intimateAgencyEnabled}
+            onChange={(v) => set('intimateAgencyEnabled', v)}
           />
         </FeatureGroup>
       )}

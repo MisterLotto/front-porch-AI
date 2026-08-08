@@ -79,6 +79,41 @@ class RealismSettings with SettingsBase {
   /// about caution, not cost.
   bool _standingMoodEnabled = false;
 
+  /// Whether a character ACTS on her authored intimate preferences — pursues
+  /// what she warms to, in her own register, and turns down what she is not.
+  ///
+  /// HARD DEPENDENCY ON THE REALISM ENGINE, and unusually it is a real one
+  /// rather than an inherited gate. The feature is a loop: she asks, the user
+  /// answers, and being refused or indulged moves her mood, which is what she
+  /// carries into the next reply. The judge that scores that answer IS the
+  /// engine (`realism_prompt_builder.preferencesBlock` reaches the relationship
+  /// AND emotional-state evals). With the engine off she would ask for things
+  /// and nothing would ever come of it — half a feature, and the worse half.
+  /// So this is gated on realism at the point of use, not merely chipped as
+  /// depending on it.
+  ///
+  /// Defaults OFF. It changes how a character behaves in intimate scenes quite
+  /// noticeably — she initiates, where before she only responded — and that is
+  /// the user's call to make, not a default to inherit. Costs NOTHING per turn:
+  /// two prompt sentences, no extra model call.
+  bool _intimateAgencyEnabled = false;
+
+  /// Global Chaos Mode default. Chaos had NO global switch at all — it was
+  /// per-chat only, seeded from the card — so Porch Life could only apologise
+  /// for it in a footer instead of offering it.
+  ///
+  /// Depends on NOTHING, and that is a finding rather than an assumption: the
+  /// 2026-08-07 audit (docs/design/feature-independence.md) confirmed Chaos
+  /// runs fully with the Realism Engine off. It is filed under realism in the
+  /// source tree for location only.
+  ///
+  /// OR-override, the [_nsfwCooldownDefault] shape rather than the
+  /// [_needsSimDefault] AND-gate: a card that asks for Chaos still gets it, and
+  /// switching this on makes new chats start with it. Defaults FALSE — Chaos
+  /// injects random events into a story and that is nobody's default.
+  /// The per-chat sidebar switch still wins for an individual story.
+  bool _chaosModeDefault = false;
+
   /// Hand-offs between characters in a group (Pockets). Off by default and
   /// gated on Pockets, because it asks the model for something strictly harder
   /// than the rest of the record: not just WHAT changed but WHO now has it. A
@@ -140,6 +175,13 @@ class RealismSettings with SettingsBase {
 
   /// See [_standingMoodEnabled]. Free: no model call, ever.
   bool get standingMoodEnabled => _standingMoodEnabled;
+
+  /// See [_intimateAgencyEnabled]. Free, and hard-gated on the engine at the
+  /// point of use — the switch alone is not enough to turn it on.
+  bool get intimateAgencyEnabled => _intimateAgencyEnabled;
+
+  /// See [_chaosModeDefault]. Depends on nothing.
+  bool get chaosModeDefault => _chaosModeDefault;
 
   /// See [_pocketTransfersEnabled]. Costs nothing extra — it rides the Pockets
   /// pass that is already running.
@@ -204,6 +246,9 @@ class RealismSettings with SettingsBase {
     _pocketsEnabled = prefs?.getBool(k('pockets_enabled')) ?? false;
     _standingMoodEnabled =
         prefs?.getBool(k('standing_mood_enabled')) ?? false;
+    _intimateAgencyEnabled =
+        prefs?.getBool(k('intimate_agency_enabled')) ?? false;
+    _chaosModeDefault = prefs?.getBool(k('chaos_mode_default')) ?? false;
     _pocketTransfersEnabled =
         prefs?.getBool(k('pocket_transfers_enabled')) ?? false;
     _adultThemesExplicit = prefs?.getBool(k('adult_themes_enabled'));
@@ -335,6 +380,18 @@ class RealismSettings with SettingsBase {
   Future<void> setStandingMoodEnabled(bool value) async {
     _standingMoodEnabled = value;
     await prefs?.setBool(k('standing_mood_enabled'), value);
+    notify();
+  }
+
+  Future<void> setIntimateAgencyEnabled(bool value) async {
+    _intimateAgencyEnabled = value;
+    await prefs?.setBool(k('intimate_agency_enabled'), value);
+    notify();
+  }
+
+  Future<void> setChaosModeDefault(bool value) async {
+    _chaosModeDefault = value;
+    await prefs?.setBool(k('chaos_mode_default'), value);
     notify();
   }
 
