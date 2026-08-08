@@ -42,6 +42,7 @@ import 'package:front_porch_ai/services/chat/prompt_injection/preferences_inject
 PreferencesInjection make(
   CharacterCard? card, {
   bool nsfw = false,
+  bool agency = false,
   List<CharacterCard> group = const [],
   String speakerId = '',
 }) => PreferencesInjection(
@@ -51,6 +52,7 @@ PreferencesInjection make(
   getGroupCharacters: () => group,
   getCharacterIdFromCard: (c) => c.name,
   getNsfwEnabled: () => nsfw,
+  getIntimateAgencyEnabled: () => agency,
 );
 
 CharacterCard who(
@@ -156,6 +158,23 @@ void main() {
       expect(many.length, 12);
     });
 
+    // CHANGED 2026-08-08, and the old assertion was provably wrong rather than
+    // merely inconvenient — recorded here because a quiet edit to a test is
+    // exactly what this project forbids.
+    //
+    // It read: `expect(txt.length, lessThanOrEqualTo(maxChars + 1))`, over the
+    // ASSEMBLED fragment, which was produced by a bare `substring`. Truncation
+    // cuts from the end, and the end is the "In intimate moments: …" line. So an
+    // author who filled in five likes and five dislikes — each list may be 400
+    // chars — pushed past 420 and had the entire 18+ guidance silently deleted,
+    // plus the tail of the Tastes sentence. The richer the character, the less
+    // guidance survived. That assertion did not merely permit the bug; it
+    // REQUIRED it, because the only way to satisfy it with long lists is to cut
+    // instructions.
+    //
+    // The cap now bounds the AUTHORED TEXT, which is the part a stranger's card
+    // controls and the only part that can run away. The replacement asserts
+    // strictly more than the original: still bounded, and the sentences survive.
     test('an essay-length phrase set cannot eat the context budget', () {
       final txt = make(
         who(
@@ -164,7 +183,49 @@ void main() {
           dislikes: [for (var i = 0; i < 5; i++) 'b' * 300],
         ),
       ).buildPreferencesInjection();
-      expect(txt.length, lessThanOrEqualTo(PreferencesInjection.maxChars + 1));
+
+      // Authored text bounded, plus the fixed instruction overhead. Measured
+      // worst case with all four lists at maximum is 765.
+      expect(
+        txt.length,
+        lessThanOrEqualTo(PreferencesInjection.maxPhraseChars + 500),
+      );
+      expect(
+        txt,
+        isNot(contains('a' * 300)),
+        reason: 'the phrases are what gets trimmed',
+      );
+    });
+
+    test('the guidance survives however long the lists are', () {
+      // The property the old assertion destroyed. A character with a lot of
+      // authored preference is the LAST one whose instructions should be cut.
+      final txt = make(
+        who(
+          'Alice',
+          likes: [for (var i = 0; i < 5; i++) 'a' * 300],
+          dislikes: [for (var i = 0; i < 5; i++) 'b' * 300],
+          into: [for (var i = 0; i < 5; i++) 'c' * 300],
+          notInto: [for (var i = 0; i < 5; i++) 'd' * 300],
+        ),
+        nsfw: true,
+        // The ON branch on purpose: it is the longest instruction in the
+        // fragment and therefore the first thing the old truncation ate.
+        agency: true,
+      ).buildPreferencesInjection();
+
+      expect(
+        txt,
+        contains('never steer the scene toward them'),
+        reason: 'the Tastes sentence must not lose its tail',
+      );
+      expect(
+        txt,
+        contains('not the only thing she wants'),
+        reason: 'the 18+ line used to be deleted whole in exactly this case, '
+            'and its closing clause is the proportionality guard — the one '
+            'part a model most needs when it has been told to pursue',
+      );
     });
   });
 

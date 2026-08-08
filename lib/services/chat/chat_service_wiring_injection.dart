@@ -414,6 +414,15 @@ extension ChatServiceWiringInjection on ChatService {
       // than relying on the model's discretion.
       getNsfwEnabled: () =>
           _storageService.realismSettings.adultThemesEnabled,
+      // BOTH halves resolved here, so there is exactly one place the decision
+      // is made. The engine half is a HARD dependency and not the usual
+      // inherited gate: the feature is a loop — she asks, the user answers,
+      // and being refused moves her mood into the next reply — and the judge
+      // that scores the answer IS the engine. With realism off she would ask
+      // for things and nothing would ever come of it.
+      getIntimateAgencyEnabled: () =>
+          _storageService.realismSettings.intimateAgencyEnabled &&
+          _realismEnabled,
     );
   }
 

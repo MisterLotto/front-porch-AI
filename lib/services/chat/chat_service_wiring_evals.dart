@@ -314,6 +314,13 @@ extension ChatServiceWiringEvals on ChatService {
           dislikes: ext.dislikes,
           intimateInto: adult ? ext.intimateInto : const [],
           intimateNotInto: adult ? ext.intimateNotInto : const [],
+          // Same resolution as the injection's gate (wiring_injection): the
+          // switch AND the engine. The engine is implied here — an eval only
+          // runs with realism on — but it is stated so the two call sites read
+          // identically and cannot drift.
+          intimateAgency:
+              _storageService.realismSettings.intimateAgencyEnabled &&
+              _realismEnabled,
         );
       },
       setObjective:

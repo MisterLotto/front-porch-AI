@@ -215,12 +215,18 @@ class RealismPromptBuilder {
   /// Empty in, empty out: a character with no authored preferences costs their
   /// eval exactly what it cost before this existed — the same contract the
   /// ambition roster keeps.
+  /// [intimateAgency] mirrors the After Dark "Acts on desires" switch (already
+  /// AND-ed with the engine by the caller). It adds the refusal clause below —
+  /// omitted when off, because a judge told to weigh "she asked and was
+  /// refused" against a character who never asks is being asked to score
+  /// something that did not happen.
   static String preferencesBlock({
     required String charName,
     List<String> likes = const [],
     List<String> dislikes = const [],
     List<String> intimateInto = const [],
     List<String> intimateNotInto = const [],
+    bool intimateAgency = false,
   }) {
     // ONE shared cleanup with the behavioural injection (preference_phrases.dart)
     // so what the judge weighs and what the character was told cannot diverge —
@@ -244,7 +250,24 @@ class RealismPromptBuilder {
         'kindly meant. When one of these is what actually moved a score, SAY SO '
         'in that score\'s reason, naming it — the user sees those reasons and '
         'they are how a number stops being arbitrary. Do not invent preferences '
-        'beyond these.\n\n';
+        'beyond these. '
+        // The other half of "she acts on her desires" (preferences_injection).
+        // She can now ask for what she wants; this is what makes the answer
+        // MATTER. Without it a refusal reads to the judge as an ordinary line
+        // of dialogue, emotion barely moves, and the next turn's mood line
+        // shows a character who shrugged off being turned down — which is not
+        // a character, it is a vending machine.
+        //
+        // Direction follows personality on purpose. "Refused, therefore angry"
+        // would make every character the same character; the whole point of
+        // the maintainer's example is that a DOMINANT one gets angry where a
+        // gentler one goes quiet.
+        '${intimateAgency ? 'When $charName asked for one of these and was refused — or was '
+                  'given it — that is a real moment, not a neutral exchange. Score it '
+                  'as one, and let the direction fit who they are: pressed and turned '
+                  'down reads as anger or cold distance in a dominant character, and '
+                  'as hurt or retreat in a gentler one. ' : ''}'
+        '\n\n';
   }
 
   static String _subjectivityFrame(
