@@ -69,9 +69,21 @@ class ClimaxEval {
   /// almost never answers true, and the Lust bar stays pinned at the top
   /// forever. This text is the one that shipped with the original detector,
   /// kept verbatim because it was already tuned.
+  /// [recentExchange] is the last few turns, formatted `sender: text` — the
+  /// SAME context the needs-impact eval gave this question before Afterglow
+  /// stood on its own, and dropping it was a real regression that CI caught.
+  ///
+  /// It matters because of who narrates a climax. In roleplay the user very
+  /// often writes it — "the wave crests over us both" — and the character's own
+  /// reply is a half-line of aftermath. Shown only that reply, the model
+  /// answers false and the refractory never starts, which is the exact symptom
+  /// this whole fix set out to remove. The verdict is still about the
+  /// CHARACTER, and still judged on a reply that already exists; the exchange
+  /// is context for reading it, not a second thing to score.
   static String buildPrompt({
     required String charName,
     required String reply,
+    required String recentExchange,
     required bool toolsMode,
   }) =>
       'Read the scene below and answer one question about $charName.\n\n'
@@ -87,6 +99,7 @@ class ClimaxEval {
       '(~6-7 for an intense, drawn-out or repeated climax; ~3 for a quick one). '
       'When false, 0.\n\n'
       'The scene:\n$reply\n\n'
+      '${recentExchange.trim().isEmpty ? '' : 'Recent exchange for context:\n$recentExchange\n\n'}'
       '${toolsMode ? 'Report by calling the $kClimaxTool tool. Use ONLY the tool — no plain-text reply.' : 'Respond with ONLY a flat JSON object containing "is_climax" and '
             '"refractory_turns". Do NOT use markdown code blocks — raw JSON only.'}';
 
@@ -112,6 +125,7 @@ class ClimaxEval {
   Future<int?> detect({
     required String charName,
     required String reply,
+    String recentExchange = '',
   }) async {
     if (reply.trim().isEmpty) return null;
     try {
@@ -119,8 +133,12 @@ class ClimaxEval {
         await fire(
           debugLabel: 'climax',
           tools: tools,
-          buildPrompt: ({required bool toolsMode}) =>
-              buildPrompt(charName: charName, reply: reply, toolsMode: toolsMode),
+          buildPrompt: ({required bool toolsMode}) => buildPrompt(
+            charName: charName,
+            reply: reply,
+            recentExchange: recentExchange,
+            toolsMode: toolsMode,
+          ),
         ),
       );
     } catch (e) {

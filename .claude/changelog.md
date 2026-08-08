@@ -11947,3 +11947,61 @@ appear. 8 new guards in a test that builds ONE block with 15 of the 17 fragments
 live, which nothing in the suite did before. Negative-checked by moving each
 relocated fragment back to where it was: position, fixation, standing mood and
 weather each redden the full-sequence test plus their own named inversion.
+
+---
+
+## 2026-08-08 — CI red since e943ba2: Afterglow's climax check lost its scene
+
+**Files:** `lib/services/chat/climax_eval.dart` (required `recentExchange`) ·
+`lib/services/chat/chat_service_climax.dart` (builds the same 3-message window
+the needs eval uses) · `integration_test/support/fake_backend.dart` (a branch
+for the standalone climax eval) · `test/services/chat/afterglow_independence_test.dart`
+(one added argument — signature only) ·
+`test/services/chat/climax_scene_context_test.dart` (new, 6)
+
+**Reported by the maintainer:** CI failing on every push. It was — and it
+started BEFORE this session's pushes, at `e943ba2` (the Afterglow independence
+fix). `E2E smoke (4/5)` failed on macOS, Windows AND Linux, deterministically,
+on `climax_refractory_test.dart:131`: expected a 6-turn refractory, got 0.
+
+**The real bug — a narrowed prompt.** Climax detection used to ride the
+needs-impact eval, whose prompt carries the reply AND a
+`Recent exchange for context:` block of the last three messages. Extracting it
+into its own pass kept the first and silently dropped the second. The E2E
+fixture is exactly the case that breaks: the USER narrates the climax ("the wave
+crests over us both") and the character answers with aftermath ("Closer now, and
+closer still."). Shown only that reply the model answers false, no refractory
+starts, and Afterglow does nothing — the precise symptom the decoupling existed
+to remove. That shape is not a fixture quirk; it is how much intimate roleplay
+is written, which is why the context was in the prompt to begin with.
+`recentExchange` is now a REQUIRED named parameter, so it cannot be dropped
+silently a second time.
+
+**The second half — the test double had not kept up.** `fake_backend.dart`
+detects evals by scanning the prompt for field names and only produced
+`is_climax`/`refractory_turns` inside its `hunger_delta` branch — the needs
+eval. The standalone call matched nothing, fell through to the CHAT branch, was
+answered with prose, and also inflated `chatRequests`, the counter that file's
+own comment is careful to keep trustworthy. It has its own branch now, keyed on
+`"is_climax"`, with the verdict moved out of the needs branch the app no longer
+asks.
+
+**Why the unit suite never saw it.** Every existing guard was about the criteria
+text, the transport, or WHERE the pass runs. None asked what scene it is shown.
+The new file asks exactly that.
+
+**Test files touched, and why** (both flagged for the maintainer):
+`afterglow_independence_test.dart` gained ONE argument because a required
+parameter was added — no assertion changed. `integration_test/support/
+fake_backend.dart` gained a branch so the double answers a call the app now
+makes — no assertion changed, and `climax_refractory_test.dart` itself is
+untouched. Both are protected paths; a PR carrying them needs the
+`approved-test-change` label.
+
+**Gates:** analyze 0 · 3202 unit tests · 94 goldens · 6 new guards,
+negative-checked by restoring the dropped exchange line (2 red) and by emitting
+the context header with nothing under it (2 red). **The E2E itself could not be
+run here** — the app builds and launches under xvfb in this container but the
+test harness loses it about a second in, with CI's exact invocation. That is the
+same blind spot that let this ship; CI is the verification for the fake-backend
+half.

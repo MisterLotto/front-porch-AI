@@ -59,6 +59,7 @@ void main() {
       final p = ClimaxEval.buildPrompt(
         charName: 'Jennifer',
         reply: 'she shuddered and went limp',
+        recentExchange: '',
         toolsMode: false,
       );
 

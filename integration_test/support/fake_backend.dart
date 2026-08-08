@@ -440,13 +440,24 @@ class FakeBackendServer {
       eval['social_delta'] = 5;
       eval['bladder_delta'] = -3;
       eval['comfort_delta'] = 2;
-      // Climax verdict (maintainer-approved addition, 2026-08-03). The field
-      // is REQUIRED in the tool schema since the is_climax fix, so the fake
-      // must answer it like a compliant model. TRUE only when the scene the
-      // eval quotes contains the marker phrase 'the wave crests' — which only
-      // climax_refractory_test.dart ever sends — so every pre-existing suite
-      // keeps byte-identical behavior (an explicit false where an implicit
-      // false-by-omission used to be).
+    }
+    // Climax detection. Its OWN eval since Afterglow was decoupled from Needs
+    // (e943ba2) — it used to ride the needs-impact eval, which is why the
+    // verdict was produced in the hunger_delta branch above.
+    //
+    // Without this branch the standalone call matches nothing, falls through to
+    // the CHAT branch, is answered with prose, and detection silently fails —
+    // which is exactly how it reached CI. Worse, it also incremented
+    // chatRequests, the counter the scene-time comment below is careful to keep
+    // trustworthy.
+    //
+    // TRUE only when the scene the eval quotes contains the marker phrase 'the
+    // wave crests', which only climax_refractory_test.dart ever sends, so every
+    // other suite keeps its existing behavior. Note the phrase arrives in the
+    // "Recent exchange for context" section, not the reply: the user narrates
+    // the climax and the character answers with aftermath, which is the common
+    // shape in roleplay and the reason that context is in the prompt at all.
+    if (lastContent.contains('"is_climax"')) {
       final climax = lastContent.contains('the wave crests');
       eval['is_climax'] = climax;
       eval['refractory_turns'] = climax ? 6 : 0;
