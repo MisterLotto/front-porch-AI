@@ -73,6 +73,10 @@ List<Widget> stoopStandardSections(
     stoopTextSection(context, 'Example dialogue', s('mes_example')),
     stoopAmbitionsSection(context, re),
     stoopPreferencesSection(context, re),
+    // Kept with the other two card-authored identity sections and ahead of the
+    // engine-gated pair below: what a character owns is theirs whether or not
+    // the downloader ever turns the Realism Engine on.
+    stoopWardrobeSection(context, re),
     stoopRealismSection(context, re),
     stoopNeedsSection(context, re),
     stoopLorebookSection(context, card, name),

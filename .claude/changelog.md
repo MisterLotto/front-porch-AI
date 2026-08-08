@@ -11659,3 +11659,48 @@ byte-identical) · web tsc + 59 tests + bundle rebuilt. 50 new guards.
 Negative-checked four ways: parseDisplay never splitting, cardJsonFrom emitting
 an empty record (the golden guard), the per-list cap dropped, and the widget's
 optional-pair gate forced true — each reddening a different, correct set.
+
+---
+
+## 2026-08-08 — Wardrobe on The Stoop (desktop + web), and a truncation bug
+
+**Files:** `lib/ui/pages/repository/stoop_identity_sections.dart`
+(`stoopWardrobeSection` + the `stoopPhrases` truncation fix) ·
+`lib/ui/pages/repository/stoop_card_sections.dart` (one insertion, covers solo
+cards AND group members) · `web_ui/src/pages/stoop/StoopCardPage.tsx`
+(`realismBlock()` extraction + the wardrobe section) ·
+`test/ui/stoop_wardrobe_section_test.dart` (new, 9) · `docs/Rawhide.md`
+
+**Why this section needed its own reader.** Its two neighbours are flat lists of
+strings, which `stoopPhrases` reads. `inventory` is a MAP of two lists whose
+entries may each be a bare string OR a `{name, state}` object. Handing that to
+`stoopPhrases` returns empty for every card ever uploaded — and does it
+SILENTLY, because a section that renders nothing is exactly what a card with no
+wardrobe looks like. The feature would have shipped looking correct and shown
+nothing forever.
+
+`Pockets.fromJson` is that reader, reused rather than reimplemented. It already
+tolerates both entry shapes, collapses whitespace, caps names at 60 chars, and
+bounds each list with `.take(8)` on the RAW list — the same
+hostile-upload concern `_maxStoopPhrases` exists for. It also means the Stoop
+advertises exactly the items a download would honour, never a longer list the
+app would then trim.
+
+**Pre-existing bug fixed on the way past.** `stoopPhrases`' truncation branch
+was written `'\${s.substring(...)}…'` inside a NON-raw string, so the `$` was
+escaped and no interpolation happened: any phrase over 160 characters rendered
+on the Stoop panel as the literal text `${s.substring(0,
+_maxStoopPhraseChars).trimRight()}…`. It survived because every card anyone
+looked at was under the limit. Found by a scout agent and verified against the
+raw bytes before touching it. Fixed here because the wardrobe section shares the
+row-rendering path, and pinned by a 200-character case.
+
+**Web parity** reuses `inventoryToChips` — the same converter the web editor
+uses — so both Stoop clients and both editors agree. The three-hop
+`extensions.front_porch.realism_engine` walk was extracted to `realismBlock()`
+rather than pasted a second time.
+
+**Gates:** analyze 0 · 3159 unit tests · 94 goldens · web tsc + 59 tests +
+bundle rebuilt. 9 new guards, negative-checked three ways — restoring the
+escaped-dollar bug (1 red), reading inventory through `stoopPhrases` (6 red),
+and dropping item condition (1 red).

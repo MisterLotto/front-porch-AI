@@ -18,7 +18,9 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/ui/pages/repository/stoop_collapsible.dart';
+import 'package:front_porch_ai/services/chat/chat.dart' show Pockets;
+import 'package:front_porch_ai/ui/pages/repository/repository.dart'
+    show StoopCollapsible;
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// The Stoop card panel's IDENTITY sections — the card-authored phrase lists
@@ -55,8 +57,13 @@ List<String> stoopPhrases(Object? raw) {
     final s = a.replaceAll(RegExp(r'\s+'), ' ').trim();
     if (s.isEmpty) continue;
     out.add(
+      // The `$` was backslash-escaped here, in a NON-raw string, so this branch
+      // emitted the literal text `${s.substring(...)}…` instead of the phrase.
+      // Only a phrase over 160 characters reaches it, which is why it survived:
+      // every card anyone looked at was under the limit, and the one that was
+      // not would have shown a line of Dart source to whoever opened it.
       s.length > _maxStoopPhraseChars
-          ? '\${s.substring(0, _maxStoopPhraseChars).trimRight()}…'
+          ? '${s.substring(0, _maxStoopPhraseChars).trimRight()}…'
           : s,
     );
   }
@@ -155,6 +162,49 @@ Widget stoopPreferencesSection(BuildContext context, Map<String, dynamic> re) {
         if (dislikes.isNotEmpty) ...[
           _subLabel(context, 'Put off by'),
           ..._phraseRows(context, '✕', dislikes),
+        ],
+      ],
+    ),
+  );
+}
+
+/// What the character starts a chat already wearing and carrying.
+///
+/// Not read through [stoopPhrases] like its neighbours, and it cannot be: this
+/// field is a MAP of two lists whose entries may each be a bare string OR a
+/// `{name, state}` object, so the phrase reader returns empty for every card
+/// forever — silently, since an absent section looks exactly like a card whose
+/// author wrote no wardrobe.
+///
+/// [Pockets.fromJson] is that reader, and reusing it rather than writing a
+/// map-aware coercion here is the point: it already tolerates both entry
+/// shapes, already collapses whitespace, already caps names at 60 characters,
+/// and already bounds each list with `.take(8)` on the RAW list — which is what
+/// keeps a hostile upload with fifty thousand entries from freezing the panel,
+/// the same concern `_maxStoopPhrases` exists for. It also means the Stoop
+/// shows a downloader exactly the items the runtime would honour, rather than a
+/// longer list the app would then trim.
+///
+/// Ungated, like the two sections above: a wardrobe travels with the card and
+/// works the moment it is downloaded, independent of the Realism Engine.
+Widget stoopWardrobeSection(BuildContext context, Map<String, dynamic> re) {
+  final p = Pockets.fromJson(re['inventory']);
+  final worn = p.wornDisplay;
+  final carrying = p.carryingDisplay;
+  if (worn.isEmpty && carrying.isEmpty) return const SizedBox.shrink();
+  return StoopCollapsible(
+    title: 'Pockets & Wardrobe (${worn.length + carrying.length})',
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (worn.isNotEmpty) ...[
+          _subLabel(context, 'Wearing'),
+          ..._phraseRows(context, '🧥', worn),
+        ],
+        if (worn.isNotEmpty && carrying.isNotEmpty) const SizedBox(height: 8),
+        if (carrying.isNotEmpty) ...[
+          _subLabel(context, 'Carrying'),
+          ..._phraseRows(context, '🎒', carrying),
         ],
       ],
     ),
