@@ -29,6 +29,29 @@ export 'package:front_porch_ai/services/remote_model_info.dart';
 
 /// LLM backend that connects to OpenAI-compatible APIs
 /// (OpenRouter, Nano-GPT, vLLM, LM Studio, etc).
+/// Models that reject `reasoning:{enabled:false}` because their reasoning
+/// cannot be switched off. Learned from the provider's own 400 (see the payload
+/// builder), remembered for the process so the rejection is paid once per model
+/// rather than on every eval of every turn. Static because the model outlives
+/// any one service instance — a backend switch and back must not re-learn it.
+final Set<String> _mandatoryReasoningModels = <String>{};
+
+/// Does this provider error mean "you may not switch my reasoning off"?
+///
+/// Matched on the message rather than a status code because 400 covers every
+/// malformed-request case; keyed on the two words every provider phrasing so
+/// far shares. Nano-GPT: "Kimi K2 Thinking is a mandatory-reasoning model. Use
+/// reasoning.exclude=true to hide reasoning output." Deliberately narrow — a
+/// false positive here would silently stop us disabling reasoning on a model
+/// that supports it, which costs the user tokens on every eval forever.
+bool _isMandatoryReasoningRejection(String msg) {
+  final m = msg.toLowerCase();
+  return m.contains('reasoning') &&
+      (m.contains('mandatory') ||
+          m.contains('cannot be disabled') ||
+          m.contains('exclude=true'));
+}
+
 class OpenRouterService extends LLMService {
   String _apiUrl;
   String _apiKey;
@@ -302,6 +325,29 @@ class OpenRouterService extends LLMService {
       // handles "Request model reasoning" = off for OpenRouter models.
       if (!params.reasoningEnabled) {
         reasoning['exclude'] = true;
+        // MANDATORY-REASONING MODELS REJECT `enabled:false` OUTRIGHT.
+        //
+        // The two keys do different jobs: `enabled:false` stops the model
+        // thinking (saves tokens), `exclude:true` merely keeps the thoughts out
+        // of the response. A model whose reasoning cannot be switched off 400s
+        // the first and is perfectly happy with the second — its own error says
+        // so: "Kimi K2 Thinking is a mandatory-reasoning model. Use
+        // reasoning.exclude=true to hide reasoning output."
+        //
+        // This is not cosmetic. EVERY eval suppresses reasoning (they want flat
+        // JSON, not think-blocks), so on such a model every judge 400s, twice
+        // each with the retry — relationship, emotional, narrative, needs-impact
+        // and objective-completion all fail, and the maintainer sees "no deltas,
+        // emotion sticking across messages" with bond_delta=null on every turn
+        // while needs quietly fall back to plain decay. Reported 2026-08-08.
+        //
+        // Learned per model rather than dropped for everyone: `enabled:false` is
+        // what actually saves money on models that honour it, and silently
+        // paying for discarded reasoning tokens on every eval, forever, is a bill
+        // the user never agreed to. One rejection per model is the whole cost.
+        if (_mandatoryReasoningModels.contains(modelName)) {
+          reasoning.remove('enabled');
+        }
       }
       payload['reasoning'] = reasoning;
     }
@@ -448,6 +494,21 @@ class OpenRouterService extends LLMService {
           final errJson = jsonDecode(body);
           errorMsg = errJson['error']?['message'] ?? errorMsg;
         } catch (_) {}
+        // A mandatory-reasoning model refusing `reasoning:{enabled:false}`.
+        // Remember it and RETRY ONCE right here rather than just throwing:
+        // without the retry the caller still loses this eval, and for the
+        // reported case that is every judge on the turn the user is waiting on.
+        // The rejection then costs one round trip for the life of the process.
+        if (!_mandatoryReasoningModels.contains(modelName) &&
+            _isMandatoryReasoningRejection(errorMsg)) {
+          _mandatoryReasoningModels.add(modelName);
+          debugPrint(
+            '[RemoteAPI] $modelName cannot disable reasoning — retrying with '
+            'reasoning.exclude only (remembered for this session)',
+          );
+          yield* generateStream(params);
+          return;
+        }
         throw Exception('API error: $errorMsg');
       }
 

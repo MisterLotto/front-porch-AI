@@ -421,6 +421,41 @@ extension ChatServiceReprocess on ChatService {
           );
         }
 
+        // ── Where she was BEFORE the reply being discarded ────────────────
+        //
+        // Last, so it wins: everything above rebuilds the baseline from the
+        // PREVIOUS accepted message, and for spatial stance that is a
+        // second-hand copy at best and missing entirely at worst. Posture is
+        // written after generation, so the rejected message's own snapshot
+        // was overwritten with where its reply left her — the receipt stamped
+        // beside it (see kSpatialStancePreTurn) is the only surviving record
+        // of where the turn began, and it belongs to THIS turn rather than
+        // the one before it.
+        //
+        // It is also the only baseline the FIRST reply of a chat has. The
+        // look-back above needs a previous accepted bot message carrying a
+        // realism snapshot; on turn one there is only the greeting, and the
+        // greeting is stamped on exactly one entry path (1:1 + startNewChat +
+        // a card with no frontPorchExtensions). Every other opening — the
+        // ordinary open-a-character path, any Front Porch or Stoop card, any
+        // group — found nothing to restore and left the discarded reply's
+        // position standing, so each reroll wrote the next attempt from a
+        // place invented by the reply the user had just rejected. Two rerolls
+        // from one point disagreed, which CLAUDE.md names as a rewind bug by
+        // definition.
+        //
+        // 1:1 and group alike: the receipt rides the message, and in a group
+        // the persist immediately below files the restored value into the
+        // rejected speaker's own _groupRealism entry.
+        final preTurnStance = lastMsg.activeMetadata?[kSpatialStancePreTurn];
+        if (preTurnStance is String) {
+          _relationshipService.setSpatialStance(preTurnStance);
+          debugPrint(
+            '[Realism:Regen] Rewound spatial stance to the pre-reply '
+            'position: "${_relationshipService.spatialStance}"',
+          );
+        }
+
         if (isGroupHostRegen) {
           // Persist the reverted baseline into the speaker's _groupRealism
           // entry and drop the impersonation. Decay + re-eval for the regen

@@ -69,7 +69,7 @@ part 'realism_evals.one_shot.dart';
 /// ChatService owns via late final (after _llmEvalEngine) + thins/delegations at
 /// *every* prior call site for the 5 _evaluate*Call (full excision of moved code
 /// from engine + old thin bodies). Some coordination (setObjective thin for auto
-/// proposal in narr/oneShot, physical posture delegate to timeService which
+/// proposal in narr/oneShot, the clock + posture delegates to timeService which
 /// receives fire cbs) may stay thin/coordinated in god per precedent (qualify).
 ///
 /// Ctor receives state via granular callbacks (modeled on steps 6-9b + needs_impact:

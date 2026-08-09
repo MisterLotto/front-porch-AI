@@ -711,6 +711,18 @@ extension ChatServiceSessionManage on ChatService {
     // Skip if character already has pre-seeded V2.5 extensions — those baseline
     // values are intentional and should not be overwritten by auto-eval.
     // (See also: setActiveCharacter 0-session path comment for why direct imports rely on retro path.)
+    //
+    // THE OPENING POSITION DOES NOT RIDE THIS GATE, and must never be wired to
+    // it. Both conditions below are about AUTHORED baselines — bond, trust,
+    // emotion, the numbers a creator set on the card — which is why an
+    // extensions-bearing card is excluded and why a group (whose baselines live
+    // in defaultMemberRealismState, not on a card) is too. Spatial stance is
+    // not authored anywhere: no card, group or Stoop download carries one, so
+    // there is nothing here to protect and these gates only ever hid the seed
+    // from the majority of real chats. It lives in the pre-turn dance instead
+    // (_seedOpeningPosture), which reaches every card shape, every group
+    // member, all four ways a conversation can start, and a reload — the seed
+    // this baseline fires is a head start for the sidebar, not the mechanism.
     if (_activeGroup == null &&
         _messages.isNotEmpty &&
         _activeCharacter!.frontPorchExtensions == null) {

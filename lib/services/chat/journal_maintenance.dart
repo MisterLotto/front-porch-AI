@@ -181,10 +181,30 @@ class JournalMaintenance {
     try {
       final messages = getMessages();
       var start = getCursor().clamp(0, messages.length);
-      if (start == 0 && messages.length > JournalPhysics.kFirstPassCap) {
-        // Virgin journal on an existing long chat: first pass reads only the
-        // recent tail instead of the whole history (older turns stay
-        // reachable through RAG; the recap catches the character up fast).
+      // THE WINDOW IS CAPPED ON EVERY PASS, not just a virgin one.
+      //
+      // This cap used to be gated on `start == 0`, so it protected a fresh
+      // journal on a long chat and nothing else. That made the pass a one-way
+      // trap, because the cursor only advances when a call SUCCEEDS (see the
+      // `anySucceeded` guard below): one failed pass — a timeout, a model swap,
+      // a backend hiccup — left the cursor behind, the next pass read from that
+      // same stale cursor to now, the window grew, and a bigger window fails
+      // more easily. Every failure made the next failure more likely, forever.
+      //
+      // Found in the maintainer's own database: a 9,488-message chat with the
+      // cursor stuck at 590, i.e. every pass was trying to send 8,898 messages
+      // (~4.37 MILLION tokens) into an 8-16k context, every `journalInterval`
+      // messages, burning a model call each time and never once succeeding.
+      // A second chat sat at 2,168 messages behind (~720k tokens). Their
+      // recaps had been frozen since the day the first call failed, which is
+      // what a reasoning model then reports as "the recap contradicts the
+      // scene" — the memory system had silently stopped, not drifted.
+      //
+      // A pass that far behind cannot catch up in one call anyway, and the
+      // older material is exactly what RAG and the already-written cards are
+      // for. So the tail is bounded unconditionally and the cursor is allowed
+      // to jump the gap: falling behind must not be self-perpetuating.
+      if (messages.length - start > JournalPhysics.kFirstPassCap) {
         start = messages.length - JournalPhysics.kFirstPassCap;
       }
       if (start >= messages.length) {

@@ -267,16 +267,18 @@ extension ChatServiceGenerationBlocks on ChatService {
 
     // Build summary block if available. Role frame (spec §6): the recap is
     // the plot spine; the journal carries feelings; RAG carries exact lines.
-    // Leading \n: post-transcript blocks carry their own separator because
-    // history has no trailing newline (same convention as memoriesBlock).
-    // The "not new prose" clause is the recap's anti-echo guard for its
-    // post-transcript seat (Grok review: a bare recap right before the
-    // reply is narrative-continue bait — models restate it).
-    if (_summary.isNotEmpty) {
-      t.summaryBlock =
-          '\n[The story so far (a recap for memory — not new prose; do '
-          'not continue or restate it): $_summary]\n';
-    }
+    // The text lives in buildRecapBlock (prompt_injection/recap_injection.dart)
+    // — read its doc before changing the wording; the head is what scopes the
+    // recap to the past, and it is the only thing keeping this block from
+    // reading as a competing claim about NOW.
+    //
+    // It takes the recap and nothing else. It used to also take the lag in
+    // messages behind the Journal pass cursor (_summaryLastIndex vs
+    // _messages.length) to decide whether to stamp the block "the conversation
+    // has moved on since it was written" — that stamp measured as a NET
+    // NEGATIVE (models quoted it back as the contradiction) and was deleted,
+    // taking the derivation with it.
+    t.summaryBlock = buildRecapBlock(recap: _summary);
 
     // The Journal — the upcoming speaker's pinned + hot memory cards, with
     // their felt emotions (strictly this chat's cards; guests never

@@ -22,10 +22,10 @@ import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/chat/chat.dart';
+// memory_service.dart is not exported by the curated services.dart barrel, so
+// this one stays a direct import (documented exemption).
 import 'package:front_porch_ai/services/memory_service.dart';
-import '../journal_physics.dart';
-import '../journal_store.dart';
-import '../story_clock.dart';
 
 /// The Journal — prompt injection builder (docs/design/journal-memory.md
 /// §4.5). Tenth sibling of the prompt_injection builders: renders the
@@ -162,12 +162,42 @@ class JournalInjection {
     // trailing newline), so like memoriesBlock it carries its own separator;
     // the "not new messages" clause is the anti-echo guard for sitting near
     // the generation point.
+    //
+    // ── SCOPE WIDENED 2026-08-08 ────────────────────────────────────────────
+    // The clause used to name the recap and the transcript and stop there,
+    // which left the one collision that users actually hit unresolved: the
+    // character-state block ('realism', four sections BELOW this one in
+    // kStateZoneSectionIds) renders a bond/trust reading off engine scalars
+    // that can sit near zero while the cards underneath describe deep
+    // connection. Measured against Kimi 2.6, 14 conflict sentences named this
+    // pair — "the notes say 'no particular trust or distrust' but the journal
+    // entries show intense trust and connection".
+    //
+    // The primary fix is upstream, in relationship_injection.dart, which no
+    // longer asserts absences the cards can falsify. This is the second half:
+    // where the two still overlap, ONE of them has to be named the guide, and
+    // the Journal is already the block that carries that ruling. So the
+    // EXISTING clause is widened rather than a second rule being written — the
+    // state zone ships exactly one precedence frame (state_zone_frame.dart)
+    // plus this grandfathered one, and §6.1 bans per-block precedence lines by
+    // name.
+    //
+    // Two deliberate properties of the wording:
+    //  * It names a KIND ("any other note about where they stand"), not a
+    //    block. Role frames may not assume a block exists (§ degradation
+    //    floors) — the character-state block is absent whenever the Realism
+    //    Engine is off, and the recap is absent on a virgin chat.
+    //  * It is relationship-scoped on purpose. It does NOT reach the mood,
+    //    needs, position or story-clock lines in that same block: those are
+    //    live readings of RIGHT NOW, the cards are remembered moments, and a
+    //    memory has no business overruling where someone is standing.
     final text =
         "\n[$characterName's private journal — personal memories from "
         'this chat, in their own words. Not new messages, and nothing here '
-        'needs a reply. These shape how they feel and behave, and when they '
-        'cover the same moments as the story recap or the lines above, the '
-        'feelings here are the truer guide:\n'
+        'needs a reply. These shape how they feel and behave, and where '
+        'anything else covers the same ground — the story recap, the lines '
+        'above, or any other note about where $characterName stands with '
+        '$userName — the feelings here are the truer guide:\n'
         '${lines.join('\n')}'
         '$excerpt\n]\n';
     return (text: text, expandedPositions: expandedPositions);

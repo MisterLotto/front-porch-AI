@@ -19,6 +19,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/image_prompt/image_gen_context.dart';
+import 'package:front_porch_ai/utils/utils.dart' show stripQuotedSpeech;
 
 /// Single source of truth for turning (mode + style + raw context) into a high-quality,
 /// style-faithful image generation prompt.
@@ -169,18 +170,6 @@ class ImagePromptBuilder {
     return map[style] ?? '';
   }
 
-  /// Canonical dialogue strip (used by the customPrompt scene distillation
-  /// *and* the LLM post-process in _generateSmartWith). Deduped to avoid fragility drift.
-  /// Removes quoted spoken content so it never appears as literal text in the image prompt.
-  /// Static path is intentionally best-effort (keeps some narrative for robustness without LLM);
-  /// LLM path (via generateSmartPrompt) provides stronger visual-only distillation.
-  String _stripQuotedDialogue(String text) {
-    return text
-        .replaceAll(RegExp(r'["\u201c][^"\u201d]+["\u201d]'), '')
-        .replaceAll(RegExp(r'\s{2,}'), ' ')
-        .trim();
-  }
-
   /// Strips completed `<think>...</think>` and unclosed trailing `<think>` blocks from narrative sources.
   /// Prevents artifacts from thinking models or interrupted realism evaluations from leaking into
   /// image generation prompts. Applied to lastMessage/recent/scenario/world before visual distillation.
@@ -212,7 +201,7 @@ class ImagePromptBuilder {
   /// Combines quote strip + think strip + removal of known non-visual meta (interrupted evals, card import junk).
   /// Keeps the result as source material for distillation rather than raw dump.
   String _cleanNarrativeForVisual(String text) {
-    text = _stripQuotedDialogue(text);
+    text = stripQuotedSpeech(text);
     text = _stripThinkBlocks(text);
     text = text.replaceAll(
       RegExp(
@@ -430,7 +419,7 @@ class ImagePromptBuilder {
 
     // Best-effort removal of literal spoken dialogue from the model's output.
     // Uses the canonical deduped helper (also used by the static path).
-    prompt = _stripQuotedDialogue(prompt);
+    prompt = stripQuotedSpeech(prompt);
 
     return prompt;
   }

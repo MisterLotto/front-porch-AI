@@ -162,8 +162,9 @@ class RealismPromptBuilder {
 
   /// One-line snapshot of where the relationship currently stands, so the
   /// judge can tell wanted intimacy from premature intimacy. Used by the
-  /// relationship, emotional, and one-shot prompts (posture only where the
-  /// eval also maintains posture).
+  /// relationship, emotional, and one-shot prompts. [posture] is read-only
+  /// CONTEXT ("where she currently is"); no prompt here asks the judge to
+  /// produce a posture any more — that moved to the post-generation pass.
   static String standingContext({
     required String charName,
     required String userName,
@@ -355,10 +356,12 @@ class RealismPromptBuilder {
               'another advance is normal recovery, not a rejection, so do not score it negative unless '
               'something genuinely upsetting happened.\n' : ''}';
 
-  static String _postureSection(String charName) =>
-      '- "posture": $charName\'s current physical position and location (brief grounded phrase), or "none".\n'
-      '  Match the current scene and emotional state; keep natural continuity within a scene (no location '
-      'jumps); update on scene breaks, time jumps, or when the narrative context clearly shifted.\n';
+  // (There is no posture section here any more. Posture left the fused
+  // one-shot call on 2026-08-08 along with the four-call path's copy: it is a
+  // POST-generation question now — "where did this reply leave her" — and its
+  // one remaining prompt lives with the pass that asks it, in
+  // TimeService.evaluateTimeProgressAndPostureIfNeeded. Keeping a second
+  // rubric here would have been a rubric nobody fires.)
 
   // Scene-time fields ride the fused one-shot call (strict one-shot vs
   // normal parity — the dedicated per-turn scene-time eval asks the same).
@@ -587,7 +590,6 @@ class RealismPromptBuilder {
       '${_bondSection(charName, userName)}'
       '${_trustSection(charName, userName)}'
       '${_emotionSection(charName, allowedEmotionLabels)}'
-      '${_postureSection(charName)}'
       '${_sceneTimeSection()}'
       '${arousalEnabled ? _arousalSection(charName, userName, arousalLevel, refractoryTurnsLeft) : ''}'
       '${_objectiveSection(charName, userName, primaryObjective, ambitions)}'
@@ -602,7 +604,6 @@ class RealismPromptBuilder {
         'trust_reason',
         'emotion',
         'emotion_intensity',
-        'posture',
         'minutes_elapsed',
         'new_day',
         if (arousalEnabled) 'arousal_delta',

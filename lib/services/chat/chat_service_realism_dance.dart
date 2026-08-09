@@ -207,6 +207,47 @@ extension ChatServiceRealismDance on ChatService {
         return;
       }
 
+      // ── The opening position, and ONLY the opening one ────────────────
+      // Posture is a post-generation question now (it reads the reply), so
+      // the very first time a character is asked to speak there is nothing
+      // on record and the prompt would carry no "Position:" line at all —
+      // the maintainer's "the part that informs the character where they
+      // are when they start their turn".
+      //
+      // This is the single site that reaches EVERY opening: the 1:1 host
+      // (sendMessage calls us) and every group member (_generateResponse
+      // calls us once the speaker is picked), for cards with and without
+      // frontPorchExtensions, through New Chat, a first-ever open, or a
+      // reload of a session that predates the feature. Wiring the seed to
+      // the chat-entry paths instead is what shipped it to third-party
+      // cards only and skipped groups entirely.
+      //
+      // Per-speaker by construction: this runs AFTER the load above, so the
+      // stance it inspects and the stance it writes are this speaker's own
+      // `_groupRealism` slot, and the save below files it back there. No
+      // stance is shared across the cast and nobody inherits the first
+      // speaker's. See _seedOpeningPosture for why the empty-stance guard
+      // makes this an opening baseline and not a return to pre-generation
+      // evaluation.
+      // NEVER let the seed take the engine down with it. This method is
+      // `try { … } finally { … }` with NO catch, so anything thrown here
+      // propagates out and SKIPS every eval below — bond, trust, emotion,
+      // arousal, the lot. The seed is one fallible network call, and it was
+      // shipped awaited-raw on 2026-08-08; the maintainer hit it the same day
+      // ("no deltas, emotion is sticking across messages") and their Nina
+      // session shows the fingerprint exactly: characterEmotion left at the
+      // card default, trustLevel 0, spatialStance '', and the bond/arousal
+      // keys absent from realism_state altogether because the code that
+      // writes them never ran.
+      //
+      // An opening position is a nice-to-have baseline. The Realism Engine is
+      // not. A seed that fails must cost its own line and nothing else.
+      try {
+        await _seedOpeningPosture();
+      } catch (e) {
+        debugPrint('[Realism:Posture] Opening seed failed (continuing): $e');
+      }
+
       if (_relationshipService.pendingTrustRepair) {
         // Trust-repair eval (fires when trust dropped sharply). Was 1:1-only in
         // the old centralized block; now part of the single path so the host

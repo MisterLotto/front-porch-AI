@@ -64,8 +64,15 @@ extension ChatServiceRealismEvals on ChatService {
   Future<void> _evaluateEmotionalStateCall({void Function(String)? onChunk}) =>
       _realismEvals.evaluateEmotionalStateCall(onChunk: onChunk);
 
-  Future<void> _evaluatePhysicalStateCall({void Function(String)? onChunk}) =>
-      _realismEvals.evaluatePhysicalStateCall(onChunk: onChunk);
+  /// [postureOnly] is the post-generation spatial pass — the same eval leaf,
+  /// asked the one question that can only be answered once the reply exists.
+  Future<void> _evaluatePhysicalStateCall({
+    void Function(String)? onChunk,
+    bool postureOnly = false,
+  }) => _realismEvals.evaluatePhysicalStateCall(
+    onChunk: onChunk,
+    postureOnly: postureOnly,
+  );
 
   Future<void> _evaluateNarrativeCall({void Function(String)? onChunk}) =>
       _realismEvals.evaluateNarrativeCall(onChunk: onChunk);

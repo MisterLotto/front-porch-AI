@@ -167,13 +167,57 @@ extension ChatServiceGroupRealismHelpers on ChatService {
   ///    climax seconds after detection: the swipe's own metadata carried
   ///    climax_triggered=true while the session row still said 100/0/0.
   ///
+  /// SPATIAL STANCE joined them on 2026-08-08, when the posture eval moved to
+  /// the post-generation phase so it could read the reply. That moved a WRITE
+  /// across the snapshot boundary: without this line every message would
+  /// carry the position the character was in BEFORE her reply, and the regen
+  /// revert (which rebuilds its baseline from the previous accepted message's
+  /// snapshot) would hand the replacement turn a position one exchange stale
+  /// — the exact teleport the move was made to stop, reintroduced through the
+  /// rewind door. It is also what makes swiping between alternatives move the
+  /// character to where THAT alternative left her.
+  ///
+  /// SPATIAL STANCE ALSO LEAVES A PRE-TURN RECEIPT HERE, and that is not
+  /// bookkeeping — it is the other half of moving the write.
+  ///
+  /// The snapshot below is captured BEFORE generation, so up to the moment
+  /// this method runs `rs['spatialStance']` still holds the position the turn
+  /// STARTED from. Overwriting it with the post-reply position is right for
+  /// everything that reads a snapshot forwards (the next turn's baseline,
+  /// swipe navigation, delete time-travel) and fatal for the one thing that
+  /// reads it backwards: a REGENERATE has to put the stance back to what it
+  /// was before the reply it is discarding, and after the overwrite no record
+  /// of that value existed anywhere.
+  ///
+  /// The regen revert normally papers over this by restoring the PREVIOUS
+  /// accepted message's snapshot — whose post-reply stance is, by
+  /// construction, this turn's pre-reply stance. But the FIRST reply of a
+  /// chat has no previous accepted message: the greeting only carries a
+  /// snapshot on the one entry path that runs the greeting baseline eval
+  /// (1:1, `startNewChat`, card with NO frontPorchExtensions), which is
+  /// neither the common card shape, nor a group, nor the ordinary
+  /// open-a-character path. On every other opening the revert found nothing,
+  /// left the discarded reply's position in place, and each reroll then
+  /// grounded the next attempt in a position invented by the reply the user
+  /// had just thrown away — drifting further every press.
+  ///
+  /// So the pre-reply value is preserved beside the snapshot before it is
+  /// overwritten, in exactly the idiom `needs_pre_turn_vector` and
+  /// `pre_climax_arousal` already use for the two other post-generation
+  /// writes: the rejected message carries the receipt for its own rewind.
+  /// `putIfAbsent` is what makes Continue safe — a continuation restamps the
+  /// SAME message a second time, by which point the snapshot holds the
+  /// post-reply position, and recording that would quietly redefine "before
+  /// the turn" as "after it".
+  ///
   /// metadata and swipeMetadata[i] share one map instance, so this in-place
   /// update sticks through the regen swipe merge and persists. 1:1 and group
   /// alike: the speaker's scalars are loaded when this runs. Guests carry no
   /// realism_state, so this no-ops for them.
   void _restampRealismSnapshotPostGen(ChatMessage msg) {
     if (msg.isUser) return;
-    final rs = msg.activeMetadata?['realism_state'];
+    final meta = msg.activeMetadata;
+    final rs = meta?['realism_state'];
     if (rs is! Map) return;
     if (_needsSimEnabled &&
         _needsSimulation.vector.isNotEmpty &&
@@ -186,6 +230,13 @@ extension ChatServiceGroupRealismHelpers on ChatService {
       rs['arousalLevel'] = _nsfwService.arousalLevel;
       rs['cooldownTurnsRemaining'] = _nsfwService.cooldownTurnsRemaining;
       rs['cooldownTurnsTotal'] = _nsfwService.cooldownTurnsTotal;
+    }
+    if (rs.containsKey('spatialStance')) {
+      meta!.putIfAbsent(
+        kSpatialStancePreTurn,
+        () => rs['spatialStance'] as String? ?? '',
+      );
+      rs['spatialStance'] = _relationshipService.spatialStance;
     }
   }
 
@@ -260,7 +311,16 @@ extension ChatServiceGroupRealismHelpers on ChatService {
   /// (1:1 in `sendMessage` pre-tick; group in the realism dance pre-decay) — with
   /// the `realism_state` snapshot's needs vector as a fallback. No-op when there
   /// is no baseline or no net change (`message_bubble` hides zero-delta needs).
-  Future<void> _attachNeedsDeltaChipToLastMessage() async {
+  ///
+  /// Deliberately a pure in-memory mutator with NO save of its own. It used to
+  /// end in `_saveChat()`, and because it is the LAST thing the post-generation
+  /// block does, that made it the accidental persist for the whole phase — one
+  /// that never ran when Needs was off, silently costing the spatial stance
+  /// (and anything else written after the phase's first save) its trip to
+  /// disk. The persist now lives at the end of the block in
+  /// `chat_service_generation_postgen.dart`, where it covers every pass rather
+  /// than one feature's slice.
+  void _attachNeedsDeltaChipToLastMessage() {
     if (!_needsSimEnabled || _messages.isEmpty) return;
     var preVec = _coerceNeedsVector(
       _messages.last.activeMetadata?['needs_pre_turn_vector'],
@@ -280,7 +340,5 @@ extension ChatServiceGroupRealismHelpers on ChatService {
       '[Realism:Needs] Chip: ${needsDeltas.length} need delta(s) attached for '
       '${_messages.last.sender}',
     );
-    await _saveChat();
-    notifyListeners();
   }
 }

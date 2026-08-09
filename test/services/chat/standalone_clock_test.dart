@@ -215,7 +215,28 @@ void main() {
       expect(prompt, contains('${StoryClock.maxMinutesPerTurn}'));
     });
 
-    test('the engine prompt still carries all three, unchanged', () async {
+    // AMENDED 2026-08-08 (maintainer-approved test change). This asserted
+    // `contains('posture')` — that the engine's pre-generation clock call also
+    // asked the model where the character was standing. That is no longer true,
+    // and the old assertion now pins the BUG rather than the behaviour:
+    //
+    // posture was answered BEFORE the reply that moves her existed, so a
+    // position the character established in her own words could not reach a
+    // single prompt — the next turn's pre-generation judge overwrote it first.
+    // Meanwhile the prompt asserted the stale one imperatively ("Position: X —
+    // ground actions in this"). That is the teleporting the feature exists to
+    // prevent, produced by the feature itself. Maintainer ruling: "spatial
+    // awareness check should run post character message, otherwise how could it
+    // check where she moved". Posture now has its own post-generation pass.
+    //
+    // The replacement is deliberately stronger than a deletion: it pins the new
+    // split so a relapse is caught. The engine call keeps the realism context
+    // the standalone clock drops (that contrast is what this group is for), and
+    // must NOT ask for posture — asking would pay for a field that is discarded,
+    // and the next turn's answer would overwrite the post-generation one, which
+    // is exactly how the bug worked.
+    test('the engine prompt keeps its realism context but no longer asks '
+        'for posture', () async {
       final t = makeService();
       seedFixed(t);
       String? prompt;
@@ -226,9 +247,12 @@ void main() {
         capturePrompt: (p) => prompt = p,
       );
 
-      expect(prompt, contains('posture'));
+      // The contrast this group exists to draw: the engine call still carries
+      // the realism context the standalone clock strips.
       expect(prompt, contains('Relationship tension'));
       expect(prompt, contains('minutes_elapsed'));
+      // Posture belongs to the post-generation pass now, on BOTH paths.
+      expect(prompt, isNot(contains('posture')));
     });
 
     test('posture is never written while the engine is off', () async {

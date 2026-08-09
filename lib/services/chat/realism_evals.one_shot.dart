@@ -234,13 +234,15 @@ extension RealismEvalOneShot on RealismEvals {
         setEmotionIntensity(intensityMatch.group(1)!.toLowerCase().trim());
       }
 
-      final postureMatch = RegExp(
-        r'"posture"\s*:\s*"([^"]+)"',
-      ).firstMatch(textForOneShot);
-      if (postureMatch != null) {
-        final p = postureMatch.group(1)!.trim();
-        relationshipService.setSpatialStance(p);
-      }
+      // NO POSTURE HERE. One-shot is a PRE-generation optimisation and
+      // posture stopped being a pre-generation question on 2026-08-08 — it is
+      // now its own post-generation pass, which reads the reply the character
+      // actually wrote (see TimeService.evaluateTimeProgressAndPostureIfNeeded).
+      // Parsing it here would have made one-shot the ONLY mode that still
+      // asserts a stale position into the very reply it precedes, which is a
+      // strict-parity violation on Spatial Stance — the four-call path no
+      // longer sets it here either. test/services/chat/one_shot_parity_test
+      // compares 'stance' across the two paths and would catch a relapse.
 
       relationshipService.updateFixationFromEvalResult(
         (RegExp(
@@ -251,9 +253,9 @@ extension RealismEvalOneShot on RealismEvals {
       );
 
       // ── Story clock (parity with the multi-call path) ──
-      // The fused JSON above already carries minutes_elapsed/new_day (and
-      // posture); this applies the same clamp/floor/backstop clock math the
-      // dedicated per-turn scene-time eval uses — no extra LLM call.
+      // The fused JSON above already carries minutes_elapsed/new_day; this
+      // applies the same clamp/floor/backstop clock math the dedicated
+      // per-turn scene-time eval uses — no extra LLM call.
       await timeService.evaluateTimeProgressAndPostureIfNeeded(
         charName: charName,
         recent: recent,

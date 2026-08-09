@@ -3,6 +3,67 @@
 
 # Changelog
 
+## 2026-08-08 — fix(realism): the spatial-awareness check ran before the reply it was supposed to be reading
+- **Files changed:** `lib/services/chat/time_service.dart`,
+  `realism_evals.calls.dart`, `realism_evals.one_shot.dart`,
+  `realism_prompt_builder.dart`, `realism_tools.dart`,
+  `chat_service_realism_evals.dart`, `chat_service_generation_postgen.dart`,
+  `chat_service_group_realism_helpers.dart`,
+  `test/services/chat/posture_after_reply_test.dart` (new),
+  `CLAUDE.md`, `docs/design/feature-independence.md`,
+  `docs/design/story-calendar.md`, `docs/Rawhide.md`
+- **The bug:** spatial stance ("Position: X — ground actions in this") exists to stop
+  characters teleporting between turns. It was produced by the FUSED pre-generation
+  scene-time+posture eval, which fires before the reply exists — so a position the
+  character established in her own words was invisible, and the next turn's
+  pre-generation judge simply re-derived a guess and overwrote it. The post-reply
+  position could therefore never reach a single prompt. The feature was asserting
+  stale positions imperatively, which is precisely the teleporting it was built to
+  prevent. Maintainer ruling: "spatial awareness check should run post character
+  message… then the spatial is supposed to be injected into the next character
+  message so she/they/he know exactly where they were in a room/park etc and do not
+  'teleport' around like what happens in other chat apps."
+- **The fix:** posture is now its own POST-generation pass, fired from
+  `_finalizeGenerationTurn` beside `_runClimaxPass`/`_runPocketsPass` for the
+  identical reason those live there — it reads the reply that was just written.
+  `TimeService.evaluateTimeProgressAndPostureIfNeeded` gained a `postureOnly` mode,
+  which is the pre-existing posture-only branch (previously reachable only through
+  a DISABLED clock) promoted to a flag, so there is one posture prompt in the app
+  rather than two kept in step by hand. TIME did not move: the clock still advances
+  before generation so the character knows what time it is while writing.
+- **What was deleted:** the posture clause and parse in the fused clock prompt; the
+  posture apply in the one-shot path; `_postureSection` in the prompt builder and
+  `posture` in `_oneShotFields` (a field nobody would have read); and the two
+  near-identical time prompts, which collapsed into one now that only the scene
+  framing differs between engine-on and standalone.
+- **Rewind (the subtle part):** moving the write across the snapshot boundary made
+  the pre-gen `realism_state` stamp stale, so `_restampRealismSnapshotPostGen` now
+  restamps `spatialStance` alongside needs and the NSFW scalars. Without it a regen
+  rebuilds its baseline from the previous accepted message and hands the replacement
+  turn a position one exchange old — the same teleport, through the rewind door.
+  Proven: deleting that one line turns the regen guard red.
+- **Parity:** 1:1 and group are the same code path; the post-gen phase already
+  impersonates the speaker and calls `_saveScalarsIntoGroupRealism`, and
+  `spatialStance` rides `saveRelationshipScalarsToGroup`, so each member keeps their
+  own position. One-shot no longer sets posture either, so strict one-shot parity on
+  Spatial Stance holds (`one_shot_parity_test` compares `stance` and stays green).
+- **Cost:** +1 short call per turn with the engine on — the same trade accepted for
+  Afterglow. Partly offset: the clock call and the one-shot call both stopped asking
+  for a field they no longer read. Deliberately NOT folded into the Pockets call
+  (Pockets has its own switch, so posture would silently die for anyone with Pockets
+  off) — feature-independence doctrine.
+- **Two existing tests now fail, legitimately, and were NOT edited:**
+  `standalone_clock_test` "the engine prompt still carries all three, unchanged"
+  (asserts the pre-gen clock prompt contains "posture" — it deliberately no longer
+  does) and `realism_prompt_builder_test` "JSON instruction lists the exact keys per
+  prompt" (asserts the one-shot prompt asks for `"posture"` — it deliberately no
+  longer does). Both assert exactly the behaviour the ruling changed.
+- **Guard:** `test/services/chat/posture_after_reply_test.dart` — 5 tests through the
+  real ChatService, each proven to fail against the specific thing it guards
+  (old placement, posture back in the clock prompt, Continue skip removed, restamp
+  line removed, per-speaker persist removed).
+
+
 ## 2026-08-07 — feat(pockets): Pockets & Wardrobe v1, complete
 - **Files changed:** `lib/services/chat/pockets.dart` (new), `pockets_eval.dart` (new),
   `chat_service_pockets.dart` (new), `prompt_injection/inventory_injection.dart` (new),
@@ -12853,3 +12914,958 @@ dedupe-key separator, which made `git`, `grep` and every diff tool treat the fil
 as binary — and caused one reviewer to wrongly conclude the group-member
 renderer did not exist. It is now written as a backslash-u escape instead: identical at
 runtime, plain text on disk.
+
+---
+
+## 2026-08-08 — The state zone: the app stops sounding like the user, and stops lying about how old it is
+
+**Files changed**
+- `lib/services/chat/chat_service_generation_plan.dart` — `kStateZoneSectionIds` (the zone's one
+  membership list); `summary` / `journal` / `objectives` / `world` / `realism` / `catastrophe`
+  flipped to `inSystem: true` and re-registered after the nine static card sections; new
+  `state_frame` section carrying the zone's single precedence frame, gated on the zone having
+  content; continue-mode strip clears the frame when it empties the zone.
+- `lib/services/chat/prompt_injection/state_zone_frame.dart` — NEW. `buildStateZoneFrame`.
+- `lib/services/chat/prompt_injection/recap_injection.dart` — NEW. `buildRecapBlock`, with the
+  derived staleness stamp.
+- `lib/services/chat/chat_service_generation_blocks.dart` — recap assembly now delegates to
+  `buildRecapBlock` and passes the lag derived from `_summaryLastIndex` vs `_messages.length`.
+- `lib/services/chat/prompt_injection/author_note_builder.dart` — one "progress tracking lags the
+  story" hedge, emitted once per block whenever a concrete step was named.
+- `lib/services/chat/prompt_injection/journal_injection.dart` — "the lines above" → "the lines of
+  the conversation" (the transcript is no longer above it); doc + role-frame comments updated to
+  say the feelings ruling is scoped to feelings on purpose.
+- `lib/services/chat/prompt_injection/prompt_injection.dart` — barrel exports for the two new leaves.
+- `lib/services/chat/chat_service_impersonate.dart` — comment recording why that path has no state
+  zone (it never registered those sections; writing the USER's line needs none of them).
+- `test/services/chat/state_zone_placement_test.dart` — NEW. 13 guards.
+- `docs/design/prompt-state-injection.md` — new §6.1 (the precedence contract §1 said was missing),
+  new §8d (the measurement).
+
+**Why.** A user ran Kimi 2.6 and its visible thinking block showed it fighting the prompt:
+"Actually, I think the user included a stale recap block by mistake" … "disregarding the outdated
+'current task' since that's already happened." Every complaint was correct. The recap is rewritten
+only every `journalInterval` user messages (default 10) but asserted itself in present tense with
+no age; objective steps complete in a fire-and-forget background check so the named step can be
+history; nothing anywhere said which source wins when they disagree; and all of it rode the USER
+message, so the model blamed the human for the app's own bookkeeping.
+
+**How.** The six state blocks move to the system role behind one frame that splits the ruling by
+kind — the transcript owns EVENTS, the notes own FEELINGS — so it cannot contradict the Journal's
+existing "the feelings here are the truer guide". The recap states a derived lag and nothing else;
+the objective block states one hedge. Precedence is stated exactly once, per the register audit.
+
+**Trade-off, measured, not guessed.** gemma-4-31B Q8 on the bundled KoboldCpp at 7,160 prompt
+tokens, four consecutive turns per arm: warm-turn prompt processing goes **0.011s → 2.57s** (0.010s
+→ 3.25s with the arms reversed) because a churning head defeats the prefix cache. The maintainer
+accepted that cost for correct attribution. The recovery is to stop the churn, not the placement:
+the Journal hot set re-sorts by mood every turn even when nothing moved.
+
+**Rejected: a trailing system message** (which would have kept the cache win). A third message with
+role=system is silently discarded — HTTP 200, no warning — by 9 of 19 surveyed local chat
+templates, including on KoboldCpp itself. Reproduction is recorded in §6.1 so it is not
+re-proposed and spot-checked green on oMLX, which normalizes messages and hides it.
+
+**Found while measuring, NOT fixed (needs a decision):** with `--jinja` (which the app always
+passes), legacy Mistral-v0.2/v0.3 templates that never mention the system role make KoboldCpp drop
+the LEADING system message entirely — 203 tokens in, 0 tokens delivered on
+`intervitens-mini-magnum-12b-v1.1`, intact without `--jinja`. Pre-existing; it already costs those
+users the character card. Only 1 of 6 local GGUFs surveyed is affected. Written up in §6.1.
+
+---
+
+## 2026-08-08 — The Journal stops rewriting itself every turn (prefix-cache memo)
+
+**Files.** `lib/services/chat/prompt_injection/journal_injection.dart`,
+`test/services/chat/journal_memo_test.dart` (new).
+
+**Why.** The state zone now leads the SYSTEM message, so every byte the Journal emits sits in the
+prompt's prefix — one changed character and a local backend re-prefills the whole prompt, the
+transcript included. `prompt-state-injection.md` §8.5 named the Journal's per-turn mood re-sort as
+the follow-up that recovers that cost.
+
+**How.** `buildJournalBlock` now memoises. `_memoKey` folds in every input that can change the
+emitted bytes — the names, the persona, the mood scalar the sort reads, the story day and calendar
+anchor, and per card its id/pinned/heat/content/category/both emotion labels/intensity/metadata
+stamp/createdAt/embedding hash. `accessCount` and `lastAccessedAt` are deliberately excluded: the
+re-warm records them but neither reaches the text or the order. The recent-turn query text (which
+changes EVERY turn, being the last three messages) joins the key only when it can actually change
+anything — i.e. when a cold card carries a vector, or a card's receipts clear the expand age gate.
+Same key ⇒ the previous string is handed back byte-for-byte and the query embedding is skipped
+entirely. A miss runs the old code path unchanged, so what gets injected never changes.
+`_expandBestCard`'s hand-rolled receipt parse was deleted in favour of the one `_receiptPositions`
+the key test also uses, so the two can't disagree about which cards are expandable.
+
+**Measured (gemma-4-31B Q8, bundled KoboldCpp, 7.2k prompt tokens, quiet machine, 4 turns/arm,
+warm = mean of turns 2–4).** Recovery across the state zone turns out to be **all-or-nothing**, and
+that is the finding, not the memo:
+
+| arm | warm turn |
+|---|---|
+| state after the transcript (pre-move control) | 0.013s |
+| all three state blocks volatile (shipped today) | 3.396s |
+| journal static only (this change alone) | 3.4–4.8s — **no recovery** |
+| recap static only | no recovery |
+| recap + journal static, realism still churning | no recovery |
+| recap + journal + realism all static | **0.114s (97% recovered)** |
+
+The cache breaks at the first differing byte and ~88% of the prompt sits *after* the system
+message, so one churning block anywhere in the zone costs the same as three. This change is a
+necessary third of the fix and worth nothing shipped alone; §8d's "make the re-sort conditional and
+the system message becomes byte-identical on most turns" is only true once the realism/character-
+state block stops changing too, which it does not today. The one benefit the memo banks
+unconditionally is the query embedding it no longer runs on a hit.
+
+**Guards.** `journal_memo_test.dart`, 8 tests, all negative-checked by sabotaging
+`journal_injection.dart` one way at a time (script kept out of the repo): removing the memo, or
+dropping the mood / the card set / a card's words and feeling / the names and story day / the
+query-liveness test from the key each turn the right test red, and putting a per-turn value into
+the emitted block turns the byte-identity test red.
+
+---
+
+## 2026-08-08 — system-role probe: fix the false positive, the live key, the racing arms
+
+**Files.** `lib/services/system_role_probe.dart`, `lib/services/kobold_service.dart`,
+`test/services/system_role_probe_test.dart`, `test/services/kobold_system_role_test.dart` (new),
+`docs/Rawhide.md`.
+
+**Why.** The probe that detects `--jinja` templates with no system branch (mini-magnum et al.,
+where the character card silently never reaches the model) shipped with an A/B that compared
+"system message PRESENT" against "system message ABSENT". That delta is the sum of two independent
+effects: the system text being discarded — the real defect — and the template ADDING content
+because none was supplied. Only the first is a bug. A template carrying
+`{%- if not system_message %}…{%- endif %}` (Cohere Command-R bakes ~110 tokens this way; several
+Llama-3/Mistral RP conversions copy it) makes the "absent" arm cost more all on its own, and
+`kSystemRoleDropMarginTokens = 100` cannot separate the two. Result: a healthy backend gets
+declared "dropped" and the state zone is folded back into the user turn — silently undoing the
+attribution fix for people it should have left alone.
+
+**How.** The probe never removes the system message now. Three `max_tokens: 1` requests, all three
+carrying a system AND a user message; only the ~200-word filler moves:
+
+```
+A  system: MARKER            user: PING            -> baseline
+B  system: MARKER + FILLER   user: PING            -> sysCost = B - A
+C  system: MARKER            user: FILLER + PING   -> refCost = C - A   (calibration)
+```
+
+Verdict is `sysCost / refCost`: ≥ 0.75 honored, ≤ 0.25 dropped, anything between is inconclusive
+and fails open. Everything that is not the filler is byte-identical across the arms, so a baked-in
+preamble (present in all three) and fixed per-request padding both cancel; arm C is what catches a
+server whose `prompt_tokens` are constant/block-rounded, which the old rule would have handed a
+confident "dropped". A template that TRUNCATES rather than drops lands at ~0 and is correctly
+treated as a drop — the marker alone fills the kept window, so the card would be cut off just as
+completely.
+
+**Measured against the real binary** (KoboldCpp 1.117.1, `--jinja`, the maintainer's own models,
+old rule and new rule run side by side on each):
+
+| backend | OLD delta | OLD verdict | NEW delivered | NEW verdict | truth |
+|---|---|---|---|---|---|
+| gemma-4-31B-it-uncensored-Q8_0 | −3 | honored | 211/212 = 0.995 | honored | honored |
+| gemma-4-31B behind a 120-token default preamble | +114 | **dropped (WRONG)** | 211/212 = 0.995 | **honored** | honored |
+| intervitens-mini-magnum-12b-v1.1-Q6_K | +271 | dropped | 0/222 = 0.000 | dropped | dropped |
+| mini-magnum behind the same preamble | +271 | dropped | 0/222 = 0.000 | dropped | dropped |
+
+(The preamble arm is a loopback proxy in front of the real model that forwards a supplied system
+message byte-for-byte and injects a 120-token preamble only when none is sent — i.e. a template
+that HONORS the system role. The old rule called it broken.)
+
+**Also fixed, same review pass.**
+
+- MAJOR — the verdict key was a getter recomputed from three MUTABLE settings on every generation,
+  while only `_markModelReady()` ever armed the probe. Editing any key component after model-ready
+  (the remote model name, a preset swap) moved the lookup off the `dropped` verdict and switched
+  the workaround OFF for the rest of the run, on a model still measured to drop. Now resolved once
+  in `_markModelReady()` and held in `_systemRoleIdentity`.
+- MAJOR — the probe took ONE `waitForIdle` reading before arm A, registered on nothing, and fired
+  arm B with no idle check at all, so its requests could land inside the user's own turn. Every arm
+  now runs through `_runSerialized` — extracted from `generateWithTools`, which was the only thing
+  that did the `_pendingRequest` dance — so each arm waits for idle AND occupies the shared slot.
+  Per arm rather than around the whole probe, so nothing is ever stuck behind more than one request.
+- MINOR — sync I/O on the generation path: the same getter fell through to `kcppsModelPath`, which
+  is `existsSync` + `readAsStringSync` + `jsonDecode` of the preset file, for every `.kcpps` user on
+  every generation. Gone with the caching (fix #1) — it is now read once per model load.
+- MINOR — dead API and no recovery: `reset()` and `supportFor()` had zero production callers, and
+  `_attempts` was never cleared, so three inconclusive arms (server still settling at load)
+  permanently disabled the workaround for that model. `reset()` is now called from `stopKobold()`
+  (unconditionally, before the `_process != null` block, so a hot-restart reconnect is covered too),
+  which refunds the budget and prevents a GGUF swapped in at the same path inheriting the previous
+  file's verdict. `supportFor()` + the `SystemRoleSupport` enum were DELETED in favour of a single
+  `@visibleForTesting bool? verdictFor()`; `extends ChangeNotifier` was dropped too (nothing ever
+  listened — the "status surface can repaint on it" it was built for does not exist).
+
+**Not done, deliberately — see the response for the full reasoning.** The plain-English notice
+still goes only to the desktop KoboldCpp log panel. `EngineHealth` was evaluated as the alternative
+and rejected: its notice reads "hit an engine error — please report this on Discord" (nothing
+errored; the app fixed it), it only fires on pre-release builds, and its sole consumer is
+`main_layout.dart`, so it buys no web parity either. A real user-visible "this model ignores system
+prompts, I'm working around it" indicator is OWED on both the desktop model/backend surface and
+`web_ui`'s ModelsPage (via the existing `/api/backend/status` route), and is flagged rather than
+shipped desktop-only.
+
+**Guards.** `system_role_probe_test.dart` (25 tests) — the fake server no longer only SUBTRACTS the
+system message; it can bake a default preamble when none is sent, always bake one, truncate instead
+of drop, pad every request, and report constant usage. `kobold_system_role_test.dart` (5 tests, new
+file) covers the KoboldService half against a fake dropping backend. All negative-checked: reverting
+to the old present-vs-absent rule turns 6 red (including `Expected: true / Actual: <false>` on the
+preamble case — the exact false positive); restoring the live getter turns 3 red (`Expected
+'KoboldCPP||/models/mini-magnum-12b.gguf'` vs `Actual 'KoboldCPP|anthropic/claude-opus-4|…'`);
+bypassing `runExclusive` turns the slot guards red (`waitForIdle` returns in 0 ms); removing the
+`stopKobold` reset turns the recovery guard red. Each was put back and re-run green.
+
+## 2026-08-08 — the posture the reply establishes now actually reaches the disk
+
+**Files:** `lib/services/chat/chat_service_generation_postgen.dart`,
+`lib/services/chat/chat_service_group_realism_helpers.dart`,
+`lib/services/chat/chat_service_greeting.dart`, `lib/services/chat/time_service.dart`,
+`test/services/chat/posture_persistence_test.dart` (new).
+
+**CRITICAL — the write was never persisted.** Moving the spatial-stance eval to the
+post-generation phase (so it can read the reply) put it AFTER `_finalizeGenerationTurn`'s
+`await _saveChat()`. On the ordinary 1:1 path nothing saves again: `sendMessage` does not,
+the journal/growth/embed passes are fire-and-forget, and the only remaining candidate —
+`_attachNeedsDeltaChipToLastMessage` — returns on its first line when the Needs simulation
+is off. So the session row's `spatial_stance`, the message's restamped
+`realism_state.spatialStance` and the group's `group_realism_state` blob all kept the
+PREVIOUS turn's value. Live memory said "curled in the armchair" while the reload and the
+next prompt both said "sitting on the windowsill" — the character teleported back one
+exchange, which is precisely the bug the whole feature exists to prevent.
+
+**MAJOR, same root:** whether posture survived depended on the NEEDS switch, because the
+only save that could follow the pass lived inside the needs chip helper. Two unrelated
+features wired together (docs/design/feature-independence.md).
+
+**Fix — one persist, not two.** Considered reordering the pass ahead of the existing save
+and rejected it: in a group the impersonation dance that names the right speaker in the
+prompt runs after that save, so the pass would have to drag the whole dance forward, and
+posture belongs beside the climax/pockets passes that read the same reply. Considered
+moving the save itself down and rejected that too: it is there to get the reply text on
+disk BEFORE four eval round-trips, and a crash during them would lose a user's reply to
+save one write. Instead the save was moved OUT of `_attachNeedsDeltaChipToLastMessage`
+(now a pure in-memory mutator, `void`) and put at the end of the post-generation block,
+where it covers every pass rather than one feature's slice. Same one write per turn on the
+common path; skipped on Continue with the passes themselves.
+
+**Turn one had no position.** With posture now a post-generation question, a fresh chat's
+first reply — and a chat where Realism was switched on mid-conversation — had no
+"Position:" line at all. `_runPostGreetingEval` now fires a `postureOnly` pass against the
+greeting (the opening scene IS the seed), and `_runRetroactiveBaselineEval` fires one after
+BOTH its branches (one-shot's fused JSON no longer carries posture, and the four-call
+branch's physical-state call is the clock alone).
+
+**Cost, judged not ignored.** The pass is awaited inside `_isPostGenerating` — the flag
+that greys the composer — so it adds one eval round-trip to the "can't send yet" window.
+Kept there deliberately: the value it produces is read by the next prompt's Position line,
+so a fire-and-forget version would race the user's next send (restoring the teleport) and
+race the save (restoring the bug above).
+
+**Stale comment** at `time_service.dart`'s `skipOwnsClock` block still claimed "Posture
+still evaluates" — untrue since posture left that call.
+
+**Guards (new file, all 7 proven red first).** `posture_persistence_test.dart` asserts the
+DATABASE, not scalars — which is exactly how the shipped guard missed this: the session
+row, the persisted message snapshot, the group blob per speaker, Needs-ON vs Needs-OFF
+producing the same stored value, one-shot vs four-call producing the same stored value,
+and the two turn-one seeds. Pre-fix every one failed with `Actual: ''`; post-fix all seven
+pass. It also replaces vacuous evidence: `one_shot_parity_test.dart:190` compares
+`observable()['stance']`, which is now `''` on BOTH paths and passes by emptiness.
+
+---
+
+## 2026-08-08 — The Journal memo starts actually hitting (and the reason it can't hit more)
+
+**Files.** `lib/services/chat/prompt_injection/journal_injection.dart`,
+`test/services/chat/journal_memo_test.dart`, `docs/design/prompt-state-injection.md` (new §8e).
+
+**Why.** The memo shipped earlier today folded the recent-turn QUERY TEXT into its key whenever
+any cold card carried a vector — which is the steady state of every chat with embeddings on. The
+query is the last three messages, so it differs every turn: the memo hit **zero times in 21 turn
+transitions**, and the one benefit it claimed (skipping the ONNX query embedding) was never
+collected. Adversarial review also found the builder computing the proof that the query embedding
+was dead work and then paying for it anyway, the key over-specified on the nuanced mood label, and
+`sourceMessageIds` missing from a key documented as folding "exactly" the inputs.
+
+**How.** The key is now two-stage. Stage 1 (`_memoKey`) folds in everything the query cannot
+touch and, in the same pass over the cards, answers "could the query change anything at all?".
+Stage 2 (in the builder) folds in the query's ENTIRE influence — the ids of the cold cards it
+resurfaced and the excerpt it expanded — instead of the query text. Four smaller fixes ride
+along:
+- the query embedding is now gated on that liveness answer, so a turn that proved the vector
+  unusable no longer computes one (it did before, on every miss);
+- the mood joins the key as its emotion FAMILY (`JournalPhysics.emotionFamily`), which is the only
+  thing the ordering ever reads (`hotSortKey` → `moodCongruent` → family) and which no rendered
+  text quotes — 'wistful' and 'melancholy' were forcing misses that could not move a byte;
+- `card.sourceMessageIds` joined the per-card fields (it feeds `_expandBestCard`);
+- re-warming moved AHEAD of the memo check. A ledger card (promise/milestone) never cools and
+  never joins the hot set, so it can resurface on consecutive turns with its heat unchanged —
+  the one case where a hit used to swallow the `accessCount`/`lastAccessedAt` write. The old
+  doc's claim that no re-warm write is skipped by a hit was false; it is now true by construction.
+Also deleted: the now-unreachable `if (lines.isEmpty) return empty;` (the budget loop always adds
+its first line, so it was exactly `injected.isEmpty`, which is checked earlier and cheaper).
+
+**Measured** — replayed through the real builder with REAL nomic-embed-text-v1.5 vectors (fixture
+built with the same `search_document: ` prefix / mean-pool / L2-normalize pipeline as
+`native_embedding_engine.dart`), 22 turns, a 24-card diary, the query changing every turn:
+
+| scenario | memo hits before | after | byte-repeat ceiling | query embeddings before → after |
+|---|---|---|---|---|
+| mature diary (cold cards + old receipts) | 0/21 | **6/21** | 6/21 | 22/22 → 22/22 |
+| young chat (all cards hot, receipts on screen) | 0/21 | **14/21** | 14/21 | 22/22 → **0/22** |
+
+The memo now hits on exactly the turns whose bytes repeat — the most any sound memo can do — and
+stops paying for a dead embedding where it can prove one is dead.
+
+**The ceiling is the real finding, and it is NOT fixed here (needs a maintainer call).** With real
+nomic vectors the minimum observed query↔card cosine is **0.513**, above `kMinColdSimilarity`
+(0.35) *and* `kMinExpandSimilarity` (0.45): every card clears both floors on every turn. So
+cold-card resurfacing is not "a memory comes back when the conversation drifts near it" — it
+promotes three arbitrary cold cards a turn until the cold pool empties — and expand-memory quotes
+verbatim transcript lines on every single turn instead of when the user reaches for one moment.
+That churn is why the block's bytes only repeat 6/21 times in a mature chat. The floors live in
+`journal_physics.dart`; re-tuning them is a behaviour change, so it was left alone and written up
+in §8e.
+
+**Guards.** `journal_memo_test.dart` grew four tests and one changed one, each negative-checked by
+sabotaging the exact fix it protects: keying the query text back in (the changing-query hit goes
+red), dropping the liveness gate on the embedding (0 → 3 embeddings), keying the nuanced mood
+instead of its family, re-warming after the memo check instead of before (`accessCount` 2 → 1),
+and dropping the expansion outcome from the key. All five failed sabotaged and passed restored.
+The one CHANGED test is `'a turn that cannot use the query text does not pay for the query
+embedding'`: it asserted `embedCalls == 1` after three turns, which encoded the defect — the first
+turn paid for an embedding the builder had already proved unusable. It now asserts `0`.
+
+---
+
+## 2026-08-08 — the state zone splits by volatility, and the recap stops counting
+
+**Files:** `lib/services/chat/chat_service_generation_plan.dart`,
+`lib/services/chat/prompt_injection/state_zone_frame.dart`,
+`lib/services/chat/prompt_injection/recap_injection.dart`,
+`test/services/chat/state_zone_placement_test.dart`,
+`docs/design/prompt-state-injection.md` (§6.1, §8d)
+
+**Why.** Moving the whole state zone into the leading system message (earlier the same day, to stop
+Kimi 2.6 accusing the human of pasting a stale recap) cost **+3.66s of prompt processing on every
+single reply** at 7k context on the maintainer's gemma-4-31B. The prefix cache breaks at the first
+differing byte, and after the move ~88% of the prompt — the transcript — sat behind blocks that
+change every turn.
+
+**What changed.**
+
+1. **The zone is now two lists, split by how often the bytes change.**
+   `kStateZoneSystemSectionIds` (`summary` · `journal` · `objectives` · `world`) leads in the system
+   message; `kStateZoneTailSectionIds` (`realism` · `catastrophe`) stays in the user turn after the
+   transcript. The character-state block renders mood, bond and the story clock, which advance every
+   turn *by design* — it can never be byte-stable, so it can never be in the head. It also never
+   needed to move: Kimi read it correctly where it was ("use the character state info … to inform my
+   response") and only ever mistook the recap and the objective step for the human's words.
+2. **Two frames, one function, only one of them long.** `buildStateZoneFrame` gained a
+   `StateZonePlacement`. The head keeps the full precedence ruling (transcript owns events, notes own
+   feelings). The tail gets ONE sentence doing the only job that cannot travel 7k tokens — *this is
+   the app's note on how NAME is right now, USER did not write it, no reply needed* — and
+   deliberately does not restate precedence, because nothing in the tail can be stale. It opens with
+   its own newline: the transcript has no trailing one, and a marker glued to the end of the user's
+   sentence reintroduces the exact misreading it exists to prevent.
+3. **The recap stopped naming its lag.** `buildRecapBlock` said "it lags the conversation by N
+   messages". N changes by two every turn, so that one interpolation re-prefilled the whole
+   conversation on every reply — **the split alone recovered nothing (3.69s) until this was fixed.**
+   It now states the fact ("the conversation has moved on since it was written"), which is all the
+   frame needs, since events go to the transcript unconditionally at any lag.
+
+**Measured** (same rig as §8a/8b — gemma-4-31B-it-uncensored-Q8_0, bundled KoboldCpp, `--jinja`,
+ctx 8192, `max_tokens=1`, `/api/extra/perf last_process`, 4 turns/arm, ~6.6–7.0k prompt tokens),
+warm turns 2–4:
+
+| arm | warm mean |
+|---|---|
+| state after the transcript (pre-§6.1 baseline) | 0.009s |
+| all of it in the leading system message | 3.664s |
+| split by volatility, recap still counting | **3.693s — no recovery** |
+| split by volatility + recap de-churned | **0.019s** |
+
+Reversed arm order: 0.018 / 3.570 / 3.898 / 0.020 — same verdict. Amortized over a real Journal
+cadence (a pass rewrites the recap every 10 user messages, and that turn alone re-prefills): ~0.4s
+per turn, landing on the turn that was already making a Journal LLM call.
+
+**Guards, all negative-checked.** Restoring the live lag count reddens the new byte-identity test
+(`lag 2 changed the bytes`); flipping `realism` back to `inSystem: true` reddens the end-to-end
+placement assertions; dropping the tail half from the continue-mode frame strip reddens the new
+continue assertions. All three passed again once restored.
+
+**Not fixed, reported instead:** `realism_prompt_builder_test.dart` and `standalone_clock_test.dart`
+fail in this tree on `Expected: contains 'posture'` — they belong to the separate
+"posture moved post-generation" change and were left alone.
+
+---
+
+## 2026-08-08 — Turn one gets a position again, for every card and every group member
+
+**Files changed**
+- `lib/services/chat/chat_service_greeting.dart` — new `_seedOpeningPosture()`; the greeting
+  baseline and the retroactive scan now call it instead of firing the posture eval inline.
+- `lib/services/chat/chat_service_realism_dance.dart` — one call to it, in the per-speaker
+  pre-turn dance.
+- `lib/services/chat/chat_service_session_manage.dart` — comment only: why the opening
+  position must never be wired to `startNewChat`'s authored-baseline gate again.
+- `test/services/chat/posture_opening_seed_test.dart` — NEW.
+
+**The problem.** Posture moved to the post-generation phase (it has to read the reply), which
+left the first reply of every conversation with no `Position:` line at all. The seed added to
+cover that was wired to the greeting baseline, which `startNewChat` runs only when
+`frontPorchExtensions == null` **and** `_activeGroup == null`. Between them those two gates
+excluded every card authored in Front Porch AI, every card downloaded from The Stoop, every
+group, and every chat opened by tapping a character (that path never calls `startNewChat`).
+A/B against HEAD: HEAD had a stance before the first reply for every card and `Position = true`
+on a group's first prompt; the working tree had neither.
+
+**The fix.** One guarded seed, at the one moment common to all four ways a conversation can
+start: the per-speaker pre-turn dance, which `sendMessage` runs for the 1:1 host and
+`_generateResponse` runs for each group member once the speaker is picked. `spatialStance.isEmpty`
+is the entire guard, and it is exact on all three counts that matter — it is per-speaker (the
+dance has already loaded that member's own `_groupRealism` slot, so a cast of five gets five
+separate openings and nobody inherits the first speaker's), it survives a reload (the stance it
+reads is the persisted one, not a flag that would reset to "unseeded" and re-fire over a real
+position), and it **cannot overwrite a post-reply value on any later turn** because it only runs
+when there is no value to overwrite. The instant any post-generation pass succeeds the guard
+closes for good.
+
+Deliberately NOT wired to the chat-entry paths: that is what produced the regression. The
+`frontPorchExtensions == null` / `_activeGroup == null` gates protect AUTHORED baselines — bond,
+trust, emotion, numbers a creator set. No card, group or Stoop download carries a spatial stance,
+so there was nothing there to protect and the gates only hid the seed from most real chats.
+
+**Cost.** One eval on the opening turn of a chat and zero after it. Nothing for engine-off users
+(`_realismActiveThisMode` gate). No sync I/O, no hot path — the guard is an in-memory string check.
+
+**Guards, negative-checked both ways.** With the dance call commented out, all three new tests go
+red, each on the assertion it exists for (the opening `Position:` line, for an authored card, a
+plain card, and a group's first speaker). With the `isNotEmpty` guard removed instead, the *other*
+half goes red — turn two is handed the re-seeded position instead of the one the reply
+established, and the per-character call count is wrong — which is exactly the pre-generation
+evaluation this design removed. Both restored, green again.
+
+**Not fixed, reported instead:** `posture_after_reply_test.dart` fails on two `hasLength(1)`
+assertions (lines 239 and 304/310) that count *every* posture prompt globally. Turn one now
+legitimately costs two — one to stage her, one to record where the reply left her — so the
+arithmetic is stale by maintainer ruling. The prose ("exactly one posture pass per generated
+reply") is still true; only the total is wrong. Left untouched per the no-editing-tests rule.
+
+## 2026-08-08 — system-role probe: a retry budget that can actually be spent, and a reset that really stops the probe
+
+**Files.** `lib/services/system_role_probe.dart`, `lib/services/kobold_service.dart`,
+`test/services/system_role_probe_test.dart`, `test/services/kobold_system_role_test.dart`,
+`docs/Rawhide.md`.
+
+**Why (1) — the retry budget was decoration.** `kSystemRoleProbeMaxAttempts = 3` was spent one
+attempt per *call*, and `ensureProbed` has exactly one production call site: `_markModelReady`,
+which fires once per model load. So the budget could never be spent. One inconclusive probe — a
+timeout, a socket hiccup, a backend that had bound its port but wasn't answering
+`/v1/chat/completions` yet — permanently left that model unprobed for the rest of the run, which on
+a dropping model means *every* reply is card-less, with no recovery path the user could even be
+told about (stop and restart your backend). The whole retry design was reasoning about a
+code path that did not exist.
+
+**How (1).** The budget now lives INSIDE one call: `ensureProbed` chains up to
+`kSystemRoleProbeMaxAttempts` measurements, spaced by `retryBackoff` × attempt (3s, then 6s), and
+stops at the first one that concludes. The backoff waits *outside* the engine's request slot, so
+nothing queues behind it. Worst case for a permanently-silent server is three `max_tokens: 1`
+requests over 9 seconds and then silence — the arms short-circuit on the first failure, so a dead
+server costs one request per attempt, not three. `_attempts` (the per-call counter) is deleted and
+replaced by `_exhausted`, a "do not start the chain over" marker: the model-ready transition is
+driven by a regex over the backend's console output and can legitimately fire more than once per
+load, so without it a silent server would be re-probed once per matching log line.
+
+**Why (2) — `reset()` forgot the verdict but not the probe.** It cleared the maps and dropped the
+in-flight marker, and that was all. Two bugs fell out. A probe measuring the OLD server could land
+its verdict AFTER the reset that was meant to forget it — describing a template that may not even
+be loaded any more. And because the in-flight marker was gone, a SECOND probe could start while the
+first was still running: two chains racing on one identity, the loser overwriting the winner. On a
+stop/start with a different GGUF at the same path, that is precisely the case that decides whether
+the card gets folded into the user turn.
+
+**How (2).** Each chain now runs under a `_ProbeRun` token whose *object* identity is the run's
+identity. `reset()` removes the run and calls `cancel()`, which (a) sets a flag the chain checks
+after every await that could span a reset — so a disowned chain writes no verdict and issues no
+further arms — and (b) **closes the socket**. The close is the load-bearing half: every probe arm
+runs inside KoboldService's single request slot, so an arm left waiting on a server that was just
+killed would block the next model's probe *and* the user's first message for
+`kSystemRoleProbeTimeout` — 60 seconds. The `finally` that clears the run is guarded by
+`identical()`, so a chain unwinding late cannot de-register the fresh chain that replaced it.
+
+**Dead API audit.** `reset()` has a live production caller (`stopKobold`). `verdictFor` is
+`@visibleForTesting` and exists because tests must distinguish "measured healthy" from "never
+measured" — which `isSystemDropped` flattens to the same `false`. Nothing else on the class is
+unreferenced. (The reviewer's `supportFor` belongs to the sibling `ToolTransportProbe`, not here.)
+
+**Verified against the real binary**, KoboldCpp 1.117.1 on macOS arm64, app launch flags
+(`--jinja --flashattention --gpulayers 99 --contextsize 4096`):
+
+```
+mini-magnum-12b-v1.1-Q6_K   0 vs 222 tokens  ->  DROPPED   (427ms)
+gemma-4-31B-it-uncensored   211 vs 212       ->  honored   (8190ms)
+```
+
+Plus a TCP front that drops the first connection and then forwards to the live mini-magnum — the
+production "backend still settling" case, and the one the old code could not survive:
+
+```
+attempt 1: ClientException ... Broken pipe
+attempt 2: DROPPED (0 vs 222)                ->  verdict in 5701ms
+```
+
+And three loopback servers over real sockets: a template that only bakes a default preamble when
+no system message is supplied → **honored** (the false positive the differential exists to
+prevent), one that drops → **dropped**, one that truncates to 10 words → **dropped**.
+
+**Guards, every one negative-checked.** Loop bound forced to 1 attempt → 3 red, including the new
+"a backend still warming up at load is measured on the retry". `reset()` reverted to
+remove-without-cancel → both new lifecycle guards red, one on "reset left the probe stuck on the
+wire" (2s timeout against a 5s server), one on the disowned verdict overwriting the fresh one.
+One-probe-at-a-time guard removed → 3 arms became 6. Dropping only the post-measure staleness check
+was initially caught by NOTHING — the backoff check upstream masked it — so a guard was added for
+the one window it owns (a reset landing between the final arm and the verdict write, driven through
+the caller's own `runExclusive` wrapper); it goes red without the check and green with it. All
+restored, 30 + 6 green.
+
+**Not fixed, reported.** No user-visible notice on web/mobile for a model measured to drop —
+see the response and `docs/Rawhide.md`. EngineHealth was evaluated as the home and rejected: its
+notice is `isPreRelease`-gated, says "hit an engine error — please report this on Discord" (this is
+a handled property of the user's GGUF, not an app failure), and is wired only in the Flutter
+`main_layout.dart`, so it would not reach a web user anyway. Today's evidence is the plain-English
+line in the backend log plus `[SystemRole]` debug output. Desktop+web parity for that notice is
+owed.
+
+---
+
+## 2026-08-08 — the state zone goes back where it was; the attribution stays, in words
+
+**Supersedes** the two entries above titled "The state zone: the app stops sounding like the user…"
+and "the state zone splits by volatility, and the recap stops counting", and retires the one titled
+"The Journal memo starts actually hitting…". Maintainer ruling after three rounds of measurement:
+**revert the system-role placement, keep everything else.**
+
+- **Files changed:** `lib/services/chat/chat_service_generation_plan.dart`,
+  `lib/services/chat/prompt_injection/state_zone_frame.dart`,
+  `lib/services/chat/prompt_injection/recap_injection.dart`,
+  `lib/services/chat/prompt_injection/journal_injection.dart` (restored to its pre-move
+  shape + barrel import), `test/services/chat/state_zone_placement_test.dart` (rewritten),
+  `test/services/chat/journal_memo_test.dart` (DELETED),
+  `docs/design/prompt-state-injection.md`, `docs/Rawhide.md`
+
+**What was reverted and why.** `summary` · `journal` · `objectives` · `world` · `realism` ·
+`catastrophe` are back in the USER message after the transcript, in their original registration
+order, with the original placement comment restored (the previous round had deleted the comment
+that recorded *why* that seat was chosen — a future reader had no way to find out). The two
+volatility lists (`kStateZoneSystemSectionIds` / `kStateZoneTailSectionIds`), the
+`StateZonePlacement` enum and the second `state_tail_frame` section are gone, replaced by one list
+`kStateZoneSectionIds` and one frame.
+
+The split arm had benched at 0.019s, but that bench **hardcoded a static journal block**. On the
+maintainer's real 200-card diary, replayed against one chat's 42 recorded emotion values under the
+default config, the journal block changes its bytes on **17 of 41 turn transitions (41% of
+replies)** — 543 of 873 across the whole library — because `JournalPhysics.hotSortKey`'s +0.25
+mood-congruence boost re-sorts the hot set whenever the emotion FAMILY changes and the 600-token
+budget then renders a different card set. That ordering is a deliberate feature and stays, so the
+"near-static" half is not near-static and the system message cannot hold a stable prefix.
+
+**Re-measured here**, on the maintainer's `gemma-4-31B-it-uncensored-Q8_0` via the bundled
+KoboldCpp, 5.4k-token prompt, five consecutive turns per arm. Two traps in the earlier rig had to
+be closed first: a **unique session nonce per arm**, because the deterministic fixture let an arm
+inherit a warm cache slot from an earlier run (KoboldCpp then prints `Processed:480 in 0.00s
+(119999.99 T/s)`, llama.cpp's sentinel for "not computed"); and **tokens prefilled** read from the
+backend's own log line rather than `/api/extra/perf`'s `last_process`, which bills a partially
+reused tail to *generation* instead (`Processed:467 in 0.01s` … `Generated:1/1 in 3.25s`).
+
+| arm | tokens re-prefilled / warm turn | warm wall/turn |
+|---|---|---|
+| zone in the user turn (HEAD, and now) | 508 of 5.5k | 3.25s |
+| the same + frame + de-churned recap (ships) | 629 of 5.5k | 4.31s |
+| whole zone in the leading system message | 5,020 of 5.5k | 30.07s — **9.3×** |
+
+(Box under load at ~170 T/s; idle it does 600–750, so divide the wall clock by ~4. Token counts are
+rate-independent.)
+
+**What survives, because it is what fixed the reported bug.** The Kimi 2.6 transcript called the
+recap STALE and the objective step ALREADY DONE; "the user must have pasted this by mistake" was its
+attempt to explain a contradiction it could not resolve. So: the recap's staleness claim, the
+objective-step hedge, and the precedence frame all stay, and cost ~121 tokens a turn between them.
+
+- **The frame now carries the attribution in words**, since the message role no longer does: it
+  says the app wrote these notes, that the user did not type them, that they need no reply, and
+  splits precedence by KIND — the conversation owns EVENTS, the notes own FEELINGS — which is what
+  keeps it from fighting the Journal's own "truer guide" line. ONE frame, one register (§1 named
+  repetition as the disease). It names the KINDS of note it covers rather than "everything below",
+  because the author-directive tail (`post_history` / `author_note` / @AN lore) renders between the
+  zone's two runs and those blocks genuinely ARE the user's.
+- **The staleness stamp still prints no live counter** — verified, the code was already free of the
+  interpolation. It states the fact ("the conversation has moved on since it was written"). From
+  this seat a moving byte is cheap, but it buys nothing: nothing downstream behaves differently at
+  a lag of 12 than at 14, because the frame hands events to the conversation unconditionally.
+
+**Deleted: the Journal memo** (~150 lines: `_memoKey`, `_receiptPositions`, `_lastKey`,
+`_lastBlock`, the two key separators, the two-stage keying) **and `journal_memo_test.dart`.** It
+existed to keep the journal block byte-stable while that block led the prompt. From the user turn it
+protects nothing. What was left did not pay for itself: on a hit it saved only the line-render loop
+and a string join (the DB read, cold-card retrieval and expand-memory all ran *before* the memo was
+consulted, because retrieval is a write); the query-embedding skip (~10 ms of ONNX) only fires with
+RAG on *and* no cold card carrying a vector *and* no receipts clearing the age gate, while with RAG
+off — the default — `store.embedText` is null and nothing ran anyway; and the measured hit rate
+against real nomic vectors was 6/21 transitions on a mature diary. `journal_injection.dart` is back
+to its pre-move content, plus the `chat.dart` barrel import (three sibling single-file imports
+collapsed, per the barrel rule).
+
+**Guards, every one negative-checked (red, then green again).**
+`test/services/chat/state_zone_placement_test.dart`, 15 tests, rewritten for the reverted design
+(it was written by the previous round in this same uncommitted body of work — no committed test was
+edited):
+- `inSystem: true` put back on the recap → END TO END red on the load-bearing assertion.
+- live counter restored in `buildRecapBlock` → "byte-identical at every lag" red with
+  `lag 2 changed the bytes` / `…sation by 1 messages` vs `…by 2 messages`.
+- attribution reworded away from "written by the app" → red; precedence sentence duplicated →
+  "states the precedence rule exactly once" red (`Expected: <1> Actual: <2>`).
+- continue-mode frame strip removed → END TO END red on the frame outliving its blocks.
+
+**Docs rewritten to match what ships.** `prompt-state-injection.md` §6.1 had two sections stating
+opposite things about the load-bearing property and still described the all-in-system design; §8d
+now records the revert with the measurement above and the two rig traps; §8e records the memo's
+deletion and keeps the finding underneath it (with real nomic vectors the minimum observed
+query↔card cosine is 0.513, above BOTH `kMinColdSimilarity` 0.35 and `kMinExpandSimilarity` 0.45 —
+so cold resurfacing promotes arbitrary cards every turn and expand-memory quotes verbatim lines
+every turn; a `JournalPhysics` tuning question, left for the maintainer). §8.5 now says hot-set
+order stabilization is **closed, not done**. `docs/Rawhide.md`'s bullet no longer promises users the
+speed cost is gone; it says plainly that the front-of-prompt attempt made replies ~9× slower to
+start and was backed out.
+
+**Verification:** `flutter analyze --no-fatal-warnings --no-fatal-infos` → No issues found.
+`dart fix --dry-run` → Nothing to fix. `flutter test --concurrency=4 --exclude-tags golden` →
+3355 passed, 4 failed — all four in the *other* in-flight posture work
+(`posture_after_reply_test` ×2, `realism_prompt_builder_test`, `standalone_clock_test`, all
+asserting on the word "posture"); my diff contains zero occurrences of it and touches none of
+those files. Not edited, reported.
+
+## 2026-08-08 — Two committed tests amended (maintainer-approved)
+
+**Files:** `test/services/chat/standalone_clock_test.dart`,
+`test/services/chat/realism_prompt_builder_test.dart`
+
+Both asserted that the PRE-generation prompt asks the model for `posture`. That
+stopped being true when posture moved to its own post-generation pass, so both
+assertions had turned into guards for the bug rather than the behaviour: a check
+that runs before the reply cannot see where the reply moved her, and the next
+turn's pre-generation answer overwrote the post-generation one before it could
+ever reach a prompt.
+
+Maintainer ruling (2026-08-08): "spatial awareness check should run post
+character message, otherwise how could it check where she moved or what she is
+doing"; approval for these two edits given explicitly in the same conversation.
+
+Neither assertion was deleted — both were FLIPPED, which makes them stronger
+than they were:
+- standalone_clock: the engine call must still carry the realism context the
+  standalone clock strips (the contrast that test group exists to draw) and must
+  NOT ask for posture, because asking would pay for a discarded field and would
+  let the next turn overwrite the post-generation answer.
+- realism_prompt_builder: one-shot must NOT list "posture" either. This now
+  guards the strict one-shot/multi-call parity rule — if posture were restored
+  to one path only, one-shot would become the sole mode asserting a stale
+  position into the reply it precedes, which is the original bug via the back
+  door.
+
+Both were red before the edit and green after (26 tests in the two files), so
+the absence they now assert is real rather than vacuous.
+
+## 2026-08-08 — System-role close-out: hermetic guard + kobold_service off the ratchet
+
+**Files:** `test/services/kobold_system_role_test.dart` (rewritten),
+`lib/services/kobold_service.dart`, `lib/services/kobold_system_role.dart`
+(new), `lib/services/kobold_process_control.dart` (new),
+`lib/services/system_role_probe.dart` (doc), `docs/Rawhide.md`
+
+### 1. The guard was flaky at `--concurrency=4` — which is what CI runs
+
+Reported green because it had only been run ALONE. Reproduced under 24 CPU
+burners: 1 failure in 8 runs, `Expected: false  Actual: <null>` on the verdict
+assertion. Two causes, both "synchronise on the wrong event":
+
+- The helper polled until the fake server had RECEIVED three requests and then
+  asserted the verdict. Arrival is not completion — the verdict is written after
+  the third RESPONSE is parsed — so on a loaded box the assertion could run
+  before the probe had decided. This was a real happens-before error, not merely
+  a short budget.
+- Two tests measured the engine's single request slot with a stopwatch against
+  fixed response delays (arm, sleep 20 ms, assert `waitForIdle` takes ≥ 100 ms).
+  Either side of that window slips on a contended runner.
+
+Fixed by waiting on the WORK, not the clock. `debugMarkModelReady()` now returns
+the measurement it arms (`KoboldSystemRole.arm` returns the `ensureProbed`
+future), so every wait is exact and no polling loop remains. The fake server is
+now GATED by the test — it reads a request and answers only when the test says
+so — so "is the slot held?" is asked at a moment where the answer cannot change,
+and the one remaining `delayed` asserts something has NOT happened yet, which
+load can only make more true.
+
+Shared state removed at the root as well: `KoboldService(storage,
+systemRoleProbe: …)` takes an injected probe, so each test case owns its verdict
+map instead of sharing `SystemRoleProbe.instance`. That singleton's doc claimed
+it existed because openai_chat_stream.dart "has no constructor and would need
+the instance threaded down" — provably false: that file is handed the resolved
+boolean as a parameter and never touches the class. Corrected.
+
+Result: 12/12 green under the identical 24-burner load that reddened the old
+file, and green in all 8 full `--concurrency=4` suite runs. (Run 2 of 8 had one
+unrelated red: `test/services/avatar_repository_test.dart` "schema version is
+42", a COMMITTED test that shares no import with anything touched here and
+passes 8/8 solo — a pre-existing intermittent, reported not edited.)
+
+Four negative checks, each confirmed red then green again:
+- `runExclusive` dropped → slot guard fails (`Expected: false  Actual: <true>`)
+- `_systemRole.forget()` removed → both stop guards fail; the cancel guard fails
+  via its 10 s timeout, proving that timeout is an assertion and not decoration
+- identity not re-resolved → model-swap guard fails
+- `foldSystemIntoUser` forced false → both workaround guards fail
+
+### 2. `kobold_service.dart` was 10 lines from the CI ratchet
+
+990 lines, up from 924 at HEAD, and the largest file in `lib/`. The ratchet fails
+any `lib/` file that REACHES 1,000. Three cohesive leaves extracted — 990 → 769,
+so it is no longer in the top ten largest files in `lib/`:
+
+- `kobold_system_role.dart` — the `--jinja` workaround's wiring: arm / read /
+  forget. Three events that must stay in step; scattered through a 900-line
+  service they are how a `forget` goes missing.
+- `kobold_process_control.dart` — killing KoboldCpp cross-platform.
+  `killOrphanedKoboldProcesses` (the public `killOrphanedBackend` method was
+  DELETED — it had exactly one caller) and `terminateKoboldTree`, the
+  children-then-parent-then-SIGKILL-then-sweep-by-name ladder. `stopKobold` is
+  now 12 readable lines. The duplicated executable-name sweep on the normal and
+  failure paths collapsed into one `_sweepByName`; the failure path now logs it
+  too, which it did not before.
+
+- `kobold_launch_args.dart` — `buildKoboldLaunchArgs`, the settings → argv
+  translation that was two thirds of `startKobold`. Extracted verbatim. Every
+  rule in it is a decision with a bug behind it (the iGPU-defaulting
+  `--usecublas`, the flash-attention prerequisite `--quantkv` needs, the
+  launcher's argparse cap that rejects a batch size the engine accepts) and
+  NONE of it was reachable by a test while it sat inside a method that spawns
+  a process. New file `test/services/kobold_launch_args_test.dart`, 16 tests,
+  characterising the shipped behaviour rather than specifying new behaviour.
+  Four of them negative-checked: bare `--usecublas` → red; `--jinja` made
+  conditional → red; `--quantkv` no longer forcing flash attention → red;
+  oversized batch back on the rejected CLI flag → red. All green again after
+  restore.
+
+`stopKobold` also captures `_process` into a local first: the exitCode listener
+installed by `startKobold` nulls the field the moment the process dies, which
+could happen part-way through the ladder and turn later `_process?.kill()` calls
+into silent no-ops.
+
+One ordering fix found in self-review: `_markModelReady` now arms the probe
+BEFORE `notifyListeners()`. A listener woken by that call can reach straight
+back in and generate, and until the arm runs the key still names the PREVIOUS
+model — so notify-first left a window where the workaround was decided from a
+stale verdict.
+
+### 3. `docs/Rawhide.md` understated the attribution frame by ~4x
+
+It said "about one extra sentence of text per reply". Measured: the frame is
+three sentences, 95 words, ~530 characters, plus the recap clause and the
+objective hedge. The note now states the real size and says plainly that it is
+more than what was first written there.
+
+---
+
+## 2026-08-08 — Spatial stance: rerolling the FIRST reply no longer walks her out of the room
+
+**Files:** `lib/services/chat_service.dart`,
+`lib/services/chat/chat_service_greeting.dart`,
+`lib/services/chat/chat_service_group_realism_helpers.dart`,
+`lib/services/chat/chat_service_reprocess.dart`,
+`lib/services/chat/chat_service_defaults.dart`,
+`test/services/chat/posture_regen_rewind_test.dart` (new),
+`test/services/chat/posture_seed_single_flight_test.dart` (new),
+`test/services/chat/posture_after_reply_test.dart` (counting fix — untracked
+file from this same body of work), `docs/Rawhide.md`
+
+### 1. CRITICAL — a regenerated first reply was grounded in the reply it discarded
+
+Moving the posture eval to the post-generation phase put a WRITE on the far
+side of the snapshot boundary. A message's `realism_state` is captured BEFORE
+generation, and `_restampRealismSnapshotPostGen` then overwrote its
+`spatialStance` with where the reply ENDED. Correct for every forward reader
+(next turn's baseline, swipe navigation, delete time-travel) — and it destroyed
+the only copy of the value a REGENERATE has to put back.
+
+On turn two that was invisible: the revert rebuilds its baseline from the
+PREVIOUS accepted message, whose post-reply stance is by construction this
+turn's pre-reply stance. Turn one has no previous accepted message. The greeting
+carries a snapshot on exactly one entry path (1:1 + `startNewChat` + a card with
+NO `frontPorchExtensions`) — not the ordinary open-a-character path, not a Front
+Porch or Stoop card, not a group. Everywhere else the revert found nothing, left
+the rejected reply's position standing, and each reroll wrote the next attempt
+from a place invented by the reply the user had just thrown away, drifting one
+room further per press. CLAUDE.md classifies exactly this as a rewind bug.
+
+Fixed by ordering, not by special-casing turn one: the restamp now preserves the
+pre-reply stance beside the snapshot (`kSpatialStancePreTurn`, `putIfAbsent` so a
+Continue's second restamp cannot redefine "before the turn" as "after it"), and
+the regen revert restores from it LAST, so it wins over the older second-hand
+copy. Same idiom as `needs_pre_turn_vector` and `pre_climax_arousal` — the two
+other post-generation writes. 1:1 and group share the path; in a group the
+existing `_saveScalarsIntoGroupRealism` right below files the restored value
+into the rejected speaker's own entry.
+
+### 2. Race — two callers could both seed the opening position
+
+`_seedOpeningPosture` has two entry points (the fire-and-forget greeting
+baseline and the pre-turn dance) and the guard they share, `spatialStance
+.isEmpty`, is a read of a value only the completed call writes. `sendMessage`
+does not gate on the greeting eval, so sending while the baseline was still on
+the wire bought a second identical request and let network timing pick which
+answer the conversation opened from. Now single-flight via a `Future<void>?` on
+the shell: the second caller waits for the first and re-reads the guards
+afterwards (so the documented "answered none → retry" behaviour and a mid-flight
+chat switch both still work). The waiter's copy swallows errors so a failed seed
+cannot be thrown at whoever arrived second.
+
+### 3. `docs/Rawhide.md` promised something untrue
+
+The spatial bullet claimed "rerolling a reply properly puts her back where she
+was before it" while the first reply of every chat did not. Rewritten to state
+what now actually ships, including that two rerolls of the same message start
+from the same place in 1:1 and group alike, and that a send landing during the
+opening request waits for it instead of paying for a second one.
+
+### Verification
+
+`flutter analyze --no-fatal-warnings --no-fatal-infos` → No issues found.
+`dart fix --dry-run` → Nothing to fix. `flutter test --concurrency=4
+--exclude-tags golden` → **+3363 ~14, all tests passed**. Both new suites were
+proven to fail first: the regen suite went 0/3 with the receipt+read reverted
+(1:1 legs on the regen prompt, group leg on the persisted blob — expected
+'curled in the armchair', actual 'leaning on the porch rail'); the race suite
+failed with `seedPostureCalls == 2` with the single-flight wait removed.
+
+---
+
+## 2026-08-08 — The story clock stops contradicting the notes (Bug 1 + Bug 2)
+
+**Files changed**
+- `lib/services/chat/time_service.dart` — the two fixes below
+- `lib/services/chat/chat_service_session_load.dart` — freeze the synthesised date into the row
+- `lib/utils/quoted_speech.dart` (new) + `lib/utils/utils.dart` — shared `stripQuotedSpeech`
+- `lib/services/image_prompt/image_prompt_builder.dart` — deleted its private duplicate of that strip
+- `test/services/chat/story_clock_stability_test.dart` (new, 15 guards)
+
+Context: the A/B against Kimi 2.6 showed wording fixes moved nothing (p=0.86),
+and mining the 461 conflict sentences put **day (28) and time (16)** at the top
+of the fields the model names when it says something contradicts. The clock is
+the biggest single contradiction source, and neither cause is a wording problem.
+
+### Bug 1 — the in-story date followed the real-world calendar
+
+`loadTimeScalars` fell back to `StoryClock.fromLegacy(today: todayAnchor())` for
+any session row with NULL `story_clock`/`story_start_date`. The v38 ladder note
+says those rows "synthesize on first load" — but nothing ever wrote the result
+back, so the synthesis ran again on EVERY load, anchored on a different "today".
+A chat opened on Monday reported Monday; the same chat reopened on the Saturday
+reported Saturday, while the journal cards and the "Where we are" recap written
+earlier still named the old date. A real trace: *"Saturday August 8th (Day 1) —
+wait, earlier it was Monday, but the notes say Saturday."*
+
+Not a corner case: **96 of the 109 sessions in the maintainer's own library**
+still had NULL there. The columns are only written by a full chat save, so
+opening a chat, reading it and closing it never froze the date — those chats
+were free to wander indefinitely.
+
+Fixed in three parts:
+1. `loadTimeScalars` now reports the invention via `canonicalClockWasSynthesised`,
+   and `_hydrateSessionScalars` patches `story_clock`/`story_start_date` (plus the
+   derived `start_day_of_week`/`time_of_day`/`day_count`) straight back into the
+   row. A partial `patchSession`, deliberately not `_saveChat()`: we are
+   mid-hydration and a full save would persist half-loaded needs/pockets/chaos
+   state. Migration-safe — the synthesis formula is untouched, so a legacy chat
+   keeps showing exactly what it shows today; it just stops moving afterwards.
+2. The two half-populated cases (clock without anchor, anchor without clock) no
+   longer go through the today-anchored path at all — each derives the missing
+   half from the half we have. The old code could hand a fixed-date story
+   (Day 1 = 1887-06-01) a "current" moment in 2026 and call it Day 50,000.
+3. `restoreTimeFromRealismState` read pre-calendar message snapshots ("Day N,
+   period P") against the wall calendar too, so swiping one old message dragged
+   the whole timeline onto whatever date the user happened to be swiping on —
+   mid-conversation, contradicting every message above it. It now reads them
+   against THIS story's Day 1, which is the only thing the snapshot ever meant.
+
+The wall clock is now read in exactly one place: the genuinely pre-calendar
+branch, whose result is frozen immediately by (1).
+
+### Bug 2 — a character SAYING "next week" travelled there
+
+Investigated as asked. The per-turn eval turned out to be broadly sane on real
+data (median advance 15 min/turn, p90 115 min, 11 turns at the 180-min clamp).
+The day jumps came from `detectOocTimeSkip`, which matched its phrase list
+anywhere in the message — quoted dialogue included:
+
+- *"Mistress? will you give your donors a new video next week?"* → matched
+  `next week` → **Day 1 to Day 8**, exactly seven days, same wall time.
+- *"why wait till next week for the Gym video, do it tomorrow"* → the same
+  seven-day jump a few turns later, and that one stuck for the rest of the chat.
+- *"even though we just woke up a few hours ago"* → matched `woke up` → fired
+  `nextMorning` and cost another chat a whole day, at 10:32 in the morning.
+
+The scene-time prompt already states the rule the detector was missing: "merely
+MENTIONING yesterday, tomorrow, or another day does NOT count". And the damage
+compounds — a fired skip claims the turn (`_oocSkipMovedClockThisTurn`), so the
+eval's own correct verdict of a few minutes is discarded in favour of the
+phantom week.
+
+Fixed by stripping quoted speech before matching. A skip is something the
+NARRATION does; a time phrase inside quotes is something a character said.
+Measured against the whole library: of **1,050 trigger phrases, 1,043 sit
+outside quotes and still fire**; the 7 inside were false, every one. Straight and
+curly quotes both count; single quotes deliberately do not (apostrophes); an
+unterminated quote keeps the old firing behaviour rather than swallowing the
+message.
+
+Deliberately NOT applied to `_newDayCorroboration`: "goodnight" and "I'm going
+to sleep" are SPOKEN, so stripping quotes there would delete the evidence that a
+night was really crossed and quietly stop day rolls altogether.
+
+### Deletion / consolidation
+
+`ImagePromptBuilder._stripQuotedDialogue` was a private second copy of the same
+regex. Deleted; both callers now use `stripQuotedSpeech` in `lib/utils/`
+(`think_tags.dart` is the precedent for a shared text helper). Behaviour is
+unchanged for image prompts — the only difference is a space instead of nothing
+between two words that were welded by a quote, and the whitespace collapse that
+follows erases it.
+
+### Two findings reported, NOT changed (need a maintainer call)
+
+1. **Day N rolls at midnight, not at waking.** Minutes accumulate freely across
+   midnight, so a continuous late-night scene increments the story day with no
+   sleep and no scene break — the app can say "1:05 at night, Day 4" for what is
+   still Day 3's evening, while `periodForHour` itself calls 01:00 'night'.
+   3 real instances (22:50→01:05, 23:49→00:01, 23:59→00:04), all small. Fixing
+   it means making `dayCountFor` roll at ~05:00 instead of midnight, which a
+   committed test pins by name ("counts calendar days", 00:10 → Day 2), and it
+   ripples into biomes, journal Day lines, growth and objectives. Not touched.
+2. **`new_day` corroboration scans a 6-message window.** One sleep/wake word
+   anywhere in the last ~3 exchanges keeps the gate open for every later
+   hallucinated `new_day`, and the list includes `in the morning`, a pure
+   forward reference the prompt's own rule excludes. The real day rolls I traced
+   all landed on legitimate 08:00 next-morning transitions, so the data did not
+   justify narrowing it — but the window is wider than the guard's own docstring
+   claims.
+
+### Verification
+
+`flutter analyze --no-fatal-warnings --no-fatal-infos` → No issues found.
+`flutter test --concurrency=4 --exclude-tags golden` → **+3406 ~14, all tests
+passed**. All 15 new guards were proven to fail first: with the quote strip
+reverted, 5 went red printing the real damage (2026-07-02 → 2026-07-09 twice,
+→ 2026-07-03 08:00 once, plus the phantom skip chip); with the anchor fixes
+reverted, 5 went red printing today's real date (2026-08-08) where the story
+date belongs — including an 1887 story reported as 2026-08-08. The four existing
+clock suites (70 tests) pass unmodified.

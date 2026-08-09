@@ -19,8 +19,8 @@
 /// Engine eval tools — the tool-calling transport for every structured eval
 /// whose downstream consumes flat-JSON text (the journal_ops/growth_ops
 /// pattern applied to the Realism Engine's judge calls, the needs-impact
-/// eval, the scene-time/posture eval, the expression reclassifier, and the
-/// Scene Guest cast detector).
+/// eval, the scene-time eval, the posture pass, the expression
+/// reclassifier, and the Scene Guest cast detector).
 ///
 /// Design: tools are a RELIABLE WAY TO OBTAIN THE SAME JSON the evals have
 /// always parsed. A successful tool call is converted by
@@ -110,9 +110,9 @@ final Map<String, Map<String, dynamic>> _narrativeFields = {
 final Map<String, Map<String, dynamic>> _oneShotFields = {
   ..._relationshipFields,
   ..._emotionalFields,
-  'posture': _strField(
-    'Current physical position and location (brief phrase), or "none".',
-  ),
+  // No `posture`: it moved to its own POST-generation pass on 2026-08-08
+  // (see kSceneTimeEvalTools below). One-shot fuses the PRE-generation
+  // judges, and posture stopped being one of those.
   // Scene-time fields ride the fused call so one-shot mode needs no separate
   // per-turn time eval (strict one-shot vs normal parity — same fields, same
   // clamp/floor/backstop applied by TimeService).
@@ -268,21 +268,29 @@ final Map<String, Map<String, dynamic>> _sceneTimeFields = {
   ),
 };
 
+/// The POST-generation posture pass (TimeService's `postureOnly` mode). It
+/// keeps the full field set because `posture` is the only REQUIRED one and a
+/// model that volunteers the others costs nothing — but posture is the only
+/// field that pass reads. Until 2026-08-08 this was the fused pre-generation
+/// scene-time+posture schema; posture moved out of that call because the
+/// question ("where did this reply leave her") is unanswerable before the
+/// reply exists.
 final List<Map<String, dynamic>> kSceneTimeEvalTools = [
   _tool(
     kSceneTimeTool,
-    'Report the scene-time verdict and the character\'s current posture.',
+    'Report the character\'s current physical position and stance.',
     _sceneTimeFields,
     const ['posture'],
   ),
 ];
 
-/// Time-only variant for the standalone clock (Realism Engine off — see
-/// TimeService's `timeOnly` mode). Deliberately the SAME tool name, so
-/// [realismToolCallToJson] and every parse step downstream are literally the
-/// same code path; it just drops `posture`, which is a realism scalar that
-/// nothing reads while the engine is off. Field definitions are reused from
-/// [_sceneTimeFields] rather than restated, so the two variants cannot drift.
+/// The per-turn clock advance — BOTH drivers, the engine's and the standalone
+/// one (TimeService's `timeOnly` mode is only about how much scene framing the
+/// PROMPT carries; the schema is one). Deliberately the SAME tool name as the
+/// posture variant, so [realismToolCallToJson] and every parse step downstream
+/// are literally the same code path; it just drops `posture`. Field
+/// definitions are reused from [_sceneTimeFields] rather than restated, so the
+/// two variants cannot drift.
 final List<Map<String, dynamic>> kSceneTimeOnlyEvalTools = [
   _tool(
     kSceneTimeTool,

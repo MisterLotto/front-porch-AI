@@ -18,6 +18,53 @@
 
 part of '../chat_service.dart';
 
+/// The STATE ZONE (docs/design/prompt-state-injection.md §6.1) — the blocks
+/// that describe the world and the character rather than the conversation:
+/// the recap, the Journal, the objective, the world, the character-state
+/// block and the needs catastrophe.
+///
+/// ALL SIX RIDE THE USER TURN, AFTER THE TRANSCRIPT. That seat is measured,
+/// not chosen. Everything registered ahead of the transcript has to be
+/// byte-identical from turn to turn or the local prefix cache breaks at the
+/// first differing byte and re-processes everything after it — which is the
+/// whole transcript. Measured on the maintainer's gemma-4-31B (Q8, M5 Max) on
+/// a 5.4k-token prompt, five consecutive turns, each arm given a unique
+/// session nonce so none of them could inherit a warm cache slot from another
+/// (§8d):
+///
+///   zone here, after the transcript   508 of 5.5k tokens re-prefilled/turn
+///   zone in the leading system msg   5020 of 5.5k tokens re-prefilled/turn
+///
+/// i.e. 9.3x the wall clock per reply, every reply, for as long as the chat
+/// lives. Only the state zone itself is ever re-read from this seat; from the
+/// other one the whole conversation is.
+///
+/// The system-message placement was tried on 2026-08-08 (to stop models
+/// reading the app's bookkeeping as something the human typed) and REVERTED
+/// the same day, because no amount of de-churning can buy the prefix back: the
+/// Journal's mood-congruent ordering re-sorts the hot set whenever the
+/// speaker's emotion FAMILY changes, and the 600-token budget then renders a
+/// different card set. Replayed over the maintainer's own 200-card diary
+/// against one real chat's 42 recorded emotion values, the journal block held
+/// its bytes on 24 of 41 turn transitions and changed them on 17 — 41% of
+/// replies; across every real chat in that library, 543 of 873 transitions.
+/// The ordering is a deliberate feature and stays, so the zone stays here and
+/// pays for attribution in WORDS instead — see [buildStateZoneFrame]. That
+/// frame is not free either, but it is ~121 tokens added to a zone that is
+/// re-read anyway (508 → 629 tokens/turn), against ~4,500.
+///
+/// Membership is declared once, here, and read by the frame's salience gate
+/// and by the continue-mode strip — a new state block joins the contract by
+/// being added to this list, not by being remembered in three places.
+const List<String> kStateZoneSectionIds = [
+  'summary',
+  'journal',
+  'objectives',
+  'world',
+  'realism',
+  'catastrophe',
+];
+
 /// Phase 2 of `_generateResponse` (see chat_service_generation.dart):
 /// Continue-mode message pop, the macro resolution pass, the realism/world/
 /// Chance Time/porch-night/objective/catastrophe state blocks, PromptPlan
@@ -297,19 +344,30 @@ extension ChatServiceGenerationPlan on ChatService {
         text: '',
         counted: false, // budget-fitted by the RAG joint cap below
       );
-      // The recap and the Journal ALSO sit after the transcript (audit
-      // finding #4's remainder, same mechanism as memories above): the
-      // journal block re-sorts with the speaker's mood and re-warms cold
-      // cards EVERY turn, and the recap rewrites every journal pass — as
-      // pre-history sections they rewrote the prompt's head, forcing a
-      // full re-prefill of the whole transcript on every local backend
-      // (KoboldCpp, oMLX, LM Studio; prefix caches need byte-identical
-      // heads). Post-history, mood re-ordering is cache-free. Render order
-      // memories → recap → journal puts the feelings channel closest to
-      // the generation point, matching its "truer guide" role frame.
-      // Their fixed-count slot is unchanged (history/memories are excluded
-      // from fixedCountText); the only fixed-count delta is each block's
-      // new separator newline (≤1 token), so history budgeting is intact.
+      // ── the state zone opens here (kStateZoneSectionIds, top of file) ──
+      // The recap and the Journal sit after the transcript (audit finding
+      // #4's remainder, same mechanism as memories above): the journal block
+      // re-sorts with the speaker's mood and re-warms cold cards EVERY turn,
+      // and the recap rewrites every journal pass — as pre-history sections
+      // they rewrote the prompt's head, forcing a full re-prefill of the
+      // whole transcript on every local backend (KoboldCpp, oMLX, LM Studio;
+      // prefix caches need byte-identical heads). Post-history, mood
+      // re-ordering is cache-free. Render order memories → recap → journal
+      // puts the feelings channel closest to the generation point, matching
+      // its "truer guide" role frame. Their fixed-count slot is unchanged
+      // (history/memories are excluded from fixedCountText); the only
+      // fixed-count delta is each block's separator newline (≤1 token), so
+      // history budgeting is intact.
+      //
+      // Re-measured 2026-08-08 when this seat was briefly given up for the
+      // leading system message and taken straight back: 508 vs 5,020 tokens
+      // re-prefilled per warm turn on gemma-4-31B (9.3x the wall clock per
+      // reply), and de-churning cannot recover it because the journal's own
+      // mood ordering moves the bytes on 41% of real turns. The attribution
+      // that move was chasing is bought in words by the state_frame section
+      // below. Full numbers: the kStateZoneSectionIds doc and §6.1/§8d of
+      // docs/design/prompt-state-injection.md.
+      plan.add(id: 'state_frame', label: 'State Frame', text: '');
       plan.add(id: 'summary', label: 'Summary', text: t.summaryBlock);
       plan.add(id: 'journal', label: 'Journal', text: t.journalBlock);
       plan.add(
@@ -349,6 +407,18 @@ extension ChatServiceGenerationPlan on ChatService {
       // cannot bury the Mafia night (docs/design/llmerta-porch-memories.md §7b).
       plan.add(id: 'porch_night', text: porchNightBlock);
 
+      // The zone is introduced only when it actually has something in it
+      // (salience gating — a quiet turn stays quiet, and a frame introducing
+      // nothing is pure noise). Run after every section is registered, and
+      // BEFORE fixedCountText is counted, so the frame is paid for in the
+      // history budget.
+      if (kStateZoneSectionIds.any((id) => plan.section(id).text.isNotEmpty)) {
+        plan.section('state_frame').text = buildStateZoneFrame(
+          userName: t.userName,
+          characterName: t.speakingCharacter.name,
+        );
+      }
+
       final fixedTokens = await _countTokens(plan.fixedCountText);
       final contextBudget = _sessionGenSettings.resolveContextSize(
         _storageService,
@@ -365,6 +435,42 @@ extension ChatServiceGenerationPlan on ChatService {
         );
         t.history = result.history;
         t.droppedMessages = result.droppedCount;
+
+        // ── THE RECAP ONLY EARNS ITS PLACE WHEN IT COVERS WHAT THE
+        //    TRANSCRIPT NO LONGER SHOWS ────────────────────────────────────
+        //
+        // `droppedCount == 0` means every message in this chat is in the
+        // prompt below. The recap then describes nothing the model cannot
+        // read directly — it is a second, COMPRESSED, and (because it only
+        // rewrites on a Journal pass) OLDER account of the very same events.
+        // That is not memory, it is a contradiction generator: measured on
+        // the maintainer's real chats, "recap" was named in 19 of the 461
+        // conflict sentences a reasoning model produced, and the modal
+        // complaint was the recap disagreeing with the scene.
+        //
+        // Rewording it did not help — an A/B on Kimi 2.6 over 32 historical
+        // turns moved the recap-conflict rate 33% -> 33% (p=1.00), because
+        // the contradiction is REAL and no phrasing removes a true one. So
+        // the block is dropped instead, on exactly the turns where it can
+        // only do harm. Where it does carry unseen history it is untouched.
+        //
+        // Deliberately keyed on the fitted result rather than the Journal
+        // cursor: the cursor says how much has been READ, this says how much
+        // is VISIBLE, and visibility is the thing that makes the recap
+        // redundant. It also degrades correctly on a huge context (nothing
+        // dropped -> no recap needed) and on a tiny one (lots dropped ->
+        // recap matters most).
+        if (t.droppedMessages == 0) {
+          plan.section('summary').text = '';
+          // The frame was decided ABOVE, while the recap still had text, so
+          // re-run its salience gate here or a turn whose only state was the
+          // recap ships a sentence introducing an empty zone.
+          if (kStateZoneSectionIds.every(
+            (id) => plan.section(id).text.isEmpty,
+          )) {
+            plan.section('state_frame').text = '';
+          }
+        }
       }
       // If budget is zero or negative, fixed sections already fill the context — use minimal history
       if (t.historyBudget <= 0 && _messages.isNotEmpty) {
@@ -392,6 +498,12 @@ extension ChatServiceGenerationPlan on ChatService {
       plan.section('chance_time').text = '';
       plan.section('objectives').text = '';
       plan.section('catastrophe').text = '';
+      // A frame is only true while something it introduces is still there.
+      // Checked against the whole membership rather than hard-coded to the
+      // strip list above, so this stays correct if the strip ever changes.
+      if (kStateZoneSectionIds.every((id) => plan.section(id).text.isEmpty)) {
+        plan.section('state_frame').text = '';
+      }
       // Also skip RAG "earlier memories" for pure straight continuation.
       t.droppedMessages = 0;
     }

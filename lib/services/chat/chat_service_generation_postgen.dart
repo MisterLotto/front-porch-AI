@@ -214,6 +214,35 @@ extension ChatServiceGenerationPostGen on ChatService {
             // Continue for the same reason the needs checks are.
             await _runClimaxPass(finalResponse);
             await _runPocketsPass(finalResponse);
+            // Spatial stance — where this reply LEFT her. Third of the same
+            // family, and it belongs here for the identical reason: a
+            // position the character establishes in her own words cannot be
+            // known by a judge that ran before those words existed. It used
+            // to ride the pre-generation scene-time eval, which is why
+            // characters teleported: the prompt asserted a position derived
+            // from the previous exchange while the reply had already moved
+            // them somewhere else. Maintainer ruling 2026-08-08. Skipped on
+            // Continue with its siblings — a continuation is the same
+            // exchange, and re-reading it would just re-answer the same
+            // question at the price of another call.
+            //
+            // The result is picked up by the group persist below
+            // (spatialStance rides saveRelationshipScalarsToGroup), by the
+            // snapshot restamp, and by the single persist that closes this
+            // block, so 1:1 and group store it identically.
+            //
+            // AWAITED, and therefore inside the settling window that greys the
+            // composer. That cost was weighed and kept: the value this call
+            // produces is read by the NEXT prompt's "Position:" line, so a
+            // fire-and-forget version would race the user's next send and hand
+            // the reply the position from the exchange before — the exact
+            // teleport the pass was moved here to stop. It would also race the
+            // `_saveChat` below, putting the write back outside any save and
+            // recreating the bug this block was rewritten to fix. Same
+            // reasoning, same phase, same awaiting as its two siblings above.
+            if (finalResponse.isNotEmpty) {
+              await _evaluatePhysicalStateCall(postureOnly: true);
+            }
           }
 
           // Keep this message's realism_state snapshot TRUTHFUL now that the
@@ -250,7 +279,37 @@ extension ChatServiceGenerationPostGen on ChatService {
           // the swipe-merge copies these chips onto the accepted swipe.
           // The ONE chip source. Continue never re-attaches.
           if (t.mode == GenerationMode.normal) {
-            await _attachNeedsDeltaChipToLastMessage();
+            _attachNeedsDeltaChipToLastMessage();
+          }
+
+          // ── The post-generation phase's ONE persist ────────────────────
+          // Everything above this line writes to memory only: the needs
+          // vector, the climax/arousal scalars, pockets, the spatial stance,
+          // the restamped `realism_state` snapshot, the per-member
+          // `_groupRealism` entry and the chips. The `_saveChat()` near the
+          // top of this method ran BEFORE all of it — it exists to get the
+          // reply text on disk before four eval round-trips, not to carry
+          // their results.
+          //
+          // Until 2026-08-08 the only save that could follow this block was
+          // the one hidden inside _attachNeedsDeltaChipToLastMessage, which
+          // returns on its first line when Needs is off. So on the ordinary
+          // 1:1 path with Needs off NOTHING was written after the passes ran:
+          // the session row, the message snapshot and the group blob all kept
+          // the PREVIOUS turn's spatial stance, and the character teleported
+          // back one exchange on every reload. It also meant a user's answer
+          // to "do I want the Sims needs simulation?" silently decided
+          // whether her position survived — two unrelated features wired
+          // together (docs/design/feature-independence.md).
+          //
+          // Moving the save out of the chip helper and putting it here costs
+          // the same one write per turn it always did, and now it covers
+          // everything the phase produced instead of one feature's slice.
+          // Skipped on Continue with the passes themselves: a continuation
+          // re-runs none of them, so there is nothing new to write.
+          if (t.mode != GenerationMode.continue_) {
+            await _saveChat();
+            notifyListeners();
           }
         } finally {
           // Unconditional pointer restore on a throw. The settling flag is

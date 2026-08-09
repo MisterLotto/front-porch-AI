@@ -229,6 +229,12 @@ extension ChatServiceImpersonate on ChatService {
       // ── Context Shift: budget-aware history trimming ──
       // Same single-source PromptPlan as the main generation path (spec §7):
       // one section list renders the system text, user text, and fixed count.
+      // No state zone here, and that is not a divergence from §6.1: writing
+      // the USER's next line needs the card, the scene and the transcript,
+      // never the character's private feelings, needs or objectives — this
+      // path has never registered those sections at all. The author-directive
+      // tail (post-history, @AN lore, author's note) sits in the user message
+      // exactly as the main path leaves it.
       final plan = PromptPlan();
       plan.add(id: 'system', inSystem: true, text: '$systemPrompt\n');
       plan.add(id: 'lore.before', inSystem: true, text: loreBefore);

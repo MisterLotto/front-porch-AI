@@ -135,6 +135,20 @@ const Duration _kStreamNotifyInterval = Duration(milliseconds: 33);
 /// Inter-call delay used when staggering the multi-call realism evaluations.
 const _kEvalDispatchStagger = Duration(milliseconds: 50);
 
+/// Message-metadata key holding the spatial stance the turn STARTED from.
+///
+/// Posture is written AFTER generation (it reads the reply), so the message's
+/// `realism_state` snapshot — captured before generation — gets its
+/// `spatialStance` overwritten with where the reply LEFT her. That is correct
+/// for every forward reader and destroys the only copy of the value a
+/// REGENERATE has to put back, which is why this receipt exists. Written once
+/// per message in `_restampRealismSnapshotPostGen`, read once in the regen
+/// revert; named here so the two can never drift apart on a typo.
+///
+/// Sibling of `needs_pre_turn_vector` and `pre_climax_arousal` — the same
+/// contract for the two other post-generation writes.
+const String kSpatialStancePreTurn = 'spatial_stance_pre_turn';
+
 // Internal flag to signal a cancellation request for realism evaluation.
 // This is a file-scope flag to avoid needing to thread state through the
 // entire class in this patch, and is reset once the interruption is surfaced

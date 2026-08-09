@@ -22,6 +22,7 @@ import 'package:front_porch_ai/services/chat/pass_support.dart';
 import 'package:front_porch_ai/services/chat/realism_tools.dart';
 import 'package:front_porch_ai/services/chat/story_clock.dart';
 import 'package:front_porch_ai/services/services.dart' show LlmToolResponse;
+import 'package:front_porch_ai/utils/utils.dart' show stripQuotedSpeech;
 
 /// Plain (non-ChangeNotifier) domain service owning the chat-scoped passage-of-time
 /// state — rewritten around a real datetime clock (design:
@@ -31,9 +32,10 @@ import 'package:front_porch_ai/services/services.dart' show LlmToolResponse;
 /// weekday are all pure derivations; every conversion/snap/synthesis lives in
 /// the [StoryClock] leaf.
 ///
-/// Advancement is continuous and per-turn: the scene-time eval (which already
-/// fires every turn — it used to carry posture alone on non-eligible turns)
-/// reports `minutes_elapsed` for the latest exchange, hard-clamped by
+/// Advancement is continuous and per-turn: the scene-time eval (which fires
+/// every turn, BEFORE generation, so the character knows what time it is
+/// while writing) reports `minutes_elapsed` for the latest exchange,
+/// hard-clamped by
 /// [StoryClock.maxMinutesPerTurn], with [StoryClock.failureDriftMinutes] as
 /// the deterministic floor on eval failure and a
 /// [StoryClock.stallBackstopTurns]-turn backstop that snaps to the next
@@ -64,11 +66,11 @@ import 'package:front_porch_ai/services/services.dart' show LlmToolResponse;
 /// What the other three turned out to be:
 ///
 /// 2. FUSED WITH POSTURE — a cost, not a barrier, and this file already
-///    disproved it: the `!_passageOfTimeEnabled` branch below has always run
-///    a posture-ONLY call. `timeOnly` is that same shape mirrored. With the
-///    engine ON nothing changes at all — the fused call stays fused and costs
-///    exactly what it did. Only an engine-off user who opts in pays a call,
-///    and for them it replaces zero calls, not one.
+///    disproved it: the posture-ONLY branch below has always existed.
+///    `timeOnly` is that same shape mirrored. (Since 2026-08-08 the fusion is
+///    gone outright — posture moved to its own POST-generation pass, see
+///    [evaluateTimeProgressAndPostureIfNeeded] — so the time call now asks
+///    one question in every mode.)
 /// 3. ONE-SHOT HAS NO TIME CALL TO EXTRACT — true and irrelevant. One-shot is
 ///    a REALISM optimization; with the engine off there is no fused JSON to
 ///    lift a field out of. The paths never intersect, so one-shot parity is
@@ -104,8 +106,20 @@ import 'package:front_porch_ai/services/services.dart' show LlmToolResponse;
 ///
 /// Legacy wire formats (`timeOfDay`/`dayCount`/`startDayOfWeek` in session
 /// rows, realism_state snapshots, group blobs, and V2 card extensions) are
-/// written as derivations and read as seeds via [StoryClock.fromLegacy] — the
-/// single successor to the old per-consumer `resolveStartDayOfWeek` trick.
+/// written as derivations and read as seeds.
+///
+/// THE STORY DATE IS NOT ALLOWED TO FOLLOW THE REAL CALENDAR (2026-08-08).
+/// Every legacy read used to resolve through [StoryClock.fromLegacy] against
+/// `todayAnchor()`, and none of them wrote the answer back — so the same chat
+/// reported a different date on Monday and on Saturday while its journal and
+/// recap still named the first one. That is a contradiction we hand the model
+/// in its own prompt, and it is the single largest one the conflict-sentence
+/// mining found (day 28 · time 16 of 461). `fromLegacy` now has exactly ONE
+/// caller: [loadTimeScalars]'s branch for a row with neither canonical column,
+/// which flags itself via [canonicalClockWasSynthesised] so the loader freezes
+/// the result into the row on the spot. Everything else derives from state we
+/// already hold. Do not reintroduce a wall-clock read on a load or restore
+/// path: `DateTime.now()` belongs to a NEW chat's start date and nowhere else.
 class TimeService {
   final VoidCallback onNotify;
   final Future<void> Function() onSaveChat;
@@ -126,11 +140,12 @@ class TimeService {
   DateTime _startDate = StoryClock.todayAnchor();
   bool _passageOfTimeEnabled = true;
   int _turnsSinceClockMoved = 0; // stall backstop counter (not a pacing gate)
+  bool _canonicalClockWasSynthesised = false;
   // One clock authority per turn: set when detectOocTimeSkip moves the clock,
   // consumed by the per-turn eval so it can't re-count the same exchange.
   bool _oocSkipMovedClockThisTurn = false;
 
-  // Tools transport for the scene-time/posture eval (nullable — tests and
+  // Tools transport for the scene-time and posture evals (nullable — tests and
   // any host without the tools door stay on the text path).
   final Future<LlmToolResponse?> Function(
     String prompt,
@@ -167,16 +182,37 @@ class TimeService {
   String get storyClockIso => StoryClock.serializeClock(_clock);
   String get storyStartDateIso => StoryClock.serializeDate(_startDate);
 
+  /// True when the last [loadTimeScalars] had to INVENT part of the canonical
+  /// clock because the session row predates the Story Calendar (v38). The
+  /// caller MUST write [storyClockIso] / [storyStartDateIso] back to the row.
+  ///
+  /// THE BUG THIS EXISTS TO END. The v38 ladder note says legacy rows
+  /// "synthesize on first load" — but nothing ever persisted that synthesis, so
+  /// it ran again on EVERY load, and its only anchor is
+  /// [StoryClock.todayAnchor], the real-world calendar. The in-story date
+  /// therefore followed the day you happened to open the chat: opened on a
+  /// Monday it reported Monday; reopened on the Saturday it reported Saturday,
+  /// while the journal cards and the "Where we are" recap written earlier still
+  /// named the old one. The model then spends its reasoning deciding which of
+  /// our own answers to believe ("Saturday August 8th (Day 1) — wait, earlier it
+  /// was Monday, but the notes say Saturday").
+  ///
+  /// It was not a rare corner: 96 of the 109 sessions in the maintainer's own
+  /// library still had NULL `story_clock`/`story_start_date`, because the
+  /// columns are only written by a full chat save — opening a chat, reading it
+  /// and closing it never froze the date, so those chats wandered indefinitely.
+  bool get canonicalClockWasSynthesised => _canonicalClockWasSynthesised;
+
   /// "9:40 PM" / "Tue, Mar 3" / "Tuesday, March 3rd(, 1887)" for the UI.
   String get displayClock => StoryClock.formatClock(_clock);
   String get displayShortDate => StoryClock.formatShortDate(_clock);
   String get displayDate =>
       StoryClock.formatDate(_clock, realYear: StoryClock.todayAnchor().year);
 
-  /// Fire one scene-time/posture eval through the shared tools-vs-text
+  /// Fire one scene-time or posture eval through the shared tools-vs-text
   /// negotiation (or straight text when the tools door isn't wired).
-  /// [tools] selects the fused schema or the posture-less standalone one; both
-  /// carry the same tool NAME, so everything downstream is one code path.
+  /// [tools] selects the posture schema or the time-only one; both carry the
+  /// same tool NAME, so everything downstream is one code path.
   Future<String?> _fireSceneTimeEval(
     String Function({required bool toolsMode}) buildPrompt, {
     required Future<String?> Function(
@@ -213,6 +249,10 @@ class TimeService {
     _turnsSinceClockMoved = 0;
     _oocSkipMovedClockThisTurn = false;
     _passageOfTimeEnabled = true;
+    // A brand-new chat has nothing to write back — its clock reaches the row
+    // through the ordinary save. Leaving a previous chat's `true` standing here
+    // would ask the loader to patch a row this service no longer describes.
+    _canonicalClockWasSynthesised = false;
   }
 
   /// Seed from a V2 card / ext-seed payload (design §3a). [storyStartDate]
@@ -255,7 +295,18 @@ class TimeService {
   }
 
   /// Load from a session row. Canonical columns win; legacy rows synthesize
-  /// so the displayed weekday never jumps across the upgrade.
+  /// so the displayed weekday never jumps across the upgrade — and report that
+  /// they did via [canonicalClockWasSynthesised], because a synthesis that is
+  /// never written back is a synthesis that runs again tomorrow against a
+  /// different "today".
+  ///
+  /// Only the both-columns-missing case reads the wall clock at all. The two
+  /// half-populated cases derive the missing half from the half we HAVE, which
+  /// is deterministic: a stored moment fixes Day 1 at [dayCount] days behind
+  /// it, and a stored Day 1 fixes the moment at Day [dayCount] forward of it.
+  /// The old code sent both of those through the today-anchored legacy path,
+  /// which could hand a fixed-date story (Day 1 = 1887-06-01) a "current"
+  /// moment in 2026 and call it Day 50,000.
   void loadTimeScalars({
     required String timeOfDay,
     required int dayCount,
@@ -275,20 +326,35 @@ class TimeService {
 
     final clock = StoryClock.parse(storyClock);
     final anchor = StoryClock.parse(storyStartDate);
+    final safeDay = dayCount < 1 ? 1 : dayCount;
+    _canonicalClockWasSynthesised = clock == null || anchor == null;
+
     if (clock != null && anchor != null) {
       _clock = clock;
       _startDate = StoryClock.dateOnly(anchor);
+    } else if (clock != null) {
+      _clock = clock;
+      _startDate = StoryClock.dateOnly(
+        clock,
+      ).subtract(Duration(days: safeDay - 1));
+    } else if (anchor != null) {
+      _startDate = StoryClock.dateOnly(anchor);
+      _clock = StoryClock.representativeTime(
+        _startDate.add(Duration(days: safeDay - 1)),
+        timeOfDay,
+      );
     } else {
+      // Genuinely pre-calendar: period + day number and nothing else. Today is
+      // the only anchor there is, and this branch keeps showing exactly what
+      // these chats show now — the caller freezes it so it stops moving.
       final legacy = StoryClock.fromLegacy(
         timeOfDay: timeOfDay,
         dayCount: dayCount,
         startDayOfWeek: startDayOfWeek,
         today: StoryClock.todayAnchor(),
       );
-      _clock = clock ?? legacy.clock;
-      _startDate = anchor != null
-          ? StoryClock.dateOnly(anchor)
-          : legacy.startDate;
+      _clock = legacy.clock;
+      _startDate = legacy.startDate;
     }
   }
 
@@ -317,16 +383,18 @@ class TimeService {
     final tod = state['timeOfDay'] as String?;
     final dc = state['dayCount'] as int?;
     if (tod == null && dc == null) return;
-    final legacy = StoryClock.fromLegacy(
-      timeOfDay: tod ?? timeOfDay,
-      dayCount: dc ?? dayCount,
-      startDayOfWeek: state['startDayOfWeek'] as int? ?? 0,
-      today: StoryClock.todayAnchor(),
+    if (anchor != null) _startDate = StoryClock.dateOnly(anchor);
+    // A pre-calendar snapshot says only "Day N, period P". Read it against
+    // THIS story's Day 1 — the anchor we are already holding — not against the
+    // real-world calendar. Today-anchoring it meant swiping one old message
+    // dragged the entire timeline onto whatever date the user happened to be
+    // swiping on, which is the same wandering date as the load path, except it
+    // struck mid-conversation and contradicted every message above it.
+    final day = (dc ?? dayCount) < 1 ? 1 : (dc ?? dayCount);
+    _clock = StoryClock.representativeTime(
+      _startDate.add(Duration(days: day - 1)),
+      tod ?? timeOfDay,
     );
-    _clock = legacy.clock;
-    _startDate = anchor != null
-        ? StoryClock.dateOnly(anchor)
-        : legacy.startDate;
   }
 
   // ── Manual control (chevrons + calendar dialog) ───────────────────────────
@@ -388,6 +456,34 @@ class TimeService {
   /// AND bare in-narrative skip phrasing ("we drive for several hours").
   /// Stamps the destination into pending metadata for the next delta chip.
   /// Respects the global passageOfTimeEnabled setting.
+  ///
+  /// ── WHY QUOTED SPEECH IS STRIPPED FIRST (2026-08-08) ─────────────────────
+  ///
+  /// A skip is something the NARRATION does. A time phrase inside quotes is
+  /// something a character SAID, and saying a date is not travelling to it —
+  /// the scene-time prompt already states the rule this detector was missing:
+  /// "merely MENTIONING yesterday, tomorrow, or another day does NOT count".
+  ///
+  /// This was not theoretical. In one of the maintainer's own chats the line
+  /// *"Mistress? will you give your donors a new video next week?"* matched
+  /// `next week` and jumped the story from Day 1 to Day 8 — exactly seven days,
+  /// same wall time — and a few turns later *"why wait till next week for the
+  /// Gym video"* did it again, that time permanently. A third chat lost a full
+  /// day to *"even though we just woke up a few hours ago"*, which matched
+  /// `woke up` and fired [StoryClock.nextMorning]. In every case the skip then
+  /// claimed the turn (`_oocSkipMovedClockThisTurn`), so the eval's own — and
+  /// correct — verdict of a few minutes was discarded in its favour. That is
+  /// the "day 28 / time 16" contradiction: the notes still describe the same
+  /// afternoon the scene never left.
+  ///
+  /// The narrated cases are untouched, because narration is not in quotes. Over
+  /// the 1,050 trigger phrases in that library, 1,043 sit outside quotes and
+  /// still fire; the 7 inside were false, every one.
+  ///
+  /// Deliberately NOT applied to [_newDayCorroboration]: "goodnight" and "I'm
+  /// going to sleep" are SPOKEN, so stripping quotes there would delete the
+  /// evidence that a night was really crossed and quietly stop day rolls
+  /// altogether. Opposite question, opposite answer.
   void detectOocTimeSkip(String text) {
     if (!_passageOfTimeEnabled) {
       debugPrint(
@@ -396,7 +492,7 @@ class TimeService {
       return;
     }
 
-    final lower = text.toLowerCase();
+    final lower = stripQuotedSpeech(text).toLowerCase();
 
     final hasOocMarker = RegExp(
       r'\(ooc[:\s]|\[ooc|\*ooc\b|ooc:',
@@ -518,22 +614,51 @@ class TimeService {
     caseSensitive: false,
   );
 
-  /// Per-turn scene-time + posture evaluation (design §2). In the multi-call
-  /// path this fires ONE eval per turn asking minutes_elapsed / new_day /
-  /// posture — the same call that previously carried posture alone on
-  /// non-eligible turns. In oneShotMode the fused one-shot JSON (passed as
-  /// [oneShotText]) already carries all three fields, so no call fires here;
-  /// this method only applies the clock math (strict one-shot parity: same
-  /// clamp, floor, and backstop against the same clock).
+  /// Per-turn scene-time evaluation (design §2) and — in [postureOnly] mode —
+  /// the post-generation posture pass.
+  ///
+  /// ── WHY POSTURE IS A SEPARATE CALL, AFTER GENERATION (2026-08-08) ────────
+  ///
+  /// Posture used to ride this same call, fused with minutes_elapsed/new_day,
+  /// fired BEFORE the reply was written. That defeated the whole point of the
+  /// feature. Spatial stance exists so a character does not teleport around a
+  /// room between turns: the position is injected imperatively into the next
+  /// reply ("Position: X — ground actions in this",
+  /// prompt_injection/behavioral_injection.dart). But a position a character
+  /// establishes IN her reply — she crosses the room and sits on the
+  /// windowsill — could not possibly be seen by a judge that ran before that
+  /// reply existed, and the next turn's pre-generation judge simply
+  /// re-derived a fresh guess and overwrote it. The prompt then asserted the
+  /// stale position as fact. Maintainer ruling, verbatim: "spatial awareness
+  /// check should run post character message, otherwise how could it check
+  /// where she moved or what she is doing".
+  ///
+  /// So posture is now exactly the kind of fact Pockets and Afterglow are —
+  /// something the REPLY changed — and it runs where they run, reading the
+  /// text that was just written (chat_service_generation_postgen.dart).
+  /// TIME did not move: the clock must advance before the reply so the
+  /// character knows what time it is while writing it.
+  ///
+  /// [postureOnly] is that pass. It is the SAME branch that used to serve
+  /// "passage of time is off, so ask about posture alone" — promoted to a
+  /// flag instead of being reachable only through a disabled clock, so there
+  /// is one posture prompt in the app rather than two that must be kept in
+  /// step. It ignores [_passageOfTimeEnabled] entirely: where a character is
+  /// standing has nothing to do with whether the story clock ticks.
+  ///
+  /// In oneShotMode the fused one-shot JSON (passed as [oneShotText]) carries
+  /// minutes_elapsed/new_day, so no call fires here; this method only applies
+  /// the clock math (strict one-shot parity: same clamp, floor, and backstop
+  /// against the same clock). One-shot no longer carries posture either — it
+  /// is a PRE-generation optimisation and posture is no longer a
+  /// pre-generation question.
   ///
   /// [timeOnly] is the standalone clock: the Realism Engine is OFF and the
-  /// user opted the clock in anyway, so this asks about elapsed time and
-  /// nothing else. Posture, emotion and relationship tension are all realism
-  /// scalars — with the engine off nothing reads them and no fragment injects
-  /// them, so asking for them would be paying tokens for a value that gets
-  /// dropped. Everything AFTER the eval is the shared code below: the same
-  /// [_extractMinutes], the same [_newDayCorroboration] guard, the same
-  /// [_applyElapsed] clamp/floor/backstop against the same clock. That
+  /// user opted the clock in anyway, so the prompt drops the scene framing
+  /// (mood, last known position, relationship tension) that nothing reads
+  /// with the engine off. Everything AFTER the eval is the shared code below:
+  /// the same [_extractMinutes], the same [_newDayCorroboration] guard, the
+  /// same [_applyElapsed] clamp/floor/backstop against the same clock. That
   /// sharing is what makes engine-on and standalone advance identically for
   /// an identical verdict, rather than by promise.
   Future<void> evaluateTimeProgressAndPostureIfNeeded({
@@ -555,6 +680,7 @@ class TimeService {
     bool oneShotMode = false,
     String? oneShotText,
     bool timeOnly = false,
+    bool postureOnly = false,
   }) async {
     // Realism context, and therefore skipped entirely in timeOnly mode.
     final emotionCtx = !timeOnly && getCharacterEmotion().isNotEmpty
@@ -564,11 +690,11 @@ class TimeService {
         ? 'Recent position reference: $charName was "${getCurrentSpatialStance()}". '
         : '';
 
-    if (!_passageOfTimeEnabled) {
-      // Standalone mode exists only to move the clock; with passage off there
-      // is no posture to fall back to evaluating, so there is nothing to do.
-      if (oneShotMode || timeOnly) return; // posture rides the fused JSON
-      // Passage disabled — posture only, time untouched.
+    if (postureOnly) {
+      // Where she ended up. [recent] here is the window AFTER the reply was
+      // appended, so the exchange this reads is the one the character just
+      // wrote — the whole reason the pass moved. Deliberately NOT gated on
+      // _passageOfTimeEnabled: a frozen clock does not freeze a room.
       String buildPosturePrompt({required bool toolsMode}) =>
           '$emotionCtx$postureCtx'
           'Current time: $displayClock.\n\n'
@@ -577,7 +703,7 @@ class TimeService {
           '- Within the same scene, maintain natural continuity (don\'t jump locations).\n'
           '- Across scene breaks or time jumps, update to the new context.\n\n'
           'Recent conversation:\n$recent\n\n'
-          '${toolsMode ? 'Report by calling the $kSceneTimeTool tool (only the "posture" field matters here). Use ONLY the tool — no plain-text reply.' : 'Respond with ONLY valid JSON. Do NOT use markdown code blocks — return raw JSON only.\n'
+          '${toolsMode ? 'Report by calling the $kSceneTimeTool tool with "posture". Use ONLY the tool — no plain-text reply.' : 'Respond with ONLY valid JSON. Do NOT use markdown code blocks — return raw JSON only.\n'
                     'Example: {"posture": "standing by the window"} or {"posture": "none"}'}';
       try {
         final raw = await _fireSceneTimeEval(
@@ -597,11 +723,14 @@ class TimeService {
           }
         }
       } catch (_) {}
-      debugPrint(
-        '[Realism:Physical] Posture: ${getCurrentSpatialStance()} | Time: $displayClock (Day $dayCount) | Passage of time: disabled',
-      );
+      debugPrint('[Realism:Posture] ${getCurrentSpatialStance()} (post-reply)');
       return;
     }
+
+    // Nothing to advance. Posture no longer falls back to this call — it has
+    // its own post-generation pass above — so a frozen clock now costs the
+    // user nothing at all rather than one posture request per turn.
+    if (!_passageOfTimeEnabled) return;
 
     final newDayCorroborated = _newDayCorroboration.hasMatch(recent);
     void logSuppressedNewDay() => debugPrint(
@@ -613,13 +742,18 @@ class TimeService {
     // narrative skip already moved the clock for this exchange, this eval
     // must not count the same exchange again — the double-advance is how a
     // "Time skip: 11:50 PM" chip ended up under a 1:05 AM sidebar clock.
-    // Posture still evaluates; no minutes, no new_day, no failure drift.
+    // The flag suppresses minutes, new_day and the failure drift — nothing
+    // else. (It used to add "posture still evaluates", which stopped being
+    // true when posture left this call for its own post-generation pass
+    // above; a skipped turn's position now comes from that pass, which never
+    // reaches this branch.)
     final skipOwnsClock = _oocSkipMovedClockThisTurn;
     _oocSkipMovedClockThisTurn = false;
 
     if (oneShotMode) {
-      // The fused JSON already carries minutes_elapsed/new_day (and posture,
-      // parsed by the one-shot applier). Clock math only — no LLM call.
+      // The fused JSON already carries minutes_elapsed/new_day. Clock math
+      // only — no LLM call. (Posture is NOT in it any more; it has its own
+      // post-generation pass.)
       if (skipOwnsClock) {
         debugPrint(
           '[Realism:Time] OOC skip owns this turn — one-shot clock '
@@ -642,8 +776,7 @@ class TimeService {
 
     // The two minutes_elapsed / new_day rules are written once and shared, so
     // the standalone clock cannot be tuned apart from the engine's by someone
-    // editing one copy. Only the posture clause and the closing instruction
-    // differ between the variants.
+    // editing one copy.
     final timeRules =
         '1. "minutes_elapsed": how many in-story minutes passed during the LATEST exchange below (integer, 0-${StoryClock.maxMinutesPerTurn}). '
         'Most conversational exchanges take 2-15 minutes; activities (a meal, a walk, a task, travel) take longer. '
@@ -651,31 +784,30 @@ class TimeService {
         '2. "new_day": true ONLY if the conversation explicitly transitioned to the next day (slept, woke up, scene break). false otherwise. '
         'Merely MENTIONING yesterday, tomorrow, or another day does NOT count — the characters must actually cross a night.\n';
 
-    String buildPrompt({required bool toolsMode}) => timeOnly
-        ? 'You are evaluating how much story time just passed.\n\n'
-              'Current story time: $displayClock on $narrativeWeekday, Day $dayCount.\n\n'
-              '$timeRules\n'
-              'Recent conversation:\n$recent\n\n'
-              '${toolsMode ? 'Report by calling the $kSceneTimeTool tool with "minutes_elapsed" and "new_day". Use ONLY the tool — no plain-text reply.' : 'Respond with ONLY a flat JSON object containing "minutes_elapsed" and "new_day". '
-                        'Do NOT use markdown code blocks — return raw JSON only.'}'
-        : 'You are evaluating scene time and physical state for $charName.\n\n'
-              '$emotionCtx$postureCtx'
-              'Relationship tension: $shortTermTierName.\n'
-              'Current story time: $displayClock on $narrativeWeekday, Day $dayCount.\n\n'
-              '$timeRules'
-              '3. "posture": $charName\'s current physical position and location (brief grounded phrase). Use "none" if unclear.\n'
-              '   - If the scene/location has changed (new setting, time passed, scene break), update to match the new context.\n'
-              '   - Maintain continuity only within the SAME scene — do NOT anchor them to a position from a previous scene.\n\n'
-              'Recent conversation:\n$recent\n\n'
-              '${toolsMode ? 'Report by calling the $kSceneTimeTool tool with "minutes_elapsed", "new_day", and "posture". Use ONLY the tool — no plain-text reply.' : 'Respond with ONLY a flat JSON object containing "minutes_elapsed", "new_day", and "posture". '
-                        'Do NOT use markdown code blocks — return raw JSON only.'}';
+    // ONE time prompt for both drivers. The engine adds its scene framing
+    // (mood, last known position, relationship tension); the standalone clock
+    // asks the question bare, because with the engine off nothing reads those
+    // scalars and paying tokens to restate them spends a user's budget on
+    // context nobody consumes. Neither asks for posture any more — see the
+    // ruling on this method: posture is about the reply that has not been
+    // written yet at this point in the turn.
+    String buildPrompt({required bool toolsMode}) =>
+        'You are evaluating how much story time just passed'
+        '${timeOnly ? '' : ' for $charName'}.\n\n'
+        '${timeOnly ? '' : '$emotionCtx$postureCtx'
+                  'Relationship tension: $shortTermTierName.\n'}'
+        'Current story time: $displayClock on $narrativeWeekday, Day $dayCount.\n\n'
+        '$timeRules\n'
+        'Recent conversation:\n$recent\n\n'
+        '${toolsMode ? 'Report by calling the $kSceneTimeTool tool with "minutes_elapsed" and "new_day". Use ONLY the tool — no plain-text reply.' : 'Respond with ONLY a flat JSON object containing "minutes_elapsed" and "new_day". '
+                  'Do NOT use markdown code blocks — return raw JSON only.'}';
 
     try {
       final raw = await _fireSceneTimeEval(
         buildPrompt,
         fireLLMEval: fireLLMEval,
         onChunk: onChunk,
-        tools: timeOnly ? kSceneTimeOnlyEvalTools : kSceneTimeEvalTools,
+        tools: kSceneTimeOnlyEvalTools,
       );
       if (raw != null) {
         final text = stripThinkBlocks(raw).isNotEmpty
@@ -694,14 +826,6 @@ class TimeService {
             newDay: saidNewDay && newDayCorroborated,
           );
         }
-        if (!timeOnly) {
-          final postureMatch = RegExp(
-            r'"posture"\s*:\s*"([^"]+)"',
-          ).firstMatch(text);
-          if (postureMatch != null) {
-            setSpatialStance(postureMatch.group(1)!.trim());
-          }
-        }
       } else if (!skipOwnsClock) {
         _applyElapsed(minutes: null, newDay: false);
       }
@@ -713,9 +837,8 @@ class TimeService {
     }
 
     debugPrint(
-      timeOnly
-          ? '[Clock:Standalone] Time: $displayClock $displayShortDate (Day $dayCount)'
-          : '[Realism:Physical] Posture: ${getCurrentSpatialStance()} | Time: $displayClock $displayShortDate (Day $dayCount)',
+      '${timeOnly ? '[Clock:Standalone]' : '[Realism:Time]'} '
+      'Time: $displayClock $displayShortDate (Day $dayCount)',
     );
   }
 }

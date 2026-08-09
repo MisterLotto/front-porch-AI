@@ -433,6 +433,14 @@ class ChatService extends ChangeNotifier {
       false; // true while post-greeting baseline eval runs
   bool _greetingEvalPending =
       false; // greeting placed but baseline eval not yet run
+  // In-flight opening-position seed. Two entry points call _seedOpeningPosture
+  // and the guard they share ("no stance on record") is written only by the
+  // completed call, so without this they both fire. See _seedOpeningPosture.
+  Future<void>? _openingPostureSeed;
+  // The session the opening position has already been ATTEMPTED for. Keyed on
+  // the session id rather than a bool precisely so it needs no reset site: the
+  // four places that reset per-chat state would each have had to remember it.
+  String? _openingPostureSeededFor;
   String _realismEvalStreamText = '';
 
   // Verifier phase coordination (god-owned for overlay + chips; leaf is stateless/prompt+rule).

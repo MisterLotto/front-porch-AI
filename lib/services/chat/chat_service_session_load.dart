@@ -394,6 +394,33 @@ extension ChatServiceSessionLoad on ChatService {
       // removing it here would have quietly switched that behaviour on.
       passageOfTimeEnabled: s.passageOfTimeEnabled,
     );
+    // Freeze a synthesised story date into the row the FIRST time we invent it.
+    // The v38 ladder note promised legacy rows would "synthesize on first
+    // load", but nothing wrote the result back, and the synthesis is anchored
+    // on the real-world calendar — so the in-story date silently followed
+    // whatever day the chat was opened on (96 of 109 sessions in the
+    // maintainer's library were still in that state). A full save would have
+    // fixed it, but a save only happens when you send a message: opening a
+    // chat, reading it and closing it left the date free to move again.
+    //
+    // A partial patch, not _saveChat(): we are mid-hydration, so writing the
+    // whole row here would persist the half-loaded needs/pockets/chaos state
+    // that the lines below have not restored yet. Unawaited for the same reason
+    // the other load-path writes are — the open path must not block on disk.
+    if (_timeService.canonicalClockWasSynthesised) {
+      unawaited(
+        _db.patchSession(
+          SessionsCompanion(
+            id: drift.Value(s.id),
+            storyClock: drift.Value(_timeService.storyClockIso),
+            storyStartDate: drift.Value(_timeService.storyStartDateIso),
+            startDayOfWeek: drift.Value(_timeService.startDayOfWeekAnchor),
+            timeOfDay: drift.Value(_timeService.timeOfDay),
+            dayCount: drift.Value(_timeService.dayCount),
+          ),
+        ),
+      );
+    }
     _nsfwService.loadNsfwScalars(
       nsfwCooldownEnabled: s.nsfwCooldownEnabled,
       arousalLevel: s.arousalLevel,

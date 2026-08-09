@@ -39,6 +39,7 @@ export 'output_sanitizer_regex.dart';
 export 'persona_colors.dart';
 export 'picker_prefs.dart';
 export 'png_metadata_utils.dart';
+export 'quoted_speech.dart';
 export 'spell_check_languages.dart';
 export 'startup_trace.dart';
 export 'think_tags.dart';

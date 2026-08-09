@@ -245,15 +245,26 @@ extension RealismEvalCalls on RealismEvals {
     }
   }
 
-  /// Scene time (+ posture, under the engine). [timeOnly] is the standalone
-  /// clock: the engine is off and the user opted the clock in, so the realism
-  /// preconditions below do not apply — there is no speaker to score and no
-  /// posture to store. It stays THIS method rather than a second one so the
-  /// recent-window construction, the TimeService call and every argument are
-  /// literally shared; the mode only relaxes the gate and drops posture.
+  /// Scene time, and — in [postureOnly] mode — the post-generation posture
+  /// pass.
+  ///
+  /// [timeOnly] is the standalone clock: the engine is off and the user opted
+  /// the clock in, so the realism preconditions below do not apply — there is
+  /// no speaker to score. [postureOnly] is the other end: no clock at all,
+  /// just "where did this reply leave her", fired AFTER generation from
+  /// chat_service_generation_postgen.dart. Both stay THIS method rather than
+  /// becoming siblings, because the part that must not drift is everything
+  /// around the call — the six-message window, the character resolution, and
+  /// the argument list handed to TimeService are literally shared, so the
+  /// posture pass can never end up reading a different scene than the clock.
+  ///
+  /// The window is why the mode change works at all: post-generation the
+  /// reply is already `_messages.last`, so these same six messages carry the
+  /// text the character just wrote. Pre-generation they could not.
   Future<void> evaluatePhysicalStateCall({
     void Function(String)? onChunk,
     bool timeOnly = false,
+    bool postureOnly = false,
   }) async {
     if (!timeOnly) {
       if (!getRealismEnabled()) return;
@@ -280,10 +291,9 @@ extension RealismEvalCalls on RealismEvals {
     }
     final charName = getActiveCharacter()?.name ?? '';
 
-    // Time progress + posture (when passage enabled) + disabled-passage posture path
-    // now fully delegated to TimeService (pre-turn advance logic moved verbatim,
-    // adjusted only for granular cbs). No new private method in god.
-    // shortTermTierName resolves via relationshipService.
+    // Both the clock advance and the posture pass are TimeService's; this
+    // method only assembles the scene they read. shortTermTierName resolves
+    // via relationshipService.
     await timeService.evaluateTimeProgressAndPostureIfNeeded(
       charName: charName,
       recent: recent,
@@ -297,6 +307,7 @@ extension RealismEvalCalls on RealismEvals {
       getCharacterEmotion: getCharacterEmotion,
       getEmotionIntensity: getEmotionIntensity,
       timeOnly: timeOnly,
+      postureOnly: postureOnly,
     );
   }
 
