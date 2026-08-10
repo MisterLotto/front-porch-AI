@@ -39,7 +39,10 @@ extension RealismEvalCalls on RealismEvals {
     }
 
     final msgs = getMessages();
-    final recentCount = msgs.length < 3 ? msgs.length : 3;
+    // 4-message window, unified across the three prefix-sharing judges (was
+    // 3 here): the recent block must be built from the same inputs everywhere
+    // or the judges' shared context silently diverges per eval.
+    final recentCount = msgs.length < 4 ? msgs.length : 4;
     final recent = msgs.reversed
         .take(recentCount)
         .toList()
@@ -70,6 +73,7 @@ extension RealismEvalCalls on RealismEvals {
     String buildPrompt({required bool toolsMode}) =>
         RealismPromptBuilder.relationshipEvalPrompt(
           preferences: getPreferences?.call() ?? '',
+          ambitions: getAmbitions?.call() ?? const [],
           charName: charName,
           userName: userName,
           dossier: dossier,
@@ -117,10 +121,13 @@ extension RealismEvalCalls on RealismEvals {
         injections: {'personality': dossier, 'standing': standing},
       );
 
-      // Unified parse/apply (also used by one-shot). The relationship path passes
-      // arousal parsing through even though its prompt does not request the field
-      // (best-effort extraction preserved exactly).
-      final res = _parseAndApplyRelationshipDeltas(effectiveText);
+      // Unified parse/apply (also used by one-shot). applyArousal:false — in
+      // multi-call mode the emotional eval requests and owns arousal_delta; a
+      // model volunteering it here used to get it applied twice in one turn.
+      final res = _parseAndApplyRelationshipDeltas(
+        effectiveText,
+        applyArousal: false,
+      );
 
       debugPrint(
         '[Realism:Relationship] Bond: ${res.bondDelta} (${res.bondReason.isNotEmpty ? res.bondReason : 'no reason'}) | Trust: ${res.trustDelta} (${res.trustReason.isNotEmpty ? res.trustReason : 'no reason'})',
@@ -174,6 +181,7 @@ extension RealismEvalCalls on RealismEvals {
     String buildPrompt({required bool toolsMode}) =>
         RealismPromptBuilder.emotionalEvalPrompt(
           preferences: getPreferences?.call() ?? '',
+          ambitions: getAmbitions?.call() ?? const [],
           charName: charName,
           userName: userName,
           dossier: dossier,
@@ -236,7 +244,9 @@ extension RealismEvalCalls on RealismEvals {
       );
       text = effectiveText; // rebind (var allows)
 
-      await _applyEmotionalResults(text);
+      // applyArousal:true — this eval's prompt requests arousal_delta, so it
+      // is the multi-call owner of the field.
+      await _applyEmotionalResults(text, applyArousal: true);
       debugPrint(
         '[Realism:Emotion] Emotion: ${getCharacterEmotion()} (${getEmotionIntensity()})',
       );
@@ -334,11 +344,26 @@ extension RealismEvalCalls on RealismEvals {
     final primary = getPrimaryObjective();
 
     final dossier = getCharacterDossier(char);
+    // Same standing/preferences the other two judges build from the same
+    // sources — the shared prefix is byte-identical only because every judge
+    // is handed the same inputs (see RealismPromptBuilder.judgePrefix).
+    final standing = RealismPromptBuilder.standingContext(
+      charName: charName,
+      userName: userName,
+      shortTermTier: relationshipService.shortTermTierName,
+      longTermTier: relationshipService.longTermTierName,
+      trustTier: relationshipService.trustTierName,
+      trustLevel: relationshipService.trustLevel,
+      emotion: getCharacterEmotion(),
+      emotionIntensity: getEmotionIntensity(),
+    );
     String buildPrompt({required bool toolsMode}) =>
         RealismPromptBuilder.narrativeEvalPrompt(
           charName: charName,
           userName: userName,
           dossier: dossier,
+          standing: standing,
+          preferences: getPreferences?.call() ?? '',
           recent: recent,
           primaryObjective: primary?.objective,
           ambitions: getAmbitions?.call() ?? const [],

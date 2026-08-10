@@ -203,7 +203,27 @@ extension ChatServiceGenerationPostGen on ChatService {
           // deltas in both 1:1 and group — invisible to the user, because
           // the chips are not re-attached on a continuation.
           if (t.mode != GenerationMode.continue_) {
-            await _runPostGenNeedsChecks(finalResponse);
+            // The needs-impact eval and the fused reply-facts fetch run
+            // CONCURRENTLY (same pattern as the pre-generation 4-eval block,
+            // same stagger so KoboldCpp's FIFO queue sees them in intended
+            // order). They are independent by construction: needs writes the
+            // needs vector; the prefetch only READS stance/emotion/pockets to
+            // build its prompt and parks raw text — the passes that apply it
+            // run after both complete. On a remote backend this makes the
+            // post-gen phase cost the slower of the two calls, not the sum.
+            //
+            // The fused fetch: when two or more of the three bookkeeping
+            // passes below (climax, pockets, posture) are live, ONE call
+            // answers all of them and each pass consumes its slice through
+            // its own unchanged parser. With fewer than two live it is a
+            // no-op and each pass fires its own call exactly as before. See
+            // ReplyFactsEval for the composition rules.
+            await Future.wait([
+              _runPostGenNeedsChecks(finalResponse),
+              Future<void>.delayed(
+                _kEvalDispatchStagger,
+              ).then((_) => _prefetchReplyFacts(finalResponse)),
+            ]);
             // Pockets & Wardrobe — its own pass, skipped on Continue for the
             // SAME reason as the needs checks above: a continuation extends
             // this exchange rather than being a new one, and re-reading it
@@ -241,8 +261,28 @@ extension ChatServiceGenerationPostGen on ChatService {
             // recreating the bug this block was rewritten to fix. Same
             // reasoning, same phase, same awaiting as its two siblings above.
             if (finalResponse.isNotEmpty) {
-              await _evaluatePhysicalStateCall(postureOnly: true);
+              final fused = _replyFactsRaw;
+              if (fused != null) {
+                // The fused call already asked "where did this reply leave
+                // her" — consume its answer through the ONE posture parser
+                // instead of paying a second call. An absent or unparseable
+                // answer skips, exactly as a failed standalone pass does:
+                // the stance keeps its last value.
+                final posture = TimeService.parsePosture(fused);
+                if (posture != null) {
+                  _relationshipService.setSpatialStance(posture);
+                }
+                debugPrint(
+                  '[Realism:Posture] ${_relationshipService.spatialStance} '
+                  '(fused reply-facts)',
+                );
+              } else {
+                await _evaluatePhysicalStateCall(postureOnly: true);
+              }
             }
+            // Consumed — the carrier must never outlive the passes that read
+            // it, or a stale answer could feed the next turn's bookkeeping.
+            _replyFactsRaw = null;
           }
 
           // Keep this message's realism_state snapshot TRUTHFUL now that the
@@ -320,6 +360,13 @@ extension ChatServiceGenerationPostGen on ChatService {
           }
         }
 
+        // [EvalTraffic]: the turn's secondary-call tally — everything since
+        // the last flush (pre-gen judges, post-gen passes). Printed before
+        // the fire-and-forget passes launch so their spend lands in the next
+        // turn's `background` line instead of muddying this one.
+        final turnTraffic = EvalTraffic.current.flushTurn();
+        if (turnTraffic != null) debugPrint(turnTraffic);
+
         // Journal maintenance pass if due (fire-and-forget): memory cards +
         // recap in one call. Card ownership is derived from the window's
         // message characterIds (immune to the prePostActiveChar restore
@@ -339,6 +386,15 @@ extension ChatServiceGenerationPostGen on ChatService {
         if (t.mode == GenerationMode.normal) {
           _maybeRunPromiseDebtPass();
         }
+
+        // Dream prefetch: the clock crossed a night during this turn's
+        // pre-generation advance, so the dream can be generated NOW and
+        // merely inserted at the next send — see the producer in
+        // chat_service_send.dart. The kick itself is synchronous (the park
+        // exists before this line returns); only the model call runs in the
+        // background, recording into the next turn's [EvalTraffic]
+        // background line, where background spend belongs.
+        _maybeKickDreamPrefetch();
 
         // Embed messages for RAG memory (fire-and-forget)
         _maybeEmbedMessages();

@@ -23,6 +23,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/database/database.dart' hide AvatarImage;
 import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/chat/eval_traffic.dart';
 import 'package:front_porch_ai/services/services.dart';
 
 /// Plain (non-ChangeNotifier) leaf sibling to LlmEvalEngine owning the objective
@@ -249,10 +250,18 @@ class ObjectiveProposal {
         stopSequences: [],
       );
 
+      final trafficWatch = Stopwatch()..start();
       String responseText = '';
       await for (final chunk in llmService.generateStream(params)) {
         responseText += chunk;
       }
+      EvalTraffic.current.record(
+        label: 'objective_taskgen',
+        lane: 'raw',
+        promptChars: params.prompt.length,
+        outputChars: responseText.length,
+        ms: trafficWatch.elapsedMilliseconds,
+      );
 
       // Strip &lt;think&gt;...&lt;/think&gt; blocks (and unclosed ones) so thinking models can
       // reason at length before emitting the final numbered list. We increased
@@ -414,10 +423,18 @@ class ObjectiveProposal {
         stopSequences: [],
       );
 
+      final trafficWatch = Stopwatch()..start();
       String responseText = '';
       await for (final chunk in llmService.generateStream(params)) {
         responseText += chunk;
       }
+      EvalTraffic.current.record(
+        label: 'objective_check',
+        lane: 'raw',
+        promptChars: params.prompt.length,
+        outputChars: responseText.length,
+        ms: trafficWatch.elapsedMilliseconds,
+      );
       responseText = stripThinkBlocks(responseText);
       // One raw log per batch so a parse failure or surprise YES is
       // diagnosable (review finding: verdict-only logging hid them).

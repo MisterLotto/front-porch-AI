@@ -217,7 +217,7 @@ extension ChatServiceGreeting on ChatService {
     _isProcessingGreeting = true; // reuse the greeting overlay
     notifyListeners();
     try {
-      if (_storageService.realismSettings.realismOneShotEval) {
+      if (_oneShotActive) {
         await _evaluateOneShotCall(); // step 10 thin (full in realism_evals)
 
         // Check for cancellation after one-shot eval

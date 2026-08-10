@@ -127,6 +127,19 @@ extension ChatServiceAccessors on ChatService {
       !_autoResponseInProgress &&
       (_activeGroup == null || !_observerMode);
 
+  /// The one-shot decision for THIS turn — the tri-state setting resolved
+  /// against the live backend (pure policy in resolveOneShotMode; the
+  /// probe verdict and locality are the only inputs storage can't know).
+  /// Consulted by the pre-generation dance, the regen replay, and the
+  /// retroactive baseline scan, so all three paths flip together.
+  bool get _oneShotActive => resolveOneShotMode(
+    mode: _storageService.realismSettings.oneShotMode,
+    isLocal: testLlmServiceOverride != null
+        ? testIsLocalOverride
+        : (_llmProvider?.isLocal ?? true),
+    toolSupport: _toolProbe.supportFor(_evalBackendIdentity),
+  );
+
   /// The story clock advances on its OWN eval this turn: the engine is off and
   /// the user opted in (docs/design/feature-independence.md). Keyed on
   /// [_realismEnabled], deliberately NOT [_realismActiveThisMode] — the latter

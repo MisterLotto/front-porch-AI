@@ -63,10 +63,14 @@ class ChatToolsFacade {
     return {
       'realismEnabled': _chat.realismEnabled,
       'needsEnabled': _chat.needsSimEnabled,
-      // Global One-Shot Eval flag (fuses the multi-call realism evals into one
-      // LLM call). A single StorageService flag — identical in 1:1 and group, so
-      // no per-character/group branch is needed (parity inherited).
+      // Global One-Shot Eval setting (fuses the multi-call realism evals into
+      // one LLM call). A single StorageService setting — identical in 1:1 and
+      // group, so no per-character/group branch is needed (parity inherited).
+      // The bool stays for additive-contract discipline (old readers keep
+      // working: true == explicitly ON); the tri-state mode is the real
+      // control since 2026-08-10.
       'realismOneShotEval': _storage.realismOneShotEval,
+      'realismOneShotMode': _storage.oneShotMode.name,
       'focusedId': focused?.id,
       'memory': {
         'ragEnabled': _storage.ragEnabled,
@@ -323,12 +327,21 @@ class ChatToolsFacade {
     _notify();
   }
 
-  /// Global One-Shot Eval toggle (experimental). Flips the same
-  /// [StorageService.realismOneShotEval] flag the desktop realism sidebar drives.
-  /// One-shot must produce 1:1-equivalent realism/needs deltas to the multi-call
-  /// path (engine contract), so the web only flips the flag — never branches.
+  /// Legacy bool One-Shot toggle — kept so an older PWA bundle's toggle keeps
+  /// working (additive contract). An explicit toggle maps to On/Off, never
+  /// Auto, the same rule the storage shim applies.
   Future<void> setOneShotEval(bool v) async {
     await _storage.setRealismOneShotEval(v);
+    _notify();
+  }
+
+  /// Tri-state One-Shot mode (Auto / On / Off) — the same
+  /// [StorageService.oneShotMode] the desktop realism sidebar drives. Auto
+  /// resolves per turn against the live backend (resolveOneShotMode); the web
+  /// only stores the choice — never branches — so one-shot/multi-call parity
+  /// is inherited exactly as it was for the bool.
+  Future<void> setOneShotMode(OneShotMode v) async {
+    await _storage.setOneShotMode(v);
     _notify();
   }
 

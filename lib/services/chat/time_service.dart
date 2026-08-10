@@ -599,6 +599,33 @@ class TimeService {
     return m == null ? null : int.tryParse(m.group(1)!);
   }
 
+  /// The posture question alone — shared VERBATIM between the standalone
+  /// post-generation posture pass above and the fused reply-facts prompt
+  /// (ReplyFactsEval), so the two transports can never drift in what they
+  /// ask. Do not re-inline into either caller; the fusion parity test pins
+  /// both.
+  static String postureQuestion({
+    required String charName,
+    String emotionCtx = '',
+    String postureCtx = '',
+    required String displayClock,
+  }) =>
+      '$emotionCtx$postureCtx'
+      'Current time: $displayClock.\n\n'
+      'What is $charName\'s current physical position and stance? Use "none" if unclear.\n'
+      '- Match the posture to the current scene context and emotional state.\n'
+      '- Within the same scene, maintain natural continuity (don\'t jump locations).\n'
+      '- Across scene breaks or time jumps, update to the new context.\n\n';
+
+  /// The ONE posture parser — used by the standalone pass above and by the
+  /// fused reply-facts consumption in the post-generation phase, so a change
+  /// to what counts as an answer can never apply to one transport and not
+  /// the other.
+  static String? parsePosture(String text) {
+    final m = RegExp(r'"posture"\s*:\s*"([^"]+)"').firstMatch(text);
+    return m?.group(1)?.trim();
+  }
+
   /// Deterministic corroboration gate for the eval's `new_day` flag. The flag
   /// bypasses [StoryClock.maxMinutesPerTurn] entirely (it's the only way the
   /// clock can cross a night in one turn), and small eval models hallucinate
@@ -696,12 +723,7 @@ class TimeService {
       // wrote — the whole reason the pass moved. Deliberately NOT gated on
       // _passageOfTimeEnabled: a frozen clock does not freeze a room.
       String buildPosturePrompt({required bool toolsMode}) =>
-          '$emotionCtx$postureCtx'
-          'Current time: $displayClock.\n\n'
-          'What is $charName\'s current physical position and stance? Use "none" if unclear.\n'
-          '- Match the posture to the current scene context and emotional state.\n'
-          '- Within the same scene, maintain natural continuity (don\'t jump locations).\n'
-          '- Across scene breaks or time jumps, update to the new context.\n\n'
+          '${postureQuestion(charName: charName, emotionCtx: emotionCtx, postureCtx: postureCtx, displayClock: displayClock)}'
           'Recent conversation:\n$recent\n\n'
           '${toolsMode ? 'Report by calling the $kSceneTimeTool tool with "posture". Use ONLY the tool — no plain-text reply.' : 'Respond with ONLY valid JSON. Do NOT use markdown code blocks — return raw JSON only.\n'
                     'Example: {"posture": "standing by the window"} or {"posture": "none"}'}';
@@ -715,11 +737,9 @@ class TimeService {
           final text = stripThinkBlocks(raw).isNotEmpty
               ? stripThinkBlocks(raw)
               : raw;
-          final postureMatch = RegExp(
-            r'"posture"\s*:\s*"([^"]+)"',
-          ).firstMatch(text);
-          if (postureMatch != null) {
-            setSpatialStance(postureMatch.group(1)!.trim());
+          final posture = parsePosture(text);
+          if (posture != null) {
+            setSpatialStance(posture);
           }
         }
       } catch (_) {}

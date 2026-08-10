@@ -239,11 +239,14 @@ class RealismEvals {
       final raw = p['raw'] as String;
       final eff = results[kind]?.correctedRaw ?? raw;
       switch (kind) {
+        // Arousal ownership mirrors the direct paths exactly (see the rule on
+        // _parseAndApplyRelationshipDeltas): the eval that REQUESTS
+        // arousal_delta applies it, nobody else.
         case 'relationship':
-          _parseAndApplyRelationshipDeltas(eff);
+          _parseAndApplyRelationshipDeltas(eff, applyArousal: false);
           break;
         case 'emotional_state':
-          await _applyEmotionalResults(eff);
+          await _applyEmotionalResults(eff, applyArousal: true);
           break;
         case 'narrative':
           await _applyNarrativeResults(eff);
@@ -251,8 +254,10 @@ class RealismEvals {
         case 'oneShot':
           // Future-proof: oneShot path currently bypasses batch collection (god only begins
           // collect in the !oneShot 4-eval branch), but if collected treat as combined.
-          _parseAndApplyRelationshipDeltas(eff);
-          await _applyEmotionalResults(eff);
+          // Both appliers read the SAME fused text here, so exactly one of
+          // them may own arousal — the old true/true pair applied it twice.
+          _parseAndApplyRelationshipDeltas(eff, applyArousal: true);
+          await _applyEmotionalResults(eff, applyArousal: false);
           await _applyNarrativeResults(eff);
           // posture/fixation/objective/reason handled inside _applyNarrative + rel parse
           break;

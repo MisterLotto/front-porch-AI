@@ -3,6 +3,255 @@
 
 # Changelog
 
+## 2026-08-10 — feat(evals): [EvalTraffic] — a per-turn tally of secondary LLM traffic
+- **Files changed:** `lib/services/chat/eval_traffic.dart` (new),
+  `lib/services/chat/llm_eval_engine.dart`,
+  `lib/services/chat/chat_service_wiring_evals.dart`,
+  `lib/services/chat/chat_service_wiring_memory.dart`,
+  `lib/services/chat/chat_service_realism_evals.dart`,
+  `lib/services/chat/objective_proposal.dart`,
+  `lib/services/chat/chat_service_send.dart`,
+  `lib/services/chat/chat_service_generation_postgen.dart`,
+  `lib/services/chat/chat.dart`,
+  `test/services/chat/eval_traffic_test.dart` (new), `.claude/changelog.md`
+- **Why (eval review §8 — "instrument first"):** the state-zone placement won
+  its argument with a measured number; the eval-side optimizations shipped as
+  reasoning about call counts. This line is what lets a real setup SEE the
+  counts move and makes a regression visible in the console.
+- **What it prints:** one `[EvalTraffic]` line at the end of each turn's
+  post-gen phase — calls · total prompt chars (≈tokens, chars÷4, labelled an
+  estimate) · output chars · summed LLM wall time · per-call detail like
+  `realism(text) 6.0k→120 1.50s` — plus a `background` line at the next send
+  for what the fire-and-forget passes (journal/growth/promise/cast) spent in
+  between. Flushes clear, so group speakers print per-speaker deltas.
+- **How:** recording at the transport chokepoints — `fireLLMEval` (text lane,
+  new optional `label` param threaded through the wiring closures: realism*,
+  needs, pockets, climax, reply_facts, director, journal, growth, dream,
+  ambition, promise, guest_gate, cast, trust_repair; *the four judges share
+  one closure and report coarsely as 'realism' — their per-kind detail is in
+  the [Realism:*] logs), `_fireToolEval` (tools lane, labelled by tool name;
+  timeouts recorded too — the wall time was spent), and the two raw
+  objective streams that bypass the engine. One static instance by design
+  (debug-only, nothing reads it back; threading a tally through every ctor
+  would be ceremony). Not recorded: main generation (LiveGenProgress),
+  vision captions, calls aborted before HTTP.
+- **Verification:** analyze clean; new eval_traffic_test (7 tests: tally
+  arithmetic + flush semantics + structural chokepoint/print pins) —
+  negative-checked: a record() that drops entries turned the arithmetic
+  group red (3 tests), removing the engine's record turned the chokepoint
+  guard red; both restored to green. Full suite 3463 passed. Console-only —
+  no user-facing surface, so no Rawhide.md entry and no web work.
+
+## 2026-08-10 — feat(realism): One-Shot Eval becomes a tri-state (Auto / On / Off), Auto default
+- **Files changed:** `lib/services/storage/settings/realism_settings.dart`,
+  `lib/services/chat/pass_support.dart`,
+  `lib/services/chat/chat_service_accessors.dart`,
+  `lib/services/chat/chat_service_realism_dance.dart`,
+  `lib/services/chat/chat_service_reprocess.dart`,
+  `lib/services/chat/chat_service_greeting.dart`,
+  `lib/services/storage_service.dart`, `lib/services/services.dart`,
+  `lib/ui/chat_components/sidebar/character_state/character_state_settings.dart`,
+  `lib/services/web/facade/chat_tools_facade.dart`,
+  `lib/services/web/routes/chat_tools_routes.dart`,
+  `web_ui/src/components/ChatTools.tsx`, `web_ui/src/styles.css`,
+  `assets/web_app/*` (rebuilt),
+  `test/services/chat/one_shot_mode_test.dart` (new),
+  `.claude/changelog.md`, `docs/Rawhide.md`
+- **Why (eval review Tier-1 §3.4, maintainer-approved "make tri state
+  auto"):** one-shot collapses the 4 pre-generation judge calls into 1
+  (~40% fewer prompt tokens, 3 fewer round trips) and the probe already
+  knows, per backend identity, whether a backend speaks native tools — a
+  tools-confirmed REMOTE model is exactly the class the fused prompt is
+  easy for. The old bool couldn't express "fuse where it's safe": off was
+  both "never touched" and "explicitly no".
+- **How:** new `OneShotMode { auto, on, off }` enum (default auto) stored
+  under `realism_one_shot_mode`; pure `resolveOneShotMode` in
+  pass_support.dart (on→always, off→never, auto→ !isLocal &&
+  probe.supported) resolved per turn by the ONE `_oneShotActive` getter,
+  consulted by all three sites (pre-gen dance, regen replay, retroactive
+  baseline scan). An untested verdict resolves multi-call; the first eval
+  probes and Auto converges next turn (ToolSupportTester usually settles it
+  up front on backend change).
+- **Migration:** stored old bool true (an explicit opt-in) → ON; false
+  (indistinguishable from never-touched, one-shot was "experimental,
+  default off") → AUTO; new key wins once written. The legacy
+  `realismOneShotEval`/`setRealismOneShotEval` surface stays as a shim —
+  a toggle maps to ON/OFF (never Auto) and keeps writing the old bool key
+  (the protected persistence test pins it; a downgrade reads truth).
+- **UI, both platforms in the same body of work (parity rule):** the
+  desktop realism sidebar's switch became a 3-pill row (Auto/On/Off, Auto
+  listed first); the PWA's toggle became the same segmented control
+  (porch-amber accent), riding the same `/toggle` endpoint with a string
+  value — additive: every bool case is unchanged, the old `oneShotEval`
+  bool alias still works for older bundles, and the state JSON keeps the
+  bool alongside the new `realismOneShotMode`. `npm run lint` + 59 web
+  tests green; bundle rebuilt into assets/web_app.
+- **Scripted-test invariance, by design:** test overrides count as remote
+  but their probe verdict stays `untested`, so Auto resolves multi-call in
+  every scripted suite — behavior identical to the old default. Suites
+  driving one-shot explicitly use the shim → ON, same as before.
+- **Verification:** flutter analyze clean; new one_shot_mode_test (11
+  tests: resolution truth table, migration matrix, shim mapping, wiring
+  guards) — negative-checked: inverting the Auto branch turned the truth
+  table red; reverting the dance to the raw bool read turned the wiring
+  guard red; both restored to green. Full suite 3456 passed, protected
+  persistence + posture-parity suites unmodified.
+
+## 2026-08-10 — perf(realism): the three judges now share a byte-identical prompt prefix; scene-time dispatches last
+- **Files changed:** `lib/services/chat/realism_prompt_builder.dart`,
+  `lib/services/chat/realism_evals.calls.dart`,
+  `lib/services/chat/chat_service_realism_evals.dart`,
+  `test/services/chat/realism_shared_prefix_test.dart` (new),
+  `.claude/changelog.md`, `docs/Rawhide.md`
+- **Why (eval review Tier-1 §3.3, maintainer-approved):** the relationship,
+  emotional and narrative judges fire back-to-back into KoboldCpp's FIFO
+  queue every turn, and each opened with a DIFFERENT first sentence — so
+  fast-forward was defeated from token one and every call re-prefilled its
+  own copy of the same dossier (≤2,000 chars) + standing + subjectivity
+  frame. Roughly 60–70% of each judge prompt was identical static context
+  paid three times per turn.
+- **How:** new `RealismPromptBuilder.judgePrefix` — intro + dossier +
+  standing + ambition roster + subjectivity frame — composed byte-identically
+  into all three judges AND the fused one-shot (parity by construction, the
+  same discipline the fragment sections already had). Each judge's tail is
+  its task line + rubric sections + recent window + format ask, in the same
+  relative order as before (rubrics before recent — the protected
+  parity-slice test depends on it). Dispatch order changed so the three
+  prefix-sharers are CONSECUTIVE: relationship → emotional → narrative, with
+  scene-time (deliberately lean, shares nothing) moved from third to last —
+  dispatched in the middle it would evict the shared prefill between two
+  judges on a single-slot backend.
+- **Maintainer constraint honored and pinned:** "no evals can change from
+  pre to post, but the order they fire in doesn't matter." Nothing crossed
+  the generation boundary — the four judges stay pre-generation, the
+  reply-readers (needs impact, climax, pockets, posture) stay
+  post-generation — and the new test's phase group is the durable form of
+  that sentence (dance carries no reply-reader; postgen carries no judge).
+- **Deliberate input changes, disclosed:** (a) the relationship judge's
+  recent window unified 3 → 4 messages (emotional/narrative were already 4;
+  the shared context must be built from the same inputs everywhere);
+  (b) the ambition roster now renders for all three judges, and the
+  standing + subjectivity frame (with the preferences block) now reach the
+  narrative judge — identical context is the price of a byte-identical
+  prefix, every block self-omits when empty, and each is judge-relevant.
+  Deltas still come from the same rubrics at temp 0.1; observable behavior
+  is expected unchanged, and 1:1/group + one-shot/multi-call parity are
+  untouched by construction (same builder serves all paths).
+- **Verification:** flutter analyze clean; new realism_shared_prefix_test
+  (5 tests) — negative-checked: a single byte prepended to one builder's
+  prefix turned byte-identity red; swapping narrative/scene-time dispatch
+  turned the order guard red; both restored to green. The protected suites
+  (realism_prompt_builder_test incl. the parity slice, one_shot_parity_test,
+  ambition_steering_test, preferences_scoring_test, realism_evals_test, all
+  scripted turn suites) pass UNMODIFIED. Full suite 3445 passed.
+
+## 2026-08-10 — perf(evals): stop blocking every turn on the quest check; run post-gen calls concurrently; strip dead needs fields; eval sampler hygiene
+- **Files changed:** `lib/services/chat/objective_mention_gate.dart` (new),
+  `lib/services/chat/chat_service_objectives.dart`,
+  `lib/services/chat/chat_service_generation_postgen.dart`,
+  `lib/services/chat/llm_eval_engine.dart`,
+  `lib/services/chat/chat_service_realism_evals.dart`,
+  `lib/services/chat/chat_service_wiring_evals.dart`,
+  `lib/services/chat/chat_service_wiring_memory.dart`,
+  `lib/services/chat/expression_classifier.dart`,
+  `lib/services/chat/realism_verification.dart`,
+  `lib/services/chat/chat.dart`,
+  `test/services/chat/objective_check_gate_test.dart` (new),
+  `.claude/changelog.md`, `docs/Rawhide.md`
+- **Quest check (eval review Tier-1 §3.1):** with the Realism Engine on, the
+  objective completion check forced its cadence to every-turn (freq=1) and is
+  AWAITED before generation — one full blocking model round trip added to
+  every reply while any quest was open, silently ignoring the per-objective
+  checkFrequency the UI exposes. Now: the UI cadence is respected again, and
+  off-interval a deterministic mention gate (objective_mention_gate.dart, the
+  promise ledger's warrantsEval pattern) fires the check early only when the
+  exchange actually shares content words with an open quest — because a
+  completion can only be shown BY the exchange, a no-overlap exchange is a
+  guaranteed NO not worth a blocking call. Cast/user name tokens excluded so
+  quest-target names can't hold the gate open. A paraphrase the gate misses
+  is caught at the next interval, never lost.
+- **Post-gen concurrency (§3.2):** the needs-impact eval and the fused
+  reply-facts fetch now run under Future.wait with the standard 50 ms
+  dispatch stagger (the pre-gen 4-eval pattern). They are independent by
+  construction — needs writes the needs vector; the prefetch only reads
+  stance/emotion/pockets and parks raw text consumed after both complete.
+  Remote post-gen wall clock becomes max(two calls), not the sum.
+- **Dead needs fields (§3.5):** the text-mode needs-impact asks (normal +
+  Director-correction variants) no longer request `activities`, `intensity`,
+  `is_climax`, `refractory_turns` or carry the worked climax example —
+  nothing has read them since ClimaxEval took over climax (2026-08-07); the
+  parser only ever consumed the seven deltas + reason. The TOOL schema keeps
+  activities/intensity defined-but-optional (fixed registry contract, and
+  tool_registry_test pins the scalar-array converter branch with it). The
+  Director's needs hint now tells the rewrite to preserve deltas + reason
+  only — telling it to preserve a field the eval never emits invited
+  invention.
+- **Sampler hygiene (§3.6):** new `kScalarEvalRepeatPenalty = 1.0` applied to
+  every scalar-JSON eval (realism judges, needs impact, scene time, posture,
+  climax, pockets, reply-facts, cast detect, guest gate, Director critique,
+  expression reclassify) — repeat penalty punishes exactly the tokens JSON
+  must repeat and buys nothing at temp 0.1. The prose-emitting passes
+  (Journal, Growth, Dreams, task generation) deliberately keep the 1.15
+  default. The expression reclassifier also gains the `reasoningMaxTokens: 0`
+  flag every other eval already sends (it was the one that forgot). Also
+  deleted a duplicated back-to-back cancellation check in fireLLMEval.
+  DELIBERATE DEVIATIONS from the review's §3.6, recorded: (a) maxLength
+  tiering was NOT applied — the engine has no reliable thinking-model signal,
+  and truncating a local thinking model's eval mid-&lt;think&gt; silently kills
+  its deltas every turn, the exact bug class dc473cf just fixed; revisit with
+  the eval-model-override work. (b) task generation keeps reasoning ON — its
+  own comment documents letting thinking models reason then stripping, a
+  deliberate quality choice not overridden here.
+- **Verification:** flutter analyze clean; dart fix nothing; new
+  objective_check_gate_test (8 tests) — negative-checked: restoring the
+  freq=1 override turned the structural guard red, inverting the matcher
+  turned 3 matcher tests red, both restored to green. Full suite 3440 passed
+  including all objective/needs/engine/verification suites unmodified.
+
+## 2026-08-10 — perf(realism): fuse the three post-reply bookkeeping calls into one when 2+ are live
+- **Files changed:** `lib/services/chat/reply_facts_eval.dart` (new),
+  `lib/services/chat/chat_service_reply_facts.dart` (new part),
+  `lib/services/chat/climax_eval.dart`, `lib/services/chat/pockets_eval.dart`,
+  `lib/services/chat/time_service.dart`, `lib/services/chat/realism_tools.dart`,
+  `lib/services/chat/chat.dart`, `lib/services/chat_service.dart`,
+  `lib/services/chat/chat_service_wiring_evals.dart`,
+  `lib/services/chat/chat_service_generation_postgen.dart`,
+  `lib/services/chat/chat_service_climax.dart`,
+  `lib/services/chat/chat_service_pockets.dart`,
+  `test/services/chat/reply_facts_fusion_test.dart` (new),
+  `.claude/changelog.md`, `docs/Rawhide.md`
+- **Why:** the post-generation phase fired one LLM call per bookkeeping pass —
+  climax (Afterglow), Pockets & Wardrobe, and posture — each sending the SAME
+  reply + the same 3-turn exchange with a different question attached. With
+  all three on, every turn paid three round trips for what one call answers.
+- **How:** a fused ReplyFactsEval fires when two or more of the three are
+  live; each feature's question is included only when its OWN gate is on
+  (fire = OR of gates, sections/required-fields = AND per feature), composed
+  from the standalone prompts' exact fragment builders (ClimaxEval.rubric,
+  PocketsEval.wardrobeContext/opsRubric, TimeService.postureQuestion) so the
+  transports cannot drift. The answer is consumed by the three passes'
+  existing key-scoped parsers — appliers, chips, gates and regen rewind are
+  untouched. Fewer than two live = each pass fires standalone, byte-for-byte
+  as before, so nobody's cost changes until fusion actually saves a call.
+  This re-opens the 2026-08-07 "Pockets rides no other feature's eval"
+  ruling WITH ITS RATIONALE SATISFIED (maintainer-approved 2026-08-10): the
+  ruling forbade inheriting another feature's gates, and here no feature's
+  switch appears in another's gate — amendments recorded on the ClimaxEval
+  and PocketsEval class docs.
+- **Failure semantics:** a fused call that fired and failed parks an EMPTY
+  carrier — all three passes skip for the turn (each one's existing
+  deterministic floor) instead of paying fallback calls on a backend that
+  just failed. Null carrier = no fusion = standalone paths.
+- **Verification:** `flutter analyze` → No issues found. New suite
+  reply_facts_fusion_test (14 tests) — every guard proven to fail first:
+  (a) pockets pass ignoring the fused carrier went red on "standalone call
+  is what fusion replaced", (b) dropping inventory_ops from the computed
+  required list went red on the schema group, (c) a one-word drifted
+  re-inline of the climax rubric went red on fragment parity. All 18
+  existing climax/pockets/posture/wardrobe/tool-registry suites (183 tests
+  total with the new ones) pass unmodified, plus a full
+  `flutter test --concurrency=4 --exclude-tags golden` run.
+
 ## 2026-08-08 — fix(realism): the spatial-awareness check ran before the reply it was supposed to be reading
 - **Files changed:** `lib/services/chat/time_service.dart`,
   `realism_evals.calls.dart`, `realism_evals.one_shot.dart`,
@@ -13869,3 +14118,90 @@ reverted, 5 went red printing the real damage (2026-07-02 → 2026-07-09 twice,
 reverted, 5 went red printing today's real date (2026-08-08) where the story
 date belongs — including an 1887 story reported as 2026-08-08. The four existing
 clock suites (70 tests) pass unmodified.
+
+## 2026-08-10 — Eval review items 6+7: dreams stop blocking the send; three hygiene fixes
+
+**Files:** `lib/services/chat/dream_service.dart`,
+`lib/services/chat/chat_service_send.dart`,
+`lib/services/chat/chat_service_generation_postgen.dart`,
+`lib/services/chat/llm_eval_engine.dart`,
+`lib/services/chat/realism_verification.dart`,
+`lib/services/chat/realism_evals.support.dart`,
+`lib/services/chat/realism_evals.calls.dart`,
+`lib/services/chat/realism_evals.one_shot.dart`,
+`lib/services/chat/realism_evals.dart`,
+new tests `test/services/chat/{dream_prefetch,recent_exchange_photo_marker,needs_verifier_hunger_delta,arousal_single_owner}_test.dart`,
+`docs/Rawhide.md`.
+
+### 1. Dream prefetch (review item 6 — the last model call still blocking a send)
+
+The night's dream was generated INSIDE sendMessage, holding the user's morning
+message hostage to a full eval request. But the clock crosses a night during a
+turn's PRE-generation advance, so the rollover is already visible by that
+turn's POST-generation phase. Split into producer + consumer:
+
+- `DreamService` gains `parkPrefetch`/`takePrefetch` (session-guarded,
+  single-take, mismatch-discard). `checkRollover`/`pending`/`clear` untouched
+  — the existing dedicated suite still pins them.
+- `_maybeKickDreamPrefetch()` (chat_service_send.dart, called from the
+  post-generation phase beside the other background passes) runs the SAME
+  detection + owner rule + fragment sources as the old inline block, then
+  parks the `generateDream` future. The method is deliberately synchronous
+  through the park — only the journal read + model call live inside the
+  parked future — so a user firing the next message instantly can never beat
+  the park and lose the dream (the old blocking design never lost one).
+- sendMessage keeps an anchor-only `checkRollover` at entry (before the
+  turn's clock advance) so the first turn after a chat load anchors on the
+  pre-advance day exactly as before, then consumes via `takePrefetch`:
+  same insertion position, same journal card, same silent-skip floor.
+
+### 2. recentExchange reads promptText (item 7 hygiene)
+
+`recentExchange` fed needs/climax/pockets `displayText`; the realism judges
+read `promptText`. The two differ only for photo messages, where promptText
+carries the "[shared a photo: caption]" marker — so the reply-readers were
+the only evals blind to a photo the exchange was about. One-word fix.
+
+### 3. The verifier's hunger rule was dead (item 7)
+
+`_applyRuleChecks` probed the plain key `hunger`, but the needs eval emits
+`hunger_delta`, and the strict-quote extractor can never match the longer key
+— h was always 0 and the "hunger delta w/o eat" correction never fired on
+real output. The dedicated suite's `anyOf('corrected','accepted')` assertions
+were green either way, which is how it survived. Now probes `hunger_delta`
+first with plain `hunger` as the fallback, and the replacement goes through
+the shared `_correctedJson` (the old inline double-`replaceAll` deleted).
+
+### 4. One arousal owner per turn (item 7 — the double-apply)
+
+`_parseAndApplyRelationshipDeltas` parsed `arousal_delta` "best-effort" even
+on the relationship path, whose prompt never requests it. A model that
+volunteered the field got arousal applied twice in one turn (relationship
+parse + emotional eval), with the chip showing only the second value. Both
+appliers now take a required `applyArousal` flag: the eval whose prompt
+REQUESTS the field owns it — emotional in multi-call, the fused call in
+one-shot. The future-proof batch-oneShot arm (which feeds the same fused text
+to both appliers) applies it exactly once too.
+
+### Deferred, with reasons (from the same review)
+
+- Journal/Growth structural dedup (`_runExchange` ×2, twin review classes):
+  a pure refactor of two live passes whose transports are pinned by
+  integration suites; deferred rather than risk byte-drift in a PR already
+  carrying behavior changes.
+- Guest chime gate batching: `scene_guest_director_test.dart` pins the gate
+  behavior; needs its own carefully-scoped change.
+- Salient-kick minimum window: would break the protected
+  `journal_review_test`/`growth_rings_test` canned-kick fixtures — needs a
+  maintainer decision on amending committed tests first.
+
+### Verification
+
+All four new suites proven red-then-green against the exact thing they
+guard: session guard removed → mismatch tests red; single-take removed →
+single-take red; postgen kick deleted → wiring test red (dream call fires
+from the next send or never); promptText reverted → marker tests red; hunger
+probe reverted → spike tests red; ownership gate dropped → double-apply red;
+one-shot flag flipped → one-shot silence red.
+`flutter analyze` clean; `dart fix --dry-run` nothing to fix; full unit +
+golden suites run before push (results in the PR).

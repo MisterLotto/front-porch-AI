@@ -507,7 +507,7 @@ extension ChatServiceReprocess on ChatService {
         _needsSimulation.tickDecay();
         _nsfwService.decrementCooldownIfActive();
 
-        if (_storageService.realismSettings.realismOneShotEval) {
+        if (_oneShotActive) {
           await _evaluateOneShotCall(onChunk: handleChunk);
         } else {
           _realismEvals.beginCollectForBatchedVerification();

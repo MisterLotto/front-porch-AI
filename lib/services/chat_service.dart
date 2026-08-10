@@ -83,6 +83,7 @@ part 'chat/chat_service_generation_request.dart';
 part 'chat/chat_service_generation_stream.dart';
 part 'chat/chat_service_generation_postgen.dart';
 part 'chat/chat_service_pockets.dart';
+part 'chat/chat_service_reply_facts.dart';
 part 'chat/chat_service_mood.dart';
 part 'chat/chat_service_climax.dart';
 part 'chat/chat_service_cast.dart';
@@ -613,6 +614,7 @@ class ChatService extends ChangeNotifier {
 
   /// Afterglow's climax check. Its own pass — see ClimaxEval.
   late final _climaxEval = _buildClimaxEval();
+  String? _replyFactsRaw; // fused reply-facts carrier — see _prefetchReplyFacts
 
   /// The 1:1 speaker's pockets. In a group each member's record lives in their
   /// `_groupRealism` slot instead, which is what keeps it session-scoped and
@@ -622,9 +624,9 @@ class ChatService extends ChangeNotifier {
   // WHY THESE THREE STAY IN THE SHELL while the rest of Pockets, Climax and
   // Standing Mood live in `chat/chat_service_{pockets,climax,mood}.dart`:
   //
-  //   * `_pockets`, `_pocketsEval`, `_climaxEval` are FIELDS, and a Dart
-  //     extension cannot declare instance state. There is no version of this
-  //     that moves them.
+  //   * `_pockets`, `_pocketsEval`, `_climaxEval` and `_replyFactsRaw` are
+  //     FIELDS, and a Dart extension cannot declare instance state. There is
+  //     no version of this that moves them.
   //   * `pocketsFor` and `characterIdFor` (and `standingMoodSummary` further
   //     down) are FAKE-PINNED: the golden harness's
   //     `FakeChatService implements ChatService` overrides them, and extension

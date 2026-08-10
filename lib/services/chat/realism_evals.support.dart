@@ -28,7 +28,16 @@ extension _RealismEvalSupport on RealismEvals {
   /// Apply emotional scalar + arousal pending updates from a (possibly corrected) eval text.
   /// Mirrors the direct-path logic after _verify in evaluateEmotionalStateCall so batch and
   /// direct produce identical emotion/arousal side effects and chip metadata.
-  Future<void> _applyEmotionalResults(String text) async {
+  ///
+  /// [applyArousal] names this call's arousal ownership explicitly (see
+  /// [_parseAndApplyRelationshipDeltas] for the ownership rule). True on both
+  /// live paths — the emotional eval is the multi-call owner; false only in
+  /// the future-proof batch-oneShot arm, where the relationship parse of the
+  /// same fused text already applied it.
+  Future<void> _applyEmotionalResults(
+    String text, {
+    required bool applyArousal,
+  }) async {
     final emotionMatch = RegExp(
       r'"emotion"\s*:\s*"([^"]+)"',
     ).firstMatch(text);
@@ -43,7 +52,7 @@ extension _RealismEvalSupport on RealismEvals {
       setEmotionIntensity(intensityMatch.group(1)!.toLowerCase().trim());
     }
 
-    if (nsfwService.nsfwCooldownEnabled) {
+    if (applyArousal && nsfwService.nsfwCooldownEnabled) {
       final arDelta = extractJsonInt(text, 'arousal_delta');
       if (arDelta != null) {
         // Record the EFFECTIVE delta (post-clamp + refractory physiology) so
@@ -222,7 +231,7 @@ extension _RealismEvalSupport on RealismEvals {
     }
   }
 
-  /// Parses relationship/trust (+ best-effort or requested arousal) fields from
+  /// Parses relationship/trust (+ arousal when this call owns it) fields from
   /// an eval JSON text, applies the side effects (score/trust deltas to services,
   /// arousal to nsfwService), populates pending metadata for chips/reasons using
   /// only nonzero deltas (reasons are populated when present even if deltas are 0),
@@ -231,6 +240,15 @@ extension _RealismEvalSupport on RealismEvals {
   /// This single implementation is used by both the separate relationship eval
   /// (multi-call) and the fused one-shot eval, guaranteeing identical clamp
   /// behavior and pending population for bond/trust/arousal.
+  ///
+  /// ONE AROUSAL OWNER PER TURN (eval review item 7, 2026-08-10): the eval
+  /// whose prompt REQUESTS arousal_delta is the only one allowed to apply it.
+  /// In multi-call mode that is the emotional-state eval, so the relationship
+  /// path passes [applyArousal]=false; in one-shot mode the fused call is the
+  /// requester, so it passes true. The old behavior parsed arousal here
+  /// "best-effort" even on the relationship path — a chatty model that
+  /// volunteered the field got it applied TWICE in one turn (once here, once
+  /// by the emotional eval), with the chip showing only the second value.
   ({
     int bondDelta,
     int trustDelta,
@@ -238,7 +256,7 @@ extension _RealismEvalSupport on RealismEvals {
     String bondReason,
     String trustReason,
   })
-  _parseAndApplyRelationshipDeltas(String text) {
+  _parseAndApplyRelationshipDeltas(String text, {required bool applyArousal}) {
     // Bond / relationship delta (per prompt range)
     final relDelta = extractJsonInt(text, 'relationship_delta');
     int bondDelta = 0;
@@ -257,13 +275,12 @@ extension _RealismEvalSupport on RealismEvals {
       }
     }
 
-    // Arousal (only when NSFW cooldowns are enabled; relationship path treats
-    // as best-effort since its prompt does not request the field; emotional and
-    // one-shot paths request it when enabled). arousalDelta ends up holding the
-    // EFFECTIVE delta (post-clamp + refractory physiology) so pending metadata,
-    // chips, and regen revert all agree on what actually landed.
+    // Arousal (only when NSFW cooldowns are enabled AND this call owns the
+    // field — see the ownership rule in the doc comment). arousalDelta ends up
+    // holding the EFFECTIVE delta (post-clamp + refractory physiology) so
+    // pending metadata, chips, and regen revert all agree on what landed.
     int arousalDelta = 0;
-    if (nsfwService.nsfwCooldownEnabled) {
+    if (applyArousal && nsfwService.nsfwCooldownEnabled) {
       final arDelta = extractJsonInt(text, 'arousal_delta');
       if (arDelta != null) {
         arousalDelta = nsfwService.applyEvalArousalDelta(

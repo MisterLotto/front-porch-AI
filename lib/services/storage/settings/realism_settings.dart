@@ -19,6 +19,15 @@
 import 'dart:convert';
 import 'settings_base.dart';
 
+/// How the pre-generation realism judges are fused (eval review Tier-1 §3.4,
+/// maintainer-approved 2026-08-10). [auto] — the default — uses the fused
+/// one-shot call on remote backends that have already proven native tool
+/// calls (exactly the class of model the combined prompt is easy for) and the
+/// multi-call path everywhere else, including every local backend. [on]/[off]
+/// are the explicit choices the old bool expressed; the user always wins in
+/// both directions.
+enum OneShotMode { auto, on, off }
+
 /// Realism Engine + Needs simulation + related defaults (oneShot, banned
 /// phrases, per-char enjoys hygiene is in CharacterCard / group member
 /// JSON, not here).
@@ -168,7 +177,7 @@ class RealismSettings with SettingsBase {
   /// hidden.
   /// Null = never explicitly chosen, so the seed below applies.
   bool? _adultThemesExplicit;
-  bool _realismOneShotEval = false;
+  OneShotMode _oneShotMode = OneShotMode.auto;
   bool _weatherEnabled = true;
   bool _weatherFahrenheit = false;
   bool _absenceBannerEnabled = true;
@@ -216,7 +225,17 @@ class RealismSettings with SettingsBase {
   /// switches shown" simply tracks "are you running an adult feature", which
   /// stays true even if Afterglow is enabled later in the same session.
   bool get adultThemesEnabled => _adultThemesExplicit ?? _nsfwCooldownDefault;
-  bool get realismOneShotEval => _realismOneShotEval;
+
+  /// One-Shot Eval mode. [OneShotMode.auto] (the default) fuses the judges
+  /// into one call on remote backends that have already proven native tool
+  /// calls, and stays on the multi-call path everywhere else — the resolution
+  /// lives in `resolveOneShotMode` (pass_support.dart) because it needs the
+  /// backend probe, which storage deliberately knows nothing about.
+  OneShotMode get oneShotMode => _oneShotMode;
+
+  /// Legacy bool surface over [oneShotMode], kept because callers and the
+  /// persistence test predate the tri-state. True means explicitly ON.
+  bool get realismOneShotEval => _oneShotMode == OneShotMode.on;
 
   /// Living Time story weather (living-time-features.md §3). Effective
   /// whenever the story clock is actually moving — under the engine, or on
@@ -278,7 +297,18 @@ class RealismSettings with SettingsBase {
     _pocketTransfersEnabled =
         prefs?.getBool(k('pocket_transfers_enabled')) ?? false;
     _adultThemesExplicit = prefs?.getBool(k('adult_themes_enabled'));
-    _realismOneShotEval = prefs?.getBool(k('realism_one_shot_eval')) ?? false;
+    _oneShotMode = switch (prefs?.getString(k('realism_one_shot_mode'))) {
+      'on' => OneShotMode.on,
+      'off' => OneShotMode.off,
+      'auto' => OneShotMode.auto,
+      // Pre-tri-state install: an explicit true was a deliberate opt-in and
+      // stays ON. false was the old default and indistinguishable from
+      // "never touched", so it becomes Auto — the new default, which only
+      // ever differs from off on a remote backend that has proven tools.
+      _ => (prefs?.getBool(k('realism_one_shot_eval')) ?? false)
+          ? OneShotMode.on
+          : OneShotMode.auto,
+    };
     _weatherEnabled = prefs?.getBool(k('weather_enabled')) ?? true;
     _weatherFahrenheit = prefs?.getBool(k('weather_fahrenheit')) ?? false;
     _absenceBannerEnabled =
@@ -349,10 +379,19 @@ class RealismSettings with SettingsBase {
     notify();
   }
 
-  Future<void> setRealismOneShotEval(bool value) async {
-    _realismOneShotEval = value;
-    await prefs?.setBool(k('realism_one_shot_eval'), value);
+  Future<void> setOneShotMode(OneShotMode value) async {
+    _oneShotMode = value;
+    await prefs?.setString(k('realism_one_shot_mode'), value.name);
     notify();
+  }
+
+  /// Legacy bool surface over [setOneShotMode]: an explicit toggle is an
+  /// explicit choice, so it maps to ON/OFF — never Auto. Keeps writing the
+  /// old bool key too (the persistence test pins it, and a downgrade then
+  /// reads a truthful value).
+  Future<void> setRealismOneShotEval(bool value) async {
+    await prefs?.setBool(k('realism_one_shot_eval'), value);
+    await setOneShotMode(value ? OneShotMode.on : OneShotMode.off);
   }
 
   Future<void> setRealismDefault(bool value) async {

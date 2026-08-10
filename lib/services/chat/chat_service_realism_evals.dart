@@ -39,7 +39,14 @@ extension ChatServiceRealismEvals on ChatService {
   Future<String?> _fireLLMEval(
     String prompt, {
     void Function(String)? onChunk,
-  }) => _llmEvalEngine.fireLLMEval(prompt, onChunk: onChunk);
+    double repeatPenalty = 1.15,
+    String label = 'eval',
+  }) => _llmEvalEngine.fireLLMEval(
+    prompt,
+    onChunk: onChunk,
+    repeatPenalty: repeatPenalty,
+    label: label,
+  );
 
   String _stripThinkBlocks(String text) =>
       _llmEvalEngine.stripThinkBlocks(text);
@@ -122,7 +129,7 @@ extension ChatServiceRealismEvals on ChatService {
 
     try {
       debugPrint('[Realism:TrustRepair] Evaluating repair attempt...');
-      final raw = await _fireLLMEval(prompt, onChunk: onChunk);
+      final raw = await _fireLLMEval(prompt, onChunk: onChunk, label: 'trust_repair');
       if (raw == null) return;
 
       final text = _stripThinkBlocks(raw).trim();
@@ -246,6 +253,16 @@ extension ChatServiceRealismEvals on ChatService {
   /// two paths and is deliberately left to the caller until that divergence is
   /// reconciled.
   Future<void> _fireStaggeredRealismEvals(void Function(String) onChunk) async {
+    // Dispatch order is a caching decision, not a semantics one (maintainer,
+    // 2026-08-10: firing order is free to change; eval PHASE is not — all
+    // four remain pre-generation). Relationship, emotional and narrative
+    // open with the byte-identical judgePrefix, so on KoboldCpp's FIFO
+    // queue the first pays the prefill and the next two fast-forward
+    // through it — but only if they arrive CONSECUTIVELY. Scene-time's
+    // prompt is deliberately lean and shares nothing; dispatched in the
+    // middle it would evict the shared prefix between two judges, so it
+    // fires last. (test/services/chat/realism_shared_prefix_test.dart pins
+    // both the prefix and this order.)
     await Future.wait([
       _evaluateRelationshipCall(onChunk: onChunk),
       Future.delayed(
@@ -254,11 +271,11 @@ extension ChatServiceRealismEvals on ChatService {
       ),
       Future.delayed(
         _kEvalDispatchStagger * 2,
-        () => _evaluatePhysicalStateCall(onChunk: onChunk),
+        () => _evaluateNarrativeCall(onChunk: onChunk),
       ),
       Future.delayed(
         _kEvalDispatchStagger * 3,
-        () => _evaluateNarrativeCall(onChunk: onChunk),
+        () => _evaluatePhysicalStateCall(onChunk: onChunk),
       ),
     ]);
   }

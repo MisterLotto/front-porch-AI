@@ -52,6 +52,7 @@ const String kExpressionTool = 'report_expression_label';
 const String kCastDetectTool = 'report_detected_character';
 const String kClimaxToolName = 'report_climax';
 const String kPocketsToolName = 'report_inventory';
+const String kReplyFactsToolName = 'report_reply_facts';
 
 Map<String, dynamic> _intField(String description) => {
   'type': 'integer',
@@ -378,6 +379,43 @@ final Map<String, Map<String, dynamic>> kPocketsFields = {
   },
 };
 
+/// The fused post-generation reply-facts call (ReplyFactsEval): climax +
+/// inventory + posture in ONE tool. Field definitions are REUSED from the
+/// standalone tools above so the fused and standalone lanes cannot drift;
+/// which fields are REQUIRED is computed per call from which features are
+/// live ([kReplyFactsToolsFor]) — the is_climax lesson applied to a composed
+/// schema: a model fills in what the schema demands and skips what it does
+/// not, so a live feature's fields must be demanded and a disabled feature's
+/// must not.
+final Map<String, Map<String, dynamic>> kReplyFactsFields = {
+  ...kClimaxFields,
+  ...kPocketsFields,
+  'posture': _strField(
+    'Current physical position and location (brief phrase), or "none".',
+  ),
+};
+
+/// The reply-facts schema for THIS turn's live feature set. Every field is
+/// always DEFINED (the registry below is a fixed contract); only the
+/// `required` list varies.
+List<Map<String, dynamic>> kReplyFactsToolsFor({
+  required bool askClimax,
+  required bool askPockets,
+  required bool askPosture,
+}) => [
+  _tool(
+    kReplyFactsToolName,
+    'Report the scene facts this reply changed (climax / inventory / '
+    'posture).',
+    kReplyFactsFields,
+    [
+      if (askClimax) ...['is_climax', 'refractory_turns'],
+      if (askPockets) 'inventory_ops',
+      if (askPosture) 'posture',
+    ],
+  ),
+];
+
 /// The whitelisted keys per tool (anything else the model invents is
 /// dropped, mirroring how the regex extractors ignore unknown text keys).
 final Map<String, Map<String, Map<String, dynamic>>> _fieldsByTool = {
@@ -391,6 +429,7 @@ final Map<String, Map<String, Map<String, dynamic>>> _fieldsByTool = {
   kCastDetectTool: _castDetectFields,
   kClimaxToolName: kClimaxFields,
   kPocketsToolName: kPocketsFields,
+  kReplyFactsToolName: kReplyFactsFields,
 };
 
 /// Is [toolName] known to the converter?

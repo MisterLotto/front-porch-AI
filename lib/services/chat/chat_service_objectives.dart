@@ -412,11 +412,47 @@ extension ChatServiceObjectives on ChatService {
     }
 
     _messagesSinceLastCheck++;
-    final freq = _realismEnabled
-        ? 1
-        : (primaryObjective?.checkFrequency ??
-              _activeObjectives.first.checkFrequency);
-    if (_messagesSinceLastCheck < freq) return;
+    // The per-objective cadence the UI exposes is the cadence, full stop.
+    // The old realism-on override forced freq to one — a BLOCKING model
+    // call, awaited before every reply — onto every single turn the moment
+    // any quest was open with the engine on, silently ignoring the
+    // checkFrequency the user can see and set (eval review Tier-1 §3.1).
+    final freq =
+        primaryObjective?.checkFrequency ??
+        _activeObjectives.first.checkFrequency;
+    if (_messagesSinceLastCheck < freq) {
+      // Off-interval, the check still fires the moment the scene actually
+      // touches a quest: a completion can only be shown by the exchange, and
+      // the check reads exactly this window — so an exchange sharing none of
+      // a quest's content words is a guaranteed NO not worth a blocking
+      // round trip. A paraphrase the gate misses is caught by the next
+      // interval check, never lost. Cast + user name tokens are excluded or
+      // "get Jennifer to admit her fear" would match every line Jennifer
+      // speaks.
+      final recentLower = _messages.reversed
+          .take(8)
+          .map((m) => m.promptText)
+          .join('\n')
+          .toLowerCase();
+      final quests = <String>[
+        for (final o in _activeObjectives) ...[
+          o.objective,
+          for (final t in tasksForObjective(o))
+            if (t['completed'] != true) (t['description'] as String? ?? ''),
+        ],
+      ];
+      final ignore = <String>{
+        for (final c in [?_activeCharacter, ..._groupCharacters])
+          ...c.name.toLowerCase().split(RegExp(r'[^a-z0-9]+')),
+        ..._userPersonaService.persona.name.toLowerCase().split(
+          RegExp(r'[^a-z0-9]+'),
+        ),
+      }..remove('');
+      if (!objectivesMentionedIn(recentLower, quests, ignore: ignore)) {
+        return;
+      }
+      debugPrint('[Objective] Mention gate: quest touched — checking early');
+    }
     _messagesSinceLastCheck = 0;
 
     // Arm turn-op recording only for THIS turn-path check (see field doc):

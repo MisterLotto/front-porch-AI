@@ -45,6 +45,15 @@ import 'package:front_porch_ai/services/chat/realism_tools.dart';
 /// The cost of standing alone is one short call per turn while Afterglow is on
 /// — stated plainly in the toggle copy, the way Pockets and Promises state
 /// theirs.
+///
+/// FUSED TRANSPORT (2026-08-10, maintainer-approved): when two or more of the
+/// post-generation bookkeeping passes (this one, Pockets, posture) are live,
+/// their questions ride ONE composed call (ReplyFactsEval) instead of one
+/// each. That is a change of TRANSPORT, not of ownership: this pass keeps its
+/// own gate, its question is included only when Afterglow itself is on, and
+/// the answer flows through this same [parseRefractory] into the same
+/// applier. The gate-inheritance trap the paragraph above records cannot
+/// recur — no feature's switch appears in another feature's gate.
 class ClimaxEval {
   /// Supplied by ChatService: fires through the shared tools-first negotiation
   /// and hands back flat-JSON text, so this leaf owns no transport.
@@ -63,6 +72,23 @@ class ClimaxEval {
   /// silently, forever. Re-exposed here so callers read one name.
   static const kClimaxTool = kClimaxToolName;
   static List<Map<String, dynamic>> get tools => kClimaxEvalTools;
+
+  /// The detection rubric alone — shared VERBATIM between [buildPrompt] and
+  /// the fused reply-facts prompt (ReplyFactsEval), so the fused and
+  /// standalone transports can never drift in what they ask. Do not re-inline
+  /// this into either caller; the fusion parity test pins both.
+  static String rubric(String charName) =>
+      'CLIMAX DETECTION — "is_climax": true ONLY when $charName THEMSELVES '
+      'reaches sexual orgasm / release in THIS scene — i.e. the text explicitly '
+      'narrates their own climax (coming, finishing, a shuddering or spasming '
+      'release, crying out as they tip over the edge, gushing/ejaculating, '
+      'going limp or boneless right after the peak). High arousal, being '
+      '"close", edging, begging, grinding, foreplay, or ONLY the partner/user '
+      'climaxing are NOT a climax for $charName — answer false in those cases.\n'
+      'When (and only when) "is_climax" is true, also give "refractory_turns" '
+      'as an int from 3 to 7 for how long the post-orgasm cooldown should last '
+      '(~6-7 for an intense, drawn-out or repeated climax; ~3 for a quick one). '
+      'When false, 0.\n\n';
 
   /// The criteria matter more than the question. Without them the model —
   /// especially a reasoning model, which will not guess at an undefined field —
@@ -87,17 +113,7 @@ class ClimaxEval {
     required bool toolsMode,
   }) =>
       'Read the scene below and answer one question about $charName.\n\n'
-      'CLIMAX DETECTION — "is_climax": true ONLY when $charName THEMSELVES '
-      'reaches sexual orgasm / release in THIS scene — i.e. the text explicitly '
-      'narrates their own climax (coming, finishing, a shuddering or spasming '
-      'release, crying out as they tip over the edge, gushing/ejaculating, '
-      'going limp or boneless right after the peak). High arousal, being '
-      '"close", edging, begging, grinding, foreplay, or ONLY the partner/user '
-      'climaxing are NOT a climax for $charName — answer false in those cases.\n'
-      'When (and only when) "is_climax" is true, also give "refractory_turns" '
-      'as an int from 3 to 7 for how long the post-orgasm cooldown should last '
-      '(~6-7 for an intense, drawn-out or repeated climax; ~3 for a quick one). '
-      'When false, 0.\n\n'
+      '${rubric(charName)}'
       'The scene:\n$reply\n\n'
       '${recentExchange.trim().isEmpty ? '' : 'Recent exchange for context:\n$recentExchange\n\n'}'
       '${toolsMode ? 'Report by calling the $kClimaxTool tool. Use ONLY the tool — no plain-text reply.' : 'Respond with ONLY a flat JSON object containing "is_climax" and '

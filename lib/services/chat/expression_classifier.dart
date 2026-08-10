@@ -25,6 +25,8 @@ import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/avatar_gallery.dart';
+import 'package:front_porch_ai/services/chat/llm_eval_engine.dart'
+    show kScalarEvalRepeatPenalty;
 import 'package:front_porch_ai/services/chat/pass_support.dart';
 import 'package:front_porch_ai/services/chat/realism_tools.dart';
 import 'package:front_porch_ai/services/services.dart';
@@ -416,8 +418,13 @@ class ExpressionService {
           maxLength: isThinkingModel ? 2048 : 32,
           temperature: 0.1,
           topP: 0.5,
-          repeatPenalty: 1.15,
+          repeatPenalty: kScalarEvalRepeatPenalty,
           reasoningEnabled: false,
+          // Same as every other eval: without this the reasoning-disable
+          // block is never sent to remote ":thinking" models and they reason
+          // through a one-word classification (this was the one eval that
+          // forgot the flag).
+          reasoningMaxTokens: 0,
           stopSequences: isThinkingModel ? [] : ['}\n', '}'],
         );
         final StringBuffer sb = StringBuffer();

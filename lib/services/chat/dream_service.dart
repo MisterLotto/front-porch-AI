@@ -37,10 +37,12 @@ class DreamService {
 
   bool get pending => _pending;
 
-  /// Session-scoped rollover bookkeeping — ONE call site (sendMessage entry)
-  /// and no per-load seeding: an unseen session re-anchors silently, so a
-  /// fresh load can never fire a dream for days that passed while the app
-  /// was closed (story time only moves while you play).
+  /// Session-scoped rollover bookkeeping — two call sites since the prefetch
+  /// split: sendMessage entry (anchor-only, before the turn's clock advance)
+  /// and the post-generation kick (the one that consumes [pending]). No
+  /// per-load seeding: an unseen session re-anchors silently, so a fresh
+  /// load can never fire a dream for days that passed while the app was
+  /// closed (story time only moves while you play).
   void checkRollover({required String? sessionId, required int dayCount}) {
     if (sessionId == null) return;
     if (sessionId != _markerSession) {
@@ -54,6 +56,63 @@ class DreamService {
   }
 
   void clear() => _pending = false;
+
+  /// The night's dream, generated AHEAD of the turn that shows it. The clock
+  /// crosses a night during a turn's pre-generation advance, so by that
+  /// turn's post-generation phase the rollover is already visible — the host
+  /// kicks [generateDream] there in the background and parks the future
+  /// here. The next sendMessage awaits an almost-always-completed future
+  /// instead of holding the user's turn hostage to a model call (eval
+  /// review item 6). In-memory only, exactly like [_lastDay]: a dream lost
+  /// to an app restart was lost under the old blocking design too (the
+  /// re-anchor rule above).
+  ({
+    String sessionId,
+    String ownerName,
+    String ownerId,
+    String? ownerCharacterId,
+    Future<String?> dream,
+  })?
+  _prefetched;
+
+  void parkPrefetch({
+    required String sessionId,
+    required String ownerName,
+    required String ownerId,
+    String? ownerCharacterId,
+    required Future<String?> dream,
+  }) {
+    _prefetched = (
+      sessionId: sessionId,
+      ownerName: ownerName,
+      ownerId: ownerId,
+      ownerCharacterId: ownerCharacterId,
+      dream: dream,
+    );
+  }
+
+  /// Single-take: returns the parked dream when it belongs to [sessionId]
+  /// and clears the park either way — a dream generated for one chat must
+  /// never surface in another, and a mismatch is discarded, not held.
+  ({
+    String ownerName,
+    String ownerId,
+    String? ownerCharacterId,
+    Future<String?> dream,
+  })?
+  takePrefetch(String? sessionId) {
+    final p = _prefetched;
+    _prefetched = null;
+    if (p == null || sessionId == null || p.sessionId != sessionId) {
+      return null;
+    }
+    return (
+      ownerName: p.ownerName,
+      ownerId: p.ownerId,
+      ownerCharacterId: p.ownerCharacterId,
+      dream: p.dream,
+    );
+  }
 
   /// One short call; returns sanitized dream text or null (skip silently —
   /// the local-model floor: a bad dream is worse than no dream).

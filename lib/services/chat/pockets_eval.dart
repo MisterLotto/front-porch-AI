@@ -46,6 +46,17 @@ import 'package:front_porch_ai/services/chat/pockets.dart';
 /// tools-first negotiation (`fireStructuredEval` + `ToolTransportProbe`) that
 /// the realism evals, the Journal pass and Growth all use, so a tool-less
 /// backend falls back to the forgiving flat-JSON floor exactly as they do.
+///
+/// AMENDMENT (2026-08-10, maintainer-approved): the ruling above forbade
+/// riding another FEATURE's pass, and its rationale — a feature must never
+/// inherit a gate its UI does not declare — is untouched by the fused
+/// reply-facts transport (ReplyFactsEval). That call is owned by no feature:
+/// it fires when two or more of the bookkeeping passes (this one, climax,
+/// posture) are live, includes each question only when that feature's OWN
+/// switch is on, and hands the answer to this same [parseOps] and the same
+/// applier. Pockets-only users still fire this standalone eval, byte-for-byte
+/// — the fused prompt is composed from [wardrobeContext] and [opsRubric], the
+/// exact fragments [buildPrompt] uses, so the two can never drift.
 class PocketsEval {
   /// Fires the eval and returns the raw text (tools converted to flat JSON, or
   /// the model's own text). Supplied by ChatService so this leaf owns no
@@ -107,6 +118,44 @@ class PocketsEval {
 
   static const kPocketsTool = 'report_inventory';
 
+  /// The "what she has right now" lead-in — shared VERBATIM between
+  /// [buildPrompt] and the fused reply-facts prompt (ReplyFactsEval), so the
+  /// fused and standalone transports can never drift in what they show the
+  /// model. Do not re-inline; the fusion parity test pins both callers.
+  static String wardrobeContext(String charName, Pockets current) {
+    String list(String label, List<PocketItem> items) => items.isEmpty
+        ? '$label: (nothing recorded)\n'
+        : '$label: ${items.map((i) => i.display).join(', ')}\n';
+
+    return 'You are keeping track of what $charName is wearing and carrying.\n\n'
+        '${list('Currently wearing', current.worn)}'
+        '${list('Currently carrying', current.carrying)}';
+  }
+
+  /// The op vocabulary and rules — the other shared fragment (see
+  /// [wardrobeContext] for the contract).
+  static String opsRubric({List<String> others = const []}) =>
+      '\nWhat changed in the reply below? Report ONLY changes that actually '
+      'happened in it — not things they merely mentioned, remembered, wanted, '
+      'or were offered. If nothing changed, report an empty list; that is the '
+      'common answer and it is the right one.\n\n'
+      'Each change is one op:\n'
+      '  wear / remove — clothing put on or taken off\n'
+      '  pickup / drop — something taken up or set down, lost or thrown away\n'
+      '${others.isEmpty ? '  give — handed to someone else\n' : '  give — handed to someone else. Put their name in "to", spelled EXACTLY '
+            'as it appears here: ${others.join(', ')}. If it went to anyone '
+            'else — the person you are talking to, a passer-by, nobody in '
+            'particular — leave "to" empty rather than guessing a name from '
+            'that list.\n'}'
+      '  update — the same item, new condition. Weather, wear and damage '
+      'all count, not just food: ("state": "half-eaten"), a dress caught in '
+      'the rain ("state": "rain-soaked"), armour after a fight '
+      '("state": "dented"), boots after a road ("state": "mud-caked")\n'
+      '  transform — the item BECAME something else ("item": "candy bar", '
+      '"state": "sweet wrapper")\n\n'
+      'Name items the way they are already listed above when they appear '
+      'there, so the same thing is not recorded twice.\n\n';
+
   /// The prompt. Deliberately short: this call runs every turn the feature is
   /// on, so it carries the current record and the reply and nothing else — no
   /// dossier, no relationship standing, none of the context the realism judges
@@ -129,33 +178,8 @@ class PocketsEval {
     required bool toolsMode,
     List<String> others = const [],
   }) {
-    String list(String label, List<PocketItem> items) => items.isEmpty
-        ? '$label: (nothing recorded)\n'
-        : '$label: ${items.map((i) => i.display).join(', ')}\n';
-
-    return 'You are keeping track of what $charName is wearing and carrying.\n\n'
-        '${list('Currently wearing', current.worn)}'
-        '${list('Currently carrying', current.carrying)}'
-        '\nWhat changed in the reply below? Report ONLY changes that actually '
-        'happened in it — not things they merely mentioned, remembered, wanted, '
-        'or were offered. If nothing changed, report an empty list; that is the '
-        'common answer and it is the right one.\n\n'
-        'Each change is one op:\n'
-        '  wear / remove — clothing put on or taken off\n'
-        '  pickup / drop — something taken up or set down, lost or thrown away\n'
-        '${others.isEmpty ? '  give — handed to someone else\n' : '  give — handed to someone else. Put their name in "to", spelled EXACTLY '
-              'as it appears here: ${others.join(', ')}. If it went to anyone '
-              'else — the person you are talking to, a passer-by, nobody in '
-              'particular — leave "to" empty rather than guessing a name from '
-              'that list.\n'}'
-        '  update — the same item, new condition. Weather, wear and damage '
-        'all count, not just food: ("state": "half-eaten"), a dress caught in '
-        'the rain ("state": "rain-soaked"), armour after a fight '
-        '("state": "dented"), boots after a road ("state": "mud-caked")\n'
-        '  transform — the item BECAME something else ("item": "candy bar", '
-        '"state": "sweet wrapper")\n\n'
-        'Name items the way they are already listed above when they appear '
-        'there, so the same thing is not recorded twice.\n\n'
+    return '${wardrobeContext(charName, current)}'
+        '${opsRubric(others: others)}'
         'The reply:\n$reply\n\n'
         '${recentExchange.trim().isEmpty ? '' : 'Recent exchange for context:\n$recentExchange\n\n'}'
         '${toolsMode ? 'Report by calling the $kPocketsTool tool. Use ONLY the tool — no plain-text reply.' : 'Respond with ONLY a flat JSON object containing "inventory_ops" (an array). '

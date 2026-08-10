@@ -103,7 +103,41 @@ extension ChatServiceWiringEvals on ChatService {
           callToText: (resp) =>
               realismToolCallToJson(PocketsEval.kPocketsTool, resp.calls),
           fireToolEval: _fireToolEval,
-          fireTextEval: (p, {onChunk}) => _fireLLMEval(p),
+          fireTextEval: (p, {onChunk}) => _fireLLMEval(
+            p,
+            repeatPenalty: kScalarEvalRepeatPenalty,
+            label: 'pockets',
+          ),
+        );
+      },
+    );
+  }
+
+  // ── The fused reply-facts call (ReplyFactsEval) ──
+  // One round trip for climax + pockets + posture when two or more of them
+  // are live; the composition rules that keep every feature on its own gate
+  // are documented on the leaf. Same transport wiring as its three siblings —
+  // but constructed PER TURN by _prefetchReplyFacts rather than held as a
+  // late final: the leaf is a stateless wrapper over this fire closure, and
+  // one small allocation per turn is what kept the shell under the god-file
+  // ratchet. Not a hot path (once per reply, never per frame).
+  ReplyFactsEval _buildReplyFactsEval() {
+    return ReplyFactsEval(
+      fire: ({required debugLabel, required tools, required buildPrompt}) async {
+        return fireStructuredEval(
+          probe: _toolProbe,
+          backendIdentity: _evalBackendIdentity,
+          debugLabel: debugLabel,
+          tools: tools,
+          buildPrompt: buildPrompt,
+          callToText: (resp) =>
+              realismToolCallToJson(ReplyFactsEval.kReplyFactsTool, resp.calls),
+          fireToolEval: _fireToolEval,
+          fireTextEval: (p, {onChunk}) => _fireLLMEval(
+            p,
+            repeatPenalty: kScalarEvalRepeatPenalty,
+            label: 'reply_facts',
+          ),
         );
       },
     );
@@ -125,7 +159,11 @@ extension ChatServiceWiringEvals on ChatService {
           callToText: (resp) =>
               realismToolCallToJson(ClimaxEval.kClimaxTool, resp.calls),
           fireToolEval: _fireToolEval,
-          fireTextEval: (p, {onChunk}) => _fireLLMEval(p),
+          fireTextEval: (p, {onChunk}) => _fireLLMEval(
+            p,
+            repeatPenalty: kScalarEvalRepeatPenalty,
+            label: 'climax',
+          ),
         );
       },
     );
@@ -158,7 +196,12 @@ extension ChatServiceWiringEvals on ChatService {
   // 0 new god void _ (thins + this late final + god-owned _isVerifying* + getters only).
   RealismVerification _buildRealismVerifier() {
     return RealismVerification(
-      fireLLMEval: (p, {onChunk}) => _fireLLMEval(p, onChunk: onChunk),
+      fireLLMEval: (p, {onChunk}) => _fireLLMEval(
+        p,
+        onChunk: onChunk,
+        repeatPenalty: kScalarEvalRepeatPenalty,
+        label: 'director',
+      ),
       stripThinkBlocks: _stripThinkBlocks,
       extractJsonInt: _extractJsonInt,
       extractJsonBool: _extractJsonBool,
@@ -201,7 +244,12 @@ extension ChatServiceWiringEvals on ChatService {
     return NeedsImpactEvaluator(
       evaluateNeedsImpactCall: _llmEvalEngine.evaluateNeedsImpactCall,
       verifyRealismOutput: _realismVerifier.verify,
-      fireLLMEval: (p, {onChunk}) => _fireLLMEval(p, onChunk: onChunk),
+      fireLLMEval: (p, {onChunk}) => _fireLLMEval(
+        p,
+        onChunk: onChunk,
+        repeatPenalty: kScalarEvalRepeatPenalty,
+        label: 'needs',
+      ),
       getPendingRealismMetadata: () => _pendingRealismMetadata ?? {},
       setPendingRealismMetadata: (v) => _pendingRealismMetadata = v,
       getActiveCharacter: () => _activeCharacter,
@@ -229,7 +277,12 @@ extension ChatServiceWiringEvals on ChatService {
 
   RealismEvals _buildRealismEvals() {
     return RealismEvals(
-      fireLLMEval: (p, {onChunk}) => _fireLLMEval(p, onChunk: onChunk),
+      fireLLMEval: (p, {onChunk}) => _fireLLMEval(
+        p,
+        onChunk: onChunk,
+        repeatPenalty: kScalarEvalRepeatPenalty,
+        label: 'realism',
+      ),
       // Tools transport (realism_tools.dart): same door + probe memory the
       // Journal and Growth passes use, so a backend answers the "can you speak
       // tools?" question at most once per run across all three systems.
@@ -464,8 +517,23 @@ extension ChatServiceWiringEvals on ChatService {
   ) async {
     final service =
         testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService;
+    // [EvalTraffic]: the tool name is the label — free and precise on this
+    // lane, where every call carries its schema.
+    final trafficWatch = Stopwatch()..start();
+    void recordTraffic(LlmToolResponse? resp) => EvalTraffic.current.record(
+      label:
+          ((tools.firstOrNull?['function'] as Map?)?['name'] as String?) ??
+              'tool',
+      lane: 'tools',
+      promptChars: prompt.length,
+      outputChars: resp == null
+          ? 0
+          : resp.text.length +
+                resp.calls.fold(0, (a, c) => a + c.arguments.length * 16),
+      ms: trafficWatch.elapsedMilliseconds,
+    );
     try {
-      return await service
+      final resp = await service
           .generateWithTools(
             GenerationParams(
               prompt: prompt,
@@ -494,6 +562,8 @@ extension ChatServiceWiringEvals on ChatService {
             // back to text for the round without branding the backend XML-only.
           )
           .timeout(kEvalToolCallTimeout);
+      recordTraffic(resp);
+      return resp;
     } on TimeoutException {
       // The deadline abandoned an in-flight call. On the single-slot local
       // backend that orphan holds the shared idle slot (_pendingRequest), so
@@ -502,6 +572,8 @@ extension ChatServiceWiringEvals on ChatService {
       // orphan, the server-side abort also frees anything queued behind it.)
       // Remote backends don't serialize on the slot — nothing to release.
       if (service is KoboldService) service.abortGeneration();
+      // The wall time was spent whether or not an answer came back.
+      recordTraffic(null);
       rethrow;
     }
   }

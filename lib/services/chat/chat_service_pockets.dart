@@ -166,25 +166,40 @@ extension ChatServicePockets on ChatService {
         : const <String>[];
 
     final handedOver = <String, PocketItem>{};
-    final receipts = await _pocketsEval.evaluateAndApply(
-      charName: speaker.name,
-      pockets: record,
-      reply: reply,
-      // Without this a change the USER narrated — walking her out into the
-      // rain — is invisible to the eval, and the dress stays recorded dry.
-      recentExchange: recentExchange(_messages),
-      others: others,
-      onTransfer: transfersOn
-          // Resolve against the roster the model was actually shown. An
-          // unresolvable name is DROPPED, not guessed: the item still leaves
-          // the giver (that much is true either way) and simply reaches
-          // nobody, which is the behaviour every build before this one had.
-          ? (to, item) {
-              final match = resolveRecipient(to, others);
-              if (match != null) handedOver[match] = item;
-            }
-          : null,
-    );
+    // Resolve against the roster the model was actually shown. An
+    // unresolvable name is DROPPED, not guessed: the item still leaves
+    // the giver (that much is true either way) and simply reaches
+    // nobody, which is the behaviour every build before this one had.
+    final onTransfer = transfersOn
+        ? (String to, PocketItem item) {
+            final match = resolveRecipient(to, others);
+            if (match != null) handedOver[match] = item;
+          }
+        : null;
+
+    // On a fused reply-facts turn the question was already asked (one call
+    // for all three bookkeeping passes) — parse this pass's slice through
+    // the SAME parser and applier the standalone call feeds. An answer with
+    // no ops is the common case and applies nothing, exactly as today.
+    final fused = _replyFactsRaw;
+    final List<String> receipts;
+    if (fused != null) {
+      final ops = PocketsEval.parseOps(fused);
+      receipts = ops.isEmpty
+          ? const []
+          : applyPocketOps(record, ops, onTransfer: onTransfer);
+    } else {
+      receipts = await _pocketsEval.evaluateAndApply(
+        charName: speaker.name,
+        pockets: record,
+        reply: reply,
+        // Without this a change the USER narrated — walking her out into the
+        // rain — is invisible to the eval, and the dress stays recorded dry.
+        recentExchange: recentExchange(_messages),
+        others: others,
+        onTransfer: onTransfer,
+      );
+    }
 
     // Apply the arrivals AFTER the giver's own record is settled, so a
     // hand-off can never be read back out of the giver mid-pass.
