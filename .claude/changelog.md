@@ -14370,3 +14370,36 @@ maintainer's crash, reproduced and caught. The real page's tap-to-jump
 end-to-end remains covered by the journal_review integration suite in CI.
 
 flutter analyze clean; full unit + golden suites before push.
+
+## 2026-08-10 — Process hardening after the chat-switch crash: E2E for the class + CLAUDE.md rules
+
+**Files:** new `integration_test/chat_switch_smoke_test.dart`, `CLAUDE.md`.
+
+The maintainer asked, fairly, how buggy code reached Rawhide and what would
+prevent it. Honest answer recorded here: the duplicate-GlobalKey class was
+invisible to every existing gate — analyze (legal Dart), unit (no two live
+routes), goldens (perfect pixels), and even the E2E suites, none of which
+had ever opened chat A, gone back, and opened chat B. Same shape as the
+themes bug (512e4803). Two permanent changes:
+
+1. `chat_switch_smoke_test.dart` — CI-globbed E2E on all three platforms:
+   (a) the overlap case DETERMINISTICALLY (two stacked ChatPage routes,
+   then a character switch — both pages rebuild with the same message
+   objects in the same frame; per-frame takeException assertions so the
+   corruption cascade can't hide behind pumpAndSettle), (b) rapid A/B
+   pop/push churn landing inside transition frames (the realistic race),
+   (c) a real send/reply round-trip afterwards proving the app still
+   works. Could not be EXECUTED in this sandbox (no display) — stated
+   plainly; first execution is CI's per-file matrix, and the crash
+   mechanism itself is already red-proven at widget level in
+   message_key_scope_test.dart.
+
+2. CLAUDE.md, two new non-negotiables under "Rules When the Human Cannot
+   Review Code": owner-scoped GlobalKeys (never mint from a model object;
+   the incident + the _bubbleKeys pattern), and the manual-smoke-script
+   ritual — a sandbox that cannot launch the app must SAY so and end every
+   user-visible change with a 2-3 step "poke at this" script; plus:
+   navigation/keys/lifecycle changes carry an interaction test in the same
+   change. The E2E inventory list gains the new suite.
+
+flutter analyze clean (integration_test included); new file formatter-clean.
