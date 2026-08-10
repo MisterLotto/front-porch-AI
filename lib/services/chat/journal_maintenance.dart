@@ -283,8 +283,8 @@ class JournalMaintenance {
               ownerProposals.ops.isNotEmpty) {
             debugPrint(
               '[Journal] ⚠ ${owner.name}: pass produced ops but NO recap — '
-              'likely response-budget truncation (the recap is last in the '
-              'reply); "Where we are" stays stale this pass.',
+              'the model skipped the recap-first instruction (or truncation '
+              'was total); "Where we are" stays stale this pass.',
             );
           }
         }

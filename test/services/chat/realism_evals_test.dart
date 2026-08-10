@@ -787,6 +787,11 @@ void main() {
       expect(emotion, 'prickly');
     });
 
+    // AMENDED 2026-08-10 (maintainer-directed schema strip): 'activities'
+    // and 'intensity' left the needs schema — nothing ever read either from
+    // the response. The fixture keeps volunteering both, and the assertions
+    // now pin that the unknown-key filter drops them while every read field
+    // survives (which is also the strip working end-to-end).
     test('converter: bool/array coercion + cast-detect no-name convention', () {
       final needsJson = realismToolCallToJson(kNeedsImpactTool, [
         const LlmToolCall(name: 'report_needs_impact', arguments: {
@@ -803,9 +808,10 @@ void main() {
         }),
       ]);
       expect(needsJson, isNotNull);
-      expect(needsJson, contains('"activities":["sexual","messy"]'));
-      expect(needsJson, contains('"intensity":7'));
+      expect(needsJson, isNot(contains('activities')));
+      expect(needsJson, isNot(contains('intensity')));
       expect(needsJson, contains('"energy_delta":-12'));
+      expect(needsJson, contains('"reason":"climaxed during sex"'));
 
       // Cast detect: a matched call WITHOUT a name is the explicit
       // "no detection" answer its parser expects — not a transport failure.

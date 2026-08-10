@@ -38,17 +38,13 @@ extension RealismEvalCalls on RealismEvals {
       return; // Director excluded
     }
 
-    final msgs = getMessages();
     // 4-message window, unified across the three prefix-sharing judges (was
     // 3 here): the recent block must be built from the same inputs everywhere
-    // or the judges' shared context silently diverges per eval.
-    final recentCount = msgs.length < 4 ? msgs.length : 4;
-    final recent = msgs.reversed
-        .take(recentCount)
-        .toList()
-        .reversed
-        .map((m) => '${m.sender}: ${m.promptText}')
-        .join('\n');
+    // or the judges' shared context silently diverges per eval. Routed
+    // through the ONE window builder (recentExchange — same sender:promptText
+    // shape this inline copy had), which also applies the per-message clamp;
+    // the inline copies predated it and had already drifted once.
+    final recent = recentExchange(getMessages(), take: 4);
 
     if (getActiveCharacter() == null) {
       // Group chat or other mode — relationship evals not supported in this path yet
@@ -146,14 +142,8 @@ extension RealismEvalCalls on RealismEvals {
     if (!getRealismEnabled()) return;
     if (getActiveCharacter() == null && getActiveGroup() == null) return;
     if (getActiveGroup() != null && getIsObserverMode()) return;
-    final msgs = getMessages();
-    final recentCount = msgs.length < 4 ? msgs.length : 4;
-    final recent = msgs.reversed
-        .take(recentCount)
-        .toList()
-        .reversed
-        .map((m) => '${m.sender}: ${m.promptText}')
-        .join('\n');
+    // Same 4-message window as the other judges, same one builder + clamp.
+    final recent = recentExchange(getMessages(), take: 4);
     if (getActiveCharacter() == null) {
       // Group chat or other mode — relationship evals not supported in this path yet
       return;
@@ -282,14 +272,12 @@ extension RealismEvalCalls on RealismEvals {
       if (getActiveGroup() != null && getIsObserverMode()) return;
     }
 
-    final msgs = getMessages();
-    final recentCount = msgs.length < 6 ? msgs.length : 6;
-    final recent = msgs.reversed
-        .take(recentCount)
-        .toList()
-        .reversed
-        .map((m) => '${m.sender}: ${m.promptText}')
-        .join('\n');
+    // 6-message window through the one builder + clamp. A clamped middle
+    // can in principle hide a mid-novella "goodnight" from the new_day
+    // corroboration scan, but sleep language lives at message edges in
+    // practice — and the same clamp applies to the one-shot window, so the
+    // two clock paths stay in lockstep.
+    final recent = recentExchange(getMessages(), take: 6);
     // Under the engine this path needs a character (the group per-speaker dance
     // impersonates one first). The standalone clock does not: its prompt names
     // nobody, which is also why it works unchanged in a group, where time is
@@ -325,14 +313,8 @@ extension RealismEvalCalls on RealismEvals {
     if (!getRealismEnabled()) return;
     if (getActiveCharacter() == null && getActiveGroup() == null) return;
     if (getActiveGroup() != null && getIsObserverMode()) return;
-    final msgs = getMessages();
-    final recentCount = msgs.length < 4 ? msgs.length : 4;
-    final recent = msgs.reversed
-        .take(recentCount)
-        .toList()
-        .reversed
-        .map((m) => '${m.sender}: ${m.promptText}')
-        .join('\n');
+    // Same 4-message window as the other judges, same one builder + clamp.
+    final recent = recentExchange(getMessages(), take: 4);
     if (getActiveCharacter() == null) {
       // This path requires an active character (the group per-speaker path
       // temporarily sets _activeCharacter before calling us for parity).

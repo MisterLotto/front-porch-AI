@@ -14262,3 +14262,74 @@ lesson: at 1024 tokens the JOINT history cap correctly drained every
 memory, which is the cap doing its job. `flutter analyze` clean; web
 lint/tests green + `npm run build` rebuilt assets/web_app; full unit +
 golden suites run before push.
+
+## 2026-08-10 — The eval prompt diet + two fixes the maintainer's EvalTraffic capture exposed
+
+**Files:** `lib/services/chat/llm_eval_engine.dart` (clamp + consts),
+`lib/services/chat/realism_evals.dart` (+import),
+`lib/services/chat/realism_evals.calls.dart` (4 inline windows → recentExchange),
+`lib/services/chat/realism_evals.one_shot.dart` (1 more),
+`lib/services/chat/objective_proposal.dart` (raw-m.text window → recentExchange),
+`lib/services/chat/realism_tools.dart` (needs schema strip),
+`lib/services/chat/journal_prompt.dart` + `journal_maintenance.dart` (recap first),
+new tests `test/services/chat/{eval_window_clamp,needs_tool_schema_lean,journal_recap_first}_test.dart`,
+`docs/Rawhide.md`.
+
+The maintainer ran a real turn with the new [EvalTraffic] line on and it
+showed the next problem precisely: four ~50k-char eval prompts in ONE turn
+(48.6k tokens, 50.4s of eval LLM time), because the character writes 21k-char
+replies (textLen=21248 in the log) and every eval window carried its
+messages UNCAPPED. Three changes:
+
+1. **Per-message clamp on every turn-time eval window.**
+   `clampEvalMessage` (llm_eval_engine.dart): text ≤ kEvalMessageCharCap
+   (4000 chars) passes byte-identical; longer keeps head (2/3) + tail (1/3)
+   around a visible omission marker — head-heavy because the opening carries
+   the reaction the judges score, the tail where the scene landed for the
+   reply-readers. Applied inside recentExchange, and the five inline window
+   copies (three judges, scene-time, one-shot) plus the objective check now
+   ROUTE through recentExchange — deleting the duplicates and giving the
+   clamp one choke point. The objective check was the worst offender (50k
+   chars → 18-char verdict) AND read raw `m.text` — think blocks included,
+   no photo markers; recentExchange fixes all three at once. Pure +
+   deterministic (regen parity). Sub-cap messages produce byte-identical
+   prompts, so nothing changes for normal-length chats.
+
+2. **Needs tool schema stripped of dead fields.** 'activities' and
+   'intensity' were removed from the TEXT prompt in the Tier-1 sweep but
+   survived in the tools schema, so every tools-transport needs call still
+   invited the model to fill them — and it did, visibly in the log. Nothing
+   has ever read either from the response (grep-verified: the applier
+   consumes the seven deltas + reason). Both removed.
+
+3. **Journal recap comes FIRST in both transports.** The recap was
+   instructed last, so a busy pass hitting the response budget decapitated
+   exactly the recap — live in the log: "pass produced ops but NO recap".
+   Truncation must cost something; ordering picks the cheaper casualty (a
+   trailing one-sentence memory beat vs the per-turn "Where we are" block
+   the prompt and growth pass read — and the advanced cursor gives neither
+   a retry). Both parsers were already order-independent (now pinned with
+   recap-first fixtures); only the instructions moved, in both transports.
+
+### Two existing tests amended (maintainer-directed change, documented openly)
+
+`test/services/chat/tool_registry_test.dart` and
+`test/services/chat/realism_evals_test.dart` each used the needs tool's
+'activities' field as the FIXTURE for the converter's scalar-array branch —
+it was the only scalar-array field in any registered schema, and the
+maintainer's "Do all 3" explicitly ordered that field removed. The old
+assertions ("activities":[…] survives conversion) are provably false by
+design now; the amended assertions pin the NEW truth, which is stronger: the
+unknown-key filter DROPS the volunteered dead fields while every read field
+survives — the strip working end-to-end at the converter level. The
+converter's scalar-array stringify branch is retained (the declared-array
+floor; deleting it would silently drop any future scalar-array field).
+
+### Verification
+
+All three new suites proven red-then-green: clamp disabled → 4 tests red
+including both judge/one-shot capture guards; one judge reverted to its
+inline uncapped copy → its capture guard red; 'activities' re-added to the
+schema → dead-fields test red; either transport's instruction reverted to
+memories-first → its ordering test red. flutter analyze clean; full unit
+suite +3511 green; golden suite green before push.

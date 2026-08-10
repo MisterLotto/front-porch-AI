@@ -24,6 +24,8 @@ import 'package:flutter/foundation.dart';
 import 'package:front_porch_ai/database/database.dart' hide AvatarImage;
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/chat/eval_traffic.dart';
+import 'package:front_porch_ai/services/chat/llm_eval_engine.dart'
+    show recentExchange;
 import 'package:front_porch_ai/services/services.dart';
 
 /// Plain (non-ChangeNotifier) leaf sibling to LlmEvalEngine owning the objective
@@ -349,13 +351,12 @@ class ObjectiveProposal {
       final llmService = getLlmService();
       if (!llmService.isReady) return;
 
-      final msgs = getMessages();
-      final recentMessages = msgs.length > 8
-          ? msgs.sublist(msgs.length - 8)
-          : msgs;
-      final contextText = recentMessages
-          .map((m) => '${m.sender}: ${m.text}')
-          .join('\n');
+      // The one window builder + per-message clamp. This site was the worst
+      // offender in the maintainer's EvalTraffic capture — 50k chars of
+      // prompt for an 18-char verdict — because it read 8 messages of RAW
+      // `m.text`: think blocks included, no photo markers, no ceiling.
+      // recentExchange fixes all three at once (promptText + clamp).
+      final contextText = recentExchange(getMessages(), take: 8);
 
       // Collect every item needing an LLM verdict, retiring already-finished
       // quests without spending a single token on them. (A lingering

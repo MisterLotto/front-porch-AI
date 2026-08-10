@@ -131,7 +131,16 @@ void main() {
       expect(ClimaxEval.parseRefractory(json), 6);
     });
 
-    test('arrays of SCALARS are still stringified, as they always were', () {
+    // AMENDED 2026-08-10 (maintainer-directed schema strip): 'activities'
+    // was removed from the needs tool schema — nothing has ever read it from
+    // the response, and its presence made every tools-transport needs call
+    // pay output tokens for it. It was also the ONLY scalar-array field in
+    // any registered schema, i.e. this test's fixture. The assertion now
+    // pins the NEW truth at the converter level: a volunteered 'activities'
+    // is dropped by the unknown-key filter while real fields survive.
+    // (The converter's scalar-array stringify branch itself is retained as
+    // the declared-array floor — it just has no registered field today.)
+    test('a volunteered dead field is dropped; real fields survive', () {
       final json = realismToolCallToJson(kNeedsImpactTool, [
         const LlmToolCall(name: 'report_needs_impact', arguments: {
           'activities': ['sexual', 'messy'],
@@ -141,10 +150,12 @@ void main() {
 
       expect(
         json,
-        contains('"activities":["sexual","messy"]'),
-        reason: 'the object branch must not change the behaviour of the string '
-            'arrays that were the only kind when it was written',
+        isNot(contains('activities')),
+        reason: 'the schema no longer declares it, so the unknown-key filter '
+            'must drop it — surviving here would mean the dead field costs '
+            'output tokens again',
       );
+      expect(json, contains('"energy_delta":-12'));
     });
   });
 }

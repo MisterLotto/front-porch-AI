@@ -41,14 +41,9 @@ extension RealismEvalOneShot on RealismEvals {
 
     // Keep the eval prompt lean for local models — use fewer messages and a
     // shorter personality snippet to reduce prefill time on large models.
-    final msgs = getMessages();
-    final recentCount = msgs.length < 6 ? msgs.length : 6;
-    final recent = msgs.reversed
-        .take(recentCount)
-        .toList()
-        .reversed
-        .map((m) => '${m.sender}: ${m.promptText}')
-        .join('\n');
+    // 6-message window through the one builder + clamp (strict parity: the
+    // four-call path's scene-time window uses the identical call).
+    final recent = recentExchange(getMessages(), take: 6);
 
     if (getActiveCharacter() == null) {
       // Group chat or other mode — relationship evals not supported in this path yet

@@ -181,8 +181,40 @@ String recentExchange(List<ChatMessage> msgs, {int take = 3}) {
       // caption]" marker — and the realism judges already read promptText,
       // so needs/climax/pockets were the only evals blind to a photo the
       // exchange was about (eval review Tier-3 hygiene).
-      .map((m) => '${m.sender}: ${m.promptText}')
+      .map((m) => '${m.sender}: ${clampEvalMessage(m.promptText)}')
       .join('\n');
+}
+
+/// Per-message ceiling for EVAL windows (chars, ≈1k tokens). Verbose models
+/// write 20k+ character replies, and with no ceiling every judge window
+/// ballooned to the size of a short story: the maintainer's own EvalTraffic
+/// line showed four ~50k-char eval prompts in ONE turn — 48k tokens and 50
+/// seconds of LLM time to score a single exchange, with the objective check
+/// spending 50k chars on an 18-char answer. Evals judge the exchange; they
+/// do not need to re-read the novella.
+const int kEvalMessageCharCap = 4000;
+
+/// The marker a clamped message carries in place of its middle. A visible
+/// sentence, not an ellipsis: the judges must know text was omitted rather
+/// than believe the reply jump-cut.
+const String kEvalClampMarker =
+    '[… middle of a very long message omitted for this evaluation …]';
+
+/// Clamp ONE message's contribution to an eval window: text at or under
+/// [kEvalMessageCharCap] passes through byte-identical (the overwhelming
+/// majority — so short-message prompts, and every existing test fixture,
+/// are unchanged); longer text keeps its head and tail around
+/// [kEvalClampMarker]. Head-heavy on purpose — a reply's opening carries
+/// the reaction to the user (what the judges score) and its tail carries
+/// where the scene landed (what the reply-readers need). Pure and
+/// deterministic, so a regen sees the identical window (the regen-parity
+/// rule: identical inputs must produce identical eval prompts).
+String clampEvalMessage(String text) {
+  if (text.length <= kEvalMessageCharCap) return text;
+  final head = (kEvalMessageCharCap * 2) ~/ 3;
+  final tail = kEvalMessageCharCap - head;
+  return '${text.substring(0, head)}\n$kEvalClampMarker\n'
+      '${text.substring(text.length - tail)}';
 }
 
 class LlmEvalEngine {

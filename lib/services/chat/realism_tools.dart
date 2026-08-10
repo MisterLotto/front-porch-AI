@@ -188,12 +188,13 @@ final List<Map<String, dynamic>> kOneShotEvalTools = [
 ];
 
 final Map<String, Map<String, dynamic>> _needsImpactFields = {
-  'activities': {
-    'type': 'array',
-    'items': {'type': 'string'},
-    'description': 'Activity tags for the scene (e.g. "sexual", "messy").',
-  },
-  'intensity': _intField('Scene intensity, 1-10.'),
+  // 'activities' and 'intensity' were REMOVED 2026-08-10: nothing in the
+  // app has ever read either from the response (the applier consumes the
+  // seven deltas + reason, full stop), the text prompt stopped asking in
+  // the Tier-1 sweep — but their survival HERE meant every tools-transport
+  // needs call still invited the model to fill them, and it did, paying
+  // output tokens for fields that went straight to the void (visible in
+  // the maintainer's own log: "activities":["sleeping","washing",…]).
   for (final k in const [
     'hunger',
     'energy',
