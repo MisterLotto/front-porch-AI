@@ -3,6 +3,50 @@
 
 # Changelog
 
+## 2026-08-10 — perf(realism): fuse the three post-reply bookkeeping calls into one when 2+ are live
+- **Files changed:** `lib/services/chat/reply_facts_eval.dart` (new),
+  `lib/services/chat/chat_service_reply_facts.dart` (new part),
+  `lib/services/chat/climax_eval.dart`, `lib/services/chat/pockets_eval.dart`,
+  `lib/services/chat/time_service.dart`, `lib/services/chat/realism_tools.dart`,
+  `lib/services/chat/chat.dart`, `lib/services/chat_service.dart`,
+  `lib/services/chat/chat_service_wiring_evals.dart`,
+  `lib/services/chat/chat_service_generation_postgen.dart`,
+  `lib/services/chat/chat_service_climax.dart`,
+  `lib/services/chat/chat_service_pockets.dart`,
+  `test/services/chat/reply_facts_fusion_test.dart` (new),
+  `.claude/changelog.md`, `docs/Rawhide.md`
+- **Why:** the post-generation phase fired one LLM call per bookkeeping pass —
+  climax (Afterglow), Pockets & Wardrobe, and posture — each sending the SAME
+  reply + the same 3-turn exchange with a different question attached. With
+  all three on, every turn paid three round trips for what one call answers.
+- **How:** a fused ReplyFactsEval fires when two or more of the three are
+  live; each feature's question is included only when its OWN gate is on
+  (fire = OR of gates, sections/required-fields = AND per feature), composed
+  from the standalone prompts' exact fragment builders (ClimaxEval.rubric,
+  PocketsEval.wardrobeContext/opsRubric, TimeService.postureQuestion) so the
+  transports cannot drift. The answer is consumed by the three passes'
+  existing key-scoped parsers — appliers, chips, gates and regen rewind are
+  untouched. Fewer than two live = each pass fires standalone, byte-for-byte
+  as before, so nobody's cost changes until fusion actually saves a call.
+  This re-opens the 2026-08-07 "Pockets rides no other feature's eval"
+  ruling WITH ITS RATIONALE SATISFIED (maintainer-approved 2026-08-10): the
+  ruling forbade inheriting another feature's gates, and here no feature's
+  switch appears in another's gate — amendments recorded on the ClimaxEval
+  and PocketsEval class docs.
+- **Failure semantics:** a fused call that fired and failed parks an EMPTY
+  carrier — all three passes skip for the turn (each one's existing
+  deterministic floor) instead of paying fallback calls on a backend that
+  just failed. Null carrier = no fusion = standalone paths.
+- **Verification:** `flutter analyze` → No issues found. New suite
+  reply_facts_fusion_test (14 tests) — every guard proven to fail first:
+  (a) pockets pass ignoring the fused carrier went red on "standalone call
+  is what fusion replaced", (b) dropping inventory_ops from the computed
+  required list went red on the schema group, (c) a one-word drifted
+  re-inline of the climax rubric went red on fragment parity. All 18
+  existing climax/pockets/posture/wardrobe/tool-registry suites (183 tests
+  total with the new ones) pass unmodified, plus a full
+  `flutter test --concurrency=4 --exclude-tags golden` run.
+
 ## 2026-08-08 — fix(realism): the spatial-awareness check ran before the reply it was supposed to be reading
 - **Files changed:** `lib/services/chat/time_service.dart`,
   `realism_evals.calls.dart`, `realism_evals.one_shot.dart`,

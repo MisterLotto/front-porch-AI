@@ -109,6 +109,32 @@ extension ChatServiceWiringEvals on ChatService {
     );
   }
 
+  // ── The fused reply-facts call (ReplyFactsEval) ──
+  // One round trip for climax + pockets + posture when two or more of them
+  // are live; the composition rules that keep every feature on its own gate
+  // are documented on the leaf. Same transport wiring as its three siblings —
+  // but constructed PER TURN by _prefetchReplyFacts rather than held as a
+  // late final: the leaf is a stateless wrapper over this fire closure, and
+  // one small allocation per turn is what kept the shell under the god-file
+  // ratchet. Not a hot path (once per reply, never per frame).
+  ReplyFactsEval _buildReplyFactsEval() {
+    return ReplyFactsEval(
+      fire: ({required debugLabel, required tools, required buildPrompt}) async {
+        return fireStructuredEval(
+          probe: _toolProbe,
+          backendIdentity: _evalBackendIdentity,
+          debugLabel: debugLabel,
+          tools: tools,
+          buildPrompt: buildPrompt,
+          callToText: (resp) =>
+              realismToolCallToJson(ReplyFactsEval.kReplyFactsTool, resp.calls),
+          fireToolEval: _fireToolEval,
+          fireTextEval: (p, {onChunk}) => _fireLLMEval(p),
+        );
+      },
+    );
+  }
+
   // ── Afterglow's climax check (its own pass; see ClimaxEval) ──
   // Shares only the transport, never another feature's call — the same
   // probe-and-fallback every structured eval uses, so a tool-less backend gets

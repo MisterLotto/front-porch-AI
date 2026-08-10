@@ -47,13 +47,20 @@ extension ChatServiceClimax on ChatService {
     final speaker = _activeCharacter;
     if (speaker == null) return;
 
-    final turns = await _climaxEval.detect(
-      charName: speaker.name,
-      reply: reply,
-      // The same window the needs eval uses, from the one shared helper — this
-      // was a hand-rolled copy until Pockets needed a third.
-      recentExchange: recentExchange(_messages),
-    );
+    // On a fused reply-facts turn the question was already asked (one call
+    // for all three bookkeeping passes) — read this pass's slice through the
+    // SAME parser the standalone call feeds. A fused answer without a
+    // verdict skips, exactly as a failed standalone call does.
+    final fused = _replyFactsRaw;
+    final turns = fused != null
+        ? ClimaxEval.parseRefractory(fused)
+        : await _climaxEval.detect(
+            charName: speaker.name,
+            reply: reply,
+            // The same window the needs eval uses, from the one shared helper —
+            // this was a hand-rolled copy until Pockets needed a third.
+            recentExchange: recentExchange(_messages),
+          );
     if (turns == null) return;
 
     // Metadata first, then the effect — applyClimaxEffects zeroes arousal, so

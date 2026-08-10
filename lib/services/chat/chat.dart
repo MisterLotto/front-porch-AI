@@ -62,6 +62,7 @@ export 'realism_verification.dart';
 export 'relationship_milestones.dart';
 export 'relationship_service.dart';
 export 'relationship_tiers.dart';
+export 'reply_facts_eval.dart';
 export 'scenario_fade.dart';
 export 'scene_guest_director.dart';
 export 'scene_guest_state.dart';

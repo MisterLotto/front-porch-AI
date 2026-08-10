@@ -204,6 +204,13 @@ extension ChatServiceGenerationPostGen on ChatService {
           // the chips are not re-attached on a continuation.
           if (t.mode != GenerationMode.continue_) {
             await _runPostGenNeedsChecks(finalResponse);
+            // The fused reply-facts fetch: when two or more of the three
+            // bookkeeping passes below (climax, pockets, posture) are live,
+            // ONE call answers all of them and each pass consumes its slice
+            // through its own unchanged parser. With fewer than two live,
+            // this is a no-op and each pass fires its own call exactly as
+            // before. See ReplyFactsEval for the composition rules.
+            await _prefetchReplyFacts(finalResponse);
             // Pockets & Wardrobe — its own pass, skipped on Continue for the
             // SAME reason as the needs checks above: a continuation extends
             // this exchange rather than being a new one, and re-reading it
@@ -241,8 +248,28 @@ extension ChatServiceGenerationPostGen on ChatService {
             // recreating the bug this block was rewritten to fix. Same
             // reasoning, same phase, same awaiting as its two siblings above.
             if (finalResponse.isNotEmpty) {
-              await _evaluatePhysicalStateCall(postureOnly: true);
+              final fused = _replyFactsRaw;
+              if (fused != null) {
+                // The fused call already asked "where did this reply leave
+                // her" — consume its answer through the ONE posture parser
+                // instead of paying a second call. An absent or unparseable
+                // answer skips, exactly as a failed standalone pass does:
+                // the stance keeps its last value.
+                final posture = TimeService.parsePosture(fused);
+                if (posture != null) {
+                  _relationshipService.setSpatialStance(posture);
+                }
+                debugPrint(
+                  '[Realism:Posture] ${_relationshipService.spatialStance} '
+                  '(fused reply-facts)',
+                );
+              } else {
+                await _evaluatePhysicalStateCall(postureOnly: true);
+              }
             }
+            // Consumed — the carrier must never outlive the passes that read
+            // it, or a stale answer could feed the next turn's bookkeeping.
+            _replyFactsRaw = null;
           }
 
           // Keep this message's realism_state snapshot TRUTHFUL now that the
