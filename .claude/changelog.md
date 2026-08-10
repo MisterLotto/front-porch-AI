@@ -14333,3 +14333,40 @@ inline uncapped copy → its capture guard red; 'activities' re-added to the
 schema → dead-fields test red; either transport's instruction reverted to
 memories-first → its ordering test red. flutter analyze clean; full unit
 suite +3511 green; golden suite green before push.
+
+## 2026-08-10 — Duplicate-GlobalKey crash on chat switch: bubble keys become page-owned
+
+**Files:** `lib/ui/pages/chat_page.dart`, `lib/ui/chat_components/widgets/
+message_jump.dart`, amended `test/ui/chat_components/message_jump_test.dart`,
+new `test/ui/chat_components/message_key_scope_test.dart`, `CLAUDE.md`,
+`docs/Rawhide.md`.
+
+Maintainer repro: switching chats to a different character produced a storm
+of "Multiple widgets used the same GlobalKey ([GlobalObjectKey ChatMessage])"
+followed by cascading tree corruption (child._parent, wrong build scope,
+overlay asserts). Root cause: the journal tap-to-jump feature changed bubble
+keys from list-local `ObjectKey(msg)` to `GlobalObjectKey(msg)` — whose
+identity is the message alone and whose scope is the whole app. Two ChatPage
+routes can be alive in the same frame (a push over a not-yet-disposed page,
+or a route transition), and BOTH listen to the same ChatService, so a chat
+switch had both building bubbles for the same message objects: one
+duplicate-key crash per visible message. The overlay assertion in the log is
+corroborating: routes live in the Navigator's Overlay.
+
+Fix: each `_ChatPageState` owns `_bubbleKeys` (an identity map of plain
+GlobalKeys, minted per page instance — two pages can never share one),
+pruned when the session changes so a long-lived page can't pin past chats'
+messages. `jumpToMessage` gains a required `keyOf` lookup instead of minting
+`GlobalObjectKey` internally; null (never-built bubble) means "keep paging",
+exactly like unmounted did. JumpFlash and the seek algorithm unchanged.
+
+`message_jump_test.dart` AMENDED (the signature change IS the fix — the
+suite now keys its harness the way the fixed page does). New
+`message_key_scope_test.dart` pins the regression at mechanism level: two
+lists, same message instances, one frame → clean with per-owner keys; and
+the RED-PROOF is built in as a second test asserting the OLD scheme throws
+"Multiple widgets used the same GlobalKey" in that same harness — the
+maintainer's crash, reproduced and caught. The real page's tap-to-jump
+end-to-end remains covered by the journal_review integration suite in CI.
+
+flutter analyze clean; full unit + golden suites before push.

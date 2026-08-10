@@ -17,6 +17,7 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
@@ -76,6 +77,21 @@ class _ChatPageState extends State<ChatPage> {
   bool _autoScroll = true;
   // Journal receipts tap-to-jump: the just-landed-on bubble, briefly tinted.
   ChatMessage? _jumpFlashMessage;
+  // Bubble keys for tap-to-jump, owned by THIS page instance. They used to
+  // be `GlobalObjectKey(msg)` — whose identity is the message alone — and a
+  // GlobalKey must be unique across the whole app. Two ChatPage routes can
+  // be alive in the same frame (a push over a not-yet-disposed page, or the
+  // frames of a route transition), and both listen to the same ChatService,
+  // so a chat switch had BOTH pages building bubbles for the same message
+  // objects: one duplicate-key crash per visible message, then cascading
+  // tree corruption (maintainer repro, 2026-08-10). Keys minted per page
+  // instance can never collide across pages; jumpToMessage looks them up
+  // through [_bubbleKeyOf]. Identity map on purpose: message equality is
+  // identity everywhere else (list diffing, jump targets, flash).
+  final Map<ChatMessage, GlobalKey> _bubbleKeys = HashMap.identity();
+  // Prune marker: entries live until the session changes (or the page dies),
+  // so a long-lived page can't accumulate every past chat's messages.
+  String? _bubbleKeysSessionId;
   double _sidebarWidth = 300;
   int _inputMinLines = 1;
   double _dragAccumulator = 0;
@@ -405,27 +421,6 @@ class _ChatPageState extends State<ChatPage> {
     }
   }
 
-  /// Journal receipts tap-to-jump: seek the chat to the message at
-  /// [position] (the stored absolute index), then flash the bubble so the
-  /// eye finds it. The seek itself lives in message_jump.dart.
-  Future<void> _jumpToMessage(int position) async {
-    final messages = Provider.of<ChatService>(context, listen: false).messages;
-    if (position < 0 || position >= messages.length) return;
-    final target = messages[position];
-    await jumpToMessage(
-      controller: _scrollController,
-      messages: messages,
-      target: target,
-    );
-    if (!mounted) return;
-    setState(() => _jumpFlashMessage = target);
-    Future.delayed(const Duration(milliseconds: 1800), () {
-      if (mounted && identical(_jumpFlashMessage, target)) {
-        setState(() => _jumpFlashMessage = null);
-      }
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Consumer<ChatService>(
@@ -433,6 +428,14 @@ class _ChatPageState extends State<ChatPage> {
         final character = chatService.activeCharacter;
         final messages = chatService.messages;
         final isGroup = chatService.isGroupMode;
+
+        // New chat, new keys: without this a long-lived page pins every past
+        // chat's ChatMessage objects through the key map. No setState — the
+        // map is not visual state, and this runs during build anyway.
+        if (_bubbleKeysSessionId != chatService.currentSessionId) {
+          _bubbleKeys.clear();
+          _bubbleKeysSessionId = chatService.currentSessionId;
+        }
 
         if (character == null && !isGroup) {
           // Scaffold, not a bare Center: without a Material ancestor the Text
@@ -735,12 +738,14 @@ class _ChatPageState extends State<ChatPage> {
                                             : character,
                                         chatService: chatService,
                                       );
-                                      // GlobalObjectKey (was ObjectKey): same
-                                      // identity for list diffing, but
-                                      // locatable — jumpToMessage pages the
-                                      // list until this key materializes.
+                                      // Page-scoped GlobalKey (see
+                                      // _bubbleKeys): same identity for list
+                                      // diffing, locatable for jumpToMessage
+                                      // — but owned by this page instance,
+                                      // so a second live chat route can
+                                      // never claim the same key.
                                       return JumpFlash(
-                                        key: GlobalObjectKey(msg),
+                                        key: _bubbleKeyFor(msg),
                                         flashed: identical(
                                           msg,
                                           _jumpFlashMessage,

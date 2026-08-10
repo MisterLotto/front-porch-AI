@@ -25,6 +25,37 @@
 part of 'chat_page.dart';
 
 extension _ChatPageSidebar on _ChatPageState {
+  /// This page's key for [m]'s bubble, minted on first build (see the
+  /// `_bubbleKeys` field doc — page-owned so two live chat routes can never
+  /// collide on one GlobalKey).
+  GlobalKey _bubbleKeyFor(ChatMessage m) =>
+      _bubbleKeys.putIfAbsent(m, GlobalKey.new);
+
+  /// Journal receipts tap-to-jump: seek the chat to the message at
+  /// [position] (the stored absolute index), then flash the bubble so the
+  /// eye finds it. The seek itself lives in message_jump.dart. Lives in the
+  /// sidebar part because the sidebar's receipts are what call it.
+  Future<void> _jumpToMessage(int position) async {
+    final messages = Provider.of<ChatService>(context, listen: false).messages;
+    if (position < 0 || position >= messages.length) return;
+    final target = messages[position];
+    await jumpToMessage(
+      controller: _scrollController,
+      messages: messages,
+      target: target,
+      // This page's own keys. Null for a not-yet-built bubble — the seek
+      // treats that as "keep paging"; the itemBuilder mints the key the
+      // moment the bubble materializes.
+      keyOf: (m) => _bubbleKeys[m],
+    );
+    if (!mounted) return;
+    rebuildState(() => _jumpFlashMessage = target);
+    Future.delayed(const Duration(milliseconds: 1800), () {
+      if (mounted && identical(_jumpFlashMessage, target)) {
+        rebuildState(() => _jumpFlashMessage = null);
+      }
+    });
+  }
   /// Wraps a sidebar widget with a draggable resize handle on its left edge.
   Widget _buildResizableSidebar({required Widget child}) {
     return Row(
