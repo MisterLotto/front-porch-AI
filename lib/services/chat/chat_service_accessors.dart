@@ -275,6 +275,23 @@ extension ChatServiceAccessors on ChatService {
     _memoryService = service;
   }
 
+  /// The RAG receipt of the LAST character reply (rag_injection.dart wire
+  /// shape), or null when that reply needed no retrieval — everything was
+  /// still in context, or RAG was off. Read by the sidebar Memory panel and
+  /// the web facade; keys survive the JSON round-trip, hence the cast.
+  /// Reads the PUBLIC [messages] getter, not `_messages`: the golden fakes
+  /// implement ChatService from outside this library, so a private read
+  /// here is a NoSuchMethodError on every fake-driven surface
+  /// (chat_tools_facade_test caught exactly that on first run).
+  Map<String, dynamic>? get lastRagReceipt {
+    for (final m in messages.reversed) {
+      if (m.isUser || m.sender == 'System') continue;
+      return (m.activeMetadata?['rag_receipt'] as Map?)
+          ?.cast<String, dynamic>();
+    }
+    return null;
+  }
+
   /// Set the ImageGenService after construction (for background Scene Guest
   /// portraits). Optional — when absent or unconfigured, guests just keep their
   /// initials avatar.

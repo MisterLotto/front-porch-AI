@@ -76,6 +76,10 @@ class ChatToolsFacade {
         'ragEnabled': _storage.ragEnabled,
         'ragRetrievalCount': _storage.ragRetrievalCount,
         'ragWindowSize': _storage.ragWindowSize,
+        // The last reply's retrieval receipt (rag_injection.dart wire
+        // shape) — the same anti-black-box surface the desktop sidebar
+        // shows. Additive + nullable per the API compatibility rules.
+        'lastRagReceipt': _chat.lastRagReceipt,
         'journalEnabled': _storage.journalEnabled,
         'journalInterval': _storage.journalInterval,
         'importLlmertaPorchMemories': _storage.importLlmertaPorchMemories,

@@ -86,6 +86,12 @@ class _GenTurn {
   // ── rag phase → request phase ──
   String memoriesBlock = '';
 
+  // ── rag phase → stream phase (metadata stamp) ──
+  /// What retrieval found/dropped/injected this turn (rag_injection.dart
+  /// wire shape), or null when retrieval never ran (nothing dropped, RAG
+  /// off, or not operational). Stamped as `rag_receipt` on [streamTarget].
+  Map<String, dynamic>? ragReceipt;
+
   // ── request phase → stream/postgen phases ──
   late List<String> stopList;
   late Stream<String> stream;

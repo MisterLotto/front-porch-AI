@@ -109,6 +109,14 @@ extension ChatServiceGenerationStream on ChatService {
       _messages.add(t.streamTarget);
       _pendingRealismMetadata = null;
     }
+    // RAG receipt (rag_injection.dart): stamped here — the same single
+    // funnel Standing Mood uses above — so continue/regen/group/guest turns
+    // all carry what retrieval did for THIS text. Persisted by the postgen
+    // _saveChat with everything else.
+    if (t.ragReceipt != null) {
+      t.streamTarget.activeMetadata ??= {};
+      t.streamTarget.activeMetadata!['rag_receipt'] = t.ragReceipt;
+    }
     final streamTarget = t.streamTarget;
 
     // Helper to update the visible message from buffer. Incremental: only

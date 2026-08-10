@@ -26,14 +26,25 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/data_bank_dialog.dart';
 import 'package:front_porch_ai/ui/chat_components/chat_components.dart';
 import 'memory_sources_list.dart';
+import 'rag_receipt_view.dart';
 
 /// Memory (RAG) sidebar panel — enable toggle (with first-run consent flow),
-/// embedding engine status, retrieval settings, cross-character source picker,
-/// and the Data Bank. The RAG half of the old MemorySection; the Character
-/// Growth half lives in GrowthPanel.
+/// embedding engine status, the last reply's retrieval receipt
+/// (RagReceiptView — what memory just did), retrieval settings,
+/// cross-character source picker, and the Data Bank. The RAG half of the old
+/// MemorySection; the Character Growth half lives in GrowthPanel.
 class MemoryPanel extends StatefulWidget {
   final ChatService chatService;
-  const MemoryPanel({super.key, required this.chatService});
+
+  /// Journal-receipts tap-to-jump, threaded down from the chat page so a
+  /// receipt line can seek the transcript to the message it quoted.
+  final ValueChanged<int>? onJumpToMessage;
+
+  const MemoryPanel({
+    super.key,
+    required this.chatService,
+    this.onJumpToMessage,
+  });
 
   @override
   State<MemoryPanel> createState() => _MemoryPanelState();
@@ -184,6 +195,12 @@ class _MemoryPanelState extends State<MemoryPanel> {
                 ],
               );
             },
+          ),
+          // What memory just did — the last reply's retrieval receipt.
+          RagReceiptView(
+            receipt: widget.chatService.lastRagReceipt,
+            onJumpToMessage: widget.onJumpToMessage,
+            accent: accent,
           ),
           const SizedBox(height: 6),
           // Controls row

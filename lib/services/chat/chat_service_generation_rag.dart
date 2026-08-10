@@ -46,10 +46,13 @@ extension ChatServiceGenerationRag on ChatService {
         '[RAG:Chat] ── Prompt assembly: ${t.droppedMessages} messages dropped, triggering retrieval ──',
       );
       try {
-        // Use last 3 messages as the query
+        // Use last 3 messages as the query. promptText, not displayText
+        // (2026-08-10, same fix recentExchange got): only photo turns
+        // differ, and a query blind to "[shared a photo: …]" can't retrieve
+        // the memories a photo-centered exchange is actually about.
         final queryMessages = _messages.reversed
             .take(3)
-            .map((m) => '${m.sender}: ${m.displayText}')
+            .map((m) => '${m.sender}: ${m.promptText}')
             .join('\n');
 
         // Scene Guests Phase 4: a guest turn retrieves the GUEST's own
@@ -115,29 +118,48 @@ extension ChatServiceGenerationRag on ChatService {
             (contextSize * budgetFraction).round(),
             kRagMemoryBudgetCapTokens,
           );
-          final includedMemories = <String>[];
+          // Day stamps + display order (rag_injection.dart): each line gets
+          // its story day so a verbatim Day-2 line can't masquerade as the
+          // scene's present and contradict the recap's chronology. PACKING
+          // stays in relevance order (retrieve() returns score-descending —
+          // chronology must never decide which memories fit the budget);
+          // the survivors are then SHOWN oldest → newest.
+          final sessionForStamps = _currentSessionId ?? '';
+          final days = <RetrievedMemory, int?>{
+            for (final m in memories)
+              m: m.sessionId == sessionForStamps
+                  ? storyDayAt(_messages, m.positionStart, m.positionEnd)
+                  : null,
+          };
+          String lineFor(RetrievedMemory m) => formatRagLine(
+            m.content,
+            day: days[m],
+            otherChat: m.sessionId != sessionForStamps,
+          );
+          final included = <RetrievedMemory>[];
           int usedTokens = 0;
           for (final m in memories) {
-            final memTokens = (m.content.length / 4).ceil();
+            final memTokens = (lineFor(m).length / 4).ceil();
             if (usedTokens + memTokens > memoryBudget &&
-                includedMemories.isNotEmpty) {
+                included.isNotEmpty) {
               debugPrint(
-                '[RAG:Chat] ⚠ Trimmed ${memories.length - includedMemories.length} memories to fit budget ($memoryBudget tokens)',
+                '[RAG:Chat] ⚠ Trimmed ${memories.length - included.length} memories to fit budget ($memoryBudget tokens)',
               );
               break;
             }
             usedTokens += memTokens;
-            includedMemories.add('- ${m.content}');
+            included.add(m);
           }
-          if (includedMemories.isNotEmpty) {
+          if (included.isNotEmpty) {
             // Role frame (spec §6): RAG = exact earlier lines, reference
             // only — the journal outranks it on feelings, the recap on plot.
             // Leading '\n' because this now follows the history transcript,
             // whose last line carries no trailing newline.
-            String buildBlock(List<String> mems) =>
-                '\n[Exact earlier lines from this chat (already happened — '
-                'reference only, do not revisit):\n${mems.join('\n')}]\n';
-            t.memoriesBlock = buildBlock(includedMemories);
+            String buildBlock(List<RetrievedMemory> mems) =>
+                '\n[Exact earlier lines from this chat, in story order '
+                '(already happened — reference only, do not revisit):\n'
+                '${chronologicalRagOrder(mems, sessionForStamps).map(lineFor).join('\n')}]\n';
+            t.memoriesBlock = buildBlock(included);
 
             // Budget accounting fix (spec §5f): memories were previously
             // injected WITHOUT being counted — history had already filled
@@ -162,10 +184,11 @@ extension ChatServiceGenerationRag on ChatService {
             while (memTokens > 0 &&
                 (memTokens > memoryBudget ||
                     t.historyBudget - memTokens <= 0)) {
-              includedMemories.removeLast();
-              t.memoriesBlock = includedMemories.isEmpty
-                  ? ''
-                  : buildBlock(includedMemories);
+              // removeLast drops the LEAST RELEVANT survivor — `included` is
+              // still in retrieve()'s score order; only the rendered block
+              // is chronological.
+              included.removeLast();
+              t.memoriesBlock = included.isEmpty ? '' : buildBlock(included);
               memTokens = t.memoriesBlock.isEmpty
                   ? 0
                   : await _countTokens(t.memoriesBlock);
@@ -184,7 +207,7 @@ extension ChatServiceGenerationRag on ChatService {
               // the budget map below reports the final dropped count.
               t.droppedMessages = rebudget.droppedCount;
               debugPrint(
-                '[RAG:Chat] ✅ Injecting ${includedMemories.length}/${memories.length} memories ($memTokens tokens real, budget: $memoryBudget)',
+                '[RAG:Chat] ✅ Injecting ${included.length}/${memories.length} memories ($memTokens tokens real, budget: $memoryBudget)',
               );
             } else {
               debugPrint(
@@ -193,8 +216,29 @@ extension ChatServiceGenerationRag on ChatService {
               );
             }
           }
+          // The receipt: what this turn's retrieval found, dropped, and
+          // actually injected (display order) — stamped onto the generated
+          // message in the stream phase, rendered by the sidebar Memory
+          // panel + the web facade. Built AFTER the trim loops so it reports
+          // what shipped, not what was hoped for.
+          t.ragReceipt = buildRagReceipt(
+            found: rawMemories.length,
+            journalDeduped: rawMemories.length - memories.length,
+            budgetTrimmed: memories.length - included.length,
+            injected: chronologicalRagOrder(included, sessionForStamps),
+            days: days,
+            currentSessionId: sessionForStamps,
+          );
         } else {
           debugPrint('[RAG:Chat] No relevant memories found for this turn');
+          t.ragReceipt = buildRagReceipt(
+            found: rawMemories.length,
+            journalDeduped: rawMemories.length - memories.length,
+            budgetTrimmed: 0,
+            injected: const [],
+            days: const {},
+            currentSessionId: _currentSessionId ?? '',
+          );
         }
       } catch (e) {
         debugPrint('[RAG:Chat] ✗ RAG retrieval failed: $e');

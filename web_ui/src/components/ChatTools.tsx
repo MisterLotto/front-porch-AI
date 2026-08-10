@@ -49,6 +49,20 @@ interface ToolsState {
     growthEnabled: boolean;
     growthInterval: number;
     growthReviewFirst: boolean;
+    // The last reply's retrieval receipt (additive, 2026-08-10 — absent on
+    // older facades; null when that reply needed no retrieval). Desktop
+    // sidebar parity: what memory found / dropped / actually injected.
+    lastRagReceipt?: {
+      found: number;
+      journal_deduped: number;
+      budget_trimmed: number;
+      injected: Array<{
+        pos: number;
+        day?: number | null;
+        other_chat: boolean;
+        preview: string;
+      }>;
+    } | null;
   };
   // The Journal's per-chat recap ("Where we are") — key kept as `summary`
   // to match the facade block name.
@@ -261,6 +275,34 @@ export function ChatTools({
             <>
               <NumField label="Retrieve count" value={t.memory.ragRetrievalCount} onCommit={(v) => settings({ ragRetrievalCount: v })} />
               <NumField label="Window size" value={t.memory.ragWindowSize} onCommit={(v) => settings({ ragWindowSize: v })} />
+              {/* What memory just did — desktop RagReceiptView parity. */}
+              {(() => {
+                const r = t.memory.lastRagReceipt;
+                const counts = r
+                  ? [
+                      r.budget_trimmed > 0 ? `${r.budget_trimmed} trimmed for space` : null,
+                      r.journal_deduped > 0 ? `${r.journal_deduped} already covered by the journal` : null,
+                    ].filter(Boolean)
+                  : [];
+                const suffix = counts.length ? ` (${counts.join(', ')})` : '';
+                return (
+                  <div className="rag-receipt">
+                    <p className="muted small">
+                      {!r
+                        ? 'Last reply: nothing had scrolled out of view — no lookup needed.'
+                        : r.injected.length === 0
+                          ? `Last reply: searched the archive — nothing relevant enough to bring back.${suffix}`
+                          : `Last reply: ${r.injected.length} ${r.injected.length === 1 ? 'memory' : 'memories'} woven in.${suffix}`}
+                    </p>
+                    {r?.injected.map((line, i) => (
+                      <p key={i} className="muted small rag-receipt-line">
+                        <strong>{line.other_chat ? 'another chat' : line.day != null ? `Day ${line.day}` : ''}</strong>{' '}
+                        {line.preview}
+                      </p>
+                    ))}
+                  </div>
+                );
+              })()}
             </>
           )}
           <Toggle label="Journal (memories + recap)" value={t.memory.journalEnabled} onChange={(v) => settings({ journalEnabled: v })} />

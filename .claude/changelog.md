@@ -14205,3 +14205,60 @@ probe reverted → spike tests red; ownership gate dropped → double-apply red;
 one-shot flag flipped → one-shot silence red.
 `flutter analyze` clean; `dart fix --dry-run` nothing to fix; full unit +
 golden suites run before push (results in the PR).
+
+## 2026-08-10 — RAG transparency: day-stamped injection + the retrieval receipt
+
+**Files:** new `lib/services/chat/rag_injection.dart` (pure leaf) + barrel
+export, `lib/services/chat/chat_service_generation_rag.dart`,
+`lib/services/chat/chat_service_generation.dart` (_GenTurn.ragReceipt),
+`lib/services/chat/chat_service_generation_stream.dart` (stamp),
+`lib/services/chat/chat_service_accessors.dart` (lastRagReceipt),
+new `lib/ui/chat_components/sidebar/journal_memory/rag_receipt_view.dart`,
+`memory_panel.dart` + `journal_memory_group.dart` (wiring),
+`lib/services/web/facade/chat_tools_facade.dart` (additive lastRagReceipt),
+`web_ui/src/components/ChatTools.tsx` (+ rebuilt assets/web_app),
+new tests `test/services/chat/{rag_injection,rag_receipt_wiring}_test.dart`,
+`docs/Rawhide.md`.
+
+Follow-up to the maintainer's "RAG and Where-we-are may duplicate or
+conflict / RAG needs to be less of a black box." The audit found the
+division of labor already engineered (drop-gate, out-of-context-only
+search, journal dedupe, role-frame precedence, hard budget cap) with ONE
+open conflict vector and ZERO visibility:
+
+1. **Temporal grounding.** Retrieved lines were injected naked — a Day-2
+   "I never want to see you again" read as the scene's present and fought
+   the recap's chronology. Every line now carries its story day (resolved
+   from the source message's realism_state via `storyDayAt`, nearest-earlier
+   fallback, unstamped when realism was off) or "(another chat)" for
+   cross-session sources, and the block renders in story order (cross-chat
+   first, then own-chat oldest → newest). Budget PACKING stays in relevance
+   order — chronology decides how survivors are SHOWN, never which survive.
+   The block header now says "in story order".
+2. **The receipt.** Every retrieval decision (found / journal-deduped /
+   budget-trimmed / injected with day + pos + capped preview) is compressed
+   into `rag_receipt` metadata on the generated message — stamped at the
+   same stream-phase funnel Standing Mood uses, built AFTER the trim loops
+   so it reports what shipped. `ChatService.lastRagReceipt` surfaces the
+   last reply's receipt; the sidebar Memory panel renders it
+   (RagReceiptView — "N memories woven in (…)"; per-line story-day chip +
+   tap-to-jump via the existing journal-receipts jump; cross-chat lines
+   don't offer a jump), and the web ChatTools Memory section shows the same
+   read-only summary via the facade (additive field).
+3. **Query hygiene:** the retrieval query now reads promptText (photo
+   markers), the same fix recentExchange got.
+
+Retrieval-off / no-drop turns stamp nothing — the panel says "no lookup
+needed" rather than implying a search that never ran.
+
+### Verification
+
+Both new suites proven red-then-green per guard: backward-walk removed,
+identity order, stamp dropped, preview uncapped (leaf); display reorder
+removed, query reverted to displayText, stream-phase stamp deleted
+(wiring — real ChatService, scripted LLM, fake MemoryService, 3072-token
+context genuinely dropping messages). First run also caught a real fixture
+lesson: at 1024 tokens the JOINT history cap correctly drained every
+memory, which is the cap doing its job. `flutter analyze` clean; web
+lint/tests green + `npm run build` rebuilt assets/web_app; full unit +
+golden suites run before push.
