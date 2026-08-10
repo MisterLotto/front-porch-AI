@@ -263,7 +263,7 @@ extension ChatServiceRealismDance on ChatService {
             )
             .text;
         await _evaluateTrustRepairCall(userText, onChunk: handleChunk);
-      } else if (_storageService.realismSettings.realismOneShotEval) {
+      } else if (_oneShotActive) {
         debugPrint(
           '[Realism:Unified] One-shot eval for ${speaker.name} ($charId)',
         );

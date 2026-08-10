@@ -19,6 +19,7 @@
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf_router/shelf_router.dart';
 
+import 'package:front_porch_ai/services/services.dart' show OneShotMode;
 import 'package:front_porch_ai/services/web/facade/chat_tools_facade.dart';
 import 'package:front_porch_ai/services/web/util/util.dart';
 
@@ -65,6 +66,22 @@ class WebChatToolsRoutes {
     final body = await _json(request);
     final name = body['name']?.toString();
     final value = body['value'];
+    // The one tri-state control rides the same endpoint with a string value
+    // (additive: every bool case below is unchanged, and the old
+    // 'oneShotEval' bool alias keeps working for older bundles).
+    if (name == 'oneShotMode') {
+      final mode = switch (value) {
+        'auto' => OneShotMode.auto,
+        'on' => OneShotMode.on,
+        'off' => OneShotMode.off,
+        _ => null,
+      };
+      if (mode == null) {
+        return JsonResponse.badRequest('value must be auto, on or off');
+      }
+      await _facade.setOneShotMode(mode);
+      return JsonResponse.ok(_snapshot(request));
+    }
     if (name == null || value is! bool) {
       return JsonResponse.badRequest('name and bool value are required');
     }

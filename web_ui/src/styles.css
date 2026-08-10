@@ -222,6 +222,24 @@ label input { margin-top: 6px; }
 }
 .cpu-warn strong { color: var(--porch-amber); display: block; margin-bottom: 3px; }
 .pill { font-size: 0.7rem; padding: 2px 8px; border-radius: 999px; margin-left: 8px; }
+/* Tri-state control (One-Shot Eval Auto/On/Off) — the desktop sidebar's
+   choice pills, in web clothes. */
+.mode-seg { display: inline-flex; gap: 4px; }
+.mode-seg-btn {
+  font-size: 0.7rem;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--muted);
+  cursor: pointer;
+}
+.mode-seg-btn.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text);
+  font-weight: 600;
+}
 .pill.ok { background: rgba(105, 240, 174, 0.18); color: var(--ok); }
 .tunnel-url { display: block; color: var(--accent); word-break: break-all; margin: 8px 0; }
 

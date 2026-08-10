@@ -36,6 +36,9 @@ interface ToolsState {
   realismEnabled: boolean;
   needsEnabled: boolean;
   realismOneShotEval: boolean;
+  // Tri-state One-Shot mode (2026-08-10). Optional: absent on an older
+  // facade, in which case the legacy bool still tells us on-vs-not.
+  realismOneShotMode?: 'auto' | 'on' | 'off';
   memory: {
     ragEnabled: boolean;
     ragRetrievalCount: number;
@@ -200,6 +203,11 @@ export function ChatTools({
     apply(api.post<ToolsState>(`/api/chat/tools/settings${q}`, fields));
   const toggle = (name: string, value: boolean) =>
     apply(api.post<ToolsState>(`/api/chat/tools/toggle${q}`, { name, value }));
+  // Same endpoint, string value — the one tri-state control (see the route's
+  // oneShotMode case). Falls back to the legacy bool on an older facade.
+  const oneShotMode = t?.realismOneShotMode ?? (t?.realismOneShotEval ? 'on' : 'auto');
+  const setOneShotMode = (value: 'auto' | 'on' | 'off') =>
+    apply(api.post<ToolsState>(`/api/chat/tools/toggle${q}`, { name: 'oneShotMode', value }));
 
   if (!t) return null;
 
@@ -219,14 +227,27 @@ export function ChatTools({
       <details className="tool-section">
         <summary>Realism performance</summary>
         <div className="tool-body">
-          <Toggle
-            label="One-Shot Eval (Experimental)"
-            value={t.realismOneShotEval}
-            onChange={(v) => toggle('oneShotEval', v)}
-          />
+          <div className="tool-toggle">
+            <span>One-Shot Eval</span>
+            <span className="mode-seg" role="radiogroup" aria-label="One-Shot Eval mode">
+              {(['auto', 'on', 'off'] as const).map((m) => (
+                <button
+                  key={m}
+                  role="radio"
+                  aria-checked={oneShotMode === m}
+                  className={`mode-seg-btn${oneShotMode === m ? ' selected' : ''}`}
+                  onClick={() => setOneShotMode(m)}
+                >
+                  {m === 'auto' ? 'Auto' : m === 'on' ? 'On' : 'Off'}
+                </button>
+              ))}
+            </span>
+          </div>
           <p className="muted small">
-            Fuses relationship + scene evals into a single LLM call to double the processing speed.
-            May be less accurate on &lt; 8B param models.
+            Fuses the realism evals into a single LLM call for roughly double the processing speed.
+            Auto uses it on remote AI services that support tool calls, and keeps the safer
+            multi-call path on local models, where small models can struggle with the combined
+            prompt.
           </p>
         </div>
       </details>

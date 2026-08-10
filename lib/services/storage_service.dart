@@ -654,6 +654,9 @@ class StorageService extends ChangeNotifier {
   bool get realismOneShotEval => realismSettings.realismOneShotEval;
   Future<void> setRealismOneShotEval(bool v) =>
       realismSettings.setRealismOneShotEval(v);
+  OneShotMode get oneShotMode => realismSettings.oneShotMode;
+  Future<void> setOneShotMode(OneShotMode v) =>
+      realismSettings.setOneShotMode(v);
   bool get realismDefault => realismSettings.realismDefault;
   Future<void> setRealismDefault(bool v) =>
       realismSettings.setRealismDefault(v);

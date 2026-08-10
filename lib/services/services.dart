@@ -37,6 +37,10 @@ export 'expression_pack_service.dart';
 export 'model_fetch.dart';
 export 'model_manager.dart';
 export 'storage_service.dart';
+// The one settings TYPE consumers need by name (the sidebar's tri-state
+// control, the web facade/routes, the one-shot resolver). The settings
+// objects themselves are reached through StorageService instances.
+export 'storage/settings/realism_settings.dart' show OneShotMode;
 export 'character_repository.dart';
 export 'group_chat_repository.dart';
 export 'group_card_service.dart';

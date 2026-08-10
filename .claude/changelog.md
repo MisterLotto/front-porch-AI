@@ -3,6 +3,61 @@
 
 # Changelog
 
+## 2026-08-10 — feat(realism): One-Shot Eval becomes a tri-state (Auto / On / Off), Auto default
+- **Files changed:** `lib/services/storage/settings/realism_settings.dart`,
+  `lib/services/chat/pass_support.dart`,
+  `lib/services/chat/chat_service_accessors.dart`,
+  `lib/services/chat/chat_service_realism_dance.dart`,
+  `lib/services/chat/chat_service_reprocess.dart`,
+  `lib/services/chat/chat_service_greeting.dart`,
+  `lib/services/storage_service.dart`, `lib/services/services.dart`,
+  `lib/ui/chat_components/sidebar/character_state/character_state_settings.dart`,
+  `lib/services/web/facade/chat_tools_facade.dart`,
+  `lib/services/web/routes/chat_tools_routes.dart`,
+  `web_ui/src/components/ChatTools.tsx`, `web_ui/src/styles.css`,
+  `assets/web_app/*` (rebuilt),
+  `test/services/chat/one_shot_mode_test.dart` (new),
+  `.claude/changelog.md`, `docs/Rawhide.md`
+- **Why (eval review Tier-1 §3.4, maintainer-approved "make tri state
+  auto"):** one-shot collapses the 4 pre-generation judge calls into 1
+  (~40% fewer prompt tokens, 3 fewer round trips) and the probe already
+  knows, per backend identity, whether a backend speaks native tools — a
+  tools-confirmed REMOTE model is exactly the class the fused prompt is
+  easy for. The old bool couldn't express "fuse where it's safe": off was
+  both "never touched" and "explicitly no".
+- **How:** new `OneShotMode { auto, on, off }` enum (default auto) stored
+  under `realism_one_shot_mode`; pure `resolveOneShotMode` in
+  pass_support.dart (on→always, off→never, auto→ !isLocal &&
+  probe.supported) resolved per turn by the ONE `_oneShotActive` getter,
+  consulted by all three sites (pre-gen dance, regen replay, retroactive
+  baseline scan). An untested verdict resolves multi-call; the first eval
+  probes and Auto converges next turn (ToolSupportTester usually settles it
+  up front on backend change).
+- **Migration:** stored old bool true (an explicit opt-in) → ON; false
+  (indistinguishable from never-touched, one-shot was "experimental,
+  default off") → AUTO; new key wins once written. The legacy
+  `realismOneShotEval`/`setRealismOneShotEval` surface stays as a shim —
+  a toggle maps to ON/OFF (never Auto) and keeps writing the old bool key
+  (the protected persistence test pins it; a downgrade reads truth).
+- **UI, both platforms in the same body of work (parity rule):** the
+  desktop realism sidebar's switch became a 3-pill row (Auto/On/Off, Auto
+  listed first); the PWA's toggle became the same segmented control
+  (porch-amber accent), riding the same `/toggle` endpoint with a string
+  value — additive: every bool case is unchanged, the old `oneShotEval`
+  bool alias still works for older bundles, and the state JSON keeps the
+  bool alongside the new `realismOneShotMode`. `npm run lint` + 59 web
+  tests green; bundle rebuilt into assets/web_app.
+- **Scripted-test invariance, by design:** test overrides count as remote
+  but their probe verdict stays `untested`, so Auto resolves multi-call in
+  every scripted suite — behavior identical to the old default. Suites
+  driving one-shot explicitly use the shim → ON, same as before.
+- **Verification:** flutter analyze clean; new one_shot_mode_test (11
+  tests: resolution truth table, migration matrix, shim mapping, wiring
+  guards) — negative-checked: inverting the Auto branch turned the truth
+  table red; reverting the dance to the raw bool read turned the wiring
+  guard red; both restored to green. Full suite 3456 passed, protected
+  persistence + posture-parity suites unmodified.
+
 ## 2026-08-10 — perf(realism): the three judges now share a byte-identical prompt prefix; scene-time dispatches last
 - **Files changed:** `lib/services/chat/realism_prompt_builder.dart`,
   `lib/services/chat/realism_evals.calls.dart`,
