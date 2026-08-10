@@ -39,7 +39,12 @@ extension ChatServiceRealismEvals on ChatService {
   Future<String?> _fireLLMEval(
     String prompt, {
     void Function(String)? onChunk,
-  }) => _llmEvalEngine.fireLLMEval(prompt, onChunk: onChunk);
+    double repeatPenalty = 1.15,
+  }) => _llmEvalEngine.fireLLMEval(
+    prompt,
+    onChunk: onChunk,
+    repeatPenalty: repeatPenalty,
+  );
 
   String _stripThinkBlocks(String text) =>
       _llmEvalEngine.stripThinkBlocks(text);

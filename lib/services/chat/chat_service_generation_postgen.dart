@@ -203,14 +203,27 @@ extension ChatServiceGenerationPostGen on ChatService {
           // deltas in both 1:1 and group — invisible to the user, because
           // the chips are not re-attached on a continuation.
           if (t.mode != GenerationMode.continue_) {
-            await _runPostGenNeedsChecks(finalResponse);
-            // The fused reply-facts fetch: when two or more of the three
-            // bookkeeping passes below (climax, pockets, posture) are live,
-            // ONE call answers all of them and each pass consumes its slice
-            // through its own unchanged parser. With fewer than two live,
-            // this is a no-op and each pass fires its own call exactly as
-            // before. See ReplyFactsEval for the composition rules.
-            await _prefetchReplyFacts(finalResponse);
+            // The needs-impact eval and the fused reply-facts fetch run
+            // CONCURRENTLY (same pattern as the pre-generation 4-eval block,
+            // same stagger so KoboldCpp's FIFO queue sees them in intended
+            // order). They are independent by construction: needs writes the
+            // needs vector; the prefetch only READS stance/emotion/pockets to
+            // build its prompt and parks raw text — the passes that apply it
+            // run after both complete. On a remote backend this makes the
+            // post-gen phase cost the slower of the two calls, not the sum.
+            //
+            // The fused fetch: when two or more of the three bookkeeping
+            // passes below (climax, pockets, posture) are live, ONE call
+            // answers all of them and each pass consumes its slice through
+            // its own unchanged parser. With fewer than two live it is a
+            // no-op and each pass fires its own call exactly as before. See
+            // ReplyFactsEval for the composition rules.
+            await Future.wait([
+              _runPostGenNeedsChecks(finalResponse),
+              Future<void>.delayed(
+                _kEvalDispatchStagger,
+              ).then((_) => _prefetchReplyFacts(finalResponse)),
+            ]);
             // Pockets & Wardrobe — its own pass, skipped on Continue for the
             // SAME reason as the needs checks above: a continuation extends
             // this exchange rather than being a new one, and re-reading it

@@ -548,12 +548,14 @@ class RealismVerification {
         // silently, and only in chats that have verification switched on.
         ? ' Preserve full shape: include "proposed_objective" ("none" or short goal), "serves_ambition" (the ambition number the objective serves, or "none" — carry it through unchanged unless you changed the objective itself) and "fixation_topic" (persistent lingering/intrusive thought or "none"). Only correct unsupported values; keep well-supported fixations.'
         : (kind == 'needs_impact')
-            // "is_climax" is named explicitly because the Director REWRITES this
-            // text and the rewrite is what gets parsed. Dropping the verdict here
-            // silently cancels the post-orgasm refractory exactly as an omitted
-            // field does upstream. (It used to say "activities", a field nothing
-            // in the app has ever read.)
-            ? ' Preserve the needs delta keys (hunger_delta/energy_delta/etc or plain names) + reason + "is_climax" + "refractory_turns" (carry the climax verdict through unchanged unless the scene plainly contradicts it). The model is trusted to interpret the full erotic narrative (physical descriptions, self-touch, leaking, charging/aching, dominance, power exchange) and assign reasonable deltas like the other realism evals (bond/emotion etc). Only correct if the numbers clearly contradict what is actually written in the scene or pre-state. Keep scene-faithful numbers.'
+            // The preserved shape is the shape something reads: the seven
+            // delta keys + reason. The climax verdict left this eval with
+            // Afterglow's own pass (2026-08-07), and as of 2026-08-10 the
+            // needs prompt no longer asks for it — a Director told to
+            // preserve a field the eval never emits would only invite the
+            // rewrite to invent it. (It used to also say "activities", a
+            // field nothing in the app has ever read.)
+            ? ' Preserve the needs delta keys (hunger_delta/energy_delta/etc or plain names) + reason. The model is trusted to interpret the full erotic narrative (physical descriptions, self-touch, leaking, charging/aching, dominance, power exchange) and assign reasonable deltas like the other realism evals (bond/emotion etc). Only correct if the numbers clearly contradict what is actually written in the scene or pre-state. Keep scene-faithful numbers.'
             : '';
     final emotionConstraint = (bundle['injections'] as Map<String, dynamic>?)?['emotion_constraint'] as String? ?? '';
     final constraintText = emotionConstraint.isNotEmpty ? '\n$emotionConstraint\n' : '';

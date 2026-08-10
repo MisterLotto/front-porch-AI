@@ -3,6 +3,69 @@
 
 # Changelog
 
+## 2026-08-10 — perf(evals): stop blocking every turn on the quest check; run post-gen calls concurrently; strip dead needs fields; eval sampler hygiene
+- **Files changed:** `lib/services/chat/objective_mention_gate.dart` (new),
+  `lib/services/chat/chat_service_objectives.dart`,
+  `lib/services/chat/chat_service_generation_postgen.dart`,
+  `lib/services/chat/llm_eval_engine.dart`,
+  `lib/services/chat/chat_service_realism_evals.dart`,
+  `lib/services/chat/chat_service_wiring_evals.dart`,
+  `lib/services/chat/chat_service_wiring_memory.dart`,
+  `lib/services/chat/expression_classifier.dart`,
+  `lib/services/chat/realism_verification.dart`,
+  `lib/services/chat/chat.dart`,
+  `test/services/chat/objective_check_gate_test.dart` (new),
+  `.claude/changelog.md`, `docs/Rawhide.md`
+- **Quest check (eval review Tier-1 §3.1):** with the Realism Engine on, the
+  objective completion check forced its cadence to every-turn (freq=1) and is
+  AWAITED before generation — one full blocking model round trip added to
+  every reply while any quest was open, silently ignoring the per-objective
+  checkFrequency the UI exposes. Now: the UI cadence is respected again, and
+  off-interval a deterministic mention gate (objective_mention_gate.dart, the
+  promise ledger's warrantsEval pattern) fires the check early only when the
+  exchange actually shares content words with an open quest — because a
+  completion can only be shown BY the exchange, a no-overlap exchange is a
+  guaranteed NO not worth a blocking call. Cast/user name tokens excluded so
+  quest-target names can't hold the gate open. A paraphrase the gate misses
+  is caught at the next interval, never lost.
+- **Post-gen concurrency (§3.2):** the needs-impact eval and the fused
+  reply-facts fetch now run under Future.wait with the standard 50 ms
+  dispatch stagger (the pre-gen 4-eval pattern). They are independent by
+  construction — needs writes the needs vector; the prefetch only reads
+  stance/emotion/pockets and parks raw text consumed after both complete.
+  Remote post-gen wall clock becomes max(two calls), not the sum.
+- **Dead needs fields (§3.5):** the text-mode needs-impact asks (normal +
+  Director-correction variants) no longer request `activities`, `intensity`,
+  `is_climax`, `refractory_turns` or carry the worked climax example —
+  nothing has read them since ClimaxEval took over climax (2026-08-07); the
+  parser only ever consumed the seven deltas + reason. The TOOL schema keeps
+  activities/intensity defined-but-optional (fixed registry contract, and
+  tool_registry_test pins the scalar-array converter branch with it). The
+  Director's needs hint now tells the rewrite to preserve deltas + reason
+  only — telling it to preserve a field the eval never emits invited
+  invention.
+- **Sampler hygiene (§3.6):** new `kScalarEvalRepeatPenalty = 1.0` applied to
+  every scalar-JSON eval (realism judges, needs impact, scene time, posture,
+  climax, pockets, reply-facts, cast detect, guest gate, Director critique,
+  expression reclassify) — repeat penalty punishes exactly the tokens JSON
+  must repeat and buys nothing at temp 0.1. The prose-emitting passes
+  (Journal, Growth, Dreams, task generation) deliberately keep the 1.15
+  default. The expression reclassifier also gains the `reasoningMaxTokens: 0`
+  flag every other eval already sends (it was the one that forgot). Also
+  deleted a duplicated back-to-back cancellation check in fireLLMEval.
+  DELIBERATE DEVIATIONS from the review's §3.6, recorded: (a) maxLength
+  tiering was NOT applied — the engine has no reliable thinking-model signal,
+  and truncating a local thinking model's eval mid-&lt;think&gt; silently kills
+  its deltas every turn, the exact bug class dc473cf just fixed; revisit with
+  the eval-model-override work. (b) task generation keeps reasoning ON — its
+  own comment documents letting thinking models reason then stripping, a
+  deliberate quality choice not overridden here.
+- **Verification:** flutter analyze clean; dart fix nothing; new
+  objective_check_gate_test (8 tests) — negative-checked: restoring the
+  freq=1 override turned the structural guard red, inverting the matcher
+  turned 3 matcher tests red, both restored to green. Full suite 3440 passed
+  including all objective/needs/engine/verification suites unmodified.
+
 ## 2026-08-10 — perf(realism): fuse the three post-reply bookkeeping calls into one when 2+ are live
 - **Files changed:** `lib/services/chat/reply_facts_eval.dart` (new),
   `lib/services/chat/chat_service_reply_facts.dart` (new part),

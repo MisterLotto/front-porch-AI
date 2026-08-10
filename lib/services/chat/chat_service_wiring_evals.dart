@@ -103,7 +103,8 @@ extension ChatServiceWiringEvals on ChatService {
           callToText: (resp) =>
               realismToolCallToJson(PocketsEval.kPocketsTool, resp.calls),
           fireToolEval: _fireToolEval,
-          fireTextEval: (p, {onChunk}) => _fireLLMEval(p),
+          fireTextEval: (p, {onChunk}) =>
+              _fireLLMEval(p, repeatPenalty: kScalarEvalRepeatPenalty),
         );
       },
     );
@@ -129,7 +130,8 @@ extension ChatServiceWiringEvals on ChatService {
           callToText: (resp) =>
               realismToolCallToJson(ReplyFactsEval.kReplyFactsTool, resp.calls),
           fireToolEval: _fireToolEval,
-          fireTextEval: (p, {onChunk}) => _fireLLMEval(p),
+          fireTextEval: (p, {onChunk}) =>
+              _fireLLMEval(p, repeatPenalty: kScalarEvalRepeatPenalty),
         );
       },
     );
@@ -151,7 +153,8 @@ extension ChatServiceWiringEvals on ChatService {
           callToText: (resp) =>
               realismToolCallToJson(ClimaxEval.kClimaxTool, resp.calls),
           fireToolEval: _fireToolEval,
-          fireTextEval: (p, {onChunk}) => _fireLLMEval(p),
+          fireTextEval: (p, {onChunk}) =>
+              _fireLLMEval(p, repeatPenalty: kScalarEvalRepeatPenalty),
         );
       },
     );
@@ -184,7 +187,11 @@ extension ChatServiceWiringEvals on ChatService {
   // 0 new god void _ (thins + this late final + god-owned _isVerifying* + getters only).
   RealismVerification _buildRealismVerifier() {
     return RealismVerification(
-      fireLLMEval: (p, {onChunk}) => _fireLLMEval(p, onChunk: onChunk),
+      fireLLMEval: (p, {onChunk}) => _fireLLMEval(
+        p,
+        onChunk: onChunk,
+        repeatPenalty: kScalarEvalRepeatPenalty,
+      ),
       stripThinkBlocks: _stripThinkBlocks,
       extractJsonInt: _extractJsonInt,
       extractJsonBool: _extractJsonBool,
@@ -227,7 +234,11 @@ extension ChatServiceWiringEvals on ChatService {
     return NeedsImpactEvaluator(
       evaluateNeedsImpactCall: _llmEvalEngine.evaluateNeedsImpactCall,
       verifyRealismOutput: _realismVerifier.verify,
-      fireLLMEval: (p, {onChunk}) => _fireLLMEval(p, onChunk: onChunk),
+      fireLLMEval: (p, {onChunk}) => _fireLLMEval(
+        p,
+        onChunk: onChunk,
+        repeatPenalty: kScalarEvalRepeatPenalty,
+      ),
       getPendingRealismMetadata: () => _pendingRealismMetadata ?? {},
       setPendingRealismMetadata: (v) => _pendingRealismMetadata = v,
       getActiveCharacter: () => _activeCharacter,
@@ -255,7 +266,11 @@ extension ChatServiceWiringEvals on ChatService {
 
   RealismEvals _buildRealismEvals() {
     return RealismEvals(
-      fireLLMEval: (p, {onChunk}) => _fireLLMEval(p, onChunk: onChunk),
+      fireLLMEval: (p, {onChunk}) => _fireLLMEval(
+        p,
+        onChunk: onChunk,
+        repeatPenalty: kScalarEvalRepeatPenalty,
+      ),
       // Tools transport (realism_tools.dart): same door + probe memory the
       // Journal and Growth passes use, so a backend answers the "can you speak
       // tools?" question at most once per run across all three systems.

@@ -46,6 +46,7 @@ export 'mood_baseline.dart';
 export 'needs_impact_evaluator.dart';
 export 'needs_simulation.dart';
 export 'nsfw_service.dart';
+export 'objective_mention_gate.dart';
 export 'objective_proposal.dart';
 export 'pockets.dart';
 export 'pockets_eval.dart';

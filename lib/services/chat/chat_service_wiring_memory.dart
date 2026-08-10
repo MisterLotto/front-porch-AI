@@ -388,7 +388,8 @@ extension ChatServiceWiringMemory on ChatService {
         }
         return '';
       },
-      fireGateEval: (prompt) => _fireLLMEval(prompt),
+      fireGateEval: (prompt) =>
+          _fireLLMEval(prompt, repeatPenalty: kScalarEvalRepeatPenalty),
       stripThinkBlocks: _stripThinkBlocks,
       extractJsonBool: _extractJsonBool,
       getHostName: () => _activeCharacter?.name ?? 'the character',
@@ -421,7 +422,8 @@ extension ChatServiceWiringMemory on ChatService {
         }
         return out.reversed.toList();
       },
-      fireLLMEval: (prompt) => _fireLLMEval(prompt),
+      fireLLMEval: (prompt) =>
+          _fireLLMEval(prompt, repeatPenalty: kScalarEvalRepeatPenalty),
       stripThinkBlocks: _stripThinkBlocks,
       getHostName: () => _activeCharacter?.name ?? '',
       getUserName: () => _userPersonaService.persona.name,
