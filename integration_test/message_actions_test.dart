@@ -36,8 +36,6 @@ import 'package:window_manager/window_manager.dart';
 import 'package:front_porch_ai/main.dart' as app;
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
-import 'package:front_porch_ai/ui/chat_components/chat_components.dart'
-    show MessageBubble;
 import 'package:front_porch_ai/ui/layout/main_layout.dart';
 import 'package:front_porch_ai/ui/pages/chat_page.dart';
 
@@ -137,40 +135,11 @@ void main() {
     await d.waitForWidget(find.textContaining(_kGreeting, findRichText: true));
     await d.waitForWidget(d.input);
 
-    /// The bubble for a SPECIFIC message, revealed by scrolling. Bubbles are
-    /// keyed GlobalObjectKey(msg), which sidesteps two traps the first CI
-    /// run of this suite hit: the reversed list VIRTUALIZES, so an old
-    /// message's bubble may not be built at all until scrolled into view
-    /// (macOS leg), and the fake backend's replies share identical text, so
-    /// text-ancestor matching is ambiguous. Positive drags reveal older
-    /// messages in the reversed list; the negative tail is insurance.
-    Future<Finder> revealBubbleFor(ChatMessage msg) async {
-      final f = find.byKey(GlobalObjectKey(msg));
-      if (f.evaluate().isNotEmpty) return f;
-      final scrollable = find
-          .ancestor(
-            of: find.byType(MessageBubble).first,
-            matching: find.byType(Scrollable),
-          )
-          .first;
-      const drags = [
-        300.0, 300.0, 300.0, 300.0, 300.0, 300.0, //
-        -300.0, -300.0, -300.0, -300.0, -300.0, -300.0,
-      ];
-      for (final dy in drags) {
-        if (f.evaluate().isNotEmpty) break;
-        await tester.drag(scrollable, Offset(0, dy));
-        await tester.pump(const Duration(milliseconds: 250));
-      }
-      expect(
-        f,
-        findsWidgets,
-        reason:
-            'the bubble for "${msg.text}" must be reachable by scrolling '
-            'the chat list',
-      );
-      return f;
-    }
+    // Bubble lookup lives on the driver since 2026-08-10 (d.bubbleFor /
+    // d.revealBubbleFor): the page-owned-GlobalKey crash fix removed the
+    // GlobalObjectKey(msg) key scheme this suite's local finder depended
+    // on, and the shared finder now matches on MessageBubble.message
+    // identity — same virtualization workaround, key-scheme-independent.
 
     // ── Seed two turns so realism + needs have scored an exchange ───────
     await d.sendMessage('The porch swing creaks as I sit down.');
@@ -209,7 +178,7 @@ void main() {
         attempt < 6 && confirmation.evaluate().isEmpty;
         attempt++
       ) {
-        final bubble = await revealBubbleFor(msg);
+        final bubble = await d.revealBubbleFor(msg);
         final btn = control(bubble);
         if (btn.evaluate().isEmpty) {
           await tester.pump(const Duration(milliseconds: 250));
@@ -341,7 +310,7 @@ void main() {
     // updated and caught the not-yet-rebuilt frame. Bounded wait: if the
     // bubble genuinely lingers, this still fails — as it should.
     await d.waitFor(
-      () => find.byKey(GlobalObjectKey(target)).evaluate().isEmpty,
+      () => d.bubbleFor(target).evaluate().isEmpty,
       () => 'the deleted message\'s bubble to leave the tree',
       timeout: const Duration(seconds: 10),
     );

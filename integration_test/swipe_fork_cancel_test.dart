@@ -34,8 +34,6 @@ import 'package:window_manager/window_manager.dart';
 import 'package:front_porch_ai/main.dart' as app;
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
-import 'package:front_porch_ai/ui/chat_components/chat_components.dart'
-    show MessageBubble;
 import 'package:front_porch_ai/ui/layout/main_layout.dart';
 import 'package:front_porch_ai/ui/pages/chat_page.dart';
 
@@ -145,37 +143,11 @@ void main() {
     await d.waitForWidget(find.textContaining(_kGreeting, findRichText: true));
     await d.waitForWidget(d.input);
 
-    /// The bubble for a SPECIFIC message, revealed by scrolling — same
-    /// virtualization workaround as message_actions (bubbles are keyed
-    /// GlobalObjectKey(msg); identical fake replies make text matching
-    /// ambiguous).
-    Future<Finder> revealBubbleFor(ChatMessage msg) async {
-      final f = find.byKey(GlobalObjectKey(msg));
-      if (f.evaluate().isNotEmpty) return f;
-      final scrollable = find
-          .ancestor(
-            of: find.byType(MessageBubble).first,
-            matching: find.byType(Scrollable),
-          )
-          .first;
-      const drags = [
-        300.0, 300.0, 300.0, 300.0, 300.0, 300.0, //
-        -300.0, -300.0, -300.0, -300.0, -300.0, -300.0,
-      ];
-      for (final dy in drags) {
-        if (f.evaluate().isNotEmpty) break;
-        await tester.drag(scrollable, Offset(0, dy));
-        await tester.pump(const Duration(milliseconds: 250));
-      }
-      expect(
-        f,
-        findsWidgets,
-        reason:
-            'the bubble for "${msg.text}" must be reachable by scrolling '
-            'the chat list',
-      );
-      return f;
-    }
+    // Bubble lookup lives on the driver since 2026-08-10 (d.revealBubbleFor):
+    // the page-owned-GlobalKey crash fix removed the GlobalObjectKey(msg)
+    // key scheme this suite's local finder depended on, and the shared
+    // finder now matches on MessageBubble.message identity — same
+    // virtualization workaround, key-scheme-independent.
 
     /// Reveal [msg]'s bubble, tap [control] inside it, require
     /// [confirmation] — retrying the whole loop (message_actions' pattern:
@@ -190,7 +162,7 @@ void main() {
         attempt < 6 && confirmation.evaluate().isEmpty;
         attempt++
       ) {
-        final bubble = await revealBubbleFor(msg);
+        final bubble = await d.revealBubbleFor(msg);
         final btn = control(bubble);
         if (btn.evaluate().isEmpty) {
           await tester.pump(const Duration(milliseconds: 250));
@@ -247,7 +219,7 @@ void main() {
     await d.waitForWidget(find.text('2/2'));
 
     // Left chevron → back on the ORIGINAL swipe, chips preserved.
-    final bubble = await revealBubbleFor(reply);
+    final bubble = await d.revealBubbleFor(reply);
     final leftArrow = find.descendant(
       of: bubble,
       matching: find.byIcon(Icons.chevron_left),
@@ -270,7 +242,7 @@ void main() {
     // Right chevron → 2/2 again, and NO new generation fired (navigation
     // within range never regenerates; only right-past-the-end does).
     final rightArrow = find.descendant(
-      of: await revealBubbleFor(reply),
+      of: await d.revealBubbleFor(reply),
       matching: find.byIcon(Icons.chevron_right),
     );
     await d.waitForWidget(rightArrow);

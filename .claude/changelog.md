@@ -14451,3 +14451,37 @@ Both new suites proven red-then-green: gap check neutered → suppression
 test red; session reset dropped → fresh-session test red; promise window
 reverted to the inline uncapped builder → clamp-marker/length guard red.
 flutter analyze clean; full unit + golden suites before push.
+
+## 2026-08-10 (UTC) — Red CI: E2E bubble finders re-anchored off the retired GlobalObjectKey scheme
+
+**Files:** `integration_test/support/chat_driver.dart`,
+`integration_test/message_actions_test.dart`,
+`integration_test/swipe_fork_cancel_test.dart`
+
+**Why:** The page-owned-GlobalKey crash fix (f48e598) removed the
+`GlobalObjectKey(msg)` keys from chat bubbles — and two E2E suites FOUND
+their bubbles by exactly that key. Every keyed lookup went "Found 0
+widgets" and the smoke shards carrying the two suites went red on all
+three platforms (shards 1/5+4/5 at f48e598; 2/5+5/5 after
+chat_switch_smoke_test shifted the alphabetical shard split). The finder
+was pasted identically in both suites, which is why one key-scheme change
+broke two files.
+
+**How:** ONE shared finder on ChatDriver — `bubbleFor(msg)` matches
+`MessageBubble.message` by instance identity (ChatMessage doesn't override
+`==`, so this is the same equality the old key used, preserving the
+disambiguation the keyed lookup existed for: identical fake replies make
+text matching ambiguous) — plus `revealBubbleFor(msg)` carrying the
+virtualization drag loop. Both suites' local copies deleted; all five call
+sites re-pointed at the driver. Existing-test amendment documented openly:
+the finder MECHANISM depended on a private key scheme the approved crash
+fix retired; no behavioral assertion changed. Driver imports converted to
+barrels while touched (services/chat_components/dialogs/widgets;
+journal_panel stays direct per the barrel's own panel policy).
+
+Also triaged: windows 3/5 (model_downloader_test) failed ONLY in the
+2a5e954 run — same test file passed at d0f4703 and 4eef84e unchanged, and
+nothing in that commit touches the Model Manager. Windows runner tap
+flake ("would not hit test"); watch on next run, no code change.
+
+**Commit:** (see below)

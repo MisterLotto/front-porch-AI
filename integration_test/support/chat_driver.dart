@@ -16,11 +16,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:front_porch_ai/services/chat_service.dart';
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/ui/chat_components/chat_components.dart';
+// Sidebar panels are direct-import per the chat_components barrel's policy.
 import 'package:front_porch_ai/ui/chat_components/sidebar/journal_memory/journal_panel.dart';
-import 'package:front_porch_ai/ui/chat_components/sidebar/sidebar_body.dart';
-import 'package:front_porch_ai/ui/dialogs/journal_dialog.dart';
-import 'package:front_porch_ai/ui/widgets/chance_time_overlay.dart';
+import 'package:front_porch_ai/ui/dialogs/dialogs.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 import 'e2e_sandbox.dart';
 import 'fake_backend.dart';
@@ -43,6 +45,54 @@ class ChatDriver {
         w is TextField &&
         (w.decoration?.hintText?.contains('Type a message') ?? false),
   );
+
+  /// The bubble showing exactly [msg] — matched by INSTANCE IDENTITY on
+  /// [MessageBubble.message], never by key. Bubbles used to be keyed
+  /// `GlobalObjectKey(msg)` and two suites found them that way; the
+  /// duplicate-GlobalKey crash fix (2026-08-10, page-owned `_bubbleKeys`)
+  /// removed that scheme and the keyed finders went from "the one true
+  /// handle" to "Found 0 widgets" on every platform. Identity matching
+  /// keeps the property the keyed lookup existed for — the fake backend's
+  /// replies share identical text, so text matching is ambiguous — while
+  /// depending only on the bubble's public contract, not the page's
+  /// private key scheme. ChatMessage does not override `==`, so this is
+  /// the same equality the old key used.
+  Finder bubbleFor(ChatMessage msg) => find.byWidgetPredicate(
+    (w) => w is MessageBubble && identical(w.message, msg),
+  );
+
+  /// [bubbleFor], revealed by scrolling. The reversed list VIRTUALIZES, so
+  /// an old message's bubble may not be built at all until dragged into
+  /// view (the macOS leg of message_actions' first CI run). Positive drags
+  /// reveal older messages in the reversed list; the negative tail is
+  /// insurance.
+  Future<Finder> revealBubbleFor(ChatMessage msg) async {
+    final f = bubbleFor(msg);
+    if (f.evaluate().isNotEmpty) return f;
+    final scrollable = find
+        .ancestor(
+          of: find.byType(MessageBubble).first,
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    const drags = [
+      300.0, 300.0, 300.0, 300.0, 300.0, 300.0, //
+      -300.0, -300.0, -300.0, -300.0, -300.0, -300.0,
+    ];
+    for (final dy in drags) {
+      if (f.evaluate().isNotEmpty) break;
+      await tester.drag(scrollable, Offset(0, dy));
+      await tester.pump(const Duration(milliseconds: 250));
+    }
+    expect(
+      f,
+      findsWidgets,
+      reason:
+          'the bubble for "${msg.text}" must be reachable by scrolling '
+          'the chat list',
+    );
+    return f;
+  }
 
   /// If the Chance Time overlay is up, do what a user would: spin, let the
   /// wheel land, dismiss the result card (its single button pops the route).
