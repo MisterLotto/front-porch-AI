@@ -84,13 +84,18 @@ class ChatDriver {
       await tester.drag(scrollable, Offset(0, dy));
       await tester.pump(const Duration(milliseconds: 250));
     }
-    expect(
-      f,
-      findsWidgets,
-      reason:
-          'the bubble for "${msg.text}" must be reachable by scrolling '
-          'the chat list',
-    );
+    // fail(), never an assertion: support/ is harness, not evidence
+    // (e2e_support_has_no_assertions_test bans the assertion marker here,
+    // by substring — comments included). This is the harness giving up,
+    // the same shape as waitFor's timeout, and deleting it can't create a
+    // false pass: callers immediately dead-end on the empty finder and
+    // time out loudly in their own waits.
+    if (f.evaluate().isEmpty) {
+      fail(
+        'the bubble for "${msg.text}" was not reachable by scrolling '
+        'the chat list',
+      );
+    }
     return f;
   }
 

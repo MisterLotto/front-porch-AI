@@ -14485,3 +14485,29 @@ nothing in that commit touches the Model Manager. Windows runner tap
 flake ("would not hit test"); watch on next run, no code change.
 
 **Commit:** (see below)
+
+## 2026-08-10 (UTC) — Follow-up: the driver's reveal helper tripped the support-dir no-assertions guard
+
+**Files:** `integration_test/support/chat_driver.dart`
+
+**Why:** b3f9284 moved the suites' shared `revealBubbleFor` into ChatDriver
+INCLUDING its assertion — and `test/hygiene/e2e_support_has_no_assertions_test.dart`
+exists to ban exactly that: `integration_test/support/` is carved out of
+test-integrity's blocking half on the premise it is harness, never evidence,
+so the assertion marker may not appear there (by substring, comments
+included). The guard did precisely its job — it went red in CI the moment
+the premise broke.
+
+**How:** per the guard's own instructions (do NOT relax it): the marker is
+gone from the driver — the not-reachable outcome now reports through
+`fail(...)`, the explicitly-sanctioned harness-gives-up shape with four
+precedent call sites in this same file. Semantics identical (both throw
+TestFailure); deleting it could not create a false pass since callers
+dead-end on the empty finder and time out loudly. Guard re-run locally:
+green (its red half was the CI run itself).
+
+Also triaged in the same run: E2E smoke (windows 1/5) failed in
+stoop_test.dart (share-wizard tap timeout) — the suite is untouched since
+it passed green at 4eef84e, and it passed macOS+Linux in this very run.
+Second Windows-only single-suite tap flake in two runs (model_downloader
+before it); pattern worth watching, no code change.
