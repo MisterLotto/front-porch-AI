@@ -140,90 +140,53 @@ extension ChatServiceSend on ChatService {
     await _saveChat();
     notifyListeners();
 
-    // ── Dreams (Living Time §1) — a night passed since the last turn, so the
-    // dream surfaces before this morning's exchange. Owner = the character
-    // who ended the previous day (last assistant speaker): ONE rule for 1:1
-    // and group, so parity holds by construction. Any failure skips silently
-    // (the local-model floor: a bad dream is worse than no dream).
+    // ── Dreams (Living Time §1) — a night passed, so the dream surfaces
+    // before this morning's exchange. The text was PRE-GENERATED at the end
+    // of the turn whose clock crossed the night (_maybeKickDreamPrefetch,
+    // called from the post-generation phase), so this await is on an
+    // almost-always-completed future and the send path no longer waits on a
+    // model call (eval review item 6 — dreams were one of the two calls
+    // still blocking a send). Owner rules, insertion position, the journal
+    // card and the silent-skip floor are unchanged.
+    //
+    // The bookkeeping call here is anchor-only (nothing at entry consumes
+    // pending any more): it runs BEFORE this turn's pre-generation clock
+    // advance, so the first turn after a chat load anchors on the pre-advance
+    // day exactly as the old design did. Without it the first post-generation
+    // kick would anchor AFTER the advance and a night crossed on that very
+    // first turn would be missed.
     _dreamService.checkRollover(
       sessionId: _currentSessionId,
       dayCount: _timeService.dayCount,
     );
-    if (_dreamService.pending && _currentSessionId != null) {
-      _dreamService.clear();
+    final parkedDream = _dreamService.takePrefetch(_currentSessionId);
+    if (parkedDream != null) {
       try {
-        String? lastCharId;
-        var lastSpeakerFound = false;
-        for (final m in _messages.reversed) {
-          if (!m.isUser &&
-              m.sender != 'System' &&
-              m.activeMetadata?['is_dream'] != true) {
-            lastCharId = m.characterId;
-            lastSpeakerFound = true;
-            break;
-          }
-        }
-        final ownerCard = !lastSpeakerFound
-            ? null
-            : lastCharId == null
-            ? _activeCharacter
-            : (_groupCharacters
-                      .where((c) => _getCharacterIdFromCard(c) == lastCharId)
-                      .firstOrNull ??
-                  _activeCharacter);
-        if (ownerCard != null) {
-          final ownerId = _getCharacterIdFromCard(ownerCard);
-          final cards = await _journalStore.cardsFor(
-            _currentSessionId!,
-            ownerId,
+        final dream = await parkedDream.dream;
+        if (dream != null) {
+          _messages.insert(
+            _messages.length - 1,
+            ChatMessage(
+              text: dream,
+              sender: parkedDream.ownerName,
+              isUser: false,
+              characterId: parkedDream.ownerCharacterId,
+              metadata: {'is_dream': true},
+            ),
           );
-          final sorted = [...cards]
-            ..sort(
-              (a, b) => JournalPhysics.cooledHeat(
-                b,
-              ).compareTo(JournalPhysics.cooledHeat(a)),
-            );
-          final dream = await _dreamService.generateDream(
-            characterName: ownerCard.name,
-            memoryFragments: [for (final c in sorted.take(5)) c.content],
-            fixation: _relationshipService.activeFixation,
-            emotion: _characterEmotion,
-            recap: _summary.length > 300
-                ? _summary.substring(0, 300)
-                : _summary,
-            weatherLine: switch (currentWeather) {
-              null => null,
-              final w => WeatherEngine.prose(w),
-            },
-            ambitions: ownerCard.frontPorchExtensions?.ambitions ?? const [],
+          notifyListeners();
+          await _journalStore.addCard(
+            sessionId: _currentSessionId!,
+            characterId: parkedDream.ownerId,
+            content: dream,
+            category: 'moment',
+            kind: 'dream',
+            emotionLabel: _characterEmotion.isEmpty ? null : _characterEmotion,
+            storyDay: _timeService.dayCount,
+            storyClock: _timeService.storyClockIso,
+            maxCards: _storageService.memorySettings.journalMaxCards,
           );
-          if (dream != null) {
-            _messages.insert(
-              _messages.length - 1,
-              ChatMessage(
-                text: dream,
-                sender: ownerCard.name,
-                isUser: false,
-                characterId: lastCharId,
-                metadata: {'is_dream': true},
-              ),
-            );
-            notifyListeners();
-            await _journalStore.addCard(
-              sessionId: _currentSessionId!,
-              characterId: ownerId,
-              content: dream,
-              category: 'moment',
-              kind: 'dream',
-              emotionLabel: _characterEmotion.isEmpty
-                  ? null
-                  : _characterEmotion,
-              storyDay: _timeService.dayCount,
-              storyClock: _timeService.storyClockIso,
-              maxCards: _storageService.memorySettings.journalMaxCards,
-            );
-            await _saveChat();
-          }
+          await _saveChat();
         }
       } catch (e) {
         debugPrint('[Dreams] skipped: $e');
@@ -512,5 +475,92 @@ extension ChatServiceSend on ChatService {
     // Director-triggered lore is visible for the current generate.
 
     await _generateResponse(GenerationMode.normal);
+  }
+
+  /// The dream PRODUCER — fired from the post-generation phase, because the
+  /// clock crosses a night during a turn's pre-generation advance, which
+  /// makes the rollover visible one whole phase before the dream is shown.
+  /// Same detection (checkRollover/pending/clear untouched — the dedicated
+  /// unit suite drives those APIs directly), same owner rule (the last
+  /// assistant speaker ended the day; ONE rule for 1:1 and group), same
+  /// fragment sources — only the WHEN moved: the model call runs in the
+  /// background here and parks its future; the next sendMessage inserts the
+  /// finished text (see the consumer above). A failure skips silently,
+  /// exactly as the blocking version did.
+  ///
+  /// Deliberately synchronous: everything through parkPrefetch runs before
+  /// this method returns, so by the time the post-generation phase moves on
+  /// the park EXISTS — a user firing the next message instantly can never
+  /// beat it and lose the dream. Only the slow work (journal read + model
+  /// call) lives inside the parked future.
+  void _maybeKickDreamPrefetch() {
+    _dreamService.checkRollover(
+      sessionId: _currentSessionId,
+      dayCount: _timeService.dayCount,
+    );
+    if (!_dreamService.pending || _currentSessionId == null) return;
+    _dreamService.clear();
+    String? lastCharId;
+    var lastSpeakerFound = false;
+    for (final m in _messages.reversed) {
+      if (!m.isUser &&
+          m.sender != 'System' &&
+          m.activeMetadata?['is_dream'] != true) {
+        lastCharId = m.characterId;
+        lastSpeakerFound = true;
+        break;
+      }
+    }
+    final ownerCard = !lastSpeakerFound
+        ? null
+        : lastCharId == null
+        ? _activeCharacter
+        : (_groupCharacters
+                  .where((c) => _getCharacterIdFromCard(c) == lastCharId)
+                  .firstOrNull ??
+              _activeCharacter);
+    if (ownerCard == null) return;
+    final ownerId = _getCharacterIdFromCard(ownerCard);
+    final sessionId = _currentSessionId!;
+    // Inputs sampled NOW, at the end of the day being dreamed about — if
+    // anything more faithful than the old next-morning sample.
+    final fixation = _relationshipService.activeFixation;
+    final emotion = _characterEmotion;
+    final recap = _summary.length > 300 ? _summary.substring(0, 300) : _summary;
+    final weatherLine = switch (currentWeather) {
+      null => null,
+      final w => WeatherEngine.prose(w),
+    };
+    Future<String?> generate() async {
+      try {
+        final cards = await _journalStore.cardsFor(sessionId, ownerId);
+        final sorted = [...cards]
+          ..sort(
+            (a, b) => JournalPhysics.cooledHeat(
+              b,
+            ).compareTo(JournalPhysics.cooledHeat(a)),
+          );
+        return await _dreamService.generateDream(
+          characterName: ownerCard.name,
+          memoryFragments: [for (final c in sorted.take(5)) c.content],
+          fixation: fixation,
+          emotion: emotion,
+          recap: recap,
+          weatherLine: weatherLine,
+          ambitions: ownerCard.frontPorchExtensions?.ambitions ?? const [],
+        );
+      } catch (e) {
+        debugPrint('[Dreams] prefetch skipped: $e');
+        return null;
+      }
+    }
+
+    _dreamService.parkPrefetch(
+      sessionId: sessionId,
+      ownerName: ownerCard.name,
+      ownerId: ownerId,
+      ownerCharacterId: lastCharId,
+      dream: generate(),
+    );
   }
 }

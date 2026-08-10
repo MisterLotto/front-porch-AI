@@ -502,15 +502,23 @@ class RealismVerification {
       }
     }
 
-    final h = extractJsonInt(raw, 'hunger') ?? 0;
+    // hunger_delta first: it is the key the needs eval actually emits — the
+    // plain-'hunger' probe alone made this rule dead for every real output
+    // (the strict-quote extractor never matched `"hunger_delta"`), found in
+    // the 2026-08-10 eval review. The plain key stays as the fallback the
+    // parser also accepts.
+    final hKey = extractJsonInt(raw, 'hunger_delta') != null
+        ? 'hunger_delta'
+        : 'hunger';
+    final h = extractJsonInt(raw, hKey) ?? 0;
     if (h.abs() > (8 * strictFactor) &&
         !scene.contains('eat') &&
         !scene.contains('food')) {
-      final v = h.sign * 2;
-      final corrected = raw
-          .replaceAll(RegExp('"hunger"\\s*:\\s*(-?\\d+)'), '"hunger": $v')
-          .replaceAll(RegExp('"hunger"\\s*:\\s*(-?\\d+)'), '"hunger": $v');
-      return _RuleResult(false, 'hunger delta w/o eat', corrected);
+      return _RuleResult(
+        false,
+        'hunger delta w/o eat',
+        _correctedJson(raw, hKey, h.sign * 2),
+      );
     }
 
     return _RuleResult(true, '', null);

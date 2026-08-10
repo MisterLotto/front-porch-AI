@@ -171,7 +171,10 @@ extension RealismEvalOneShot on RealismEvals {
       final textForOneShot = effectiveText; // rebind
 
       // ── Relationship / trust / arousal (unified with multi-call path) ──
-      _parseAndApplyRelationshipDeltas(textForOneShot);
+      // applyArousal:true — the fused one-shot prompt is the requester of
+      // arousal_delta, and this is its single application (the inline emotion
+      // parse below deliberately does not touch arousal).
+      _parseAndApplyRelationshipDeltas(textForOneShot, applyArousal: true);
 
       // ── Autonomous Objective ──
       // (All parses below use textForOneShot — the Director-corrected text.

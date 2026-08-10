@@ -176,7 +176,12 @@ String recentExchange(List<ChatMessage> msgs, {int take = 3}) {
       .take(n)
       .toList()
       .reversed
-      .map((m) => '${m.sender}: ${m.displayText}')
+      // promptText, not displayText, since 2026-08-10: the two differ only
+      // for photo messages, where promptText carries the "[shared a photo:
+      // caption]" marker — and the realism judges already read promptText,
+      // so needs/climax/pockets were the only evals blind to a photo the
+      // exchange was about (eval review Tier-3 hygiene).
+      .map((m) => '${m.sender}: ${m.promptText}')
       .join('\n');
 }
 

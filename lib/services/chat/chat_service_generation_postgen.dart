@@ -387,6 +387,15 @@ extension ChatServiceGenerationPostGen on ChatService {
           _maybeRunPromiseDebtPass();
         }
 
+        // Dream prefetch: the clock crossed a night during this turn's
+        // pre-generation advance, so the dream can be generated NOW and
+        // merely inserted at the next send — see the producer in
+        // chat_service_send.dart. The kick itself is synchronous (the park
+        // exists before this line returns); only the model call runs in the
+        // background, recording into the next turn's [EvalTraffic]
+        // background line, where background spend belongs.
+        _maybeKickDreamPrefetch();
+
         // Embed messages for RAG memory (fire-and-forget)
         _maybeEmbedMessages();
 

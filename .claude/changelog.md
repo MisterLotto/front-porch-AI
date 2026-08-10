@@ -14118,3 +14118,90 @@ reverted, 5 went red printing the real damage (2026-07-02 → 2026-07-09 twice,
 reverted, 5 went red printing today's real date (2026-08-08) where the story
 date belongs — including an 1887 story reported as 2026-08-08. The four existing
 clock suites (70 tests) pass unmodified.
+
+## 2026-08-10 — Eval review items 6+7: dreams stop blocking the send; three hygiene fixes
+
+**Files:** `lib/services/chat/dream_service.dart`,
+`lib/services/chat/chat_service_send.dart`,
+`lib/services/chat/chat_service_generation_postgen.dart`,
+`lib/services/chat/llm_eval_engine.dart`,
+`lib/services/chat/realism_verification.dart`,
+`lib/services/chat/realism_evals.support.dart`,
+`lib/services/chat/realism_evals.calls.dart`,
+`lib/services/chat/realism_evals.one_shot.dart`,
+`lib/services/chat/realism_evals.dart`,
+new tests `test/services/chat/{dream_prefetch,recent_exchange_photo_marker,needs_verifier_hunger_delta,arousal_single_owner}_test.dart`,
+`docs/Rawhide.md`.
+
+### 1. Dream prefetch (review item 6 — the last model call still blocking a send)
+
+The night's dream was generated INSIDE sendMessage, holding the user's morning
+message hostage to a full eval request. But the clock crosses a night during a
+turn's PRE-generation advance, so the rollover is already visible by that
+turn's POST-generation phase. Split into producer + consumer:
+
+- `DreamService` gains `parkPrefetch`/`takePrefetch` (session-guarded,
+  single-take, mismatch-discard). `checkRollover`/`pending`/`clear` untouched
+  — the existing dedicated suite still pins them.
+- `_maybeKickDreamPrefetch()` (chat_service_send.dart, called from the
+  post-generation phase beside the other background passes) runs the SAME
+  detection + owner rule + fragment sources as the old inline block, then
+  parks the `generateDream` future. The method is deliberately synchronous
+  through the park — only the journal read + model call live inside the
+  parked future — so a user firing the next message instantly can never beat
+  the park and lose the dream (the old blocking design never lost one).
+- sendMessage keeps an anchor-only `checkRollover` at entry (before the
+  turn's clock advance) so the first turn after a chat load anchors on the
+  pre-advance day exactly as before, then consumes via `takePrefetch`:
+  same insertion position, same journal card, same silent-skip floor.
+
+### 2. recentExchange reads promptText (item 7 hygiene)
+
+`recentExchange` fed needs/climax/pockets `displayText`; the realism judges
+read `promptText`. The two differ only for photo messages, where promptText
+carries the "[shared a photo: caption]" marker — so the reply-readers were
+the only evals blind to a photo the exchange was about. One-word fix.
+
+### 3. The verifier's hunger rule was dead (item 7)
+
+`_applyRuleChecks` probed the plain key `hunger`, but the needs eval emits
+`hunger_delta`, and the strict-quote extractor can never match the longer key
+— h was always 0 and the "hunger delta w/o eat" correction never fired on
+real output. The dedicated suite's `anyOf('corrected','accepted')` assertions
+were green either way, which is how it survived. Now probes `hunger_delta`
+first with plain `hunger` as the fallback, and the replacement goes through
+the shared `_correctedJson` (the old inline double-`replaceAll` deleted).
+
+### 4. One arousal owner per turn (item 7 — the double-apply)
+
+`_parseAndApplyRelationshipDeltas` parsed `arousal_delta` "best-effort" even
+on the relationship path, whose prompt never requests it. A model that
+volunteered the field got arousal applied twice in one turn (relationship
+parse + emotional eval), with the chip showing only the second value. Both
+appliers now take a required `applyArousal` flag: the eval whose prompt
+REQUESTS the field owns it — emotional in multi-call, the fused call in
+one-shot. The future-proof batch-oneShot arm (which feeds the same fused text
+to both appliers) applies it exactly once too.
+
+### Deferred, with reasons (from the same review)
+
+- Journal/Growth structural dedup (`_runExchange` ×2, twin review classes):
+  a pure refactor of two live passes whose transports are pinned by
+  integration suites; deferred rather than risk byte-drift in a PR already
+  carrying behavior changes.
+- Guest chime gate batching: `scene_guest_director_test.dart` pins the gate
+  behavior; needs its own carefully-scoped change.
+- Salient-kick minimum window: would break the protected
+  `journal_review_test`/`growth_rings_test` canned-kick fixtures — needs a
+  maintainer decision on amending committed tests first.
+
+### Verification
+
+All four new suites proven red-then-green against the exact thing they
+guard: session guard removed → mismatch tests red; single-take removed →
+single-take red; postgen kick deleted → wiring test red (dream call fires
+from the next send or never); promptText reverted → marker tests red; hunger
+probe reverted → spike tests red; ownership gate dropped → double-apply red;
+one-shot flag flipped → one-shot silence red.
+`flutter analyze` clean; `dart fix --dry-run` nothing to fix; full unit +
+golden suites run before push (results in the PR).

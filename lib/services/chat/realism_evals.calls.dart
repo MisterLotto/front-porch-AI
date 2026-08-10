@@ -121,10 +121,13 @@ extension RealismEvalCalls on RealismEvals {
         injections: {'personality': dossier, 'standing': standing},
       );
 
-      // Unified parse/apply (also used by one-shot). The relationship path passes
-      // arousal parsing through even though its prompt does not request the field
-      // (best-effort extraction preserved exactly).
-      final res = _parseAndApplyRelationshipDeltas(effectiveText);
+      // Unified parse/apply (also used by one-shot). applyArousal:false — in
+      // multi-call mode the emotional eval requests and owns arousal_delta; a
+      // model volunteering it here used to get it applied twice in one turn.
+      final res = _parseAndApplyRelationshipDeltas(
+        effectiveText,
+        applyArousal: false,
+      );
 
       debugPrint(
         '[Realism:Relationship] Bond: ${res.bondDelta} (${res.bondReason.isNotEmpty ? res.bondReason : 'no reason'}) | Trust: ${res.trustDelta} (${res.trustReason.isNotEmpty ? res.trustReason : 'no reason'})',
@@ -241,7 +244,9 @@ extension RealismEvalCalls on RealismEvals {
       );
       text = effectiveText; // rebind (var allows)
 
-      await _applyEmotionalResults(text);
+      // applyArousal:true — this eval's prompt requests arousal_delta, so it
+      // is the multi-call owner of the field.
+      await _applyEmotionalResults(text, applyArousal: true);
       debugPrint(
         '[Realism:Emotion] Emotion: ${getCharacterEmotion()} (${getEmotionIntensity()})',
       );
