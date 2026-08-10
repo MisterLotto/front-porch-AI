@@ -3,6 +3,54 @@
 
 # Changelog
 
+## 2026-08-10 — perf(realism): the three judges now share a byte-identical prompt prefix; scene-time dispatches last
+- **Files changed:** `lib/services/chat/realism_prompt_builder.dart`,
+  `lib/services/chat/realism_evals.calls.dart`,
+  `lib/services/chat/chat_service_realism_evals.dart`,
+  `test/services/chat/realism_shared_prefix_test.dart` (new),
+  `.claude/changelog.md`, `docs/Rawhide.md`
+- **Why (eval review Tier-1 §3.3, maintainer-approved):** the relationship,
+  emotional and narrative judges fire back-to-back into KoboldCpp's FIFO
+  queue every turn, and each opened with a DIFFERENT first sentence — so
+  fast-forward was defeated from token one and every call re-prefilled its
+  own copy of the same dossier (≤2,000 chars) + standing + subjectivity
+  frame. Roughly 60–70% of each judge prompt was identical static context
+  paid three times per turn.
+- **How:** new `RealismPromptBuilder.judgePrefix` — intro + dossier +
+  standing + ambition roster + subjectivity frame — composed byte-identically
+  into all three judges AND the fused one-shot (parity by construction, the
+  same discipline the fragment sections already had). Each judge's tail is
+  its task line + rubric sections + recent window + format ask, in the same
+  relative order as before (rubrics before recent — the protected
+  parity-slice test depends on it). Dispatch order changed so the three
+  prefix-sharers are CONSECUTIVE: relationship → emotional → narrative, with
+  scene-time (deliberately lean, shares nothing) moved from third to last —
+  dispatched in the middle it would evict the shared prefill between two
+  judges on a single-slot backend.
+- **Maintainer constraint honored and pinned:** "no evals can change from
+  pre to post, but the order they fire in doesn't matter." Nothing crossed
+  the generation boundary — the four judges stay pre-generation, the
+  reply-readers (needs impact, climax, pockets, posture) stay
+  post-generation — and the new test's phase group is the durable form of
+  that sentence (dance carries no reply-reader; postgen carries no judge).
+- **Deliberate input changes, disclosed:** (a) the relationship judge's
+  recent window unified 3 → 4 messages (emotional/narrative were already 4;
+  the shared context must be built from the same inputs everywhere);
+  (b) the ambition roster now renders for all three judges, and the
+  standing + subjectivity frame (with the preferences block) now reach the
+  narrative judge — identical context is the price of a byte-identical
+  prefix, every block self-omits when empty, and each is judge-relevant.
+  Deltas still come from the same rubrics at temp 0.1; observable behavior
+  is expected unchanged, and 1:1/group + one-shot/multi-call parity are
+  untouched by construction (same builder serves all paths).
+- **Verification:** flutter analyze clean; new realism_shared_prefix_test
+  (5 tests) — negative-checked: a single byte prepended to one builder's
+  prefix turned byte-identity red; swapping narrative/scene-time dispatch
+  turned the order guard red; both restored to green. The protected suites
+  (realism_prompt_builder_test incl. the parity slice, one_shot_parity_test,
+  ambition_steering_test, preferences_scoring_test, realism_evals_test, all
+  scripted turn suites) pass UNMODIFIED. Full suite 3445 passed.
+
 ## 2026-08-10 — perf(evals): stop blocking every turn on the quest check; run post-gen calls concurrently; strip dead needs fields; eval sampler hygiene
 - **Files changed:** `lib/services/chat/objective_mention_gate.dart` (new),
   `lib/services/chat/chat_service_objectives.dart`,

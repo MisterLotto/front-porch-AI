@@ -39,7 +39,10 @@ extension RealismEvalCalls on RealismEvals {
     }
 
     final msgs = getMessages();
-    final recentCount = msgs.length < 3 ? msgs.length : 3;
+    // 4-message window, unified across the three prefix-sharing judges (was
+    // 3 here): the recent block must be built from the same inputs everywhere
+    // or the judges' shared context silently diverges per eval.
+    final recentCount = msgs.length < 4 ? msgs.length : 4;
     final recent = msgs.reversed
         .take(recentCount)
         .toList()
@@ -70,6 +73,7 @@ extension RealismEvalCalls on RealismEvals {
     String buildPrompt({required bool toolsMode}) =>
         RealismPromptBuilder.relationshipEvalPrompt(
           preferences: getPreferences?.call() ?? '',
+          ambitions: getAmbitions?.call() ?? const [],
           charName: charName,
           userName: userName,
           dossier: dossier,
@@ -174,6 +178,7 @@ extension RealismEvalCalls on RealismEvals {
     String buildPrompt({required bool toolsMode}) =>
         RealismPromptBuilder.emotionalEvalPrompt(
           preferences: getPreferences?.call() ?? '',
+          ambitions: getAmbitions?.call() ?? const [],
           charName: charName,
           userName: userName,
           dossier: dossier,
@@ -334,11 +339,26 @@ extension RealismEvalCalls on RealismEvals {
     final primary = getPrimaryObjective();
 
     final dossier = getCharacterDossier(char);
+    // Same standing/preferences the other two judges build from the same
+    // sources — the shared prefix is byte-identical only because every judge
+    // is handed the same inputs (see RealismPromptBuilder.judgePrefix).
+    final standing = RealismPromptBuilder.standingContext(
+      charName: charName,
+      userName: userName,
+      shortTermTier: relationshipService.shortTermTierName,
+      longTermTier: relationshipService.longTermTierName,
+      trustTier: relationshipService.trustTierName,
+      trustLevel: relationshipService.trustLevel,
+      emotion: getCharacterEmotion(),
+      emotionIntensity: getEmotionIntensity(),
+    );
     String buildPrompt({required bool toolsMode}) =>
         RealismPromptBuilder.narrativeEvalPrompt(
           charName: charName,
           userName: userName,
           dossier: dossier,
+          standing: standing,
+          preferences: getPreferences?.call() ?? '',
           recent: recent,
           primaryObjective: primary?.objective,
           ambitions: getAmbitions?.call() ?? const [],

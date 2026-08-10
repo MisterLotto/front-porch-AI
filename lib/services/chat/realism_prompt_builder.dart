@@ -490,6 +490,53 @@ class RealismPromptBuilder {
 
   // ── Full prompts (multi-call path + fused one-shot, parity by construction) ─
 
+  /// The byte-identical PREFIX every judge prompt opens with: intro, dossier,
+  /// standing, ambition roster, subjectivity frame. Everything eval-specific
+  /// (the task line, the rubric sections, the recent window, the format ask)
+  /// comes AFTER it.
+  ///
+  /// WHY IT EXISTS (eval review Tier-1 §3.3, maintainer-approved 2026-08-10):
+  /// the three multi-call judges fire back-to-back into KoboldCpp's FIFO
+  /// queue every turn, and each used to open with a DIFFERENT first sentence
+  /// — so fast-forward was defeated from token one and every call re-prefilled
+  /// its full copy of the same dossier/standing/frame. With a byte-identical
+  /// prefix, call one pays the prefill and calls two and three fast-forward
+  /// through it. The dispatch order in `_fireStaggeredRealismEvals` keeps the
+  /// three prefix-sharing judges CONSECUTIVE (scene-time, whose prompt is
+  /// deliberately lean and shares nothing, fires last) — firing order is
+  /// free to change, eval PHASE is not (nothing moved across the generation
+  /// boundary; the guard test pins both).
+  ///
+  /// Byte-identity holds only if the callers hand every judge the same
+  /// inputs, which they do — same dossier/standing/preferences/ambitions
+  /// callbacks, same 4-message window. The one-shot prompt opens with this
+  /// same prefix (its standing additionally carries the posture line —
+  /// irrelevant for caching, since one-shot REPLACES the trio, but the
+  /// shared builder is what keeps the parity rule structural).
+  ///
+  /// The roster and frame render for every judge now (they used to be
+  /// narrative-only and relationship/emotional-only respectively). That is
+  /// deliberate: identical context is the price of a shared prefix, the
+  /// blocks are self-omitting when empty (an ambition-less, preference-less
+  /// card still costs what it did), and each is judge-relevant — the frame
+  /// is the "real person" rule and the roster is who she is trying to
+  /// become.
+  static String judgePrefix({
+    required String charName,
+    required String userName,
+    required String dossier,
+    required String standing,
+    String preferences = '',
+    List<({String text, int progress})> ambitions = const [],
+  }) =>
+      'You are the private inner voice of $charName in a roleplay with '
+      '$userName — the one who knows how each moment truly lands for them, '
+      'what they feel, and what they want.\n\n'
+      '$dossier'
+      '$standing'
+      '${_ambitionRoster(ambitions)}'
+      '${_subjectivityFrame(charName, userName, preferences)}';
+
   static String relationshipEvalPrompt({
     required String charName,
     required String userName,
@@ -497,14 +544,11 @@ class RealismPromptBuilder {
     required String standing,
     required String recent,
     String preferences = '',
+    List<({String text, int progress})> ambitions = const [],
     bool toolsMode = false,
   }) =>
-      'You are the private inner voice of $charName in a roleplay with $userName, scoring how this '
-      'exchange truly landed for them.\n\n'
-      '$dossier'
-      '$standing'
-      '${_subjectivityFrame(charName, userName, preferences)}'
-      'Evaluate:\n'
+      '${judgePrefix(charName: charName, userName: userName, dossier: dossier, standing: standing, preferences: preferences, ambitions: ambitions)}'
+      'Score how this exchange truly landed for $charName. Evaluate:\n'
       '${_bondSection(charName, userName)}'
       '${_trustSection(charName, userName)}'
       '\n'
@@ -522,14 +566,11 @@ class RealismPromptBuilder {
     int refractoryTurnsLeft = 0,
     List<String> allowedEmotionLabels = const [],
     String preferences = '',
+    List<({String text, int progress})> ambitions = const [],
     bool toolsMode = false,
   }) =>
-      'You are the private inner voice of $charName in a roleplay with $userName, naming what they '
-      'truly feel right now.\n\n'
-      '$dossier'
-      '$standing'
-      '${_subjectivityFrame(charName, userName, preferences)}'
-      'Evaluate:\n'
+      '${judgePrefix(charName: charName, userName: userName, dossier: dossier, standing: standing, preferences: preferences, ambitions: ambitions)}'
+      'Name what $charName truly feels right now. Evaluate:\n'
       '${_emotionSection(charName, allowedEmotionLabels)}'
       '${arousalEnabled ? _arousalSection(charName, userName, arousalLevel, refractoryTurnsLeft) : ''}'
       '\n'
@@ -545,16 +586,16 @@ class RealismPromptBuilder {
     required String userName,
     required String dossier,
     required String recent,
+    String standing = '',
+    String preferences = '',
     String? primaryObjective,
     List<({String text, int progress})> ambitions = const [],
     bool toolsMode = false,
   }) =>
-      'You are the autonomous story engine inside $charName\'s head, judging what they now want and '
-      'what lingers with them. Both must fit who $charName is — their ambitions, wounds, and style — '
-      'not generic story beats.\n\n'
-      '$dossier'
-      '${_ambitionRoster(ambitions)}'
-      'Evaluate:\n'
+      '${judgePrefix(charName: charName, userName: userName, dossier: dossier, standing: standing, preferences: preferences, ambitions: ambitions)}'
+      'Judge what $charName now wants and what lingers with them — both must '
+      'fit who they are (their ambitions, wounds, and style), '
+      'not generic story beats. Evaluate:\n'
       '${_objectiveSection(charName, userName, primaryObjective, ambitions)}'
       '${_fixationSection(charName)}'
       '\n'
@@ -580,13 +621,9 @@ class RealismPromptBuilder {
     String preferences = '',
     bool toolsMode = false,
   }) =>
-      'You are the private inner voice of $charName in a roleplay with $userName, scoring how this '
-      'exchange truly landed for them across every dimension below.\n\n'
-      '$dossier'
-      '$standing'
-      '${_ambitionRoster(ambitions)}'
-      '${_subjectivityFrame(charName, userName, preferences)}'
-      'Evaluate ALL of the following at once:\n'
+      '${judgePrefix(charName: charName, userName: userName, dossier: dossier, standing: standing, preferences: preferences, ambitions: ambitions)}'
+      'Score how this exchange truly landed for $charName across every '
+      'dimension below. Evaluate ALL of the following at once:\n'
       '${_bondSection(charName, userName)}'
       '${_trustSection(charName, userName)}'
       '${_emotionSection(charName, allowedEmotionLabels)}'
