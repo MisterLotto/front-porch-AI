@@ -60,6 +60,11 @@ extension ChatServiceSend on ChatService {
     // keep the wider _isTurnBusy guard, because that is where the race
     // actually corrupts something.
     if (_isGenerating) return;
+    // [EvalTraffic]: whatever the fire-and-forget passes (journal, growth,
+    // promises, cast…) spent since the last turn's print, reported now so
+    // the turn's own line stays a clean measure of the turn.
+    final backgroundTraffic = EvalTraffic.current.flushBackground();
+    if (backgroundTraffic != null) debugPrint(backgroundTraffic);
     // One-shot absence acknowledgment: pending survives exactly the first
     // user turn after load (all of that turn's prompt builds see it); the
     // second turn clears it for good.

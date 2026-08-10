@@ -40,10 +40,12 @@ extension ChatServiceRealismEvals on ChatService {
     String prompt, {
     void Function(String)? onChunk,
     double repeatPenalty = 1.15,
+    String label = 'eval',
   }) => _llmEvalEngine.fireLLMEval(
     prompt,
     onChunk: onChunk,
     repeatPenalty: repeatPenalty,
+    label: label,
   );
 
   String _stripThinkBlocks(String text) =>
@@ -127,7 +129,7 @@ extension ChatServiceRealismEvals on ChatService {
 
     try {
       debugPrint('[Realism:TrustRepair] Evaluating repair attempt...');
-      final raw = await _fireLLMEval(prompt, onChunk: onChunk);
+      final raw = await _fireLLMEval(prompt, onChunk: onChunk, label: 'trust_repair');
       if (raw == null) return;
 
       final text = _stripThinkBlocks(raw).trim();

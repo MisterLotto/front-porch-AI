@@ -360,6 +360,13 @@ extension ChatServiceGenerationPostGen on ChatService {
           }
         }
 
+        // [EvalTraffic]: the turn's secondary-call tally — everything since
+        // the last flush (pre-gen judges, post-gen passes). Printed before
+        // the fire-and-forget passes launch so their spend lands in the next
+        // turn's `background` line instead of muddying this one.
+        final turnTraffic = EvalTraffic.current.flushTurn();
+        if (turnTraffic != null) debugPrint(turnTraffic);
+
         // Journal maintenance pass if due (fire-and-forget): memory cards +
         // recap in one call. Card ownership is derived from the window's
         // message characterIds (immune to the prePostActiveChar restore

@@ -3,6 +3,45 @@
 
 # Changelog
 
+## 2026-08-10 — feat(evals): [EvalTraffic] — a per-turn tally of secondary LLM traffic
+- **Files changed:** `lib/services/chat/eval_traffic.dart` (new),
+  `lib/services/chat/llm_eval_engine.dart`,
+  `lib/services/chat/chat_service_wiring_evals.dart`,
+  `lib/services/chat/chat_service_wiring_memory.dart`,
+  `lib/services/chat/chat_service_realism_evals.dart`,
+  `lib/services/chat/objective_proposal.dart`,
+  `lib/services/chat/chat_service_send.dart`,
+  `lib/services/chat/chat_service_generation_postgen.dart`,
+  `lib/services/chat/chat.dart`,
+  `test/services/chat/eval_traffic_test.dart` (new), `.claude/changelog.md`
+- **Why (eval review §8 — "instrument first"):** the state-zone placement won
+  its argument with a measured number; the eval-side optimizations shipped as
+  reasoning about call counts. This line is what lets a real setup SEE the
+  counts move and makes a regression visible in the console.
+- **What it prints:** one `[EvalTraffic]` line at the end of each turn's
+  post-gen phase — calls · total prompt chars (≈tokens, chars÷4, labelled an
+  estimate) · output chars · summed LLM wall time · per-call detail like
+  `realism(text) 6.0k→120 1.50s` — plus a `background` line at the next send
+  for what the fire-and-forget passes (journal/growth/promise/cast) spent in
+  between. Flushes clear, so group speakers print per-speaker deltas.
+- **How:** recording at the transport chokepoints — `fireLLMEval` (text lane,
+  new optional `label` param threaded through the wiring closures: realism*,
+  needs, pockets, climax, reply_facts, director, journal, growth, dream,
+  ambition, promise, guest_gate, cast, trust_repair; *the four judges share
+  one closure and report coarsely as 'realism' — their per-kind detail is in
+  the [Realism:*] logs), `_fireToolEval` (tools lane, labelled by tool name;
+  timeouts recorded too — the wall time was spent), and the two raw
+  objective streams that bypass the engine. One static instance by design
+  (debug-only, nothing reads it back; threading a tally through every ctor
+  would be ceremony). Not recorded: main generation (LiveGenProgress),
+  vision captions, calls aborted before HTTP.
+- **Verification:** analyze clean; new eval_traffic_test (7 tests: tally
+  arithmetic + flush semantics + structural chokepoint/print pins) —
+  negative-checked: a record() that drops entries turned the arithmetic
+  group red (3 tests), removing the engine's record turned the chokepoint
+  guard red; both restored to green. Full suite 3463 passed. Console-only —
+  no user-facing surface, so no Rawhide.md entry and no web work.
+
 ## 2026-08-10 — feat(realism): One-Shot Eval becomes a tri-state (Auto / On / Off), Auto default
 - **Files changed:** `lib/services/storage/settings/realism_settings.dart`,
   `lib/services/chat/pass_support.dart`,

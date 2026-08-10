@@ -22,6 +22,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/chat/eval_traffic.dart';
 import 'package:front_porch_ai/services/chat/pass_support.dart';
 import 'package:front_porch_ai/services/chat/realism_tools.dart';
 import 'package:front_porch_ai/services/chat/relationship_service.dart';
@@ -320,6 +321,11 @@ class LlmEvalEngine {
     String prompt, {
     void Function(String)? onChunk,
     double repeatPenalty = 1.15,
+    // For the [EvalTraffic] tally only. Coarse where a closure is shared
+    // (the realism judges + scene time all ride one wiring closure as
+    // 'realism'; their per-kind detail is in the [Realism:*] logs), precise
+    // where a pass has its own closure.
+    String label = 'eval',
   }) async {
     final llm = getLlmService();
     // For remote backends, require full readiness (API key + model configured).
@@ -363,6 +369,7 @@ class LlmEvalEngine {
       if (k != null) await k.waitForIdle();
     }
 
+    final trafficWatch = Stopwatch()..start();
     String response = '';
     // Retry loop: thinking models can cause KoboldCPP to drop the connection
     // briefly (OOM during dense thinking sessions). One retry after a short
@@ -476,6 +483,13 @@ class LlmEvalEngine {
         : response;
     debugPrint(
       '[Realism:RawEval] len=${response.length} | ${preview.replaceAll('\n', '↵')}',
+    );
+    EvalTraffic.current.record(
+      label: label,
+      lane: 'text',
+      promptChars: prompt.length,
+      outputChars: response.length,
+      ms: trafficWatch.elapsedMilliseconds,
     );
     return response.isEmpty ? null : response;
   }
@@ -697,6 +711,7 @@ class LlmEvalEngine {
                 p,
                 onChunk: onChunk,
                 repeatPenalty: kScalarEvalRepeatPenalty,
+                label: 'needs',
               ),
               isCancelled: () =>
                   getIsCancellingRealismEval() || getRealismEvalCancelled(),
@@ -706,6 +721,7 @@ class LlmEvalEngine {
               buildPrompt(toolsMode: false),
               onChunk: onChunk,
               repeatPenalty: kScalarEvalRepeatPenalty,
+              label: 'needs',
             );
       if (raw == null) return null;
       final searchText = stripThinkBlocks(raw);

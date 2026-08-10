@@ -103,8 +103,11 @@ extension ChatServiceWiringEvals on ChatService {
           callToText: (resp) =>
               realismToolCallToJson(PocketsEval.kPocketsTool, resp.calls),
           fireToolEval: _fireToolEval,
-          fireTextEval: (p, {onChunk}) =>
-              _fireLLMEval(p, repeatPenalty: kScalarEvalRepeatPenalty),
+          fireTextEval: (p, {onChunk}) => _fireLLMEval(
+            p,
+            repeatPenalty: kScalarEvalRepeatPenalty,
+            label: 'pockets',
+          ),
         );
       },
     );
@@ -130,8 +133,11 @@ extension ChatServiceWiringEvals on ChatService {
           callToText: (resp) =>
               realismToolCallToJson(ReplyFactsEval.kReplyFactsTool, resp.calls),
           fireToolEval: _fireToolEval,
-          fireTextEval: (p, {onChunk}) =>
-              _fireLLMEval(p, repeatPenalty: kScalarEvalRepeatPenalty),
+          fireTextEval: (p, {onChunk}) => _fireLLMEval(
+            p,
+            repeatPenalty: kScalarEvalRepeatPenalty,
+            label: 'reply_facts',
+          ),
         );
       },
     );
@@ -153,8 +159,11 @@ extension ChatServiceWiringEvals on ChatService {
           callToText: (resp) =>
               realismToolCallToJson(ClimaxEval.kClimaxTool, resp.calls),
           fireToolEval: _fireToolEval,
-          fireTextEval: (p, {onChunk}) =>
-              _fireLLMEval(p, repeatPenalty: kScalarEvalRepeatPenalty),
+          fireTextEval: (p, {onChunk}) => _fireLLMEval(
+            p,
+            repeatPenalty: kScalarEvalRepeatPenalty,
+            label: 'climax',
+          ),
         );
       },
     );
@@ -191,6 +200,7 @@ extension ChatServiceWiringEvals on ChatService {
         p,
         onChunk: onChunk,
         repeatPenalty: kScalarEvalRepeatPenalty,
+        label: 'director',
       ),
       stripThinkBlocks: _stripThinkBlocks,
       extractJsonInt: _extractJsonInt,
@@ -238,6 +248,7 @@ extension ChatServiceWiringEvals on ChatService {
         p,
         onChunk: onChunk,
         repeatPenalty: kScalarEvalRepeatPenalty,
+        label: 'needs',
       ),
       getPendingRealismMetadata: () => _pendingRealismMetadata ?? {},
       setPendingRealismMetadata: (v) => _pendingRealismMetadata = v,
@@ -270,6 +281,7 @@ extension ChatServiceWiringEvals on ChatService {
         p,
         onChunk: onChunk,
         repeatPenalty: kScalarEvalRepeatPenalty,
+        label: 'realism',
       ),
       // Tools transport (realism_tools.dart): same door + probe memory the
       // Journal and Growth passes use, so a backend answers the "can you speak
@@ -505,8 +517,23 @@ extension ChatServiceWiringEvals on ChatService {
   ) async {
     final service =
         testLlmServiceOverride ?? _llmProvider?.activeService ?? _koboldService;
+    // [EvalTraffic]: the tool name is the label — free and precise on this
+    // lane, where every call carries its schema.
+    final trafficWatch = Stopwatch()..start();
+    void recordTraffic(LlmToolResponse? resp) => EvalTraffic.current.record(
+      label:
+          ((tools.firstOrNull?['function'] as Map?)?['name'] as String?) ??
+              'tool',
+      lane: 'tools',
+      promptChars: prompt.length,
+      outputChars: resp == null
+          ? 0
+          : resp.text.length +
+                resp.calls.fold(0, (a, c) => a + c.arguments.length * 16),
+      ms: trafficWatch.elapsedMilliseconds,
+    );
     try {
-      return await service
+      final resp = await service
           .generateWithTools(
             GenerationParams(
               prompt: prompt,
@@ -535,6 +562,8 @@ extension ChatServiceWiringEvals on ChatService {
             // back to text for the round without branding the backend XML-only.
           )
           .timeout(kEvalToolCallTimeout);
+      recordTraffic(resp);
+      return resp;
     } on TimeoutException {
       // The deadline abandoned an in-flight call. On the single-slot local
       // backend that orphan holds the shared idle slot (_pendingRequest), so
@@ -543,6 +572,8 @@ extension ChatServiceWiringEvals on ChatService {
       // orphan, the server-side abort also frees anything queued behind it.)
       // Remote backends don't serialize on the slot — nothing to release.
       if (service is KoboldService) service.abortGeneration();
+      // The wall time was spent whether or not an answer came back.
+      recordTraffic(null);
       rethrow;
     }
   }

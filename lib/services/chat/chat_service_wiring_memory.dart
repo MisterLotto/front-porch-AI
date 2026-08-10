@@ -82,7 +82,7 @@ extension ChatServiceWiringMemory on ChatService {
       store: _journalStore,
       review: _journalReview,
       probe: _toolProbe,
-      fireLLMEval: (p) => _fireLLMEval(p),
+      fireLLMEval: (p) => _fireLLMEval(p, label: 'journal'),
       fireToolEval: _fireToolEval,
       getReviewFirst: () => _storageService.memorySettings.journalReviewFirst,
       getBackendIdentity: () => _evalBackendIdentity,
@@ -189,7 +189,7 @@ extension ChatServiceWiringMemory on ChatService {
       store: _growthStore,
       review: _growthReview,
       probe: _toolProbe,
-      fireLLMEval: (p) => _fireLLMEval(p),
+      fireLLMEval: (p) => _fireLLMEval(p, label: 'growth'),
       fireToolEval: _fireToolEval,
       stripThinkBlocks: _stripThinkBlocks,
       getBackendIdentity: () => _evalBackendIdentity,
@@ -220,7 +220,7 @@ extension ChatServiceWiringMemory on ChatService {
       journalStore: _journalStore,
       growthStore: _growthStore,
       fireEval: (prompt) async {
-        final raw = await _llmEvalEngine.fireLLMEval(prompt);
+        final raw = await _llmEvalEngine.fireLLMEval(prompt, label: 'ambition');
         return raw == null ? null : _llmEvalEngine.stripThinkBlocks(raw);
       },
       getMaxCards: () => _storageService.memorySettings.journalMaxCards,
@@ -239,7 +239,7 @@ extension ChatServiceWiringMemory on ChatService {
     return PromiseDebtService(
       journalStore: _journalStore,
       fireEval: (prompt) async {
-        final raw = await _llmEvalEngine.fireLLMEval(prompt);
+        final raw = await _llmEvalEngine.fireLLMEval(prompt, label: 'promise');
         return raw == null ? null : _llmEvalEngine.stripThinkBlocks(raw);
       },
       getMaxCards: () => _storageService.memorySettings.journalMaxCards,
@@ -271,7 +271,7 @@ extension ChatServiceWiringMemory on ChatService {
   DreamService _buildDreamService() {
     return DreamService(
       fireEval: (prompt) async {
-        final raw = await _llmEvalEngine.fireLLMEval(prompt);
+        final raw = await _llmEvalEngine.fireLLMEval(prompt, label: 'dream');
         return raw == null ? null : _llmEvalEngine.stripThinkBlocks(raw);
       },
       // Dreams fire on day crossings, so what they need is a clock that
@@ -388,8 +388,11 @@ extension ChatServiceWiringMemory on ChatService {
         }
         return '';
       },
-      fireGateEval: (prompt) =>
-          _fireLLMEval(prompt, repeatPenalty: kScalarEvalRepeatPenalty),
+      fireGateEval: (prompt) => _fireLLMEval(
+        prompt,
+        repeatPenalty: kScalarEvalRepeatPenalty,
+        label: 'guest_gate',
+      ),
       stripThinkBlocks: _stripThinkBlocks,
       extractJsonBool: _extractJsonBool,
       getHostName: () => _activeCharacter?.name ?? 'the character',
@@ -422,8 +425,11 @@ extension ChatServiceWiringMemory on ChatService {
         }
         return out.reversed.toList();
       },
-      fireLLMEval: (prompt) =>
-          _fireLLMEval(prompt, repeatPenalty: kScalarEvalRepeatPenalty),
+      fireLLMEval: (prompt) => _fireLLMEval(
+        prompt,
+        repeatPenalty: kScalarEvalRepeatPenalty,
+        label: 'cast',
+      ),
       stripThinkBlocks: _stripThinkBlocks,
       getHostName: () => _activeCharacter?.name ?? '',
       getUserName: () => _userPersonaService.persona.name,
