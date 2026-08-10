@@ -23,6 +23,7 @@ import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'growth_ops.dart';
 import 'growth_physics.dart';
+import 'salience_kick_gate.dart';
 import 'growth_prompt.dart';
 import 'growth_review.dart';
 import 'growth_store.dart';
@@ -133,6 +134,14 @@ class GrowthService {
   /// Set when a significant event fires outside message metadata (objective
   /// completion). Consumed by ChatService's post-generation trigger.
   bool eventKickPending = false;
+
+  /// The shared salient-kick rate limiter (salience_kick_gate.dart),
+  /// consulted by BOTH kick origins in the god wiring before either this
+  /// service's or the Journal's [eventKickPending] is set. HOSTED here for
+  /// storage only — the ChatService shell sits at the god-file ratchet's
+  /// edge and cannot take a field, and this leaf had the headroom. The
+  /// throttle is upstream of both features and gates neither on the other.
+  final salienceKickGate = SalienceKickGate();
 
   // ── Layering (the injection payoff, §4.5) ────────────────────────────
 

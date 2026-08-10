@@ -461,6 +461,19 @@ extension ChatServiceWiringEvals on ChatService {
       // _maybeRunJournalPass/_maybeRunGrowthPass post-generation (a finished
       // quest is a story beat worth journaling AND a moment characters grow).
       onObjectiveCompleted: () {
+        // Same shared rate limiter as onSalienceKick (salience_kick_gate.dart)
+        // — a completed quest in the middle of an emotionally hot scene must
+        // not stack a second immediate double-pass on the one just fired.
+        if (!_growthService.salienceKickGate.allow(
+          sessionId: _currentSessionId,
+          messageCount: _messages.length,
+        )) {
+          debugPrint(
+            '[Journal] objective-completed kick suppressed — within '
+            '$kSalienceKickMinGapMessages messages of the last one',
+          );
+          return;
+        }
         _journalMaintenance.eventKickPending = true;
         _growthService.eventKickPending = true;
       },

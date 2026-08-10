@@ -258,6 +258,20 @@ extension ChatServiceWiringMemory on ChatService {
         if (_realismEnabled) _relationshipService.applyScoreDelta(d);
       },
       onSalienceKick: () {
+        // Rate-limited (salience_kick_gate.dart): a hot scene clears the
+        // salience bar turn after turn, and every clear used to fire a full
+        // Journal AND Growth pass immediately. A suppressed kick just waits
+        // for the ordinary scheduled cadence.
+        if (!_growthService.salienceKickGate.allow(
+          sessionId: _currentSessionId,
+          messageCount: _messages.length,
+        )) {
+          debugPrint(
+            '[Journal] salient kick suppressed — within '
+            '$kSalienceKickMinGapMessages messages of the last one',
+          );
+          return;
+        }
         _journalMaintenance.eventKickPending = true;
         _growthService.eventKickPending = true;
       },

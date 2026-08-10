@@ -58,6 +58,7 @@ export 'porch_memory_models.dart';
 export 'promise_debt_service.dart';
 export 'prompt_plan.dart';
 export 'rag_injection.dart';
+export 'salience_kick_gate.dart';
 export 'realism_evals.dart';
 export 'realism_prompt_builder.dart';
 export 'realism_tools.dart';

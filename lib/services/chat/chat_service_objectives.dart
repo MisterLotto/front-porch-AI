@@ -648,17 +648,15 @@ extension ChatServiceObjectives on ChatService {
       if (card != null) characterName = card.name;
     }
 
-    final recent = _messages.length < 2
-        ? (_messages.isEmpty ? '' : _messages.last.displayText)
-        : _messages.reversed
-              // 6, not 4: a promise often gets fulfilled across a couple of
-              // exchanges, and once the moment scrolls out of this window a
-              // missed KEPT could never be detected again (2026-08-04 report).
-              .take(6)
-              .toList()
-              .reversed
-              .map((m) => '${m.sender}: ${m.displayText}')
-              .join('\n');
+    // 6, not the judges' 4: a promise often gets fulfilled across a couple
+    // of exchanges, and once the moment scrolls out of this window a missed
+    // KEPT could never be detected again (2026-08-04 report). Through the
+    // ONE window builder since 2026-08-10 — this was the last turn-adjacent
+    // inline window the eval diet missed, and the maintainer's EvalTraffic
+    // line caught it red-handed: 38.3k chars of prompt for a 59-char verdict
+    // on a novella-writing model. recentExchange brings the per-message
+    // clamp, photo markers, and think-stripping in one line.
+    final recent = recentExchange(_messages, take: 6);
     if (recent.trim().isEmpty) return;
 
     unawaited(

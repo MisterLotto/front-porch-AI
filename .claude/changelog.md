@@ -14403,3 +14403,51 @@ themes bug (512e4803). Two permanent changes:
    change. The E2E inventory list gains the new suite.
 
 flutter analyze clean (integration_test included); new file formatter-clean.
+
+## 2026-08-10 — The last easy wins: promise pass joins the diet; salient kicks get a cooldown
+
+**Files:** `lib/services/chat/chat_service_objectives.dart` (promise window →
+recentExchange), new `lib/services/chat/salience_kick_gate.dart` + barrel
+export, `lib/services/chat/growth_service.dart` (hosts the gate instance —
+the ChatService shell sits at 999 lines and cannot take a field; storage
+only, the throttle is upstream of both features),
+`lib/services/chat/chat_service_wiring_memory.dart` +
+`chat_service_wiring_evals.dart` (both kick origins gated), new tests
+`test/services/chat/{salience_kick_gate,promise_window_clamp}_test.dart`,
+`docs/Rawhide.md`.
+
+Maintainer-approved items #1 and #2 from the easy-wins review:
+
+1. **Promise pass window.** The Promise Ledger built its own inline
+   6-message window from raw displayText — the one turn-adjacent window the
+   eval diet missed — and the maintainer's EvalTraffic line caught it:
+   `promise(text) 38.3k→59`. Now rides recentExchange (clamp + photo
+   markers + think-strip). The wiring guard drives the REAL ChatService
+   with a 21k-char scripted reply whose promise sits at the TAIL, proving
+   both the clamp and that the head+tail shape keeps commitments visible
+   to warrantsEval and the model.
+
+2. **Salient-kick cooldown.** A hot scene clears the ±12 bond bar turn
+   after turn, and every clear fired an immediate full Journal + Growth
+   double-pass (~95k chars / ~26s background in the same capture), mostly
+   re-reading what the previous kick's pass had covered. SalienceKickGate
+   (new leaf, kSalienceKickMinGapMessages = 4) rate-limits the kick
+   MECHANISM at both origins (bond/trust/Chance-Time salience + objective
+   completion) before either feature's eventKickPending is set — feature
+   independence intact: no switch of either appears in the other's gate.
+   Suppression measures from the last FIRED kick (suppressed attempts
+   don't claim the slot, so a busy scene can't starve the kick forever);
+   session switches reset the window. The journal-store INVALIDATION kick
+   (timeline rewrite after edits/deletes) is deliberately ungated — that
+   one is correctness, not salience.
+
+   The maintainer pre-approved amending the protected journal_review /
+   growth_rings E2E fixtures — UNUSED: each fires exactly one salient kick
+   and the first kick of a session always fires, so both hold unmodified.
+
+### Verification
+
+Both new suites proven red-then-green: gap check neutered → suppression
+test red; session reset dropped → fresh-session test red; promise window
+reverted to the inline uncapped builder → clamp-marker/length guard red.
+flutter analyze clean; full unit + golden suites before push.
