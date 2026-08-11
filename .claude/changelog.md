@@ -24,6 +24,14 @@
   `realism_state` never stamped and restore was a no-op. Negative-checked:
   both go red if post-gen pockets restamp is removed.
 
+## 2026-08-11 — fix(journal): clear stale "Where we are" recap on timeline rewrite
+- **Files:** `chat_service_message_ops.dart` (`_invalidateJournalFrom`),
+  `test/services/chat/recap_clear_on_rewrite_test.dart`.
+- **Why:** M3 from release audit — free-form recap had no line receipts, so
+  regen/delete left discarded plot in the prompt as "Earlier in this story."
+- **Fix:** clear `_summary` on invalidate; kick journal refill; empty injects
+  nothing. Cards still purge by receipt as before.
+
 ## 2026-08-11 — feat(journal): Belongings tab (desktop) + web tools panel
 - **Files:** `journal_dialog.dart` (4 tabs: Diary/Promises/Belongings/Our
   Story; diary excludes item), `journal_card_tile.dart` (extracted tile),

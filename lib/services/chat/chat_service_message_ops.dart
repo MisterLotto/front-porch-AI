@@ -285,15 +285,29 @@ extension ChatServiceMessageOps on ChatService {
   /// regen/delete of a fresh turn (release audit 2026-08-11). Card purge
   /// therefore always runs; cursor rollback stays gated.
   ///
-  /// The recap TEXT may still carry a stale sentence until the next pass
-  /// rewrites it — a full recap rewind is deliberately out of scope
-  /// (documented, not silent).
+  /// Recap ("Where we are") is CLEARED on rewrite (M3, 2026-08-11): it is a
+  /// free-form paragraph with no per-line receipt, so it cannot be surgically
+  /// rewound. Leaving it would assert discarded plot as "earlier in this
+  /// story." Empty is honest; [buildRecapBlock] injects nothing; the next
+  /// maintenance pass (kicked below) refills it from the new timeline.
   void _invalidateJournalFrom(int position) {
     final sessionId = _currentSessionId;
     if (sessionId == null) return;
     if (position < _summaryLastIndex) {
       _summaryLastIndex = position;
     }
+
+    // Clear stale recap before the next generation can re-inject it.
+    var recapCleared = false;
+    if (_summary.isNotEmpty) {
+      _summary = '';
+      recapCleared = true;
+      debugPrint(
+        '[Journal] Timeline rewrite at $position — cleared stale recap '
+        '(refill on next journal pass)',
+      );
+    }
+
     // Fire-and-forget BUT error-contained: this select+delete chain can
     // outlive the service (delete a message, then close the app — or a test
     // teardown closing the Drift isolate), and an unhandled "Channel was
@@ -304,21 +318,37 @@ extension ChatServiceMessageOps on ChatService {
       _journalStore
           .invalidateCardsCitingFrom(sessionId, position)
           .then((removed) {
-            if (removed > 0 && !_disposed) {
+            if (_disposed) return;
+            // Kick whether cards or only recap moved — both need a refill.
+            if (removed > 0 || recapCleared) {
               _journalMaintenance.eventKickPending = true;
+            }
+            if (removed > 0) {
               debugPrint(
                 '[Journal] Timeline rewrite at $position — removed $removed '
                 'card(s) citing the discarded region',
               );
-              notifyListeners();
             }
+            if (removed > 0 || recapCleared) notifyListeners();
           })
           .catchError((Object e) {
             debugPrint(
               '[Journal] ⚠ card invalidation at $position skipped: $e',
             );
+            // Recap already cleared synchronously; still ask for a refill.
+            if (!_disposed && recapCleared) {
+              _journalMaintenance.eventKickPending = true;
+              notifyListeners();
+            }
           }),
     );
+
+    // Recap clear is sync — notify even if the card future is still pending
+    // so the sidebar "Where we are" empties immediately.
+    if (recapCleared) {
+      _journalMaintenance.eventKickPending = true;
+      notifyListeners();
+    }
   }
 
   /// Cancel an in-progress Realism evaluation stream (if any).

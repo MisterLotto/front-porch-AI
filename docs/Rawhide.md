@@ -4,6 +4,7 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 📍 **"Where we are" forgets discarded scenes** — If you regenerate or delete a reply, the short story recap no longer keeps describing a version of events you just threw away. It clears until the Journal’s next update rewrites it from the real timeline (better empty than wrong).
 - 🎒 **Belongings get their own Journal tab** — Placement notes (“I set my jacket down by the hot tub”) no longer hide under a hundred diary lines. Open the Journal and use **Belongings** next to Promises / Our Story — count badge included. Same surface on the web tools sidebar.
 - 🎒 **Handing something to someone in a group, then regenerating, no longer leaves both of you holding it** — If she hands Sam the keys and you reject that reply, both inventories rewind: she has the keys again and Sam does not keep a phantom gift. Same for diary placement cards that used to stick around after a regen of a “keys on the table” moment.
 - 🔁 **Regenerate / Continue / long chats (thinking models)** — Prior hidden reasoning no longer re-enters the next prompt on any path (including tiny context / overflow continuity). Continue is a plain transcript+partial again (no leftover journal/world state blocks fighting the line). Long chats keep a stable history window so local backends can actually use their prompt cache.
