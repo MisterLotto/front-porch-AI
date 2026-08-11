@@ -278,10 +278,9 @@ extension ChatServiceImpersonate on ChatService {
         );
         history = result.history;
       } else if (_messages.isNotEmpty) {
-        final lastMsg = _messages.last;
-        history = lastMsg.characterId == '__director__'
-            ? '[Director: ${lastMsg.text}]'
-            : '${lastMsg.sender}: ${lastMsg.text}';
+        // Think-strip + photo markers — same as budgeted history / generation
+        // zero-budget continuity (not raw .text; Nina-class hole).
+        history = _messages.last.toPromptHistoryLine();
       }
 
       // Every backend now speaks the OpenAI chat protocol (local KoboldCpp via

@@ -472,13 +472,12 @@ extension ChatServiceGenerationPlan on ChatService {
           }
         }
       }
-      // If budget is zero or negative, fixed sections already fill the context — use minimal history
+      // If budget is zero or negative, fixed sections already fill the context —
+      // use minimal history. MUST go through toPromptHistoryLine (think-stripped
+      // + photo markers): raw lastMsg.text re-injects prior <think> plans — the
+      // same Nina-class hole the budgeted path already closed (audit 2026-08-11).
       if (t.historyBudget <= 0 && _messages.isNotEmpty) {
-        // Include at least the last message for continuity
-        final lastMsg = _messages.last;
-        t.history = lastMsg.characterId == '__director__'
-            ? '[Director: ${lastMsg.text}]'
-            : '${lastMsg.sender}: ${lastMsg.text}';
+        t.history = _messages.last.toPromptHistoryLine();
         t.droppedMessages = _messages.length - 1;
       }
     } finally {

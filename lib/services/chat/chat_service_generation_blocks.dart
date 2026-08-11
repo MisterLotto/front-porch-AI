@@ -296,10 +296,12 @@ extension ChatServiceGenerationBlocks on ChatService {
         userName: t.userName,
         // Cold-card resurfacing query — same last-3-messages recipe as RAG
         // retrieval below (built separately: that one runs after continue
-        // mode pops the tail message, this one before).
+        // mode pops the tail message, this one before). promptText (not
+        // bare displayText) so photo turns carry their caption marker the
+        // way RAG already does.
         queryText: _messages.reversed
             .take(3)
-            .map((m) => '${m.sender}: ${m.displayText}')
+            .map((m) => '${m.sender}: ${m.promptText}')
             .join('\n'),
         messageCount: _messages.length,
       );

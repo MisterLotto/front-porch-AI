@@ -65,13 +65,18 @@ extension ChatServiceWiringInjection on ChatService {
       onNotify: notifyListeners,
       getEntryRefs: () => _collectLoreRefs(inheritOverride: true),
       getRecentMessages: (count) {
+        // Scan think-stripped prose (promptText), not raw .text — reasoning
+        // that names a lore key used to false-trigger entries into the next
+        // prompt (prompt-assembly audit 2026-08-11).
         final includeNames = _storageService.lorebookSettings.includeNames;
         final start = _messages.length > count ? _messages.length - count : 0;
         return [
           for (final m in _messages.sublist(start))
             m.characterId == '__director__'
                 ? '[Director: ${m.text}]'
-                : (includeNames ? '${m.sender}: ${m.text}' : m.text),
+                : (includeNames
+                      ? m.toPromptHistoryLine()
+                      : m.promptText),
         ];
       },
       getGlobalScanDepth: () => _storageService.lorebookSettings.scanDepth,

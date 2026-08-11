@@ -3,6 +3,17 @@
 
 # Changelog
 
+## 2026-08-11 — fix(chat): close remaining think-strip holes (zero-budget + lore scan)
+- **Files:** `chat_service_generation_plan.dart` (historyBudget<=0 continuity),
+  `chat_service_impersonate.dart` (same), `chat_service_wiring_injection.dart`
+  (lore getRecentMessages), `chat_service_generation_blocks.dart` (journal
+  cold query uses promptText).
+- **Why:** stable-release-prep-3 prompt-assembly audit: budgeted history used
+  `toPromptHistoryLine` but the overflow continuity line and impersonate
+  zero-budget path still built from raw `lastMsg.text`; lore scanner still
+  saw think; journal cold query was photo-blind vs RAG.
+- **Fix:** all four go through `toPromptHistoryLine` / `promptText`.
+
 ## 2026-08-11 — fix(chat): generation history re-injected every prior `<think>` plan
 - **Files changed:** `lib/models/chat_message.dart` (`toPromptHistoryLine`),
   `lib/services/chat/chat_service_history.dart` (`_formatHistoryLine` →
