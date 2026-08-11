@@ -48,6 +48,8 @@ Still stuck? Ask in the [Discord](https://discord.gg/e4tET6rpdv), or
 | Document | What's in it |
 |---|---|
 | [Design docs](design/) | Architecture and design notes per subsystem — the Journal memory system, Living Time, the sidecar retirement, and more |
+| [Path-complete chat work](design/path-complete-chat-work.md) | Agent law: Continue/regen/group/Journal–Growth twins — fill the matrix before claiming chat work is done |
+| [Maintainer agent playbook](maintainer-agent-playbook.md) | How to drive AI agents without reading Dart — copy-paste prompts, smoke role, cadence |
 | [Character Card Forge Integration](CharacterCardForge_GroupChat_Integration_Guide.md) | For tool authors writing to the database directly, particularly group chats |
 | [Contributing](../CONTRIBUTING.md) | How to set up, what CI checks, and what licence your contributions are under |
 | [CLAUDE.md](../CLAUDE.md) | The project's full engineering rules, for humans and AI agents alike |

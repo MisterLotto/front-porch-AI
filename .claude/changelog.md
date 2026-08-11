@@ -3,6 +3,16 @@
 
 # Changelog
 
+## 2026-08-11 — docs: path-complete chat law + maintainer agent playbook
+- **Files:** `docs/design/path-complete-chat-work.md`,
+  `docs/maintainer-agent-playbook.md`, `CLAUDE.md` / `Agents.md` pointers,
+  `.claude/skills/path-complete-chat/SKILL.md`.
+- **Why:** Full-codebase audit Highs were mostly sibling-path holes (Continue
+  vs history, Growth vs Journal, group vs 1:1). Maintainer cannot read Dart;
+  needs a way to demand complete work and drive agents in plain English.
+- **Effect:** Agents must fill path-complete checklists for chat-state work;
+  human gets copy-paste prompts and a 5-click smoke role.
+
 ## 2026-08-11 — ux(rag): Memory sidebar engine card + human settings
 - **Files:** `rag_engine_card.dart` / `rag_settings_well.dart` (new),
   `memory_panel.dart`, `embedding_service.dart` (`ensureReady` starts setup
