@@ -451,6 +451,26 @@ copy, so it protects only branches that actually carry the file.
 The user has **no ability to read or evaluate Dart code**. The following rules are **non-negotiable** and take precedence over normal task execution:
 
 - **You are the only line of defense.** Be a paranoid, hostile reviewer of your own output. Do not assume your changes are clean.
+- **Hostile self-review is mandatory before "done" / ship / push-for-users** (maintainer directive 2026-08-11 — non-negotiable). The maintainer gets excited when the suite is green and will want to ship; **green analyze + green tests are not a second look.** You must run a hostile pass on your *own* change (same job an independent reviewer does) and report it **before** claiming completion or asking to cut a Rawhide build. A one-line "looks good" is not a review.
+
+  **When it applies:** any non-trivial change — bugfix, feature, audit item, CI unblock, multi-file patch. Skip only pure docs/typos with no executable effect (and still say "hostile review N/A: docs only").
+
+  **How to run it (mechanisms, not vibes):**
+  1. **Re-read the full call path** you touched end-to-end (not the bullet you closed). Name callers, order of ops, what runs *after* your restore/patch (e.g. re-decay after rewind).
+  2. **Sibling / twin surfaces:** 1:1 vs group, Continue vs regen, Journal vs Growth, desktop vs web vs relay, every GET that must forward query params. Grep the twin; if you didn't change it, say why it's safe.
+  3. **Shared-pipeline gates:** if you open a set (`sourceIds`, source lists), check the paired filter (`sessionScopedCharacterIds`, session isolation, etc.). Opening without scoping is a half-fix.
+  4. **Arithmetic / ordering:** stamps vs re-apply (capture then decay vs overlay then decay). Prove with a small timeline table if realism/needs/cadence is involved.
+  5. **Tests that can go red for the product:** would deleting the *call site* (not just the pure helper) still leave tests green? If yes, the guard is decoration — say so, or fix the test. Prefer pure helpers *and* call-site pin; prove one guard red before claiming it.
+  6. **CI surfaces you can trip:** god-file 1000-line ratchet, unused imports on *new* files, `flutter analyze` on every touched path.
+  7. **Comments vs code:** if a comment claims behaviour the code contradicts, fix code or comment in the same change.
+
+  **Output required in the completion response** (under a heading `### Hostile self-review`):
+  - What you tried to break (2–6 concrete attacks).
+  - What held / what failed.
+  - Residual risk you are *not* fixing (or "none material").
+  - Explicit: **do not treat green suite as ship-ready until this section exists.**
+
+  **Canonical misses this rule exists to stop** (audit stack 2026-08-11): god-file over 1000 after class-pin; Stoop TS without relay query forward; group RAG `sourceIds` without session-scope; feelings overlay without checking whether cadence is a true twin under re-decay; tests that assert "second restore wins" or re-implement a formula instead of calling the real helper/call site.
 - **Path-complete chat work is mandatory** for anything touching generation, Continue, regen/swipe/delete, Realism/Needs, Journal, Growth, Pockets, RAG, or group orchestration. Fill the matrices in [`docs/design/path-complete-chat-work.md`](docs/design/path-complete-chat-work.md) in your completion summary (or mark N/A with a one-line why). **Sibling-path law (incident-backed, full-codebase audit 2026-08-11):** fixing history think-strip without Continue, Journal rewrite without Growth, or 1:1 pockets without group speaker restore is incomplete work — grep the twin and update it. Continue is not “regen lite”: it has its own finalize, partial builder, and state-zone strip list; raw `.text` / unstripped think / uncleared `porch_night` are known failure modes.
 - **Maintainer is systems/hardware, not a Dart reader.** Prefer poke scripts, plain-English residual risk, and path-complete checklists over code dumps. How the human drives agents: [`docs/maintainer-agent-playbook.md`](docs/maintainer-agent-playbook.md).
 - **Deletion is part of the task.** Any time you implement or modify behavior, audit the files you touch for dead code, duplicate logic, or obsolete methods and delete them.
@@ -485,6 +505,9 @@ The user has **no ability to read or evaluate Dart code**. The following rules a
   left on barrel imports (or that its remaining direct imports are all on the
   exemption list, naming which), and what repetition you collapsed while you
   were in there. "None found" is a valid answer; silence is not.
+- **Hostile self-review done?** Point at the `### Hostile self-review` section
+  in the same response (or "N/A: docs only"). Silence here means the work is
+  incomplete — green tests are not a substitute.
 
 ## Code Style & Conventions
 
@@ -515,7 +538,8 @@ To prevent "God files" (historically some `.dart` files exceeded 9,000 lines):
 - **No skeleton or partial implementations.** Never create stub files, placeholder methods with only TODOs, incomplete classes, or "skeleton" functionality to finish later.
 - **All tasks must be completed in full during the turn they are started.** If a request cannot be fully implemented, pass `flutter analyze` (0 errors on changed files), be grepped for dead code, **actually compile and launch** (`flutter run -d macos` or equivalent with no red startup exceptions), and be manually verified — all within a single interaction — do not begin writing the code. Ask the user to clarify scope or break the work into smaller pieces instead.
 - This rule takes precedence over "getting something started." Partial progress that leaves the codebase broken or misleading is not acceptable.
-- Only mark a task complete after it is fully functional and all verification steps (analyze + grep + manual review) have passed.
+- Only mark a task complete after it is fully functional and all verification steps (analyze + grep + manual review + **hostile self-review**) have passed.
+- **Green suite ≠ ship.** Do not say "ready to ship", "all green", or ask for a Rawhide nightly until the hostile self-review section is present and any blocking findings from it are fixed or explicitly deferred by the maintainer.
 
 **Mandatory Cleanup Requirements (especially when the user cannot review code):**
 - Delete any code no longer reachable or needed as part of completing the task.

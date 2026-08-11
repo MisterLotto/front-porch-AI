@@ -3,6 +3,12 @@
 
 # Changelog
 
+## 2026-08-11 — docs: hostile self-review mandatory before ship (CLAUDE.md)
+- **Files:** `CLAUDE.md`, `AGENTS.md` (pointer).
+- **Why:** Maintainer ships on green excitement; independent second looks kept
+  catching half-fixes. Agents must hostile-review their own work (mechanisms,
+  twins, ordering, real guards) and report before claiming done / Rawhide build.
+
 ## 2026-08-11 — fix(audit): 1:1 cadence parity + pure regen patch builder
 - **P1.10 twin parity:** rejected-stamp cadence overlay runs in 1:1 as well as
   group (was `isGroupHostRegen`-only). Pure `rejectedTurnRewindPatch` shared by

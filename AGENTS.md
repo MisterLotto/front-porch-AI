@@ -38,6 +38,8 @@ If you read only one thing before touching this codebase:
   Journal rewrite. Fill
   [`docs/design/path-complete-chat-work.md`](docs/design/path-complete-chat-work.md)
   before claiming chat/realism/memory work is done.
+- **Hostile self-review is mandatory** before "done" / ship — green tests are not
+  a second look. See CLAUDE.md "Rules When the Human Cannot Review Code".
 - **Use `AppColors`** — no hard-coded `Color(0xFF…)`, no raw
   `Colors.whiteXX`/`Colors.blackXX` in new or refactored UI.
 - **Use the barrel imports** where a barrel covers the file.
