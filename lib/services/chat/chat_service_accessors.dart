@@ -270,9 +270,6 @@ extension ChatServiceAccessors on ChatService {
     _ttsService = service;
   }
 
-  /// The RAG [MemoryService] when wired (null until host injects it).
-  MemoryService? get memoryService => _memoryService;
-
   /// Test-only: arm Porch Night force-ack for [diaryCharacterId] so Continue
   /// strip coverage can prove `porch_night` is cleared (audit P0.3).
   @visibleForTesting
@@ -292,15 +289,11 @@ extension ChatServiceAccessors on ChatService {
     _memoryService = service;
   }
 
-  /// The RAG receipt of the LAST character reply (rag_injection.dart wire
-  /// shape), or null when that reply needed no retrieval — everything was
-  /// still in context, or RAG was off. Read by the sidebar Memory panel and
-  /// the web facade; keys survive the JSON round-trip, hence the cast.
-  /// Reads the PUBLIC [messages] getter, not `_messages`: the golden fakes
-  /// implement ChatService from outside this library, so a private read
-  /// here is a NoSuchMethodError on every fake-driven surface
-  /// (chat_tools_facade_test caught exactly that on first run).
-  Map<String, dynamic>? get lastRagReceipt {
+  /// Body for the class-pinned [lastRagReceipt] (fakes override the class
+  /// member; see chat_service.dart). Reads the PUBLIC [messages] getter so
+  /// a FakeChatService that implements ChatService from outside this library
+  /// is never probed for `_messages`.
+  Map<String, dynamic>? get _lastRagReceiptImpl {
     for (final m in messages.reversed) {
       if (m.isUser || m.sender == 'System') continue;
       return (m.activeMetadata?['rag_receipt'] as Map?)

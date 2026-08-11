@@ -324,12 +324,23 @@ extension ChatServiceSpeakerObjectives on ChatService {
     // switch: a snapshot only exists if the feature was on when the turn ran,
     // and rolling the timeline back must put the record where it was even if
     // the user has since toggled Pockets off and on again.
+    //
+    // Owner key MUST be the message speaker (groupSpeakerId when rewinding a
+    // group member), never bare `_activeCharacter` — after post-gen the
+    // active pointer is often someone else, so restore used to write
+    // speaker A's kit onto B (audit P1.7). `_restorePocketsFromStamp` already
+    // keys by stamp `char`; this realism_state path is the dual for no-op /
+    // stamp-less turns that only carry pockets inside realism_state.
     final pocketsSnap = state['pockets'];
-    if (pocketsSnap is Map && _activeCharacter != null) {
-      setPocketsFor(
-        _getCharacterIdFromCard(_activeCharacter!),
-        Pockets.fromJson(pocketsSnap),
-      );
+    if (pocketsSnap is Map) {
+      final ownerId = (groupSpeakerId != null && groupSpeakerId.isNotEmpty)
+          ? groupSpeakerId
+          : (_activeCharacter != null
+              ? _getCharacterIdFromCard(_activeCharacter!)
+              : '');
+      if (ownerId.isNotEmpty) {
+        setPocketsFor(ownerId, Pockets.fromJson(pocketsSnap));
+      }
     }
 
     debugPrint(

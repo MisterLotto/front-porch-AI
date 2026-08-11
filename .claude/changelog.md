@@ -3,6 +3,21 @@
 
 # Changelog
 
+## 2026-08-11 — fix(ci): FakeChatService pins memoryService/lastRagReceipt
+- **Files:** `chat_service.dart` (class-pinned getters), `chat_service_accessors.dart`,
+  `test/golden/support/fakes.dart`.
+- **Why:** ChatToolsFacade.state() reads memoryService (embedding statusSnapshot).
+  Extension-only getter hit FakeChatService via NoSuchMethod on `_memoryService`
+  — sole failure in unit CI on Rawhide pushes after RAG facade work.
+- **Fix:** Class-pin like other fake-dispatched members; fakes return null.
+
+## 2026-08-11 — fix(pockets): group restore uses speaker id; empty 1:1 saves JSON (P1.7–8)
+- **Files:** `chat_service_speaker_objectives.dart`, `chat_service_session_state.dart`,
+  `test/services/chat/pockets_empty_persist_test.dart`.
+- **Why:** realism_state pockets restore used `_activeCharacter` (often wrong after
+  post-gen in groups). Empty 1:1 kit saved as SQL NULL and re-seeded from card.
+- **Fix:** restore owner = groupSpeakerId when set; save empty as encoded JSON.
+
 ## 2026-08-11 — fix(home): exit chat → reenter no longer throws unmounted context
 - **Files:** `home_page.dart` (`_openingChat`), `home_page_chrome.dart`
   (`_handleTapCharacter` / `_handleTapGroup` / `_startNewChatWith`).

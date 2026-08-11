@@ -358,8 +358,13 @@ extension ChatServiceSessionState on ChatService {
         // unconditionally rather than behind the Pockets switch, because
         // toggling the feature off mid-chat must not erase what she was
         // already carrying — turning it back on should find the record intact.
+        //
+        // Empty ≠ absent (audit P1.8): an emptied inventory is still a
+        // record (`{"worn":[],"carrying":[]}`). NULL means "never seeded",
+        // and load + seedPocketsFromCards would re-apply the card kit.
+        // Groups already store empty maps; 1:1 must match.
         pockets: drift.Value(
-          _activeGroup == null && _pockets != null && !_pockets!.isEmpty
+          _activeGroup == null && _pockets != null
               ? jsonEncode(_pockets!.toJson())
               : null,
         ),

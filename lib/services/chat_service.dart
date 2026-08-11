@@ -900,6 +900,16 @@ class ChatService extends ChangeNotifier {
   // Fake-pinned (see the class doc): body in accessors, member stays here.
   bool get objectivesActive => _objectivesActiveImpl;
 
+  /// RAG [MemoryService] when wired. Class-pinned so FakeChatService can
+  /// override — an extension getter would read `_memoryService` on fakes and
+  /// NoSuchMethodError (CI red on chat_tools_facade_test after the embedding
+  /// statusSnapshot was added to ChatToolsFacade.state).
+  MemoryService? get memoryService => _memoryService;
+
+  /// Last character-reply RAG receipt (or null). Class-pinned for the same
+  /// fake-dispatch reason as [memoryService]; body in accessors.
+  Map<String, dynamic>? get lastRagReceipt => _lastRagReceiptImpl;
+
   /// Fake-pinned (see the class doc): body in chat/chat_service_mood.dart.
   /// What the speaker walked in carrying before the user said anything, or ''.
   String get standingMoodSummary => standingMoodSummaryImpl;

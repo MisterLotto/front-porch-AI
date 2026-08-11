@@ -52,6 +52,7 @@ import 'package:front_porch_ai/services/folder_service.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/models/world.dart' as world_model;
 import 'package:front_porch_ai/services/llm_provider.dart';
+import 'package:front_porch_ai/services/memory_service.dart';
 import 'package:front_porch_ai/services/stt_service.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
 import 'package:front_porch_ai/services/tts_voice_info.dart';
@@ -310,6 +311,16 @@ class FakeChatService extends ChangeNotifier implements ChatService {
   NeedsSimulation get needsSimulation => _needs;
   @override
   RelationshipService get relationshipService => _relationship;
+
+  /// RAG / Memory sidebar: public getters live on ChatServiceAccessors and
+  /// read library-private fields. Fakes that only `implements ChatService`
+  /// must pin them or ChatToolsFacade.state() throws mid-call (CI red since
+  /// the embedding statusSnapshot was added to the facade).
+  @override
+  MemoryService? get memoryService => null;
+
+  @override
+  Map<String, dynamic>? get lastRagReceipt => null;
 
   // 1:1 mode by default (no active group) for the simple sidebar sections.
   @override
