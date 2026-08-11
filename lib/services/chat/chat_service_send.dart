@@ -358,6 +358,19 @@ extension ChatServiceSend on ChatService {
       // Guests are excluded for the same reason they are above: a direct
       // address routes the turn away from the host, who never took one.
       await _realismEvals.evaluatePhysicalStateCall(timeOnly: true);
+      // Stamp the current story day on the latest user turn so RAG's
+      // storyDayAt can ground retrieved lines when the Realism Engine is
+      // off (standalone clock has no realism_state dance). Additive only —
+      // never invents a day when the clock is not running.
+      if (_messages.isNotEmpty) {
+        final last = _messages.last;
+        if (last.isUser) {
+          last.metadata = {
+            ...?last.metadata,
+            'story_day': _timeService.dayCount,
+          };
+        }
+      }
       await _saveChat();
       notifyListeners();
     }

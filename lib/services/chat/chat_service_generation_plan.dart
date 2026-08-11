@@ -489,20 +489,16 @@ extension ChatServiceGenerationPlan on ChatService {
 
     final plan = t.plan;
     if (t.mode == GenerationMode.continue_) {
-      // Drop the needs/realism/relationship/chaos/objective/catastrophe state injections
-      // for Continue. Per user request: the continue prompt should be straight existing
-      // messages (the plain history transcript + the partial text to continue from).
-      // The runtime state blocks make the continuation feel injected and discordant.
-      plan.section('realism').text = '';
-      plan.section('chance_time').text = '';
-      plan.section('objectives').text = '';
-      plan.section('catastrophe').text = '';
-      // A frame is only true while something it introduces is still there.
-      // Checked against the whole membership rather than hard-coded to the
-      // strip list above, so this stays correct if the strip ever changes.
-      if (kStateZoneSectionIds.every((id) => plan.section(id).text.isEmpty)) {
-        plan.section('state_frame').text = '';
+      // Continue is plain transcript + the partial being extended — no
+      // state-zone blocks. The old strip only cleared realism/chance/
+      // objectives/catastrophe and left summary/journal/world (and often
+      // the frame) fighting the partial (release audit 2026-08-11). Clear
+      // every kStateZoneSectionIds member + chance_time by membership.
+      for (final id in kStateZoneSectionIds) {
+        plan.section(id).text = '';
       }
+      plan.section('chance_time').text = '';
+      plan.section('state_frame').text = '';
       // Also skip RAG "earlier memories" for pure straight continuation.
       t.droppedMessages = 0;
     }

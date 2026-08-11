@@ -3,6 +3,14 @@
 
 # Changelog
 
+## 2026-08-11 — fix(prompt): Continue strips full state zone; standalone clock stamps story_day
+- **Files:** `chat_service_generation_plan.dart` (continue clears all
+  kStateZoneSectionIds + chance_time + frame), `chat_service_send.dart`
+  (story_day on user msg after timeOnly), `rag_injection.dart` (read
+  story_day), `create_group_chat_page.steps_lore.dart` (theme-keep).
+- **Why:** release report M1/M2 — Continue left journal/world/recap fighting
+  the partial; engine-off clock left RAG day stamps empty.
+
 ## 2026-08-11 — fix(pockets/journal): recipient rewind + stamp-after-realism + item-card purge
 - **Files:** `chat_service_pockets.dart` (others before/after on stamps),
   `chat_service_message_ops.dart` (invalidate always purges cards; pockets

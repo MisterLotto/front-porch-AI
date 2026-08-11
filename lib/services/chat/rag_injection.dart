@@ -68,8 +68,16 @@ int? storyDayAt(
   if (messages.isEmpty) return null;
 
   int? dayOf(int i) {
-    final state = messages[i].activeMetadata?['realism_state'];
-    if (state is Map) return (state['dayCount'] as num?)?.toInt();
+    final meta = messages[i].activeMetadata;
+    final state = meta?['realism_state'];
+    if (state is Map) {
+      final d = (state['dayCount'] as num?)?.toInt();
+      if (d != null) return d;
+    }
+    // Standalone clock / partial snapshots: day may ride the top-level
+    // stamp written when the engine is off (release audit 2026-08-11).
+    final top = meta?['story_day'] ?? meta?['storyDay'] ?? meta?['dayCount'];
+    if (top is num) return top.toInt();
     return null;
   }
 

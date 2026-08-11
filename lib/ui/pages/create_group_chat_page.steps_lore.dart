@@ -68,7 +68,7 @@ extension _GroupWizardLoreStep on _CreateGroupChatPageState {
                     color: entry.constant
                         ? Colors.amberAccent.withValues(alpha: 0.3)
                         : entry.enabled
-                        ? Colors.blueAccent.withValues(alpha: 0.15)
+                        ? Colors.blueAccent.withValues(alpha: 0.15) // theme-keep: lorebook enabled marker
                         : AppColors.borderOf(context).withValues(alpha: 0.5),
                   ),
                 ),
@@ -83,7 +83,7 @@ extension _GroupWizardLoreStep on _CreateGroupChatPageState {
                           color: entry.constant
                               ? Colors.amberAccent
                               : entry.enabled
-                              ? Colors.blueAccent
+                              ? Colors.blueAccent // theme-keep: lorebook enabled marker
                               : AppColors.iconSecondary(context),
                         ),
                         const SizedBox(width: 6),
@@ -125,13 +125,13 @@ extension _GroupWizardLoreStep on _CreateGroupChatPageState {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.blueAccent.withValues(alpha: 0.1),
+                              color: Colors.blueAccent.withValues(alpha: 0.1), // theme-keep: lorebook depth chip
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
                               'Depth ${entry.stickyDepth}',
                               style: const TextStyle(
-                                color: Colors.blueAccent,
+                                color: Colors.blueAccent, // theme-keep: lorebook depth chip
                                 fontSize: 9,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -149,10 +149,10 @@ extension _GroupWizardLoreStep on _CreateGroupChatPageState {
                                 entry.enabled = val;
                               });
                             },
-                            activeTrackColor: Colors.blueAccent.withValues(
+                            activeTrackColor: Colors.blueAccent.withValues( // theme-keep: lorebook enable switch
                               alpha: 0.5,
                             ),
-                            activeThumbColor: Colors.blueAccent,
+                            activeThumbColor: Colors.blueAccent, // theme-keep: lorebook enable switch
                             materialTapTargetSize:
                                 MaterialTapTargetSize.shrinkWrap,
                           ),
