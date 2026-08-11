@@ -45,7 +45,12 @@ import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/chat/chat.dart'
-    show JournalPhysics, JournalStore, kEvalClampMarker, kEvalMessageCharCap;
+    show
+        JournalPhysics,
+        JournalStore,
+        PocketSection,
+        kEvalClampMarker,
+        kEvalMessageCharCap;
 import 'package:front_porch_ai/services/chat/prompt_injection/journal_injection.dart';
 
 void _setupPathProviderMock() {
@@ -267,6 +272,57 @@ void main() {
       expect(
         cards.single.content,
         'I set my car keys down — by the porch rail.',
+      );
+    });
+
+    test('the eraser retires the live item-memory card for that name', () async {
+      // Diary lag residual: removePocketItem rewrote the kit but left the
+      // "I set my keys down…" card live, so "where are my keys?" still lied.
+      final card = CharacterCard(
+        name: 'Mara',
+        description: 'Exists only inside the item-memory test.',
+        firstMessage: 'The porch light hums.',
+        frontPorchExtensions: FrontPorchExtensions(
+          realismEnabled: false,
+          needsSimEnabled: false,
+          chaosModeEnabled: false,
+          inventory: {
+            'carrying': ['car keys'],
+          },
+        ),
+      )..dbId = 'char-itemmem-eraser';
+      await chat.setActiveCharacter(card);
+
+      llm.inventoryJson =
+          '{"inventory_ops": [{"op": "setdown", "item": "the keys", '
+          '"where": "on the hallway table"}]}';
+      await chat.sendMessage('Make yourself at home.');
+      await drainUntil(() async => (await itemCards()).isNotEmpty);
+      expect(await itemCards(), hasLength(1));
+
+      // Same id the desktop/web eraser passes (stableGroupId), not dbId.
+      final ownerId = chat.characterIdFor(card);
+      final pockets = chat.pocketsFor(ownerId);
+      expect(pockets, isNotNull);
+      // After setdown the keys live in set-aside, not carrying.
+      final setAside = pockets!.setAside;
+      expect(setAside, isNotEmpty);
+      final idx = setAside.indexWhere(
+        (e) => e.item.name.toLowerCase().contains('key'),
+      );
+      expect(idx, greaterThanOrEqualTo(0));
+
+      await chat.removePocketItem(
+        ownerId,
+        section: PocketSection.setAside,
+        index: idx,
+      );
+      await drainUntil(() async => (await itemCards()).isEmpty);
+
+      expect(
+        await itemCards(),
+        isEmpty,
+        reason: 'eraser is the human override — diary must not keep the placement',
       );
     });
 

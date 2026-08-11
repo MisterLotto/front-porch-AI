@@ -61,29 +61,7 @@ extension ChatServiceHistory on ChatService {
     if (lines.any((l) => _macroPattern.hasMatch(l))) {
       debugPrint('[MacroResolver] ⚠ Unresolved macro detected in chat history');
     }
-    return _spliceDepthLore(lines, depthLore).join("\n");
-  }
-
-  /// Insert @depth lore entries into a history line list: depth N = N
-  /// message-lines up from the end (0 = after the last message), clamped.
-  /// Entries sharing a depth keep their bucket order.
-  List<String> _spliceDepthLore(
-    List<String> lines,
-    List<LoreDepthEntry> depthLore,
-  ) {
-    if (depthLore.isEmpty) return lines;
-    final atFromEnd = <int, List<String>>{};
-    for (final d in depthLore) {
-      final clamped = d.depth > lines.length ? lines.length : d.depth;
-      atFromEnd.putIfAbsent(clamped, () => []).add(d.content);
-    }
-    final out = <String>[];
-    for (var i = 0; i <= lines.length; i++) {
-      final insert = atFromEnd[lines.length - i];
-      if (insert != null) out.addAll(insert);
-      if (i < lines.length) out.add(lines[i]);
-    }
-    return out;
+    return spliceDepthLore(lines, depthLore).join("\n");
   }
 
   /// Build chat history that fits within a token budget.
@@ -196,7 +174,7 @@ extension ChatServiceHistory on ChatService {
       anchor.dropped = droppedCount;
     }
 
-    final spliced = _spliceDepthLore(included, depthLore);
+    final spliced = spliceDepthLore(included, depthLore);
 
     // If messages were dropped, prepend a separator
     String history = spliced.join('\n');

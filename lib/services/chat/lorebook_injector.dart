@@ -37,6 +37,42 @@ class LoreDepthEntry {
   });
 }
 
+/// Max messages-from-end @depth lore may sit (release-audit L1, 2026-08-11).
+///
+/// Depth N means N lines up from the end of the *included* history window.
+/// Uncapped high depths land at the HEAD of that window; when a keyword
+/// entry flips on/off, the history string's first bytes change and every
+/// prefix-caching local backend (oMLX, KoboldCpp, LM Studio) re-prefills
+/// the whole transcript — undoing sticky-trim + the monotonic anchor.
+/// Clamping to one trim-chunk keeps depth lore in the recent tail (where
+/// ST authors almost always put it) and leaves the sticky prefix pure.
+const int kDepthLoreMaxFromEnd = 8;
+
+/// Pure splice of [depthLore] into [lines]: depth N = N message-lines up
+/// from the end (0 = after the last message), clamped to
+/// [kDepthLoreMaxFromEnd] so high-depth entries cannot thrash the sticky
+/// history prefix. Entries sharing a depth keep their bucket order.
+List<String> spliceDepthLore(
+  List<String> lines,
+  List<LoreDepthEntry> depthLore,
+) {
+  if (depthLore.isEmpty) return lines;
+  final atFromEnd = <int, List<String>>{};
+  for (final d in depthLore) {
+    final maxFromEnd =
+        lines.length < kDepthLoreMaxFromEnd ? lines.length : kDepthLoreMaxFromEnd;
+    final clamped = d.depth > maxFromEnd ? maxFromEnd : d.depth;
+    atFromEnd.putIfAbsent(clamped, () => []).add(d.content);
+  }
+  final out = <String>[];
+  for (var i = 0; i <= lines.length; i++) {
+    final insert = atFromEnd[lines.length - i];
+    if (insert != null) out.addAll(insert);
+    if (i < lines.length) out.add(lines[i]);
+  }
+  return out;
+}
+
 /// Positioned lore buckets, ready for the prompt assemblers. Every string is
 /// either empty or newline-terminated so call sites can concatenate blindly.
 class LoreInjectionResult {

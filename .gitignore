@@ -98,6 +98,27 @@ front_porch_ai.png
 .sandbox-*/
 .opencode/
 .sisyphus/
+.grok/
+
+# ---------------------------------------------------------------------------
+# Scripts & Docker — local only; NEVER commit or push (maintainer 2026-08-11)
+# ---------------------------------------------------------------------------
+# CI uses the workflow YAML on the remote, not whatever is dirty on disk here.
+# Tracked copies still need skip-worktree per clone (gitignore can't hide
+# edits to already-tracked files):
+#   git ls-files 'scripts/*' 'tools/golden/Dockerfile' 'tools/golden/golden.sh' \
+#     | xargs git update-index --skip-worktree
+# Agents: never git add scripts/, *Dockerfile*, docker-compose*, tools/golden/.
+scripts/
+**/Dockerfile
+**/Dockerfile.*
+**/*.Dockerfile
+**/docker-compose*.yml
+**/docker-compose*.yaml
+**/compose*.yml
+**/compose*.yaml
+tools/golden/Dockerfile
+tools/golden/golden.sh
 
 aur/src/
 aur/pkg/

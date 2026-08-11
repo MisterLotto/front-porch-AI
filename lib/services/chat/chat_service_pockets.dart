@@ -28,7 +28,9 @@ extension ChatServicePockets on ChatService {
   /// Strike one item off by hand. The detection eval is a model doing
   /// bookkeeping; when it misses, this is what stops a wrong entry becoming
   /// permanent. Routed through the same setter the pass uses, so there is no
-  /// second write path.
+  /// second write path. Also retires any live item-memory diary card for the
+  /// same name — the eraser is the human override, and the diary must not
+  /// keep claiming a placement the user just struck off.
   Future<void> removePocketItem(
     String characterId, {
     required PocketSection section,
@@ -39,15 +41,32 @@ extension ChatServicePockets on ChatService {
     // Expire first so the index the UI computed from the day-filtered view
     // lines up with the stored list it is about to strike from.
     p.expireSetAside(storyDayCount);
-    final list = switch (section) {
-      PocketSection.worn => p.worn,
-      PocketSection.carrying => p.carrying,
-      PocketSection.setAside => p.setAside,
-    };
-    if (index < 0 || index >= list.length) return;
-    list.removeAt(index);
+    final String itemName;
+    switch (section) {
+      case PocketSection.worn:
+        if (index < 0 || index >= p.worn.length) return;
+        itemName = p.worn[index].name;
+        p.worn.removeAt(index);
+      case PocketSection.carrying:
+        if (index < 0 || index >= p.carrying.length) return;
+        itemName = p.carrying[index].name;
+        p.carrying.removeAt(index);
+      case PocketSection.setAside:
+        if (index < 0 || index >= p.setAside.length) return;
+        itemName = p.setAside[index].item.name;
+        p.setAside.removeAt(index);
+    }
     setPocketsFor(characterId, p);
     await _saveChat();
+    if (itemName.isNotEmpty &&
+        _storageService.memorySettings.journalEnabled &&
+        _currentSessionId != null) {
+      try {
+        await _retireItemCardsFor(characterId, itemName);
+      } catch (e) {
+        debugPrint('[Journal] eraser item-card retire skipped: $e');
+      }
+    }
     notifyListeners();
   }
 
@@ -378,6 +397,21 @@ extension ChatServicePockets on ChatService {
     }
   }
 
+  /// Retire every live item-memory card about [itemName] for [ownerId].
+  /// Shared by the post-gen feed (one live placement per item) and the
+  /// eraser ([removePocketItem]) so neither path leaves a phantom diary.
+  Future<void> _retireItemCardsFor(String ownerId, String itemName) async {
+    final sid = _currentSessionId;
+    if (sid == null || itemName.isEmpty) return;
+    final existing = await _journalStore.cardsFor(sid, ownerId);
+    for (final old in existing) {
+      if (JournalPhysics.isItemCard(old) &&
+          sameItem(JournalPhysics.itemOf(old) ?? '', itemName)) {
+        await _journalStore.retireCard(old.id);
+      }
+    }
+  }
+
   /// Write this turn's item-memory cards ([itemCardsFrom] decides which
   /// events are diary-worthy). One live placement memory per item: a new
   /// card about the same thing retires the old one first, so "where are my
@@ -390,14 +424,8 @@ extension ChatServicePockets on ChatService {
     final drafts = itemCardsFrom(events);
     if (drafts.isEmpty) return;
     final sid = _currentSessionId!;
-    final existing = await _journalStore.cardsFor(sid, ownerId);
     for (final draft in drafts) {
-      for (final old in existing) {
-        if (JournalPhysics.isItemCard(old) &&
-            sameItem(JournalPhysics.itemOf(old) ?? '', draft.item)) {
-          await _journalStore.retireCard(old.id);
-        }
-      }
+      await _retireItemCardsFor(ownerId, draft.item);
       await _journalStore.addCard(
         sessionId: sid,
         characterId: ownerId,

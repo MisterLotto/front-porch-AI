@@ -3,6 +3,19 @@
 
 # Changelog
 
+## 2026-08-11 — fix(release-audit nits): eraser diary lag + deep @depth prefix thrash
+- **Files:** `chat_service_pockets.dart` (`removePocketItem` retires item cards via
+  shared `_retireItemCardsFor`), `lorebook_injector.dart` (`spliceDepthLore` +
+  `kDepthLoreMaxFromEnd=8`), `chat_service_history.dart` (uses pure splice),
+  `test/services/chat/depth_lore_prefix_test.dart` (new),
+  `item_memory_journal_test.dart` (eraser case), `.gitignore` (local scripts/Docker
+  policy note).
+- **Why:** residual L1 + eraser diary lag from stable-release-prep on 996b500.
+  High-depth lore rewrote the sticky history head; the eraser cleared kit but
+  left "I set my keys down…" live for "where are my keys?".
+- **Guards:** depth-beyond-clamp goes red without max-from-end; eraser case
+  expects zero live item cards after removePocketItem.
+
 ## 2026-08-11 — fix(journal): contain the unawaited card-purge chain (CI red on ec82f27)
 - **Files:** `lib/services/chat/chat_service_message_ops.dart`
   (`_invalidateJournalFrom` gets `.catchError` + log, same containment
