@@ -32,13 +32,34 @@ updates:
           - "patch"
 
   # Web / mobile UI
+  #
+  # ── FROZEN 2026-08-05: ChainDrop npm supply-chain attack ────────────────
+  # open-pull-requests-limit: 0 stops Dependabot opening npm PRs entirely. This
+  # is deliberate and TEMPORARY. See docs/security/npm-freeze-2026-08.md for
+  # the scan results, the thaw checklist, and who lifts it.
+  #
+  # Why freeze rather than patch: the protection we currently have is that this
+  # lockfile pins versions published BEFORE the campaign, and none of the
+  # affected packages are in the tree at all. Any bump resolves fresh artifacts
+  # from a registry whose compromised-package list was still growing when this
+  # was written (868 packages / 1381 versions reported, a wider count of 1300+
+  # cited the same day). Pulling anything new trades a known-good tree for an
+  # unaudited one — and web_ui's build output ships INSIDE the desktop app, so
+  # a poisoned build dependency reaches end users, not just developers.
+  #
+  # The open advisories this defers are all low practical exposure for us:
+  # react-router's CSRF bypass is RSC-mode only (this is a Vite SPA with no
+  # server actions), and brace-expansion / fast-uri / postcss are build- and
+  # test-time only, reachable solely from inputs we control.
+  #
+  # Restore `open-pull-requests-limit: 5` to thaw.
   - package-ecosystem: "npm"
     directory: "/web_ui"
     target-branch: "Rawhide"
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 0
     commit-message:
       prefix: "chore(deps-web)"
     groups:
