@@ -288,12 +288,11 @@ class _JournalDialogState extends State<JournalDialog> {
 
   Widget _cardList(BuildContext context, String userName) {
     final sections = <Widget>[];
-    for (final category in const [
-      'about_user',
-      'about_us',
-      'moment',
-      'promise',
-    ]) {
+    // kJournalDisplayCategories, not kJournalCategories: the display list
+    // carries 'item' (Belongings), which the LLM-authoring enum must not —
+    // this inline list used to omit it, and every placement memory was
+    // silently invisible in the diary (maintainer-found, 2026-08-11).
+    for (final category in kJournalDisplayCategories) {
       final cards = _cards.where((c) => c.category == category).toList();
       if (cards.isEmpty) continue;
       sections.add(

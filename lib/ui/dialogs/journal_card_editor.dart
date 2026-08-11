@@ -39,12 +39,24 @@ String journalCardEmoji(JournalMemoryData card) {
   return EmotionLabels.emoji[family] ?? '📝';
 }
 
+/// Every category a stored card can actually CARRY, for display surfaces —
+/// deliberately a superset of [kJournalCategories], which is the LLM pass's
+/// authoring enum. 'item' lives only here: belongings cards are written
+/// DETERMINISTICALLY from pocket events, never by the model and never by
+/// hand, so offering the category to the pass (or the plant editor) would
+/// break that guarantee — but a display list that omits it makes every
+/// placement memory invisible in the diary, which is exactly the gap the
+/// maintainer's "where is the UI for item memories?" question found
+/// (2026-08-11).
+const List<String> kJournalDisplayCategories = [...kJournalCategories, 'item'];
+
 /// Friendly section name for a card category.
 String journalCategoryLabel(String category, String userName) =>
     switch (category) {
       'about_user' => 'About $userName',
       'about_us' => 'About us',
       'promise' => 'Promises',
+      'item' => 'Belongings',
       _ => 'Moments',
     };
 
@@ -211,7 +223,15 @@ class _JournalCardEditorDialogState extends State<JournalCardEditorDialog> {
                 context,
                 value: _category,
                 items: [
-                  for (final c in kJournalCategories)
+                  // The authorable set, plus 'item' ONLY when editing an
+                  // existing belongings card — without it the dropdown's
+                  // value is not among its items, which is a crash, not a
+                  // fallback. Hand-planting INTO 'item' stays impossible:
+                  // belongings cards are deterministic-only.
+                  for (final c in {
+                    ...kJournalCategories,
+                    if (_category == 'item') 'item',
+                  })
                     DropdownMenuItem(
                       value: c,
                       child: Text(journalCategoryLabel(c, widget.userName)),
