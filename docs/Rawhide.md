@@ -18,3 +18,9 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 - 🔁 **Thinking models stop replaying prior plans** — Hidden reasoning stays in the collapsible thinking view only, on every generation path (including overflow / Continue). Continue is plain transcript + partial again — no leftover journal/world state blocks fighting the line.
 - 🚀 **Long chats keep a stable history window** — Once old messages scroll out of context, they stay out, so local backends (oMLX, KoboldCpp, LM Studio) can actually use their prompt cache. Very deep @depth lore stays near recent turns so it doesn’t thrash that prefix.
 - 📅 **Memory day stamps work with Realism off** — When Passage of Time runs alone, retrieved memories still get a story-day stamp so old words don’t read like they just happened.
+- 📖 **Web Journal is real** — Plant, edit, pin, retire memory cards from the tools sidebar; optional “review before it applies” with Apply/Discard (same as desktop Growth).
+- 🔞 **Web can flip 18+ themes** — The master switch lives in Porch Life so After Dark and intimate editor fields stay reachable (or hidden) without needing desktop.
+- ✨ **Output Sanitizer on web Settings** — Find/replace rules for model output, same host-side sanitizer the desktop Generation tab drives.
+- 🌍 **Stoop on web shows Living Worlds** — Browse / mine / downloads / creator lists include places, matching desktop.
+- 🧠 **Memory receipts tell the truth** — When the engine is down or errors after older messages scrolled out, the sidebar no longer pretends “no lookup needed.”
+- 🗑️ **Deleting a chat cleans everything** — RAG embeddings, quests, Living Worlds links, and biome spans leave with the chat; Database Cleanup also sweeps growth rings and dead-chat quests.

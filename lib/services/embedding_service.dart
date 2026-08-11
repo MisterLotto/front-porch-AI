@@ -185,8 +185,14 @@ class EmbeddingService extends ChangeNotifier {
   /// [runSetup] so the user gets a progress bar instead of a silent "Model
   /// not downloaded" forever. After a failed setup, wait for an explicit
   /// Retry (do not spin forever on open).
+  /// True while [checkAvailability] is in flight — prevents parallel re-tests
+  /// from every Memory-panel rebuild (audit P2.18).
+  bool _checking = false;
+
   void ensureReady() {
-    if (_available || _settingUp || _setupError != null) return;
+    // Latch on setup failure AND self-test failure (_setupError is set by
+    // both paths) so we never spin forever on open. Explicit Retry clears it.
+    if (_available || _settingUp || _checking || _setupError != null) return;
     _files = NativeEmbeddingEngine.resolveModelFiles(_storage.rootPath);
     if (_files == null) {
       unawaited(runSetup());
@@ -199,38 +205,52 @@ class EmbeddingService extends ChangeNotifier {
   /// with a real embed, which also warms the session so the first
   /// user-visible embed isn't the one paying the model load.
   Future<void> checkAvailability() async {
+    if (_checking) return;
+    _checking = true;
     debugPrint('[RAG:Embed] ── Checking embedding availability ──');
 
-    _files = NativeEmbeddingEngine.resolveModelFiles(_storage.rootPath);
-    if (_files == null) {
-      _available = false;
-      debugPrint(
-        '[RAG:Embed] ⚠ No embedding model on disk — run RAG setup to '
-        'download it',
-      );
-      notifyListeners();
-      return;
-    }
-
     try {
-      final result = await _nativeEmbed('test');
-      _dimensions = result.length;
-      _available = true;
-      _lastEngineError = null;
-      debugPrint(
-        '[RAG:Embed] ✅ In-process embeddings available '
-        '(${_dimensions}d vectors)',
-      );
-    } catch (e) {
-      _available = false;
-      _lastEngineError = '$e';
-      debugPrint('[RAG:Embed] ✗ In-process engine failed: $e');
-      EngineHealth.instance.reportFailure(
-        EngineHealth.embeddings,
-        'engine self-test failed: $e',
-      );
+      _files = NativeEmbeddingEngine.resolveModelFiles(_storage.rootPath);
+      if (_files == null) {
+        _available = false;
+        debugPrint(
+          '[RAG:Embed] ⚠ No embedding model on disk — run RAG setup to '
+          'download it',
+        );
+        notifyListeners();
+        return;
+      }
+
+      try {
+        final result = await _nativeEmbed('test');
+        _dimensions = result.length;
+        _available = true;
+        _lastEngineError = null;
+        // Clear a prior self-test latch so ensureReady can re-arm after Retry.
+        if (_setupError != null &&
+            _setupError!.startsWith('engine self-test failed')) {
+          _setupError = null;
+        }
+        debugPrint(
+          '[RAG:Embed] ✅ In-process embeddings available '
+          '(${_dimensions}d vectors)',
+        );
+      } catch (e) {
+        _available = false;
+        _lastEngineError = '$e';
+        // Latch for ensureReady (audit P2.18) — without this, every
+        // dependency rebuild re-kicks self-test forever.
+        _setupError = 'engine self-test failed: $e';
+        debugPrint('[RAG:Embed] ✗ In-process engine failed: $e');
+        EngineHealth.instance.reportFailure(
+          EngineHealth.embeddings,
+          'engine self-test failed: $e',
+        );
+      }
+      notifyListeners();
+    } finally {
+      _checking = false;
     }
-    notifyListeners();
   }
 
   /// Generate an embedding vector for a text string.

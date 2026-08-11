@@ -242,11 +242,31 @@ extension ChatServiceGenerationRag on ChatService {
         }
       } catch (e) {
         debugPrint('[RAG:Chat] ✗ RAG retrieval failed: $e');
+        // Honest receipt (audit P2.17): lookup was attempted; do not leave
+        // null ("no lookup needed") after a failed attempt with dropped context.
+        t.ragReceipt = buildRagReceipt(
+          found: 0,
+          journalDeduped: 0,
+          budgetTrimmed: 0,
+          injected: const [],
+          days: const {},
+          currentSessionId: _currentSessionId ?? '',
+          status: kRagReceiptError,
+        );
       }
     } else if (t.droppedMessages > 0 &&
         _storageService.memorySettings.ragEnabled) {
       debugPrint(
         '[RAG:Chat] ⚠ ${t.droppedMessages} messages dropped but RAG not operational (service=${_memoryService != null}, operational=${_memoryService?.isOperational ?? false})',
+      );
+      t.ragReceipt = buildRagReceipt(
+        found: 0,
+        journalDeduped: 0,
+        budgetTrimmed: 0,
+        injected: const [],
+        days: const {},
+        currentSessionId: _currentSessionId ?? '',
+        status: kRagReceiptNotOperational,
       );
     }
   }
@@ -267,6 +287,18 @@ extension ChatServiceGenerationRag on ChatService {
         ? _getCharacterIdFromCard(guest)
         : _getCharacterId();
     final sourceIds = <String>[currentId]; // always include self
+
+    // Group conversation embeds under group_<id>, but Data Bank rows and the
+    // per-member RAG priority sliders key by each member's stableGroupId
+    // (audit P2.16). Without those ids, member Data Bank and priority
+    // multipliers never match a candidate. Conversation RAG stays on the
+    // group bucket; members only add Data Bank / any per-member embeddings.
+    if (guest == null && _activeGroup != null) {
+      for (final c in _groupCharacters) {
+        final mid = _getCharacterIdFromCard(c);
+        if (mid.isNotEmpty && !sourceIds.contains(mid)) sourceIds.add(mid);
+      }
+    }
 
     // Look up cross-character sources from DB (for the guest, or the active char)
     final sourceCard = guest ?? _activeCharacter;

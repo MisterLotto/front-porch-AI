@@ -224,13 +224,17 @@ extension AppDatabaseChatQueries on AppDatabase {
   }
 
   Future<int> deleteSessionById(String id) async {
-    // Hard delete: also delete all messages + journal cards + growth rings in
-    // this session. (Journal cards and growth rings are strictly
-    // session-scoped, so they die with the chat.)
+    // Hard delete: everything scoped to this chat (audit P2.19). Journal and
+    // growth already cascaded; embeddings, objectives, Living Worlds links and
+    // biome spans used to be left as orphans (helpers existed but unused).
     await (delete(messages)..where((m) => m.sessionId.equals(id))).go();
     await (delete(journalMemories)..where((j) => j.sessionId.equals(id))).go();
     await (delete(growthRings)..where((g) => g.sessionId.equals(id))).go();
     await (delete(growthState)..where((g) => g.sessionId.equals(id))).go();
+    await deleteEmbeddingsForSession(id);
+    await deleteObjectivesForChat(id);
+    await (delete(chatWorlds)..where((c) => c.chatId.equals(id))).go();
+    await (delete(chatBiomeSpans)..where((c) => c.chatId.equals(id))).go();
     final count = await (delete(sessions)..where((s) => s.id.equals(id))).go();
     await bumpSyncVersion();
     return count;

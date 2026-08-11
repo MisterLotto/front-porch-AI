@@ -34,6 +34,7 @@ export 'chat_facade.dart';
 export 'chat_tools_facade.dart';
 export 'group_facade.dart';
 export 'image_facade.dart';
+export 'journal_web_surface.dart';
 export 'settings_facade.dart';
 export 'stoop_facade.dart';
 export 'story_export_facade.dart';

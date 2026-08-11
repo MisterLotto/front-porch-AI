@@ -3,6 +3,18 @@
 
 # Changelog
 
+## 2026-08-11 — fix(audit P2): web parity + RAG honesty + delete/GC
+- **Files:** `stoopApi.ts` (types=solo,group,world); `embedding_service.dart`
+  (ensureReady latch + `_checking`); `database.queries.chat.dart` (session
+  delete cascades embeddings/objectives/worlds/biomes); `rag_injection.dart` +
+  generation_rag + RagReceiptView + ChatTools (error/not_operational receipts);
+  group RAG source ids include member stableGroupIds (Data Bank + priorities);
+  `database_cleanup.dart` (growth/worlds/dead-chat objectives); web 18+ switch
+  in PorchLifeSettings; Output Sanitizer in settings facade + SettingsPage;
+  Journal web surface (`journal_web_surface.dart`, JournalPanel/ReviewModal,
+  tools routes) — cards plant/edit/pin/retire + review-first.
+- **Why:** Audit P2.12–20 product parity and integrity before stable.
+
 ## 2026-08-11 — fix(realism/growth): finish audit P1.9–11
 - **Files:** `growth_service.dart` (unconditional window cap), `growth_store.dart`
   (`invalidateRingsCitingFrom`), `chat_service_message_ops.dart` (growth twin of

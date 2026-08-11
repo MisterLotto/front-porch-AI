@@ -296,12 +296,17 @@ export const stoop = {
   twoFactorDisable: (totp: string) => call<void>('POST', '/api/stoop/2fa/disable', { totp }),
 
   browse: (query: StoopBrowseQuery) => {
+    const type = query.type ?? 'all';
     const params = new URLSearchParams({
       sort: query.sort ?? 'newest',
-      type: query.type ?? 'all',
+      type,
       page: String(query.page ?? 0),
       take: String(query.take ?? 24),
     });
+    // Desktop always opts in with types=solo,group,world when type=all
+    // because the server keeps type=all as solo+group forever. Without this
+    // Living Worlds never appear on web browse (audit P2.15).
+    if (type === 'all') params.set('types', 'solo,group,world');
     if (query.q) params.set('q', query.q);
     if (query.pick) params.set('pick', 'true');
     if (query.following) params.set('following', 'true');
@@ -329,7 +334,10 @@ export const stoop = {
     }),
 
   creator: (id: string) =>
-    call<StoopCreator>('GET', `/api/stoop/creators/${encodeURIComponent(id)}`),
+    call<StoopCreator>(
+      'GET',
+      `/api/stoop/creators/${encodeURIComponent(id)}?types=solo,group,world`,
+    ),
   setFollow: (id: string, follow: boolean) =>
     call<{ following: boolean; followers: number }>(
       'POST',
@@ -338,8 +346,16 @@ export const stoop = {
     ),
   myFollowing: () =>
     call<{ items: StoopFollowedCreator[] }>('GET', '/api/stoop/me/following'),
-  myCharacters: () => call<{ items: StoopMine[] }>('GET', '/api/stoop/me/characters'),
-  myDownloads: () => call<{ items: StoopCard[] }>('GET', '/api/stoop/me/downloads'),
+  myCharacters: () =>
+    call<{ items: StoopMine[] }>(
+      'GET',
+      '/api/stoop/me/characters?types=solo,group,world',
+    ),
+  myDownloads: () =>
+    call<{ items: StoopCard[] }>(
+      'GET',
+      '/api/stoop/me/downloads?types=solo,group,world',
+    ),
 
   messages: () => call<{ items: StoopMessage[] }>('GET', '/api/stoop/me/messages'),
   unreadCount: async (): Promise<number> =>

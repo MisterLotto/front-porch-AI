@@ -94,6 +94,13 @@ class DatabaseCleanup {
     orphanCounts['group_orphan_sessions'] = await _countOrphanGroupSessions(db);
     orphanCounts['messages'] = await _countOrphanMessages(db);
     orphanCounts['journal_memories'] = await _countOrphanJournalMemories(db);
+    // audit P2.20 — growth + Living Worlds + dead-chat objectives
+    orphanCounts['growth_rings'] = await _countOrphanBySession(db, 'growth_rings');
+    orphanCounts['growth_state'] = await _countOrphanBySession(db, 'growth_state');
+    orphanCounts['chat_worlds'] = await _countOrphanChatWorlds(db);
+    orphanCounts['chat_biome_spans'] = await _countOrphanChatBiomeSpans(db);
+    orphanCounts['dead_chat_objectives'] =
+        await _countOrphanObjectivesByChat(db);
 
     brokenRefCounts['memory_sources'] = await _countBrokenMemorySources(db);
     brokenRefCounts['group_character_ids'] = await _countBrokenGroupCharIds(db);
@@ -143,6 +150,15 @@ class DatabaseCleanup {
     // so orphan = session gone (character_id is a stableGroupId, not a
     // characters.id — do not check it against the characters table).
     removedCounts['journal_memories'] = await _deleteOrphanJournalMemories(db);
+    // audit P2.20 — growth + Living Worlds + dead-chat objectives
+    removedCounts['growth_rings'] =
+        await _deleteOrphanBySession(db, 'growth_rings');
+    removedCounts['growth_state'] =
+        await _deleteOrphanBySession(db, 'growth_state');
+    removedCounts['chat_worlds'] = await _deleteOrphanChatWorlds(db);
+    removedCounts['chat_biome_spans'] = await _deleteOrphanChatBiomeSpans(db);
+    removedCounts['dead_chat_objectives'] =
+        await _deleteOrphanObjectivesByChat(db);
 
     fixedRefCounts['memory_sources'] = await _fixBrokenMemorySources(db);
     fixedRefCounts['group_character_ids'] = await _fixBrokenGroupCharIds(db);
@@ -273,6 +289,43 @@ class DatabaseCleanup {
     final result = await db.customSelect('''
       SELECT COUNT(*) AS c FROM journal_memories jm
       WHERE NOT EXISTS (SELECT 1 FROM sessions s WHERE s.id = jm.session_id)
+    ''').get();
+    return (result.first.data['c'] as int?) ?? 0;
+  }
+
+  /// Rows keyed by session_id whose session is gone (growth rings/state).
+  static Future<int> _countOrphanBySession(AppDatabase db, String table) async {
+    final result = await db.customSelect('''
+      SELECT COUNT(*) AS c FROM $table t
+      WHERE NOT EXISTS (SELECT 1 FROM sessions s WHERE s.id = t.session_id)
+    ''').get();
+    return (result.first.data['c'] as int?) ?? 0;
+  }
+
+  static Future<int> _countOrphanChatWorlds(AppDatabase db) async {
+    final result = await db.customSelect('''
+      SELECT COUNT(*) AS c FROM chat_worlds cw
+      WHERE NOT EXISTS (SELECT 1 FROM sessions s WHERE s.id = cw.chat_id)
+         OR NOT EXISTS (SELECT 1 FROM worlds w WHERE w.id = cw.world_id AND w.deleted_at IS NULL)
+    ''').get();
+    return (result.first.data['c'] as int?) ?? 0;
+  }
+
+  static Future<int> _countOrphanChatBiomeSpans(AppDatabase db) async {
+    final result = await db.customSelect('''
+      SELECT COUNT(*) AS c FROM chat_biome_spans cbs
+      WHERE NOT EXISTS (SELECT 1 FROM sessions s WHERE s.id = cbs.chat_id)
+    ''').get();
+    return (result.first.data['c'] as int?) ?? 0;
+  }
+
+  /// Objectives that name a chat_id whose session no longer exists
+  /// (character-level orphans are covered by [_countOrphanRows]).
+  static Future<int> _countOrphanObjectivesByChat(AppDatabase db) async {
+    final result = await db.customSelect('''
+      SELECT COUNT(*) AS c FROM objectives o
+      WHERE o.chat_id IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM sessions s WHERE s.id = o.chat_id)
     ''').get();
     return (result.first.data['c'] as int?) ?? 0;
   }
@@ -431,6 +484,33 @@ class DatabaseCleanup {
       DELETE FROM journal_memories WHERE session_id NOT IN (
         SELECT id FROM sessions
       )
+    ''', updates: {});
+  }
+
+  static Future<int> _deleteOrphanBySession(AppDatabase db, String table) async {
+    return db.customUpdate('''
+      DELETE FROM $table WHERE session_id NOT IN (SELECT id FROM sessions)
+    ''', updates: {});
+  }
+
+  static Future<int> _deleteOrphanChatWorlds(AppDatabase db) async {
+    return db.customUpdate('''
+      DELETE FROM chat_worlds WHERE
+        chat_id NOT IN (SELECT id FROM sessions)
+        OR world_id NOT IN (SELECT id FROM worlds WHERE deleted_at IS NULL)
+    ''', updates: {});
+  }
+
+  static Future<int> _deleteOrphanChatBiomeSpans(AppDatabase db) async {
+    return db.customUpdate('''
+      DELETE FROM chat_biome_spans WHERE chat_id NOT IN (SELECT id FROM sessions)
+    ''', updates: {});
+  }
+
+  static Future<int> _deleteOrphanObjectivesByChat(AppDatabase db) async {
+    return db.customUpdate('''
+      DELETE FROM objectives WHERE chat_id IS NOT NULL
+        AND chat_id NOT IN (SELECT id FROM sessions)
     ''', updates: {});
   }
 

@@ -18,6 +18,7 @@
 
 import 'package:path/path.dart' as p;
 
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/legacy_model_cleanup.dart';
 import 'package:front_porch_ai/services/services.dart';
 
@@ -75,6 +76,11 @@ class SettingsFacade {
         'dynamicResponseMaxMessages': g.dynamicResponseMaxMessages,
         // Away pace (Living Time) — additive.
         'dynamicResponsePacePeriods': g.dynamicResponsePacePeriods,
+        // Output Sanitizer (audit P2.13) — additive; older PWAs ignore.
+        'outputSanitizerEnabled': g.outputSanitizerEnabled,
+        'outputSanitizerRules': [
+          for (final r in g.outputSanitizerRules) r.toJson(),
+        ],
       },
       // Ambitions + the promise ledger. Both work with the Realism Engine off,
       // so they are the two realism-adjacent settings the web needs first.
@@ -310,6 +316,14 @@ class SettingsFacade {
       if (drm is num) await g.setDynamicResponseMaxMessages(drm.toInt());
       final drp = gen['dynamicResponsePacePeriods'];
       if (drp is num) await g.setDynamicResponsePacePeriods(drp.toInt());
+      // Output Sanitizer (audit P2.13) — host-side rules apply to every
+      // surface that generates through this install.
+      final ose = gen['outputSanitizerEnabled'];
+      if (ose is bool) await g.setOutputSanitizerEnabled(ose);
+      final osr = gen['outputSanitizerRules'];
+      if (osr is List) {
+        await g.setOutputSanitizerRules(OutputSanitizerRule.listFromJson(osr));
+      }
     }
   }
 

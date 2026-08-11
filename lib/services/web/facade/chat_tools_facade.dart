@@ -21,6 +21,7 @@ import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/chat/chat.dart';
 import 'package:front_porch_ai/services/story/faithful_mode.dart';
+import 'package:front_porch_ai/services/web/facade/journal_web_surface.dart';
 import 'package:front_porch_ai/services/web/streaming/stream_hub.dart';
 
 /// Thin adapter for the chat *tools* sidebar — the memory/summary/chaos/NSFW/
@@ -87,6 +88,8 @@ class ChatToolsFacade {
             _chat.memoryService?.embeddingService.statusSnapshot,
         'journalEnabled': _storage.journalEnabled,
         'journalInterval': _storage.journalInterval,
+        // Review-first (audit P2.12) — parks proposals until Apply/Discard.
+        'journalReviewFirst': _storage.journalReviewFirst,
         'importLlmertaPorchMemories': _storage.importLlmertaPorchMemories,
         'growthEnabled': _storage.characterEvolutionEnabled,
         'growthInterval': _storage.growthInterval,
@@ -798,6 +801,7 @@ class ChatToolsFacade {
     await ifBool('journalEnabled', _storage.setJournalEnabled);
     await ifInt('journalInterval', _storage.setJournalInterval);
     await ifInt('journalMaxCards', _storage.setJournalMaxCards);
+    await ifBool('journalReviewFirst', _storage.setJournalReviewFirst);
     await ifBool(
       'importLlmertaPorchMemories',
       _storage.setImportLlmertaPorchMemories,
@@ -807,6 +811,14 @@ class ChatToolsFacade {
     await ifBool('growthReviewFirst', _storage.setGrowthReviewFirst);
     _notify();
   }
+
+  /// Web Journal diary (audit P2.12) — Growth twin for cards + review-first.
+  JournalWebSurface get journalWeb => JournalWebSurface(
+        chat: _chat,
+        storage: _storage,
+        notify: _notify,
+        resolveOwner: _growthOwner,
+      );
 
   // ── Objectives (per-character; scoped to the focused cast participant so a
   //    new goal attaches to whoever the sidebar is focused on) ───────────────

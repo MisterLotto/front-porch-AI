@@ -125,9 +125,21 @@ String formatRagLine(String content, {int? day, required bool otherChat}) {
   return '- $stamp$content';
 }
 
+/// Receipt status strings (wire format — persist in message metadata).
+/// Absent / `ok` = a real search completed. Distinct values keep the Memory
+/// panel honest when lookup was attempted but could not run (audit P2.17).
+const String kRagReceiptOk = 'ok';
+const String kRagReceiptError = 'error';
+const String kRagReceiptNotOperational = 'not_operational';
+
 /// The receipt for one turn's retrieval, stamped into the generated
 /// message's metadata as `rag_receipt`. [injected] is the FINAL set in
 /// display order; [days] carries the stamp each line was rendered with.
+///
+/// [status] defaults to [kRagReceiptOk]. Use [kRagReceiptError] /
+/// [kRagReceiptNotOperational] when messages dropped out of context but
+/// retrieval could not complete — never leave receipt null in those cases
+/// (null means "no lookup needed", which would lie).
 Map<String, dynamic> buildRagReceipt({
   required int found,
   required int journalDeduped,
@@ -135,8 +147,10 @@ Map<String, dynamic> buildRagReceipt({
   required List<RetrievedMemory> injected,
   required Map<RetrievedMemory, int?> days,
   required String currentSessionId,
+  String status = kRagReceiptOk,
 }) {
   return {
+    'status': status,
     'found': found,
     'journal_deduped': journalDeduped,
     'budget_trimmed': budgetTrimmed,

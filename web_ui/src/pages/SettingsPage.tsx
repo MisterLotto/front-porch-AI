@@ -32,6 +32,12 @@ const BACKEND_OPTIONS: BackendOption[] = [
   { id: 'custom', label: 'Custom API (OpenAI-compatible)', backend: 'openRouter', url: '', kind: 'api' },
 ];
 
+interface SanitizerRule {
+  id: number;
+  find: string;
+  replace: string;
+  stop_after_match?: boolean;
+}
 interface Gen {
   temperature: number;
   minP: number;
@@ -46,6 +52,9 @@ interface Gen {
   dynamicResponseInterval: number;
   /** Away pace (Living Time, additive): story periods per AFK scene. */
   dynamicResponsePacePeriods?: number;
+  /** Host-side find/replace on model output (audit P2.13). */
+  outputSanitizerEnabled?: boolean;
+  outputSanitizerRules?: SanitizerRule[];
 }
 interface Settings {
   backend: string;
@@ -379,6 +388,31 @@ export function SettingsPage() {
             </label>
           </>
         )}
+        {/* Output Sanitizer (audit P2.13) — host-side find/replace before
+            chat history is saved. Desktop Generation tab parity. */}
+        {s.generation.outputSanitizerEnabled !== undefined && (
+          <>
+            <h4 style={{ marginTop: 16, marginBottom: 4 }}>Output Sanitizer</h4>
+            <p className="muted small">
+              Replace specific character sequences in model output before saving
+              to chat history (e.g. em dash → &quot; - &quot;).
+            </p>
+            <label className="row-label">
+              <span>Enable Output Sanitizer</span>
+              <input
+                type="checkbox"
+                checked={!!s.generation.outputSanitizerEnabled}
+                onChange={(e) => patchGen({ outputSanitizerEnabled: e.target.checked })}
+              />
+            </label>
+            {s.generation.outputSanitizerEnabled && (
+              <SanitizerRulesEditor
+                rules={s.generation.outputSanitizerRules ?? []}
+                onChange={(rules) => patchGen({ outputSanitizerRules: rules })}
+              />
+            )}
+          </>
+        )}
       </section>
 
       {legacy && legacy.totalBytes > 0 && (
@@ -479,6 +513,67 @@ function SliderField({
         max={max}
         onChange={(e) => onChange(Number(e.target.value))}
       />
+    </div>
+  );
+}
+
+/** Compact find/replace rule list for Output Sanitizer (desktop parity). */
+function SanitizerRulesEditor({
+  rules,
+  onChange,
+}: {
+  rules: SanitizerRule[];
+  onChange: (rules: SanitizerRule[]) => void;
+}) {
+  const nextId = () =>
+    rules.reduce((m, r) => Math.max(m, r.id), -1) + 1;
+  const patch = (i: number, p: Partial<SanitizerRule>) => {
+    const next = rules.map((r, idx) => (idx === i ? { ...r, ...p } : r));
+    onChange(next);
+  };
+  return (
+    <div className="sanitizer-rules" style={{ marginTop: 8 }}>
+      {rules.map((r, i) => (
+        <div key={r.id} className="tool-row" style={{ gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+          <input
+            style={{ flex: 1, minWidth: 80 }}
+            placeholder="Find"
+            value={r.find}
+            onChange={(e) => patch(i, { find: e.target.value })}
+          />
+          <span className="muted small">→</span>
+          <input
+            style={{ flex: 1, minWidth: 80 }}
+            placeholder="Replace"
+            value={r.replace}
+            onChange={(e) => patch(i, { replace: e.target.value })}
+          />
+          <label className="muted small" title="Stop applying later rules after this one changes the text">
+            <input
+              type="checkbox"
+              checked={!!r.stop_after_match}
+              onChange={(e) => patch(i, { stop_after_match: e.target.checked })}
+            />{' '}
+            stop
+          </label>
+          <button
+            className="icon-btn"
+            title="Remove rule"
+            onClick={() => onChange(rules.filter((_, idx) => idx !== i))}
+          >
+            🗑
+          </button>
+        </div>
+      ))}
+      <button
+        className="small"
+        type="button"
+        onClick={() =>
+          onChange([...rules, { id: nextId(), find: '', replace: '', stop_after_match: false }])
+        }
+      >
+        Add rule
+      </button>
     </div>
   );
 }

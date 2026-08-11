@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { GroupSettings, type GroupBlock } from './GroupSettings';
 import { GrowthPanel } from './GrowthPanel';
+import { JournalPanel } from './JournalPanel';
 import { MilestonesPanel } from './MilestonesPanel';
 import { BelongingsPanel } from './BelongingsPanel';
 import { PromisesPanel } from './PromisesPanel';
@@ -46,6 +47,7 @@ interface ToolsState {
     ragWindowSize: number;
     journalEnabled: boolean;
     journalInterval: number;
+    journalReviewFirst?: boolean;
     importLlmertaPorchMemories?: boolean;
     growthEnabled: boolean;
     growthInterval: number;
@@ -64,6 +66,7 @@ interface ToolsState {
     // older facades; null when that reply needed no retrieval). Desktop
     // sidebar parity: what memory found / dropped / actually injected.
     lastRagReceipt?: {
+      status?: 'ok' | 'error' | 'not_operational';
       found: number;
       journal_deduped: number;
       budget_trimmed: number;
@@ -369,6 +372,7 @@ export function ChatTools({
               {/* What memory just did — desktop RagReceiptView parity. */}
               {(() => {
                 const r = t.memory.lastRagReceipt;
+                const status = r?.status ?? 'ok';
                 const counts = r
                   ? [
                       r.budget_trimmed > 0 ? `${r.budget_trimmed} trimmed for space` : null,
@@ -376,16 +380,24 @@ export function ChatTools({
                     ].filter(Boolean)
                   : [];
                 const suffix = counts.length ? ` (${counts.join(', ')})` : '';
+                let summary: string;
+                if (!r) {
+                  summary = 'Last reply: nothing had scrolled out of view — no lookup needed.';
+                } else if (status === 'error') {
+                  summary =
+                    'Last reply: tried to search the archive but the memory engine hit an error — nothing was brought back.';
+                } else if (status === 'not_operational') {
+                  summary =
+                    'Last reply: older messages had scrolled out of view, but the memory engine is not ready — install/start Memory on the desktop host to look them up.';
+                } else if (r.injected.length === 0) {
+                  summary = `Last reply: searched the archive — nothing relevant enough to bring back.${suffix}`;
+                } else {
+                  summary = `Last reply: ${r.injected.length} ${r.injected.length === 1 ? 'memory' : 'memories'} woven in.${suffix}`;
+                }
                 return (
                   <div className="rag-receipt">
-                    <p className="muted small">
-                      {!r
-                        ? 'Last reply: nothing had scrolled out of view — no lookup needed.'
-                        : r.injected.length === 0
-                          ? `Last reply: searched the archive — nothing relevant enough to bring back.${suffix}`
-                          : `Last reply: ${r.injected.length} ${r.injected.length === 1 ? 'memory' : 'memories'} woven in.${suffix}`}
-                    </p>
-                    {r?.injected.map((line, i) => (
+                    <p className="muted small">{summary}</p>
+                    {status === 'ok' && r?.injected.map((line, i) => (
                       <p key={i} className="muted small rag-receipt-line">
                         <strong>{line.other_chat ? 'another chat' : line.day != null ? `Day ${line.day}` : ''}</strong>{' '}
                         {line.preview}
@@ -398,7 +410,15 @@ export function ChatTools({
           )}
           <Toggle label="Journal (memories + recap)" value={t.memory.journalEnabled} onChange={(v) => settings({ journalEnabled: v })} />
           {t.memory.journalEnabled ? (
-            <NumField label="Every (msgs)" value={t.memory.journalInterval} onCommit={(v) => settings({ journalInterval: v })} />
+            <>
+              <NumField label="Every (msgs)" value={t.memory.journalInterval} onCommit={(v) => settings({ journalInterval: v })} />
+              <Toggle
+                label="Review journal before it applies"
+                value={t.memory.journalReviewFirst ?? false}
+                onChange={(v) => settings({ journalReviewFirst: v })}
+              />
+              <JournalPanel focusedId={focusedId} reloadKey={reloadKey} />
+            </>
           ) : (
             <p className="muted small">
               Journal off: long-term memory AND the &quot;Where we are&quot; recap are

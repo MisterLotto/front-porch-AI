@@ -164,6 +164,8 @@ void main() {
       expect(r['found'], 5);
       expect(r['journal_deduped'], 2);
       expect(r['budget_trimmed'], 1);
+      // audit P2.17 — successful search is status ok (never null/missing lie)
+      expect(r['status'], kRagReceiptOk);
       final lines = r['injected'] as List;
       expect(lines, hasLength(2));
       expect(lines[0], {
@@ -194,6 +196,32 @@ void main() {
           ((r['injected'] as List).single as Map)['preview'] as String;
       expect(preview.length, kRagReceiptPreviewChars + 1); // +1 for the '…'
       expect(preview.endsWith('…'), isTrue);
+    });
+
+    test('error and not_operational statuses are distinct wire values', () {
+      // audit P2.17 — panel must never say "no lookup needed" after a failed
+      // or non-operational attempt; status is what distinguishes them.
+      final err = buildRagReceipt(
+        found: 0,
+        journalDeduped: 0,
+        budgetTrimmed: 0,
+        injected: const [],
+        days: const {},
+        currentSessionId: 's1',
+        status: kRagReceiptError,
+      );
+      final dead = buildRagReceipt(
+        found: 0,
+        journalDeduped: 0,
+        budgetTrimmed: 0,
+        injected: const [],
+        days: const {},
+        currentSessionId: 's1',
+        status: kRagReceiptNotOperational,
+      );
+      expect(err['status'], kRagReceiptError);
+      expect(dead['status'], kRagReceiptNotOperational);
+      expect(err['status'], isNot(dead['status']));
     });
   });
 }

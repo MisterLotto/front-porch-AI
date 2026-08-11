@@ -45,6 +45,11 @@ class WebChatToolsRoutes {
     router.post('/api/chat/tools/growth', _growthPost);
     router.get('/api/chat/tools/growth/review', _growthReviewGet);
     router.post('/api/chat/tools/growth/review', _growthReviewPost);
+    // Journal diary (audit P2.12) — Growth twin: cards + review-first.
+    router.get('/api/chat/tools/journal', _journalGet);
+    router.post('/api/chat/tools/journal', _journalPost);
+    router.get('/api/chat/tools/journal/review', _journalReviewGet);
+    router.post('/api/chat/tools/journal/review', _journalReviewPost);
   }
 
   final ChatToolsFacade _facade;
@@ -353,6 +358,49 @@ class WebChatToolsRoutes {
       ],
     );
     return JsonResponse.ok(_facade.growthReviewBatch());
+  }
+
+  /// Journal cards for the focused participant (audit P2.12).
+  Future<shelf.Response> _journalGet(shelf.Request request) async =>
+      JsonResponse.ok(
+        await _facade.journalWeb.list(
+          request.url.queryParameters['participant'],
+        ),
+      );
+
+  /// Journal mutation (`action`: plant/edit/pin/retire/check).
+  Future<shelf.Response> _journalPost(shelf.Request request) async {
+    final body = await _json(request);
+    final action = body['action']?.toString() ?? '';
+    final participant =
+        body['participant']?.toString() ??
+        request.url.queryParameters['participant'];
+    const known = {'plant', 'edit', 'pin', 'retire', 'check'};
+    if (!known.contains(action)) {
+      return JsonResponse.badRequest('Unknown journal action: $action');
+    }
+    return JsonResponse.ok(
+      await _facade.journalWeb.action(participant, action, body),
+    );
+  }
+
+  shelf.Response _journalReviewGet(shelf.Request request) =>
+      JsonResponse.ok(_facade.journalWeb.reviewBatch());
+
+  Future<shelf.Response> _journalReviewPost(shelf.Request request) async {
+    final body = await _json(request);
+    return JsonResponse.ok(
+      await _facade.journalWeb.settleReview(
+        apply: body['apply'] == true,
+        rejected: [
+          if (body['rejected'] is List)
+            for (final r in body['rejected'] as List) r.toString(),
+        ],
+        recapAccepted: body['recapAccepted'] is bool
+            ? body['recapAccepted'] as bool
+            : null,
+      ),
+    );
   }
 
   Future<Map<String, dynamic>> _json(shelf.Request request) async {

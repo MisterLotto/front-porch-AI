@@ -53,12 +53,22 @@ class RagReceiptView extends StatelessWidget {
     final injected = (r?['injected'] as List?) ?? const [];
     final trimmed = (r?['budget_trimmed'] as num?)?.toInt() ?? 0;
     final deduped = (r?['journal_deduped'] as num?)?.toInt() ?? 0;
+    final status = r?['status'] as String? ?? 'ok';
 
     final String summary;
     if (r == null) {
       summary =
           'Last reply: nothing had scrolled out of view — no lookup '
           'needed.';
+    } else if (status == 'error') {
+      // audit P2.17 — never "no lookup needed" after a failed attempt
+      summary =
+          'Last reply: tried to search the archive but the memory engine '
+          'hit an error — nothing was brought back.';
+    } else if (status == 'not_operational') {
+      summary =
+          'Last reply: older messages had scrolled out of view, but the '
+          'memory engine is not ready — install/start Memory to look them up.';
     } else if (injected.isEmpty) {
       summary =
           'Last reply: searched the archive — nothing relevant enough to '
