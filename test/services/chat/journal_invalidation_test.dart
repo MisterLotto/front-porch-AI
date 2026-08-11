@@ -94,6 +94,17 @@ void main() {
     expect(await contentsFor('departed-member'), ['b-early']);
   });
 
+  test('item-memory cards past the pass cursor still die on rewrite', () async {
+    // Item cards are written with sourcePositions on the live reply without
+    // advancing summaryLastIndex. invalidateCardsCitingFrom must still run
+    // even when the ChatService cursor gate would have early-returned
+    // (release audit 2026-08-11). The store layer has no cursor — this pins
+    // that a cite-at-end card is purgeable.
+    await card(owner: 'a', content: 'I set my keys on the table.', positions: [50]);
+    expect(await store.invalidateCardsCitingFrom(sid, 50), 1);
+    expect(await contentsFor('a'), isEmpty);
+  });
+
   test('corrupt receipts JSON is skipped, not fatal', () async {
     await db.insertJournalCard(
       const JournalMemoriesCompanion(

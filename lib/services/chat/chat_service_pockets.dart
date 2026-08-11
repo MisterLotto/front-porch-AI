@@ -237,12 +237,22 @@ extension ChatServicePockets on ChatService {
 
     // Apply the arrivals AFTER the giver's own record is settled, so a
     // hand-off can never be read back out of the giver mid-pass.
+    // Recipient BEFORE/AFTER snapshots ride the rewind stamp so regen and
+    // tail-delete put BOTH sides of a give back (release audit 2026-08-11:
+    // only the giver was stamped, so Sam kept the keys after a reject).
+    final othersBefore = <Map<String, dynamic>>[];
+    final othersAfter = <Map<String, dynamic>>[];
+    final seenRecipients = <String>{};
     for (final (to, item) in handedOver) {
       final matches = _groupCharacters.where((c) => c.name == to);
       if (matches.isEmpty) continue;
       final recipient = matches.first;
       final rid = _getCharacterIdFromCard(recipient);
       final theirs = pocketsFor(rid) ?? startingPocketsFor(recipient);
+      // One before-snapshot per recipient (multiple items to Sam → one kit).
+      if (seenRecipients.add(rid)) {
+        othersBefore.add({'char': rid, 'record': theirs.toJson()});
+      }
       theirs.carrying.add(item);
       while (theirs.carrying.length > kMaxCarrying) {
         theirs.carrying.removeAt(0);
@@ -251,6 +261,13 @@ extension ChatServicePockets on ChatService {
       debugPrint(
         '[Pockets] ${speaker.name} -> ${recipient.name}: ${item.display}',
       );
+    }
+    for (final ob in othersBefore) {
+      final rid = ob['char'] as String;
+      final afterRec = pocketsFor(rid);
+      if (afterRec != null) {
+        othersAfter.add({'char': rid, 'record': afterRec.toJson()});
+      }
     }
 
     // Store even when nothing changed: the first turn is what promotes a
@@ -276,39 +293,52 @@ extension ChatServicePockets on ChatService {
       }
     }
 
-    if (receipts.isEmpty) return;
+    // Nothing moved for the bubble and no transfer to rewind — still
+    // notify (record may have been first-seeded above) and stop.
+    if (receipts.isEmpty && othersBefore.isEmpty) {
+      notifyListeners();
+      return;
+    }
 
-    // Receipts ride the message metadata the same way needs deltas do, so the
-    // bubble can show what changed without a second storage path.
+    // Receipts + rewind stamps ride the message the same way needs deltas
+    // do (hostile review 2026-08-11 — pockets ops were the one non-scalar
+    // turn effect nothing ever put back):
+    //  * pockets_before rides SHARED metadata: pre-turn speaker kit (+
+    //    `others` = each transfer recipient's pre-turn kit).
+    //  * pockets_after rides THIS SWIPE: post-turn speaker kit (+
+    //    `pockets_after_others` for recipients).
     final msg = _messages.isNotEmpty ? _messages.last : null;
     if (msg != null && !msg.isUser) {
-      msg.metadata = {...?msg.metadata, 'pocket_changes': receipts};
-      // The rewind stamps (hostile review 2026-08-11 — pockets ops were the
-      // one non-scalar turn effect nothing ever put back):
-      //  * pockets_before rides the SHARED metadata: the pre-turn record is
-      //    the same for every swipe by construction, because regen restores
-      //    it before replaying (below) — regen and tail-delete read it.
-      //  * pockets_after rides THIS SWIPE's metadata: what this variant's
-      //    ops produced — swipe navigation reads it, and a swipe whose pass
-      //    changed nothing carries no stamp and correctly restores 'before'.
-      msg.metadata!['pockets_before'] = {'char': charId, 'record': beforeJson};
-      msg.activeMetadata = {
+      if (receipts.isNotEmpty) {
+        msg.metadata = {...?msg.metadata, 'pocket_changes': receipts};
+      }
+      final beforeStamp = <String, dynamic>{
+        'char': charId,
+        'record': beforeJson,
+      };
+      if (othersBefore.isNotEmpty) beforeStamp['others'] = othersBefore;
+      msg.metadata = {...?msg.metadata, 'pockets_before': beforeStamp};
+      final afterMeta = <String, dynamic>{
         ...?msg.activeMetadata,
         'pockets_after': record.toJson(),
       };
+      if (othersAfter.isNotEmpty) {
+        afterMeta['pockets_after_others'] = othersAfter;
+      }
+      msg.activeMetadata = afterMeta;
       await _saveChat();
     }
     notifyListeners();
   }
 
-  /// Restore a speaker's record from a message's rewind stamps — the pockets
+  /// Restore pocket records from a message's rewind stamps — the pockets
   /// half of the time-travel every other turn effect already had (realism
   /// scalars via realism_state, needs via the arithmetic refund, journal
   /// cards via timeline invalidation). [after] picks the swipe's post-turn
   /// state (swipe navigation); otherwise the turn's pre-state (regenerate,
   /// tail delete). A message with no stamps applied no ops — nothing to do.
-  /// Group-safe by construction: the stamp carries the speaker's own charId,
-  /// so no name resolution can rewind the wrong member.
+  /// Restores the speaker AND any transfer recipients stamped under
+  /// `others` / `pockets_after_others`.
   void _restorePocketsFromStamp(ChatMessage msg, {required bool after}) {
     if (!_storageService.realismSettings.pocketsEnabled) return;
     final before = msg.metadata?['pockets_before'];
@@ -321,6 +351,31 @@ extension ChatServicePockets on ChatService {
       if (a is Map) recordJson = a;
     }
     setPocketsFor(chId, Pockets.fromJson(recordJson));
+
+    // Recipients of a give: same before/after contract as the speaker.
+    final othersBefore = before['others'];
+    if (othersBefore is! List) return;
+    Map<String, Object?> afterByChar = {};
+    if (after) {
+      final ao = msg.activeMetadata?['pockets_after_others'];
+      if (ao is List) {
+        for (final e in ao) {
+          if (e is Map && e['char'] is String) {
+            afterByChar[e['char'] as String] = e['record'];
+          }
+        }
+      }
+    }
+    for (final o in othersBefore) {
+      if (o is! Map) continue;
+      final oid = o['char'];
+      if (oid is! String || oid.isEmpty) continue;
+      Object? oRec = o['record'];
+      if (after && afterByChar.containsKey(oid)) {
+        oRec = afterByChar[oid];
+      }
+      setPocketsFor(oid, Pockets.fromJson(oRec));
+    }
   }
 
   /// Write this turn's item-memory cards ([itemCardsFrom] decides which

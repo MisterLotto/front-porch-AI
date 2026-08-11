@@ -33,8 +33,10 @@
 // Guard proven to fail before passing: with the regen seam's restore call
 // removed, the regenerate test goes red (the keys stay parked).
 
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -210,6 +212,89 @@ void main() {
       record().carrying.single.name,
       'car keys',
       reason: 'no-op variant restores the shared pre-turn base',
+    );
+  });
+
+  test('GROUP give: regen rewinds BOTH giver and recipient', () async {
+    // PRE-FIX: only the giver was stamped — Sam kept the keys after reject.
+    await storage.realismSettings.setPocketsEnabled(true);
+    await storage.realismSettings.setPocketTransfersEnabled(true);
+
+    await db.insertGroup(
+      GroupsCompanion.insert(id: 'grp-give', name: 'Porch Duo'),
+    );
+    await db.insertGroupMember(
+      GroupMembersCompanion.insert(
+        id: 'mem-mara',
+        groupId: 'grp-give',
+        name: 'Mara',
+        frontPorchExtensions: Value(
+          jsonEncode({
+            'realism_engine': {
+              'inventory': Pockets.cardJsonFrom(
+                worn: const [],
+                carrying: const ['car keys'],
+              ),
+            },
+          }),
+        ),
+      ),
+    );
+    await db.insertGroupMember(
+      GroupMembersCompanion.insert(
+        id: 'mem-sam',
+        groupId: 'grp-give',
+        name: 'Sam',
+        frontPorchExtensions: Value(
+          jsonEncode({
+            'realism_engine': {
+              'inventory': Pockets.cardJsonFrom(
+                worn: const [],
+                carrying: const [],
+              ),
+            },
+          }),
+        ),
+      ),
+    );
+    await chat.setActiveGroup(
+      GroupChat(id: 'grp-give', name: 'Porch Duo'),
+      groupRepo: GroupChatRepository(storage, db),
+    );
+
+    String idOf(String name) {
+      final c = chat.groupCharacters.firstWhere((x) => x.name == name);
+      return chat.characterIdFor(c);
+    }
+
+    Pockets? kit(String name) => chat.pocketsFor(idOf(name));
+
+    // Seed must be live before the turn (wardrobe_message_zero contract).
+    expect(kit('Mara')?.carrying.single.name, 'car keys');
+
+    llm.inventoryJson =
+        '{"inventory_ops": [{"op": "give", "item": "keys", "to": "Sam"}]}';
+    await chat.sendMessage('Say goodnight to Sam.');
+    await drainUntil(
+      () =>
+          (kit('Mara')?.carrying.isEmpty ?? false) &&
+          (kit('Sam')?.carrying.any((i) => i.name == 'car keys') ?? false),
+    );
+    expect(kit('Sam')!.carrying.single.name, 'car keys');
+
+    llm.inventoryJson = '{"inventory_ops": []}';
+    await chat.regenerateLastMessage();
+    await drainUntil(() => !chat.isGenerating && !chat.isSettlingTurn);
+
+    expect(
+      kit('Mara')?.carrying.any((i) => i.name == 'car keys') ?? false,
+      isTrue,
+      reason: 'giver must get the keys back when the give is rejected',
+    );
+    expect(
+      kit('Sam')?.carrying.where((i) => i.name == 'car keys') ?? const [],
+      isEmpty,
+      reason: 'recipient must not keep a gift from a discarded swipe',
     );
   });
 }

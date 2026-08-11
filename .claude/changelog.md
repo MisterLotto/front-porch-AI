@@ -3,6 +3,15 @@
 
 # Changelog
 
+## 2026-08-11 — fix(pockets/journal): recipient rewind + stamp-after-realism + item-card purge
+- **Files:** `chat_service_pockets.dart` (others before/after on stamps),
+  `chat_service_message_ops.dart` (invalidate always purges cards; pockets
+  stamp AFTER realism on tail delete), `chat_service_group_realism_helpers.dart`
+  (restamp pockets post-gen), tests in pockets_rewind + journal_invalidation.
+- **Why:** release audit: group give only rewound the giver; delete path let
+  pre-gen realism_state.pockets clobber the stamp; item cards cited positions
+  past the journal cursor and survived regen.
+
 ## 2026-08-11 — fix(chat): close remaining think-strip holes (zero-budget + lore scan)
 - **Files:** `chat_service_generation_plan.dart` (historyBudget<=0 continuity),
   `chat_service_impersonate.dart` (same), `chat_service_wiring_injection.dart`

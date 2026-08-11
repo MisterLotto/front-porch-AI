@@ -154,16 +154,11 @@ extension ChatServiceMessageOps on ChatService {
       final deleted = _messages[index];
       final wasTail = index == _messages.length - 1;
 
-      // Pockets rewind on TAIL deletes only (hostile review 2026-08-11):
-      // deleting the last reply un-happens its turn, so the record returns
-      // to its pre-turn state — the same tail-only semantics the realism
-      // time-travel below has always had. Deleting an OLDER message leaves
-      // the record alone on purpose: later turns built on its changes, and
-      // rewinding past them would invent history (the needs refund solves
-      // this with arithmetic; pocket ops have no arithmetic inverse).
-      if (wasTail && !deleted.isUser && deleted.sender != 'System') {
-        _restorePocketsFromStamp(deleted, after: false);
-      }
+      // Pockets stamp restore runs AFTER realism time-travel below (not
+      // here). realism_state.pockets was historically pre-gen and, even
+      // when restamped post-gen, restoring the NEW last message must not
+      // clobber the deleted turn's pre-ops rewind for the deleted speaker
+      // (and any hand-off recipients). Stamp wins last on tail deletes.
 
       // Needs are refunded by ARITHMETIC (subtract this message's own chips),
       // not by the realism time-travel below — that only ever rewinds the
@@ -247,6 +242,13 @@ extension ChatServiceMessageOps on ChatService {
         groupSid: deletedSid,
       );
 
+      // Pockets AFTER realism: the stamp is the truth for the discarded
+      // turn (speaker + any transfer recipients). Runs only on tail
+      // character deletes — same contract as before.
+      if (wasTail && !deleted.isUser && deleted.sender != 'System') {
+        _restorePocketsFromStamp(deleted, after: false);
+      }
+
       await _saveChat();
       notifyListeners();
     }
@@ -274,16 +276,24 @@ extension ChatServiceMessageOps on ChatService {
   /// Timeline-integrity invalidation (Journal): content at [position] was
   /// rewritten — regen, swipe navigation, edit, or delete. Cards citing
   /// positions ≥ [position] describe events that no longer happened, so they
-  /// are removed (all diary owners), the pass cursor rolls back so the next
-  /// pass re-reads the rewritten window, and a salience kick refreshes the
-  /// recap soon. Cheap no-op when the pass never consumed the region: cards
-  /// only ever cite positions below the cursor. The recap TEXT may still
-  /// carry a stale sentence until the next pass rewrites it — a full recap
-  /// rewind is deliberately out of scope (documented, not silent).
+  /// are removed (all diary owners). The pass cursor rolls back when the
+  /// rewrite sits inside the consumed window so the next pass re-reads it.
+  ///
+  /// Item-memory cards are written deterministically from pocket ops and
+  /// cite the reply position WITHOUT advancing [_summaryLastIndex], so the
+  /// old early-return (`position >= cursor`) left them as phantoms on every
+  /// regen/delete of a fresh turn (release audit 2026-08-11). Card purge
+  /// therefore always runs; cursor rollback stays gated.
+  ///
+  /// The recap TEXT may still carry a stale sentence until the next pass
+  /// rewrites it — a full recap rewind is deliberately out of scope
+  /// (documented, not silent).
   void _invalidateJournalFrom(int position) {
     final sessionId = _currentSessionId;
-    if (sessionId == null || position >= _summaryLastIndex) return;
-    _summaryLastIndex = position;
+    if (sessionId == null) return;
+    if (position < _summaryLastIndex) {
+      _summaryLastIndex = position;
+    }
     unawaited(
       _journalStore.invalidateCardsCitingFrom(sessionId, position).then((
         removed,

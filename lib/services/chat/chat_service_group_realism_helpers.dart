@@ -238,6 +238,16 @@ extension ChatServiceGroupRealismHelpers on ChatService {
       );
       rs['spatialStance'] = _relationshipService.spatialStance;
     }
+    // Pockets was captured pre-gen in _captureRealismState and never
+    // restamped, so swipe/delete restore put the PRE-ops kit back after a
+    // successful pass (release audit 2026-08-11). Mirror needs/arousal:
+    // the snapshot that rides the accepted message is post-turn truth.
+    if (_activeCharacter != null) {
+      final p = pocketsFor(_getCharacterIdFromCard(_activeCharacter!));
+      if (p != null) {
+        rs['pockets'] = p.toJson();
+      }
+    }
   }
 
   /// Give back what a deleted message spent.
