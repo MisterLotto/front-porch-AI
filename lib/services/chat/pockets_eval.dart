@@ -105,6 +105,12 @@ class PocketsEval {
                     'description':
                         'New condition (update), or what it became (transform).',
                   },
+                  'where': {
+                    'type': 'string',
+                    'description':
+                        'Where it was put, if the scene says (setdown/drop): '
+                        '"on the nightstand", "by the door".',
+                  },
                 },
                 'required': ['op', 'item'],
               },
@@ -159,7 +165,8 @@ class PocketsEval {
       'pickup\n'
       '  setdown — put down nearby but still theirs: on the table, the '
       'nightstand, by the door. It can be taken back later. Use drop only '
-      'when it is gone for good\n'
+      'when it is gone for good. Include "where" when the scene says '
+      '("where": "on the nightstand")\n'
       '${others.isEmpty ? '  give — handed to someone else\n' : '  give — handed to someone else. Put their name in "to", spelled EXACTLY '
             'as it appears here: ${others.join(', ')}. If it went to anyone '
             'else — the person you are talking to, a passer-by, nobody in '
@@ -257,6 +264,7 @@ class PocketsEval {
     List<String> others = const [],
     void Function(String to, PocketItem item)? onTransfer,
     int day = 0,
+    List<PocketEvent>? events,
   }) async {
     if (reply.trim().isEmpty) return const [];
     // Expire BEFORE the prompt is built, not only inside the applier: the
@@ -278,7 +286,13 @@ class PocketsEval {
       );
       final ops = parseOps(raw);
       if (ops.isEmpty) return const [];
-      return applyPocketOps(pockets, ops, onTransfer: onTransfer, day: day);
+      return applyPocketOps(
+        pockets,
+        ops,
+        onTransfer: onTransfer,
+        day: day,
+        events: events,
+      );
     } catch (e) {
       // Never surface as a failed turn: the reply already happened and the
       // record simply misses one update. Logged rather than swallowed silently.

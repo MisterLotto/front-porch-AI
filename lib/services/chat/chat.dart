@@ -49,6 +49,7 @@ export 'needs_simulation.dart';
 export 'nsfw_service.dart';
 export 'objective_mention_gate.dart';
 export 'objective_proposal.dart';
+export 'pocket_journal_cards.dart';
 export 'pockets.dart';
 export 'pockets_eval.dart';
 export 'pass_support.dart';

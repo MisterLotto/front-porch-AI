@@ -194,12 +194,21 @@ extension ChatServicePockets on ChatService {
     // the SAME parser and applier the standalone call feeds. An answer with
     // no ops is the common case and applies nothing, exactly as today.
     final fused = _replyFactsRaw;
+    // Applied-change feed for the item-memory journal cards — populated by
+    // the applier with canonical names, consumed after the record persists.
+    final events = <PocketEvent>[];
     final List<String> receipts;
     if (fused != null) {
       final ops = PocketsEval.parseOps(fused);
       receipts = ops.isEmpty
           ? const []
-          : applyPocketOps(record, ops, onTransfer: onTransfer, day: day);
+          : applyPocketOps(
+              record,
+              ops,
+              onTransfer: onTransfer,
+              day: day,
+              events: events,
+            );
     } else {
       receipts = await _pocketsEval.evaluateAndApply(
         charName: speaker.name,
@@ -211,6 +220,7 @@ extension ChatServicePockets on ChatService {
         others: others,
         onTransfer: onTransfer,
         day: day,
+        events: events,
       );
     }
 
@@ -237,6 +247,24 @@ extension ChatServicePockets on ChatService {
     // (and re-diffed against) every single turn.
     setPocketsFor(charId, record);
 
+    // The Journal remembers what changed hands (maintainer design,
+    // 2026-08-11): deterministic diary cards from the ops just applied —
+    // zero extra model calls. Gated on BOTH switches deliberately: pockets
+    // produced the events, the Journal stores the memory; neither feature's
+    // CORE rides the other (the independence rule), this is their
+    // intersection. Guests never journal — the pass already runs only for
+    // real cast members.
+    if (events.isNotEmpty &&
+        _storageService.memorySettings.journalEnabled &&
+        _currentSessionId != null) {
+      try {
+        await _writeItemCards(charId, events);
+      } catch (e) {
+        // A diary miss must never cost the turn — same floor as the eval.
+        debugPrint('[Journal] item cards skipped: $e');
+      }
+    }
+
     if (receipts.isEmpty) return;
 
     // Receipts ride the message metadata the same way needs deltas do, so the
@@ -247,5 +275,43 @@ extension ChatServicePockets on ChatService {
       await _saveChat();
     }
     notifyListeners();
+  }
+
+  /// Write this turn's item-memory cards ([itemCardsFrom] decides which
+  /// events are diary-worthy). One live placement memory per item: a new
+  /// card about the same thing retires the old one first, so "where are my
+  /// keys" always has exactly one answer in the diary. Cards carry the
+  /// canonical item name in the metadata pouch (the keyword re-warm key),
+  /// the story stamp, and the reply's position as their receipt — which also
+  /// enrolls them in the existing timeline-integrity invalidation: a
+  /// regenerated or deleted reply takes its phantom placement cards with it.
+  Future<void> _writeItemCards(String ownerId, List<PocketEvent> events) async {
+    final drafts = itemCardsFrom(events);
+    if (drafts.isEmpty) return;
+    final sid = _currentSessionId!;
+    final existing = await _journalStore.cardsFor(sid, ownerId);
+    for (final draft in drafts) {
+      for (final old in existing) {
+        if (JournalPhysics.isItemCard(old) &&
+            sameItem(JournalPhysics.itemOf(old) ?? '', draft.item)) {
+          await _journalStore.retireCard(old.id);
+        }
+      }
+      await _journalStore.addCard(
+        sessionId: sid,
+        characterId: ownerId,
+        content: draft.content,
+        category: 'item',
+        kind: 'item',
+        extraMetadata: {'item': draft.item},
+        sourcePositions: [if (_messages.isNotEmpty) _messages.length - 1],
+        storyDay: _timeService.dayCount,
+        storyClock: _timeService.storyClockIso,
+        maxCards: _storageService.memorySettings.journalMaxCards,
+      );
+    }
+    debugPrint(
+      '[Journal] 📦 ${drafts.length} item card(s) for ${_activeCharacter?.name}',
+    );
   }
 }

@@ -21,6 +21,7 @@ import 'dart:math';
 
 import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/chat/pockets.dart';
 import 'package:front_porch_ai/utils/utils.dart';
 
 /// The Journal — deterministic emotional physics
@@ -129,6 +130,44 @@ class JournalPhysics {
   /// Ledger-class cards that never cool and skip hot-set injection.
   static bool isLedgerCard(JournalMemoryData card) =>
       isMilestone(card) || isPromise(card);
+
+  /// Item-memory cards (2026-08-11): deterministic diary lines written from
+  /// applied pocket events ("I set my keys down on the hallway table").
+  /// NOT ledger-class on purpose — they cool at the full base rate (no
+  /// intensity, no flashbulb), fade from the hot set in a few passes like a
+  /// human forgetting where they put things, and come back through the
+  /// keyword floor below (or cosine, when embeddings exist).
+  static bool isItemCard(JournalMemoryData card) => cardKind(card) == 'item';
+
+  /// The canonical item name an item card is about, from the metadata pouch.
+  static String? itemOf(JournalMemoryData card) {
+    final raw = card.metadata;
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      return decoded is Map ? decoded['item'] as String? : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// The keyword re-warm floor: does the recent turn NAME this item card's
+  /// item? Token-set intersection via the same [itemNameTokens] rule the
+  /// applier's matching uses — no embeddings involved, which is the point:
+  /// emotional memories have no reliable trigger words, but items have
+  /// names, so "where are my keys?" must resurface the keys card on every
+  /// install, sidecar or not. Cosine remains the oblique-reference upgrade
+  /// ("ready to head out?" warming the keys card without anyone saying
+  /// keys).
+  static bool itemCardMentioned(
+    JournalMemoryData card,
+    Set<String> queryTokens,
+  ) {
+    if (queryTokens.isEmpty || !isItemCard(card)) return false;
+    final name = itemOf(card);
+    if (name == null || name.isEmpty) return false;
+    return itemNameTokens(name).any(queryTokens.contains);
+  }
 
   /// One card's heat after one maintenance pass of cooling.
   static double cooledHeat(JournalMemoryData card) {

@@ -124,13 +124,40 @@ class JournalInjection {
             return byKey != 0 ? byKey : b.createdAt.compareTo(a.createdAt);
           });
 
+    final coldCards = cards.where((c) => !JournalPhysics.isHot(c)).toList();
+
+    // The keyword floor (2026-08-11): a cold ITEM card resurfaces the moment
+    // the conversation names its item — plain token intersection, no
+    // embeddings, so "where are my keys?" works on every install. Runs
+    // before cosine and claims its cards, so the two paths never double-pick.
+    final queryTokens = itemNameTokens(queryText);
+    final lexical = <JournalMemoryData>[];
+    if (queryTokens.isNotEmpty) {
+      for (final card in coldCards) {
+        if (lexical.length >= JournalPhysics.kColdRetrievalLimit) break;
+        if (JournalPhysics.itemCardMentioned(card, queryTokens)) {
+          lexical.add(card);
+        }
+      }
+      for (final card in lexical) {
+        await store.rewarmCard(card);
+      }
+      if (lexical.isNotEmpty) {
+        debugPrint(
+          '[Journal] 🔑 Resurfaced ${lexical.length} item card(s) by name',
+        );
+      }
+    }
+
     final resurfaced = await _retrieveColdCards(
-      cards.where((c) => !JournalPhysics.isHot(c)).toList(),
+      coldCards.where((c) => !lexical.contains(c)).toList(),
       queryVector,
       currentEmotion,
     );
 
-    final injected = [...pinned, ...hot, ...resurfaced];
+    // Named mention is the stronger signal, so lexical picks rank ahead of
+    // cosine ones.
+    final injected = [...pinned, ...hot, ...lexical, ...resurfaced];
     final lines = <String>[];
     var usedChars = 0;
     const budgetChars = kHotSetTokenBudget * 4;
@@ -337,6 +364,7 @@ class JournalInjection {
       'about_user' => 'about $userName',
       'about_us' => 'about us',
       'promise' => 'a promise',
+      'item' => 'belongings',
       _ => 'a moment',
     };
     final emotion = card.emotionLabel;

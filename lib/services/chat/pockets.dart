@@ -237,18 +237,23 @@ enum PocketOpKind {
 }
 
 /// One reported change. [to] names the recipient of a `give`; [state] carries
-/// the new condition for `update`, or what the item BECAME for `transform`.
+/// the new condition for `update`, or what the item BECAME for `transform`;
+/// [where] is an optional short place phrase for `setdown`/`drop`/`give`
+/// ("on the nightstand", "by the door") — never required, purely enrichment
+/// for the item-memory journal cards.
 class PocketOpReport {
   final PocketOpKind kind;
   final String item;
   final String to;
   final String state;
+  final String where;
 
   const PocketOpReport({
     required this.kind,
     required this.item,
     this.to = '',
     this.state = '',
+    this.where = '',
   });
 
   /// Forgiving parse of one eval-reported op. Returns null for anything
@@ -266,9 +271,47 @@ class PocketOpReport {
       item: item,
       to: _tidy((raw['to'] ?? '').toString(), kMaxItemNameChars),
       state: _tidy((raw['state'] ?? '').toString(), kMaxItemStateChars),
+      where: _tidy((raw['where'] ?? '').toString(), kMaxItemStateChars),
     );
   }
 }
+
+/// One change that ACTUALLY applied, with the item's CANONICAL name (the
+/// record's own spelling, not whatever the model typed). This is the feed
+/// for the item-memory journal cards (maintainer design, 2026-08-11):
+/// deterministic, downstream of ops the record already trusted, zero extra
+/// model calls. The applier emits these; it neither knows nor cares what a
+/// journal is.
+class PocketEvent {
+  final PocketOpKind kind;
+  final String item;
+  final String to;
+  final String where;
+
+  /// The item was clothing (came from / went onto the worn list).
+  final bool clothing;
+
+  /// Part of a generic whole-outfit remove ("she undresses") rather than a
+  /// named single-item op — lets the card writer keep routine undressing
+  /// out of the diary.
+  final bool bulk;
+
+  const PocketEvent({
+    required this.kind,
+    required this.item,
+    this.to = '',
+    this.where = '',
+    this.clothing = false,
+    this.bulk = false,
+  });
+}
+
+/// Content tokens of an item name — lowercased, punctuation-stripped, filler
+/// words dropped, and short noise (< 3 chars) skipped. ONE tokenizer shared
+/// by the applier's matching and the Journal's keyword re-warm floor, so
+/// "what counts as mentioning the keys" can never drift between them.
+Set<String> itemNameTokens(String s) =>
+    _contentTokens(s).where((t) => t.length >= 3).toSet();
 
 /// A single character's pockets in a single chat.
 class Pockets {
@@ -506,11 +549,15 @@ bool sameItem(String a, String b) {
 /// [day] is the current story day, used to stamp newly parked set-aside
 /// entries and to expire yesterday's clothing before any op can match it.
 /// The default 0 means "no story clock": nothing is stamped, nothing expires.
+/// [events], when supplied, collects a [PocketEvent] per APPLIED change
+/// (canonical item names) — the deterministic feed for item-memory journal
+/// cards. No-op ops emit nothing; passing null costs nothing.
 List<String> applyPocketOps(
   Pockets p,
   Iterable<PocketOpReport> ops, {
   void Function(String to, PocketItem item)? onTransfer,
   int day = 0,
+  List<PocketEvent>? events,
 }) {
   final receipts = <String>[];
 
@@ -564,6 +611,9 @@ List<String> applyPocketOps(
         p.worn.add(op.state.isEmpty ? item : item.withState(op.state));
         capTo(p.worn, kMaxWorn);
         receipts.add('put on: ${op.item}');
+        events?.add(
+          PocketEvent(kind: op.kind, item: item.name, clothing: true),
+        );
 
       case PocketOpKind.remove:
         // Clothing taken off goes to SET ASIDE, not to carrying and not
@@ -581,19 +631,34 @@ List<String> applyPocketOps(
           for (final it in p.worn) {
             park(it, clothing: true);
             receipts.add('took off: ${it.name}');
+            events?.add(
+              PocketEvent(
+                kind: op.kind,
+                item: it.name,
+                clothing: true,
+                bulk: true,
+              ),
+            );
           }
           p.worn.clear();
           for (final it in p.carrying) {
             park(it, clothing: false);
             receipts.add('set aside: ${it.name}');
+            events?.add(
+              PocketEvent(kind: op.kind, item: it.name, bulk: true),
+            );
           }
           p.carrying.clear();
           break;
         }
         final w = find(p.worn, op.item);
         if (w == -1) break;
-        park(p.worn.removeAt(w), clothing: true);
+        final removed = p.worn.removeAt(w);
+        park(removed, clothing: true);
         receipts.add('took off: ${op.item}');
+        events?.add(
+          PocketEvent(kind: op.kind, item: removed.name, clothing: true),
+        );
 
       case PocketOpKind.setdown:
         // Put down nearby, still hers — the mid-scene sibling of the bulk
@@ -603,15 +668,28 @@ List<String> applyPocketOps(
         // data-loss shape as the undress bug, in miniature.
         final sc = find(p.carrying, op.item);
         if (sc != -1) {
-          park(p.carrying.removeAt(sc), clothing: false);
+          final down = p.carrying.removeAt(sc);
+          park(down, clothing: false);
           receipts.add('set aside: ${op.item}');
+          events?.add(
+            PocketEvent(kind: op.kind, item: down.name, where: op.where),
+          );
           break;
         }
         // A worn thing set down (hat on the table) is clothing taken off.
         final sw = find(p.worn, op.item);
         if (sw == -1) break;
-        park(p.worn.removeAt(sw), clothing: true);
+        final downWorn = p.worn.removeAt(sw);
+        park(downWorn, clothing: true);
         receipts.add('set aside: ${op.item}');
+        events?.add(
+          PocketEvent(
+            kind: op.kind,
+            item: downWorn.name,
+            where: op.where,
+            clothing: true,
+          ),
+        );
 
       case PocketOpKind.pickup:
         if (find(p.carrying, op.item) != -1 || find(p.worn, op.item) != -1) {
@@ -657,6 +735,15 @@ List<String> applyPocketOps(
           op.kind == PocketOpKind.give && op.to.isNotEmpty
               ? 'gave ${op.item} to ${op.to}'
               : 'dropped: ${op.item}',
+        );
+        events?.add(
+          PocketEvent(
+            kind: op.kind,
+            item: taken.name,
+            to: op.to,
+            where: op.where,
+            clothing: w != -1,
+          ),
         );
 
       case PocketOpKind.update:

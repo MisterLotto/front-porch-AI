@@ -14591,3 +14591,33 @@ wear's pile search cut → shower test red; both restored green. Full
 unit suite 3535 passing, chat dir 1388, analyze clean, web lint+59
 vitest+build green. Test amendments documented in-file (the two
 morning-ruling pins were superseded same-day by this approved design).
+
+## 2026-08-11 (UTC) — Item-memory journal feed: the Journal remembers where things went
+
+**Files:** `lib/services/chat/pockets.dart` (PocketEvent + events out-param,
+`where` on ops, shared itemNameTokens), `pocket_journal_cards.dart` (NEW pure
+salience mapper), `pockets_eval.dart` (where in schema+rubric, events
+pass-through), `journal_physics.dart` (isItemCard/itemOf/itemCardMentioned),
+`prompt_injection/journal_injection.dart` (keyword re-warm floor before
+cosine, 'belongings' label), `chat_service_pockets.dart` (events plumb +
+_writeItemCards with one-live-card-per-item retire), `chat.dart` barrel,
+CLAUDE.md journal section, docs/Rawhide.md, 2 new test files (15 tests).
+
+**Why:** Maintainer design (this conversation): "she put her keys on the
+table" is an EVENT to remember, not state — and remembering is the
+Journal's trade. The set-aside pile owns NOW; the Journal now owns THEN.
+
+**How:** deterministic cards, zero new model calls — the applier emits
+PocketEvents (canonical names, applied changes only), the pure mapper
+picks the diary-worthy ones (setdown/give/drop + outfit-change; undress
+and dress-alone silent), and the pass stores them gated on pockets AND
+journal (intersection; neither core rides the other). kind:'item' rider in
+the existing metadata pouch — NO migration. Full-rate cooling (no
+flashbulb); resurfacing floor is LEXICAL (token intersection on the item
+name — works with no embeddings on every install), cosine stays the
+oblique upgrade; receipts enroll cards in existing timeline invalidation.
+One live placement card per item — new placement retires the old.
+
+**Verification:** 3 guards proven red-then-green (lexical floor disabled →
+resurface test red; retire loop cut → dedupe red; undress-silence rule
+broken → mapper red). Full chat dir 1403, full unit 3550, analyze clean.
