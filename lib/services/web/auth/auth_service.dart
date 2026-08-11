@@ -189,6 +189,23 @@ class AuthService {
 
   Future<void> logout(String rawToken) => sessions.revoke(rawToken);
 
+  /// Password (+ TOTP when enabled) step-up for privileged operations that
+  /// a stolen session cookie alone must not perform — e.g. publishing a
+  /// public tunnel (audit P0.6). Returns [CredentialChangeStatus.success]
+  /// when re-auth passes.
+  Future<CredentialChangeStatus> verifyStepUp({
+    required String currentPassword,
+    String? totpCode,
+    String? ip,
+  }) async {
+    final creds = await _loadCredentials();
+    if (creds == null) return CredentialChangeStatus.notSetUp;
+    final denied = await _reauthenticate(creds, currentPassword, totpCode, ip);
+    if (denied != null) return denied;
+    _limiter.recordSuccess(creds.username);
+    return CredentialChangeStatus.success;
+  }
+
   // ── Credential management ─────────────────────────────────────────────────
 
   /// Change the username and/or password. Requires the CURRENT password (and,

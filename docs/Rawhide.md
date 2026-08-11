@@ -9,6 +9,7 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 - 🔐 **Turning on web 2FA needs your password** — a stolen browser session alone can’t enroll a new authenticator or mint recovery codes. Re-enroll while 2FA is already on is refused; turn it off first (that still needs password + code).
 - 🛡️ **First web login setup is local-first** — creating the web account from another phone, LAN, or tunnel needs a one-time code from desktop **Settings → Web Server**. Same computer on localhost still works without a code.
+- 🌐 **Turning on Tailscale/ngrok needs your web password** — a stolen browser session alone can’t publish a public or tailnet URL to your whole app.
 - 🧠 **Memory (RAG) sidebar got real setup feedback** — Settings say what they do (“past moments per reply”), and if the local model isn’t there you get Download / a progress bar / a real error + Retry — not a dead “Model not downloaded” dot. Web tools mirror the status (download still runs on the desktop host).
 - 🎒 **Belongings get their own Journal tab** — Placement notes (“I set my jacket down by the hot tub”) live under Journal → **Belongings** next to Promises / Our Story (count badge included). Same surface on the web tools sidebar. The diary section for these cards no longer crashes the editor.
 - 📍 **"Where we are" forgets discarded scenes** — Regen or delete clears a stale story recap until the Journal rewrites it from the real timeline (better empty than wrong).

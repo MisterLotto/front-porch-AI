@@ -153,6 +153,57 @@ void main() {
       expect(await auth.isSetupRequired(), isTrue);
     });
 
+    test('verifyStepUp demands the current password (tunnel enable gate)',
+        () async {
+      final auth = make();
+      await auth.setupAccount(
+        'admin',
+        'password123',
+        isDirectLoopbackClient: true,
+      );
+      // Session alone is not enough — empty / wrong password fail.
+      expect(
+        await auth.verifyStepUp(currentPassword: ''),
+        CredentialChangeStatus.invalidCurrentPassword,
+      );
+      expect(
+        await auth.verifyStepUp(currentPassword: 'wrong'),
+        CredentialChangeStatus.invalidCurrentPassword,
+      );
+      expect(
+        await auth.verifyStepUp(currentPassword: 'password123'),
+        CredentialChangeStatus.success,
+      );
+
+      // With 2FA on, password alone is not enough.
+      final begin = await auth.beginTotpEnrollment(
+        currentPassword: 'password123',
+      );
+      final code = OTP.generateTOTPCodeString(
+        begin.enrollment!.secret,
+        fixedMs,
+        length: 6,
+        interval: 30,
+        algorithm: Algorithm.SHA1,
+        isGoogle: true,
+      );
+      await auth.confirmTotpEnrollment(
+        currentPassword: 'password123',
+        code: code,
+      );
+      expect(
+        await auth.verifyStepUp(currentPassword: 'password123'),
+        CredentialChangeStatus.totpRequired,
+      );
+      expect(
+        await auth.verifyStepUp(
+          currentPassword: 'password123',
+          totpCode: code,
+        ),
+        CredentialChangeStatus.success,
+      );
+    });
+
     test('login succeeds with correct creds, fails otherwise', () async {
       final auth = make();
       await auth.setupAccount('admin', 'password123', isDirectLoopbackClient: true);

@@ -3,6 +3,15 @@
 
 # Changelog
 
+## 2026-08-11 — security(web): tunnel enable requires password step-up (audit P0.6)
+- **Files:** `auth_service.dart` (`verifyStepUp`), `remote_routes.dart`,
+  `web_ui` `RemoteAccessPage.tsx`, auth tests, Rawhide.
+- **Why:** Session cookie alone could enable ngrok/Tailscale and persist an
+  ngrok authtoken, publishing the full web surface without the web password.
+- **Behavior:** Enable paths re-auth with current password (+ TOTP if on)
+  before tunnel start; authtoken is only saved after step-up. Disable stays
+  session-only. Remote Access page collects password for enable.
+
 ## 2026-08-11 — security(web): first-run setup token + rate limit (audit P0.5)
 - **Files:** `setup_gate.dart` / `auth_types.dart` (new), `auth_service.dart`,
   `rate_limiter.dart`, `auth_routes.dart`, `web_login_section.dart`,
