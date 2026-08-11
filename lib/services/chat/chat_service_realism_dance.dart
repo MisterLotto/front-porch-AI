@@ -249,11 +249,14 @@ extension ChatServiceRealismDance on ChatService {
       }
 
       if (_relationshipService.pendingTrustRepair) {
-        // Trust-repair eval (fires when trust dropped sharply). Was 1:1-only in
-        // the old centralized block; now part of the single path so the host
-        // keeps it (and a group member would too, if their trust ever flags it).
+        // Trust-repair is a RELATIONSHIP substitute, not a full pre-gen freeze
+        // (audit P1.11). Docs once claimed it only replaced the relationship
+        // judge; the code ran ONLY trust-repair and skipped emotion/narrative/
+        // scene-time — freezing mood and the clock for a turn. After the
+        // repair call we still run emotion + narrative + physical (time).
         debugPrint(
-          '[Realism:Unified] Trust-repair eval for ${speaker.name} ($charId)',
+          '[Realism:Unified] Trust-repair eval for ${speaker.name} ($charId) '
+          '+ remaining judges (not a full freeze)',
         );
         _relationshipService.consumePendingTrustRepair();
         final userText = _messages
@@ -263,6 +266,42 @@ extension ChatServiceRealismDance on ChatService {
             )
             .text;
         await _evaluateTrustRepairCall(userText, onChunk: handleChunk);
+        if (_realismEvalCancelled) return;
+        _realismEvals.beginCollectForBatchedVerification();
+        await Future.wait([
+          _evaluateEmotionalStateCall(onChunk: handleChunk),
+          Future.delayed(
+            _kEvalDispatchStagger,
+            () => _evaluateNarrativeCall(onChunk: handleChunk),
+          ),
+          Future.delayed(
+            _kEvalDispatchStagger * 2,
+            () => _evaluatePhysicalStateCall(onChunk: handleChunk),
+          ),
+        ]);
+        await _realismEvals.finalizeBatchedRealismVerifications();
+        final collected = _realismEvals.getCollectedForBatch();
+        if (collected.isNotEmpty) {
+          final items = collected
+              .map(
+                (p) => (
+                  evalKind: p['kind'] as String,
+                  rawOutput: p['raw'] as String,
+                  sceneResponse: p['scene'] as String,
+                  preState: null,
+                  activeChar: _activeCharacter,
+                  activeGroup: _activeGroup,
+                  recentMessages: _messages,
+                  promptText: p['prompt'] as String?,
+                  injections: (p['injections'] as Map?)?.cast<String, String>(),
+                  strictnessOverride: null,
+                  maxPassesOverride: null,
+                ),
+              )
+              .toList();
+          final batchRes = await _realismVerifier.verifyBatch(items);
+          await _realismEvals.applyBatchResults(batchRes);
+        }
       } else if (_oneShotActive) {
         debugPrint(
           '[Realism:Unified] One-shot eval for ${speaker.name} ($charId)',

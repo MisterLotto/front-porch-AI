@@ -383,6 +383,28 @@ extension ChatServiceReprocess on ChatService {
             previousMessageState,
             groupSpeakerId: isGroupHostRegen ? regenSpeakerSid : null,
           );
+          // Inter-character feelings (audit P1.10): the rejected turn's own
+          // pre-gen stamp is the honest baseline. Feelings mutate POST-gen and
+          // are NOT restamped, so realism_state on lastMsg still holds pre-turn
+          // feelings. previousMessageState is an older same-speaker stamp
+          // (start of a prior turn) — restoring from it left one exchange of
+          // feelings drift on every group regen.
+          if (isGroupHostRegen &&
+              lastMsg.activeMetadata?['realism_state'] is Map) {
+            final rejected =
+                lastMsg.activeMetadata!['realism_state'] as Map;
+            final rels = rejected['interCharacterRelationships'];
+            if (rels is Map) {
+              _relationshipService.restoreFromMessageState(
+                {
+                  // Scalars already restored above; pass only the map so
+                  // restoreFromMessageState's group branch rewrites feelings.
+                  'interCharacterRelationships': rels,
+                },
+                groupSpeakerId: regenSpeakerSid,
+              );
+            }
+          }
           _characterEmotion =
               previousMessageState['characterEmotion'] as String? ??
               _characterEmotion;

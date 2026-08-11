@@ -3,6 +3,18 @@
 
 # Changelog
 
+## 2026-08-11 — fix(realism/growth): finish audit P1.9–11
+- **Files:** `growth_service.dart` (unconditional window cap), `growth_store.dart`
+  (`invalidateRingsCitingFrom`), `chat_service_message_ops.dart` (growth twin of
+  journal rewrite), `chat_service_reprocess.dart` (rejected-turn inter-char),
+  `chat_service_realism_dance.dart` (trust-repair + remaining judges), tests.
+- **P1.9:** Growth matches Journal — purge rings citing rewritten history,
+  roll cursor, cap every pass window (not only virgin cursor=0).
+- **P1.10:** Group regen restores inter-char feelings from the rejected
+  message's own pre-gen stamp, not an older same-speaker stamp.
+- **P1.11:** Trust-repair is a relationship substitute only; emotion +
+  narrative + scene-time still run so mood/clock do not freeze a turn.
+
 ## 2026-08-11 — fix(ci): FakeChatService pins memoryService/lastRagReceipt
 - **Files:** `chat_service.dart` (class-pinned getters), `chat_service_accessors.dart`,
   `test/golden/support/fakes.dart`.

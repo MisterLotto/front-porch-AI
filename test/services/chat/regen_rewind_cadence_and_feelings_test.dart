@@ -162,6 +162,39 @@ void main() {
       );
     });
 
+    test(
+      'regen prefers rejected-turn feelings over older same-speaker stamp (P1.10)',
+      () {
+        // ChatService regen first restores previousMessageState (older
+        // same-speaker stamp), then overlays the rejected turn's own pre-gen
+        // interCharacterRelationships. Without the second step, feelings lag
+        // one full exchange behind the truth.
+        final h = _Harness()..inter['aerin'] = {'bo': 8};
+        final olderSameSpeaker = {
+          'interCharacterRelationships': {'bo': 0},
+        };
+        final rejectedPreGen = {
+          'interCharacterRelationships': {'bo': 4},
+        };
+
+        h.svc.restoreFromMessageState(
+          olderSameSpeaker,
+          groupSpeakerId: 'aerin',
+        );
+        expect(h.feelings['bo'], 0);
+        h.svc.restoreFromMessageState(
+          rejectedPreGen,
+          groupSpeakerId: 'aerin',
+        );
+        expect(
+          h.feelings['bo'],
+          4,
+          reason: 'rejected message pre-gen stamp is the regen baseline for '
+              'inter-char feelings',
+        );
+      },
+    );
+
     test('the decay cadence is rewound too, so no regen burns a free turn', () {
       final h = _Harness()..aff['aerin'] = 50;
       (h.counters['aerin'] ??= {})['turnsSinceDecayCheck'] = 7;

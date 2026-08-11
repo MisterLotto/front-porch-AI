@@ -273,11 +273,11 @@ extension ChatServiceMessageOps on ChatService {
     }
   }
 
-  /// Timeline-integrity invalidation (Journal): content at [position] was
-  /// rewritten — regen, swipe navigation, edit, or delete. Cards citing
-  /// positions ≥ [position] describe events that no longer happened, so they
-  /// are removed (all diary owners). The pass cursor rolls back when the
-  /// rewrite sits inside the consumed window so the next pass re-reads it.
+  /// Timeline-integrity invalidation (Journal + Growth twin, audit P1.9):
+  /// content at [position] was rewritten — regen, swipe, edit, or delete.
+  /// Cards/rings citing positions ≥ [position] describe events that no longer
+  /// happened, so they are removed. Pass cursors roll back when the rewrite
+  /// sits inside the consumed window so the next pass re-reads it.
   ///
   /// Item-memory cards are written deterministically from pocket ops and
   /// cite the reply position WITHOUT advancing [_summaryLastIndex], so the
@@ -343,11 +343,43 @@ extension ChatServiceMessageOps on ChatService {
           }),
     );
 
+    // Growth twin: same rewrite must not leave discarded-plot rings injecting
+    // as personality, or a stuck cursor that never re-scores the tip.
+    unawaited(_invalidateGrowthFrom(sessionId, position));
+
     // Recap clear is sync — notify even if the card future is still pending
     // so the sidebar "Where we are" empties immediately.
     if (recapCleared) {
       _journalMaintenance.eventKickPending = true;
       notifyListeners();
+    }
+  }
+
+  /// Growth half of timeline integrity (audit P1.9). Journal twin: purge rings
+  /// citing the rewritten region; roll the growth cursor back when needed.
+  Future<void> _invalidateGrowthFrom(String sessionId, int position) async {
+    try {
+      final cursor = await _growthStore.cursorFor(sessionId);
+      if (position < cursor) {
+        await _growthStore.setCursor(sessionId, position);
+        debugPrint(
+          '[Growth] Timeline rewrite at $position — cursor rolled back '
+          'from $cursor',
+        );
+      }
+      final removed =
+          await _growthStore.invalidateRingsCitingFrom(sessionId, position);
+      if (_disposed) return;
+      if (removed > 0) {
+        debugPrint(
+          '[Growth] Timeline rewrite at $position — removed $removed '
+          'ring(s) citing the discarded region',
+        );
+        // Let the next due pass re-score; do not force mid-generation.
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[Growth] ⚠ ring invalidation at $position skipped: $e');
     }
   }
 

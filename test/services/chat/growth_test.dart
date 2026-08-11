@@ -21,6 +21,7 @@ import 'package:front_porch_ai/services/chat/growth_physics.dart';
 import 'package:front_porch_ai/services/chat/growth_review.dart';
 import 'package:front_porch_ai/services/chat/growth_service.dart';
 import 'package:front_porch_ai/services/chat/growth_store.dart';
+import 'package:front_porch_ai/services/chat/journal_physics.dart';
 import 'package:front_porch_ai/services/chat/pass_support.dart';
 import 'package:front_porch_ai/services/llm_service.dart'
     show LlmToolCall, LlmToolResponse;
@@ -293,6 +294,61 @@ Some prose the model wrote.
       final retired = rings.where((r) => r.retired);
       expect(active.length, GrowthPhysics.kMaxActiveRings);
       expect(retired.single.content, 'ring 0'); // the weakest
+    });
+
+    test('invalidateRingsCitingFrom purges rings that cite rewritten history', () async {
+      await store.addRing(
+        sessionId: 's1',
+        characterId: 'c1',
+        content: 'cites discarded beat',
+        category: 'trait',
+        sourcePositions: [10, 12],
+      );
+      await store.addRing(
+        sessionId: 's1',
+        characterId: 'c1',
+        content: 'manual plant — no receipts',
+        category: 'trait',
+        sourcePositions: const [],
+      );
+      await store.addRing(
+        sessionId: 's1',
+        characterId: 'c1',
+        content: 'only older receipts',
+        category: 'habit',
+        sourcePositions: [2, 3],
+      );
+      final removed = await store.invalidateRingsCitingFrom('s1', 10);
+      expect(removed, 1);
+      final left = await store.ringsFor('s1', 'c1');
+      expect(left.map((r) => r.content).toSet(), {
+        'manual plant — no receipts',
+        'only older receipts',
+      });
+    });
+
+    test('window start caps unconditionally (stuck cursor twin of Journal)', () {
+      // Mirrors growth_service.runGrowthPass math after P1.9 — a non-zero
+      // stuck cursor on a long chat must not open an unbounded window.
+      int startFor(int cursor, int len) {
+        var start = cursor.clamp(0, len);
+        if (len - start > JournalPhysics.kFirstPassCap) {
+          start = len - JournalPhysics.kFirstPassCap;
+        }
+        return start;
+      }
+
+      expect(
+        startFor(590, 9488),
+        9488 - JournalPhysics.kFirstPassCap,
+        reason: 'stuck cursor must jump the gap like Journal',
+      );
+      expect(
+        startFor(0, 200),
+        200 - JournalPhysics.kFirstPassCap,
+        reason: 'virgin long chat still capped',
+      );
+      expect(startFor(5, 20), 5, reason: 'under the cap is unchanged');
     });
 
     test('reinforce merges receipts and bumps strength; fade retires at zero', () async {

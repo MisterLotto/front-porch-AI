@@ -299,6 +299,41 @@ class GrowthStore {
     await getDb()?.deleteGrowthRing(id);
   }
 
+  /// Timeline integrity (Journal twin, audit P1.9): content at/after
+  /// [fromPosition] was rewritten, so every ring CITING that region describes
+  /// discarded plot — delete them (pinned included). Rings with no receipts
+  /// (manual plants) are never touched. Sweeps all owners for the session.
+  Future<int> invalidateRingsCitingFrom(
+    String sessionId,
+    int fromPosition,
+  ) async {
+    final db = getDb();
+    if (db == null) return 0;
+    var removed = 0;
+    for (final ring in await db.getGrowthRingsForSession(sessionId)) {
+      final raw = ring.sourceMessageIds;
+      if (raw == null || raw.isEmpty) continue;
+      List<dynamic> positions;
+      try {
+        positions = jsonDecode(raw) as List<dynamic>;
+      } catch (_) {
+        continue;
+      }
+      final cites = positions.whereType<num>().any(
+        (p) => p.toInt() >= fromPosition,
+      );
+      if (cites) {
+        await db.deleteGrowthRing(ring.id);
+        removed++;
+      }
+    }
+    if (removed > 0 && _cacheValid(sessionId)) {
+      // Drop cache so injection/timeline re-read DB without phantom rings.
+      invalidate();
+    }
+    return removed;
+  }
+
   /// Delete every ring for one owner in one chat (user Reset, or hard cast
   /// removal). The original card was never touched, so this fully restores
   /// the pre-growth character.

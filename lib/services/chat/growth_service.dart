@@ -207,9 +207,11 @@ class GrowthService {
         0,
         messages.length,
       );
-      if (start == 0 && messages.length > JournalPhysics.kFirstPassCap) {
-        // Virgin growth record on a long chat: read the recent tail only
-        // (the legacy blob distill carries the older growth forward).
+      // THE WINDOW IS CAPPED ON EVERY PASS (audit P1.9) — Journal twin.
+      // Gating on `start == 0` only protected a virgin growth record; a
+      // stuck non-zero cursor on a long chat reopened an unbounded window
+      // after one failed pass. Same trap Journal fixed in journal_maintenance.
+      if (messages.length - start > JournalPhysics.kFirstPassCap) {
         start = messages.length - JournalPhysics.kFirstPassCap;
       }
       if (start >= messages.length) {
