@@ -3,6 +3,16 @@
 
 # Changelog
 
+## 2026-08-11 — fix(host): MallocStackLogging=0 was breaking local macOS E2E
+- **Host:** `~/.zshrc` had `export MallocStackLogging=0` (and Lite/NoCompact).
+  On modern macOS any *presence* of those vars makes every process print MSL
+  lines to stderr; Flutter integration_test's isolate IPC then dies with
+  `Unexpected character`. Replaced with `unset` of those keys.
+- **Docs:** CLAUDE.md Key Commands document the gotcha + the unset fix.
+- **Local helper (gitignored scripts/):** `scripts/e2e-local.sh` unsets the
+  same keys and prefers Flutter 3.44.8 — not committed (maintainer scripts/
+  policy); stays on the machine for agent/local use.
+
 ## 2026-08-11 — fix(ci): light-mode goldens + growable FakeBackend replyPieces
 - **Files:** `settings_menu_item.light.png`, `chat_settings.light.png`,
   `integration_test/support/fake_backend.dart`,

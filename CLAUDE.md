@@ -58,6 +58,15 @@ flutter test -n "test name"          # Run specific test by name
                                      #   Also: ci-local.sh test | all | update-goldens
 
 # E2E (integration_test/) — one invocation PER FILE
+#
+# macOS host gotcha (2026-08-11): any presence of MallocStackLogging* env vars
+# (including the common mistaken `export MallocStackLogging=0`) makes every
+# process print MSL lines to stderr. That corrupts Flutter's isolate JSON
+# stream → "Unexpected character" at load, and local E2E is dead. Fix:
+#   unset MallocStackLogging MallocStackLoggingNoCompact MallocStackLoggingLite
+# and DELETE any export of those from ~/.zshrc (do not re-export as 0). Then
+# open a new terminal. Optional local helper (gitignored under scripts/):
+#   ./scripts/e2e-local.sh app_smoke_test
 flutter test integration_test/app_smoke_test.dart -d macos
                                      # Never `flutter test integration_test/` — a single
                                      #   invocation launches a second app while the first
