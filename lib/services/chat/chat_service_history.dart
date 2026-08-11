@@ -25,8 +25,9 @@ part of '../chat_service.dart';
 /// fast-forward) never matches and the whole transcript re-prefills each
 /// message. Rounding the drop point up to a chunk boundary wastes at most a
 /// chunk's worth of budget but keeps the prefix byte-stable for up to this
-/// many turns between evictions. Stateless: the boundary is derived from the
-/// drop index alone, so regen/swipe/reload all land on the same boundary.
+/// many turns between evictions. Layer 1 of sticky trimming — layer 2 is the
+/// per-session monotonic [_HistoryAnchor] below, which stops budget wobble
+/// from oscillating the drop across a chunk boundary between turns.
 const int kHistoryTrimChunk = 8;
 
 /// Per-service history-window anchor (see the monotonic-anchor comment in
@@ -49,34 +50,11 @@ final Expando<_HistoryAnchor> _historyAnchorOf = Expando();
 /// extension (never part of the public interface / fakeable).
 extension ChatServiceHistory on ChatService {
   /// One history line per message (shared by both history builders so they
-  /// can never drift). Director notes get bracketed so the AI treats them as
-  /// instructions; generated-image messages (empty text + image metadata from
-  /// `/image` or the studio's Send to chat) are described briefly instead of
-  /// producing a bare "Sender:" line; user-attached photos are marked (with
-  /// the stored auto-caption once available) so turns after the pixels stop
-  /// riding along still know a photo was shared and what it showed.
-  String _formatHistoryLine(ChatMessage m) {
-    if (m.characterId == '__director__') {
-      return '[Director: ${m.text}]';
-    }
-    if (m.activeMetadata?['is_user_image'] == true) {
-      final caption = (m.activeMetadata?['image_caption'] as String? ?? '')
-          .trim();
-      final attach = '[attaches a photo${caption.isEmpty ? '' : ': $caption'}]';
-      final text = m.text.trim();
-      return '${m.sender}: ${text.isEmpty ? attach : '$text $attach'}';
-    }
-    if (m.activeMetadata?['is_generated_image'] == true && m.text.isEmpty) {
-      final prompt = (m.activeMetadata?['image_prompt'] as String? ?? '')
-          .trim();
-      final short = prompt.length > 120
-          ? '${prompt.substring(0, 120)}…'
-          : prompt;
-      return '${m.sender}: [shares a generated image'
-          '${short.isEmpty ? '' : ': $short'}]';
-    }
-    return '${m.sender}: ${m.text}';
-  }
+  /// can never drift). Delegates to [ChatMessage.toPromptHistoryLine] so the
+  /// generation prompt and the eval windows ([recentExchange]) agree: think
+  /// blocks stay UI-only, photos carry their caption marker, director notes
+  /// and generated-image shares keep their brackets.
+  String _formatHistoryLine(ChatMessage m) => m.toPromptHistoryLine();
 
   String _buildChatHistory({List<LoreDepthEntry> depthLore = const []}) {
     final lines = _messages.map(_formatHistoryLine).toList();

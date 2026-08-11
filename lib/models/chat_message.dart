@@ -128,6 +128,26 @@ class ChatMessage {
     return displayText;
   }
 
+  /// One `sender: text` line for the chat-history section of a generation
+  /// prompt. Always think-stripped ([promptText]): feeding raw [text] re-injects
+  /// every prior `<think>` plan into the next turn, so a thinking model on a
+  /// long chat re-executes the previous scene on every regenerate (Nina
+  /// session 1786256661829, 2026-08-11 — ~39% of history tokens were think
+  /// blocks; 8 of 10 rerolls opened with the prior massage beat).
+  String toPromptHistoryLine() {
+    if (characterId == '__director__') {
+      return '[Director: $text]';
+    }
+    if (activeMetadata?['is_generated_image'] == true && displayText.isEmpty) {
+      final prompt = (activeMetadata?['image_prompt'] as String? ?? '').trim();
+      final short =
+          prompt.length > 120 ? '${prompt.substring(0, 120)}…' : prompt;
+      return '$sender: [shares a generated image'
+          '${short.isEmpty ? '' : ': $short'}]';
+    }
+    return '$sender: $promptText';
+  }
+
   /// Returns the thinking content (between &lt;think&gt; tags), or null if none.
   /// Handles both completed and in-progress (streaming) think blocks.
   String? get thinkingContent {

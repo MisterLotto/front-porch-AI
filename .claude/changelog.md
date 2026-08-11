@@ -3,6 +3,38 @@
 
 # Changelog
 
+## 2026-08-11 — fix(chat): generation history re-injected every prior `<think>` plan
+- **Files changed:** `lib/models/chat_message.dart` (`toPromptHistoryLine`),
+  `lib/services/chat/chat_service_history.dart` (`_formatHistoryLine` →
+  delegates; coexists with f174a656's monotonic window anchor),
+  `test/services/chat_message_test.dart`, `docs/Rawhide.md`,
+  `.claude/changelog.md`
+- **Why:** Nina session `1786256661829` — 10 regenerations of the hot-tub turn
+  kept opening with the prior living-room massage beat (`*I lean back into
+  your hands…`). DB showed the swipes were NOT byte-identical (so the model
+  was being called), but 8/10 shared a long prefix with message pos 60, the
+  *previous* character reply. The last saved prompt snapshot
+  (`sessions.context_budget_json`) had **39% of Chat History chars inside
+  `<think>` blocks** (80,736 / 206,835) — history used raw `m.text`, while
+  `displayText` / `promptText` / `recentExchange` already strip think. Every
+  regenerate re-fed the model's own prior scene plans as if they were story.
+- **Fix:** history lines go through `ChatMessage.toPromptHistoryLine()` →
+  `promptText` (think-stripped + photo marker). Director / generated-image
+  branches preserved. Same surface evals already use.
+- **Pairing with f174a656:** think-strip stabilizes *what each line says*
+  (and shrinks history ~39% on thinking-model chats); the monotonic anchor
+  stabilizes *where the window starts*. Together: cleaner content + a
+  byte-stable prefix for oMLX/KoboldCpp/LM Studio caches. Anchor is
+  in-memory only, so a process restart after this ships re-fits from the
+  think-free sizes (no permanent over-drop).
+- **Amplifiers on that chat (not code bugs, but made the stuckness worse):**
+  spatial stance still "Standing in the living room/entryway…"; autonomous
+  objectives still "guide Leo into his new bedroom" after an OOC "Leo is
+  asleep / hot tub"; per-chat `min_p: 0.8` is very mode-seeking.
+- **Verification:** integrated onto `origin/Rawhide` (f174a656); analyze +
+  `toPromptHistoryLine` unit tests + `history_prefix_stability_test` run
+  under flutter-3.44.8.
+
 ## 2026-08-10 — feat(evals): [EvalTraffic] — a per-turn tally of secondary LLM traffic
 - **Files changed:** `lib/services/chat/eval_traffic.dart` (new),
   `lib/services/chat/llm_eval_engine.dart`,
