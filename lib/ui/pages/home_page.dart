@@ -85,6 +85,11 @@ class _HomePageState extends State<HomePage> {
   // Porch Stories mode toggle
   bool _showStories = false;
 
+  /// Blocks stacked open-chat taps while setActiveCharacter / loadSession
+  /// runs (can take seconds). Without this, multi-tap after exit→reenter
+  /// races dispose and throws "State no longer has a context".
+  bool _openingChat = false;
+
   // Scroll controller for the character grid (visible scrollbar)
   final ScrollController _gridScrollController = ScrollController();
 

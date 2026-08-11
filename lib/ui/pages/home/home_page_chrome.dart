@@ -156,67 +156,80 @@ extension _HomePageChrome on _HomePageState {
   // ─── CharacterCardGrid Callback Handlers ────────────────────────
 
   Future<void> _handleTapCharacter(CharacterCard character) async {
-    final chatService = Provider.of<ChatService>(context, listen: false);
-    final charId = character.dbId ?? _getCharacterIdFromCard(character);
-    final sessions = await chatService.getSessionsForId(charId);
+    // Use State.mounted — NOT context.mounted. Reading State.context after
+    // unmount throws before .mounted is ever evaluated (exit chat → reenter
+    // multi-tap race, maintainer 2026-08-11).
+    if (_openingChat || !mounted) return;
+    _openingChat = true;
+    try {
+      final chatService = Provider.of<ChatService>(context, listen: false);
+      final charId = character.dbId ?? _getCharacterIdFromCard(character);
+      final sessions = await chatService.getSessionsForId(charId);
 
-    if (!context.mounted) return;
+      if (!mounted) return;
 
-    if (sessions.length > 1) {
-      final selectedId = await showSessionPickerDialog(
-        context,
-        sessions,
-        character.name,
-      );
-      if (selectedId == null || !context.mounted) return;
-      await chatService.setActiveCharacter(character);
-      if (selectedId != '__new__') {
-        await chatService.loadSession(selectedId);
+      if (sessions.length > 1) {
+        final selectedId = await showSessionPickerDialog(
+          context,
+          sessions,
+          character.name,
+        );
+        if (selectedId == null || !mounted) return;
+        await chatService.setActiveCharacter(character);
+        if (!mounted) return;
+        if (selectedId != '__new__') {
+          await chatService.loadSession(selectedId);
+        } else {
+          await chatService.startNewChat();
+        }
+      } else {
+        await chatService.setActiveCharacter(character);
       }
-      if (selectedId == '__new__') {
-        await chatService.startNewChat();
-      }
-    } else {
-      await chatService.setActiveCharacter(character);
-    }
-    if (context.mounted) {
+      if (!mounted) return;
       await Navigator.of(
         context,
       ).push(MaterialPageRoute(builder: (_) => const ChatPage()));
-      _refreshLastActivityCache();
+      if (mounted) _refreshLastActivityCache();
+    } finally {
+      _openingChat = false;
     }
   }
 
   Future<void> _handleTapGroup(GroupChat group) async {
-    final chatService = Provider.of<ChatService>(context, listen: false);
-    final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
-    final groupId = 'group_${group.id}';
-    final sessions = await chatService.getSessionsForId(groupId);
+    if (_openingChat || !mounted) return;
+    _openingChat = true;
+    try {
+      final chatService = Provider.of<ChatService>(context, listen: false);
+      final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
+      final groupId = 'group_${group.id}';
+      final sessions = await chatService.getSessionsForId(groupId);
 
-    if (!context.mounted) return;
+      if (!mounted) return;
 
-    if (sessions.length > 1) {
-      final selectedId = await showSessionPickerDialog(
-        context,
-        sessions,
-        group.name,
-      );
-      if (selectedId == null || !context.mounted) return;
-      await chatService.setActiveGroup(group, groupRepo: groupRepo);
-      if (selectedId != '__new__') {
-        await chatService.loadSession(selectedId);
+      if (sessions.length > 1) {
+        final selectedId = await showSessionPickerDialog(
+          context,
+          sessions,
+          group.name,
+        );
+        if (selectedId == null || !mounted) return;
+        await chatService.setActiveGroup(group, groupRepo: groupRepo);
+        if (!mounted) return;
+        if (selectedId != '__new__') {
+          await chatService.loadSession(selectedId);
+        } else {
+          await chatService.startNewChat();
+        }
+      } else {
+        await chatService.setActiveGroup(group, groupRepo: groupRepo);
       }
-      if (selectedId == '__new__') {
-        await chatService.startNewChat();
-      }
-    } else {
-      await chatService.setActiveGroup(group, groupRepo: groupRepo);
-    }
-    if (context.mounted) {
+      if (!mounted) return;
       await Navigator.of(
         context,
       ).push(MaterialPageRoute(builder: (_) => const ChatPage()));
-      _refreshLastActivityCache();
+      if (mounted) _refreshLastActivityCache();
+    } finally {
+      _openingChat = false;
     }
   }
 
@@ -228,24 +241,30 @@ extension _HomePageChrome on _HomePageState {
     CharacterCard? character,
     GroupChat? group,
   }) async {
-    final subject = character?.name ?? group?.name ?? '';
-    final personaId = await showPersonaPickerDialog(context, subject: subject);
-    if (personaId == null || !mounted) return;
+    if (_openingChat || !mounted) return;
+    _openingChat = true;
+    try {
+      final subject = character?.name ?? group?.name ?? '';
+      final personaId = await showPersonaPickerDialog(context, subject: subject);
+      if (personaId == null || !mounted) return;
 
-    final chatService = Provider.of<ChatService>(context, listen: false);
-    await chatService.startFreshChatWith(
-      character: character,
-      group: group,
-      groupRepo: group == null
-          ? null
-          : Provider.of<GroupChatRepository>(context, listen: false),
-      personaId: personaId,
-    );
-    if (!mounted) return;
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const ChatPage()));
-    _refreshLastActivityCache();
+      final chatService = Provider.of<ChatService>(context, listen: false);
+      await chatService.startFreshChatWith(
+        character: character,
+        group: group,
+        groupRepo: group == null
+            ? null
+            : Provider.of<GroupChatRepository>(context, listen: false),
+        personaId: personaId,
+      );
+      if (!mounted) return;
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const ChatPage()));
+      if (mounted) _refreshLastActivityCache();
+    } finally {
+      _openingChat = false;
+    }
   }
 
   void _handleContextMenuAction(String action, CharacterCard character) {

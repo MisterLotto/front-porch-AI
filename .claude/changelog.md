@@ -3,6 +3,16 @@
 
 # Changelog
 
+## 2026-08-11 — fix(home): exit chat → reenter no longer throws unmounted context
+- **Files:** `home_page.dart` (`_openingChat`), `home_page_chrome.dart`
+  (`_handleTapCharacter` / `_handleTapGroup` / `_startNewChatWith`).
+- **Why:** After leaving a chat and tapping a card again (often multi-tap while
+  setActiveCharacter loads a long session), async handlers used `context.mounted`
+  which first reads `State.context` and throws when the State is already
+  defunct — red "This widget has been unmounted" storms, open chat fails.
+- **Fix:** Guard with State.`mounted` after every await; re-entry lock so
+  stacked opens cannot race dispose.
+
 ## 2026-08-11 — security(web): tunnel enable requires password step-up (audit P0.6)
 - **Files:** `auth_service.dart` (`verifyStepUp`), `remote_routes.dart`,
   `web_ui` `RemoteAccessPage.tsx`, auth tests, Rawhide.
