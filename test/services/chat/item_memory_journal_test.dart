@@ -45,7 +45,7 @@ import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/chat/chat.dart'
-    show JournalPhysics, JournalStore;
+    show JournalPhysics, JournalStore, kEvalClampMarker, kEvalMessageCharCap;
 import 'package:front_porch_ai/services/chat/prompt_injection/journal_injection.dart';
 
 void _setupPathProviderMock() {
@@ -66,14 +66,17 @@ void _setupPathProviderMock() {
 /// in flight — no other prompt contains the wardrobe lead-in.
 class _ScriptedLlm extends LLMService {
   String inventoryJson = '{"inventory_ops": []}';
+  String reply = '*She hums on the porch, unhurried.*';
+  final List<String> pocketsPrompts = [];
 
   @override
   Stream<String> generateStream(GenerationParams params) async* {
     if (params.systemPrompt != null) {
-      yield '*She hums on the porch, unhurried.*';
+      yield reply;
       return;
     }
     if (params.prompt.contains('You are keeping track of what')) {
+      pocketsPrompts.add(params.prompt);
       yield inventoryJson;
       return;
     }
@@ -264,6 +267,49 @@ void main() {
       expect(
         cards.single.content,
         'I set my car keys down — by the porch rail.',
+      );
+    });
+
+    test('a novella reply reaches the bookkeeping prompt clamped', () async {
+      // The eval diet clamped every judge window but missed the bookkeeping
+      // carriers — a 20k-char reply rode the pockets prompt RAW (hostile
+      // review, 2026-08-11).
+      final card = CharacterCard(
+        name: 'Mara',
+        description: 'Exists only inside the item-memory test.',
+        firstMessage: 'The porch light hums.',
+        frontPorchExtensions: FrontPorchExtensions(
+          realismEnabled: false,
+          needsSimEnabled: false,
+          chaosModeEnabled: false,
+          inventory: {
+            'carrying': ['car keys'],
+          },
+        ),
+      )..dbId = 'char-itemmem-2';
+      await chat.setActiveCharacter(card);
+
+      llm.reply =
+          '*She talks and talks.* '
+          '${'The porch boards creak under the runners, unhurried. ' * 400}'
+          'Then she sets her keys on the sill.';
+      await chat.sendMessage('Long evening?');
+      await drainUntil(() async => llm.pocketsPrompts.isNotEmpty);
+
+      final prompt = llm.pocketsPrompts.single;
+      expect(prompt, contains(kEvalClampMarker));
+      expect(
+        prompt.length,
+        lessThan(2 * kEvalMessageCharCap + 4000),
+        reason:
+            'clamped reply + clamped exchange slice + rubric — never the '
+            'raw novella. (The first draft of this bound sat above the '
+            'unclamped size and proved nothing — negative-checked.)',
+      );
+      expect(
+        prompt,
+        contains('sets her keys on the sill'),
+        reason: 'the tail survives the clamp — that is where changes land',
       );
     });
   });

@@ -91,7 +91,9 @@ extension ChatServiceReplyFacts on ChatService {
 
     final raw = await _buildReplyFactsEval().fetch(
       charName: speaker.name,
-      reply: reply,
+      // Clamped like every judge window (the eval diet missed the fused
+      // carrier — hostile review 2026-08-11).
+      reply: clampEvalMessage(reply),
       recentExchange: recentExchange(_messages),
       askClimax: askClimax,
       pockets: record,

@@ -14657,3 +14657,21 @@ about. The realism_state day stamp rides the seeded position-2 row. Every
 assertion byte-identical; the 4-minute timeout bandage removed. File
 runtime: ~1s (was 7s locally, 30s+ under CI load). Stability: 10/10
 consecutive green + full chat dir at --concurrency=4 green.
+
+## 2026-08-11 (UTC) — P0 trio from the hostile review: wear-generic, transfer list, bookkeeping clamp
+
+**Files:** `lib/services/chat/pockets.dart` (generic wear re-dresses from
+the pile; never mints a "clothes" garment), `chat_service_pockets.dart`
+(handedOver Map→List — two gives to one recipient both arrive; + clamp),
+`chat_service_climax.dart` + `chat_service_reply_facts.dart` (clamp the
+raw reply at every bookkeeping carrier — the eval diet missed them),
+pockets_test (+3), item_memory_journal_test (+1 clamp guard).
+
+**Verification:** wear-generic proven red with the branch disabled (both
+tests); clamp guard's FIRST draft was itself proven decorative (bound sat
+above the unclamped size, marker rode in via the exchange copy) —
+tightened until the clamp-off run went red, then restored green. The
+transfer fix's pass-level half has NO automated guard (needs a group-mode
+ChatService harness that unit tests lack); the applier half is guarded
+(onTransfer fires per item). Stated per the no-silent-gaps rule.
+Full chat dir 1407 green; analyze clean.

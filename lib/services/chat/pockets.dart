@@ -588,6 +588,31 @@ List<String> applyPocketOps(
   for (final op in ops) {
     switch (op.kind) {
       case PocketOpKind.wear:
+        // Bulk-out, mirroring remove's bulk-in: "she gets dressed" arrives
+        // as ONE wear op naming "clothes", and the rubric's own "remove of
+        // 'clothes' means all of it" teaches models the symmetric report.
+        // Without this branch the applier minted a literal garment named
+        // "clothes" into the worn list — garbage the record then displayed
+        // AND injected (hostile review, 2026-08-11). Re-dress from the
+        // set-aside pile's clothing; with nothing set aside there is
+        // nothing to put on, and inventing an item is exactly the failure
+        // the no-op rule exists to prevent.
+        if (isGenericClothingRef(op.item)) {
+          final backOn = [
+            for (final e in p.setAside)
+              if (e.clothing) e,
+          ];
+          for (final e in backOn) {
+            p.setAside.remove(e);
+            p.worn.add(e.item);
+            receipts.add('put on: ${e.item.name}');
+            events?.add(
+              PocketEvent(kind: op.kind, item: e.item.name, clothing: true),
+            );
+          }
+          capTo(p.worn, kMaxWorn);
+          break;
+        }
         final alreadyWorn = find(p.worn, op.item);
         if (alreadyWorn != -1) {
           // Already on — but the model may be reporting a CHANGE to it ("her

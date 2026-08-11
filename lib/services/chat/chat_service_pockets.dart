@@ -177,7 +177,11 @@ extension ChatServicePockets on ChatService {
           ]
         : const <String>[];
 
-    final handedOver = <String, PocketItem>{};
+    // A LIST of (recipient, item), not a map keyed by recipient: "she hands
+    // Sam the keys and the letter" is two transfers to one name, and the
+    // map silently kept only the last while both receipts claimed delivery
+    // (hostile review, 2026-08-11).
+    final handedOver = <(String, PocketItem)>[];
     // Resolve against the roster the model was actually shown. An
     // unresolvable name is DROPPED, not guessed: the item still leaves
     // the giver (that much is true either way) and simply reaches
@@ -185,7 +189,7 @@ extension ChatServicePockets on ChatService {
     final onTransfer = transfersOn
         ? (String to, PocketItem item) {
             final match = resolveRecipient(to, others);
-            if (match != null) handedOver[match] = item;
+            if (match != null) handedOver.add((match, item));
           }
         : null;
 
@@ -213,7 +217,10 @@ extension ChatServicePockets on ChatService {
       receipts = await _pocketsEval.evaluateAndApply(
         charName: speaker.name,
         pockets: record,
-        reply: reply,
+        // Clamped like every judge window (the eval diet missed the
+        // bookkeeping passes — a 20k-char novella reply rode this prompt
+        // raw, hostile review 2026-08-11).
+        reply: clampEvalMessage(reply),
         // Without this a change the USER narrated — walking her out into the
         // rain — is invisible to the eval, and the dress stays recorded dry.
         recentExchange: recentExchange(_messages),
@@ -226,19 +233,19 @@ extension ChatServicePockets on ChatService {
 
     // Apply the arrivals AFTER the giver's own record is settled, so a
     // hand-off can never be read back out of the giver mid-pass.
-    for (final entry in handedOver.entries) {
-      final matches = _groupCharacters.where((c) => c.name == entry.key);
+    for (final (to, item) in handedOver) {
+      final matches = _groupCharacters.where((c) => c.name == to);
       if (matches.isEmpty) continue;
       final recipient = matches.first;
       final rid = _getCharacterIdFromCard(recipient);
       final theirs = pocketsFor(rid) ?? startingPocketsFor(recipient);
-      theirs.carrying.add(entry.value);
+      theirs.carrying.add(item);
       while (theirs.carrying.length > kMaxCarrying) {
         theirs.carrying.removeAt(0);
       }
       setPocketsFor(rid, theirs);
       debugPrint(
-        '[Pockets] ${speaker.name} -> ${recipient.name}: ${entry.value.display}',
+        '[Pockets] ${speaker.name} -> ${recipient.name}: ${item.display}',
       );
     }
 

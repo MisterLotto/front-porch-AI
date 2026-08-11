@@ -56,7 +56,9 @@ extension ChatServiceClimax on ChatService {
         ? ClimaxEval.parseRefractory(fused)
         : await _climaxEval.detect(
             charName: speaker.name,
-            reply: reply,
+            // Clamped like every judge window (eval diet, hostile
+            // review 2026-08-11).
+            reply: clampEvalMessage(reply),
             // The same window the needs eval uses, from the one shared helper —
             // this was a hand-rolled copy until Pockets needed a third.
             recentExchange: recentExchange(_messages),

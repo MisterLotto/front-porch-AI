@@ -238,6 +238,68 @@ void main() {
       );
     });
 
+    test('"she gets dressed" re-dresses from the pile — bulk-out mirrors '
+        'bulk-in', () {
+      // The rubric teaches remove("clothes") = the whole outfit, so a
+      // symmetric model reports wear("clothes") after the shower. Before
+      // 2026-08-11's hostile review this minted a literal garment named
+      // "clothes" into the record — displayed AND injected as garbage.
+      final p = Pockets(
+        worn: [const PocketItem('towel')],
+        carrying: [const PocketItem('phone')],
+      );
+      applyPocketOps(p, [op(PocketOpKind.remove, 'towel')], day: 2);
+      p.setAside.add(
+        const SetAsideItem(
+          PocketItem('red sundress', state: 'rain-soaked'),
+          clothing: true,
+          day: 2,
+        ),
+      );
+      final r = applyPocketOps(p, [op(PocketOpKind.wear, 'her clothes')],
+          day: 2);
+      expect(namesOf(p.worn), ['towel', 'red sundress']);
+      expect(
+        p.worn.last.state,
+        'rain-soaked',
+        reason: 'condition rides the bulk retrieval too',
+      );
+      expect(r, ['put on: towel', 'put on: red sundress']);
+      expect(p.setAside, isEmpty);
+      expect(namesOf(p.carrying), ['phone'],
+          reason: 'possessions are not clothing — they stay put');
+    });
+
+    test('generic wear with nothing set aside must not mint a garment', () {
+      final p = Pockets();
+      final r = applyPocketOps(p, [op(PocketOpKind.wear, 'clothes')]);
+      expect(r, isEmpty);
+      expect(p.worn, isEmpty,
+          reason: 'a literal item named "clothes" is the bug, not a floor');
+    });
+
+    test('two gives to the same recipient both leave — and both transfer', () {
+      // The pass used to collect transfers in a map keyed by recipient, so
+      // "she hands Sam the keys and the letter" delivered only the letter
+      // while both receipts claimed delivery (hostile review, 2026-08-11).
+      // The applier's half of the contract: onTransfer must fire per item.
+      final given = <(String, PocketItem)>[];
+      final p = Pockets(
+        carrying: [const PocketItem('car keys'), const PocketItem('letter')],
+      );
+      final r = applyPocketOps(
+        p,
+        [
+          op(PocketOpKind.give, 'keys', to: 'Sam'),
+          op(PocketOpKind.give, 'letter', to: 'Sam'),
+        ],
+        onTransfer: (to, item) => given.add((to, item)),
+      );
+      expect(r, ['gave keys to Sam', 'gave letter to Sam']);
+      expect(given, hasLength(2));
+      expect(given.map((g) => g.$2.name), ['car keys', 'letter']);
+    });
+
     test('a worn thing set down is clothing taken off', () {
       final p = Pockets(worn: [const PocketItem('straw hat')]);
       applyPocketOps(p, [op(PocketOpKind.setdown, 'hat')], day: 2);
