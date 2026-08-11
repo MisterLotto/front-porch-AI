@@ -461,10 +461,11 @@ extension _ChatPageSidebarWidgets on _ChatPageState {
               ),
             ),
           ],
+          // Label inherits OutlinedButton foreground (textSecondary) —
+          // hard-coded white70 was washed out on light sidebar paper (P3).
           child: const Text(
             'Main Settings',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white70),
           ),
         ),
       ),

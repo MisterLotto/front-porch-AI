@@ -18,7 +18,13 @@
 
 import 'package:flutter/material.dart';
 
+import 'package:front_porch_ai/ui/theme/app_colors.dart';
+
 /// Settings menu item row (extracted).
+///
+/// Icons/labels are brightness-aware (audit P3): the popup uses
+/// [AppColors.surfaceContainerOf], so hard-coded white was invisible on
+/// light-mode paper surfaces.
 class SettingsMenuItem extends StatelessWidget {
   const SettingsMenuItem({super.key, required this.icon, required this.label});
 
@@ -29,9 +35,15 @@ class SettingsMenuItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icon, size: 18, color: Colors.white70),
+        Icon(icon, size: 18, color: AppColors.iconSecondary(context)),
         const SizedBox(width: 12),
-        Text(label, style: const TextStyle(color: Colors.white, fontSize: 13)),
+        Text(
+          label,
+          style: TextStyle(
+            color: AppColors.textPrimary(context),
+            fontSize: 13,
+          ),
+        ),
       ],
     );
   }

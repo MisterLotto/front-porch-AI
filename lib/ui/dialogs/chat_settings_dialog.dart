@@ -69,8 +69,11 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
     final isRemote = !llmProvider.isLocal;
     final hasOverrides = _gen.hasOverrides;
 
+    // surfaceOf — peer dialogs (UI/Model/TTS) already use brightness-aware
+    // surfaces; the always-dark AppColors.surface made light-mode titles
+    // (textPrimary → black) unreadable black-on-dark (audit P3).
     return Dialog(
-      backgroundColor: AppColors.surface,
+      backgroundColor: AppColors.surfaceOf(context),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         width: 500,
@@ -219,13 +222,14 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                                   horizontal: 12,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: AppColors.surfaceContainer,
+                                  color: AppColors.surfaceContainerOf(context),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: DropdownButtonHideUnderline(
                                   child: DropdownButton<String>(
                                     value: _gen.resolveReasoningEffort(storage),
-                                    dropdownColor: AppColors.surfaceContainer,
+                                    dropdownColor:
+                                        AppColors.surfaceContainerOf(context),
                                     style: TextStyle(color: AppColors.textPrimary(context)),
                                     items: const [
                                       DropdownMenuItem(
@@ -297,7 +301,8 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                         setState(() => _gen.stopSequences = newList);
                         _save();
                       },
-                      backgroundColor: AppColors.surfaceContainer,
+                      backgroundColor:
+                          AppColors.surfaceContainerOf(context),
                     ),
 
                     // ── Banned Phrases (Anti-Slop) — local KoboldCpp only ──

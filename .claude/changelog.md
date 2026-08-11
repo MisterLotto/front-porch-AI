@@ -3,6 +3,15 @@
 
 # Changelog
 
+## 2026-08-11 — fix(ui,p3): light-mode Main Settings + Chat Settings contrast
+- **Files:** `settings_menu_item.dart` (AppColors text/icon),
+  `chat_page.sidebar_widgets.dart` (drop hard-coded white70 on Main Settings
+  label — inherits OutlinedButton foreground), `chat_settings_dialog.dart`
+  (`surfaceOf` / `surfaceContainerOf` instead of always-dark consts),
+  `settings_menu_item_theme_test.dart`.
+- **Why:** audit P3 — white-on-paper popup items, washed Main Settings label,
+  black-on-dark Chat Settings dialog in light theme.
+
 ## 2026-08-11 — fix(audit P2): web parity + RAG honesty + delete/GC
 - **Files:** `stoopApi.ts` (types=solo,group,world); `embedding_service.dart`
   (ensureReady latch + `_checking`); `database.queries.chat.dart` (session

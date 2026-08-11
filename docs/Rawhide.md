@@ -24,3 +24,4 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 - 🌍 **Stoop on web shows Living Worlds** — Browse / mine / downloads / creator lists include places, matching desktop.
 - 🧠 **Memory receipts tell the truth** — When the engine is down or errors after older messages scrolled out, the sidebar no longer pretends “no lookup needed.”
 - 🗑️ **Deleting a chat cleans everything** — RAG embeddings, quests, Living Worlds links, and biome spans leave with the chat; Database Cleanup also sweeps growth rings and dead-chat quests.
+- ☀️ **Light mode: Main Settings is readable again** — Menu items and the button label use theme ink (not pure white on paper). Chat Settings dialog matches the warm light surfaces of UI / Model / TTS settings.
