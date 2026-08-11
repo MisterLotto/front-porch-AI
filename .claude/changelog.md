@@ -3,6 +3,14 @@
 
 # Changelog
 
+## 2026-08-11 — test(pockets): H3 user-tail delete + restamp guards (engine on)
+- **Files:** `test/services/chat/pockets_rewind_test.dart` (scripted LLM answers
+  inert realism evals; two new cases with engine on).
+- **Why:** release-audit H3 required "delete trailing user → bot kit stays
+  post-ops" was never covered — prior suite ran pockets with realism off so
+  `realism_state` never stamped and restore was a no-op. Negative-checked:
+  both go red if post-gen pockets restamp is removed.
+
 ## 2026-08-11 — fix(prompt): Continue strips full state zone; standalone clock stamps story_day
 - **Files:** `chat_service_generation_plan.dart` (continue clears all
   kStateZoneSectionIds + chance_time + frame), `chat_service_send.dart`

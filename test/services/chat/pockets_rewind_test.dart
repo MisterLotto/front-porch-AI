@@ -66,8 +66,33 @@ class _ScriptedLlm extends LLMService {
       yield '*She hums on the porch, unhurried.*';
       return;
     }
-    if (params.prompt.contains('You are keeping track of what')) {
+    final p = params.prompt;
+    // Pockets bookkeeping (must win over other "inventory" wording).
+    if (p.contains('You are keeping track of what')) {
       yield inventoryJson;
+      return;
+    }
+    // Realism evals — inert zeros so H3 can stamp realism_state without
+    // inventing bond/time drama. Order matches the multi-call path.
+    if (p.contains('relationship_delta')) {
+      yield '{"relationship_delta":0,"trust_delta":0,'
+          '"bond_reason":"steady","trust_reason":"steady"}';
+      return;
+    }
+    if (p.contains('emotion_intensity')) {
+      yield '{"emotion":"neutral","emotion_intensity":"mild"}';
+      return;
+    }
+    if (p.contains('fixation_topic')) {
+      yield '{"fixation_topic":"none","proposed_objective":"none"}';
+      return;
+    }
+    if (p.contains('minutes_elapsed')) {
+      yield '{"minutes_elapsed": 5, "new_day": false}';
+      return;
+    }
+    if (p.contains('current physical position and stance')) {
+      yield '{"posture":"none"}';
       return;
     }
     yield '';
@@ -214,6 +239,86 @@ void main() {
       reason: 'no-op variant restores the shared pre-turn base',
     );
   });
+
+  /// Engine ON so the turn stamps `realism_state` (H3 only bites when that
+  /// snapshot is restored). Card + session switch both need the flag.
+  CharacterCard cardWithEngine(String dbId) => CharacterCard(
+    name: 'Mara',
+    description: 'Exists only inside the pockets-rewind test.',
+    firstMessage: 'The porch light hums.',
+    frontPorchExtensions: FrontPorchExtensions(
+      realismEnabled: true,
+      needsSimEnabled: false,
+      chaosModeEnabled: false,
+      inventory: {
+        'carrying': ['car keys'],
+      },
+    ),
+  )..dbId = dbId;
+
+  test(
+    'post-gen restamp: realism_state.pockets matches live kit after ops',
+    () async {
+      // H3 root: pre-gen capture left keys in hand inside realism_state while
+      // the live kit had them on the table. Delete/restore then time-traveled.
+      await chat.setActiveCharacter(cardWithEngine('char-rewind-restamp'));
+      await chat.setRealismEnabled(true);
+      await parkTheKeys();
+
+      final bot = chat.messages.lastWhere(
+        (m) => !m.isUser && m.sender != 'System',
+      );
+      final rs = bot.activeMetadata?['realism_state'];
+      expect(rs, isA<Map>(), reason: 'bot turn must carry a realism snapshot');
+      final snap = Pockets.fromJson((rs as Map)['pockets']);
+      expect(
+        snap.setAside.map((e) => e.item.name),
+        contains('car keys'),
+        reason:
+            'snapshot must be restamped AFTER pockets ops — pre-gen capture '
+            'would still show keys in hand and break every delete restore',
+      );
+      expect(snap.carrying, isEmpty);
+    },
+  );
+
+  test(
+    'USER-tail delete leaves bot post-pocket kit (H3)',
+    () async {
+      // Bot parks the keys → another user line + no-op bot reply → peel the
+      // tail so the setdown message is the new last. Restoring from that
+      // message's realism_state must keep keys on the table (not pre-gen hand).
+      await chat.setActiveCharacter(cardWithEngine('char-rewind-h3'));
+      await chat.setRealismEnabled(true);
+      await parkTheKeys();
+      expect(record().setAside.single.item.name, 'car keys');
+
+      llm.inventoryJson = '{"inventory_ops": []}';
+      await chat.sendMessage('Just checking.');
+      await drainUntil(() => !chat.isGenerating && !chat.isSettlingTurn);
+      expect(
+        record().setAside.single.item.name,
+        'car keys',
+        reason: 'no-op second turn must not move the parked keys',
+      );
+
+      // Peel bot tail, then the trailing user — setdown bot becomes last.
+      chat.deleteMessage(chat.messages.length - 1);
+      await drainUntil(() => chat.messages.isNotEmpty);
+      expect(chat.messages.last.isUser, isTrue);
+      chat.deleteMessage(chat.messages.length - 1);
+      await drainUntil(() => !chat.messages.last.isUser);
+
+      expect(
+        record().setAside.map((e) => e.item.name),
+        contains('car keys'),
+        reason:
+            'bot reply still in the transcript — inventory must stay post-ops, '
+            'not jump to the pre-generation kit trapped in a stale snapshot',
+      );
+      expect(record().carrying, isEmpty);
+    },
+  );
 
   test('GROUP give: regen rewinds BOTH giver and recipient', () async {
     // PRE-FIX: only the giver was stamped — Sam kept the keys after reject.
