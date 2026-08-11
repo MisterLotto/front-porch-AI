@@ -698,7 +698,7 @@ and `database.dart` has no barrel anyway).
   `golden` tag, so a green macOS `flutter test` NEVER runs them. Run
   `./scripts/ci-local.sh` (the fpai-golden linux/amd64 container) before pushing — the
   script's own header notes this is how a red-CI commit once reached Rawhide.
-- **E2E lives in `integration_test/`** — the suites below are the inventory; add new ones
+- **E2E coverage inventory: [`docs/design/e2e-coverage-inventory.md`](docs/design/e2e-coverage-inventory.md). E2E lives in `integration_test/`** — the suites below are the inventory; add new ones
   alongside them.
   Today: `app_smoke_test.dart` (1:1 journey — realism, needs, chaos, objectives,
   journal, persistence, backend-failure resilience, worlds + lorebook injection),

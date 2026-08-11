@@ -3,6 +3,14 @@
 
 # Changelog
 
+## 2026-08-11 — test(e2e): coverage inventory + regen feelings/cadence + Continue path
+- **Files:** `docs/design/e2e-coverage-inventory.md`,
+  `integration_test/regen_feelings_cadence_test.dart`,
+  `integration_test/continue_path_test.dart`, `Claude.md` pointer.
+- **Why:** Maintainer wants max autonomous E2E coverage; inventory tracks gaps
+  (pockets, sanitizer, RAG, …). New suites pin group regen feelings non-stack
+  and cadence under re-decay, plus Continue body merge.
+
 ## 2026-08-11 — fix(realism): rejected-stamp patch is feelings-only (cadence under re-decay)
 - **Files:** `relationship_service.rewind.dart` (`rejectedTurnRewindPatch`),
   `chat_service_reprocess.dart`, `regen_rewind_cadence_and_feelings_test.dart`.
