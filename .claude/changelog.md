@@ -14743,3 +14743,36 @@ Cache red-proofed (getter assignment removed → identical-instance test
 red). Web route tolerates unknown sections silently (stale bundles must
 never 500). Full chat dir 1416; analyze clean; web lint + 59 vitest +
 bundle rebuild green.
+
+## 2026-08-11 (UTC) — Monotonic history-window anchor (oMLX 2.8% cache-efficiency report)
+
+**Files:** `lib/services/chat/chat_service_history.dart` (_HistoryAnchor
+Expando + monotonic drop + high-water budget), NEW
+`test/services/chat/history_prefix_stability_test.dart`.
+
+**Why:** maintainer report with dashboard: oMLX at 2.8% cache efficiency,
+~52k tokens re-prefilled EVERY turn (cached ≈ static head only). Root
+cause: on an over-budget chat the history window was re-fitted from
+scratch each turn; the post-history blocks wobble the budget (journal
+mood re-sort + keyword re-warms, expand-memory ±1k quotes, set-aside
+line — several added/amplified this week), so a drop point near a chunk
+boundary OSCILLATED across it, and every flip moved the transcript's
+first byte → full re-prefill on every prefix-caching backend.
+
+**How:** per-session monotonic anchor (Expando — the shell is at the
+1,000-line ratchet's edge): once dropped, stays dropped; window start
+only advances. Budget memory is a HIGH-WATER mark (the guard caught the
+first draft comparing against last-seen budget — an ordinary downswing+
+restore read as growth and re-opened the window). Resets only on session
+switch, >25% growth over the high-water (real context raise), or anchor
+beyond the list (cleared chat). RAG's same-turn re-fit inherits and
+advances the same anchor, so consecutive SHIPPED prompts are what's
+stabilized. debugPrint on every genuine re-anchor for field diagnosis.
+
+**Verification:** service-level guard on a DB-seeded over-budget chat
+with a both-directions reserve wobble: restore leg + steady leg must
+share >60% byte prefix (legitimate shrink-advance leg deliberately
+unasserted). Proven red under pre-anchor behavior; first-draft test
+itself was proven decorative twice and tightened (wobble direction,
+inline author-note splice) before being trusted. Full chat dir 1417;
+analyze clean.
