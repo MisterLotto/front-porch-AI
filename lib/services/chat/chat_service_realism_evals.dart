@@ -299,9 +299,11 @@ extension ChatServiceRealismEvals on ChatService {
     ]);
   }
 
-  /// beginCollect → [fireEvals] → finalize → verifyBatch → apply. The three
-  // multi-call sites (dance normal, dance trust-repair remainder, regen)
-  // share this so the item-map / verifier wiring cannot drift (second-look).
+  /// beginCollect → [fireEvals] → finalize → verifyBatch → apply.
+  ///
+  /// The three multi-call sites (dance normal, dance trust-repair remainder,
+  /// regen) share this so the item-map / verifier wiring cannot drift
+  /// (second-look).
   Future<void> _runBatchedRealismVerification(
     Future<void> Function() fireEvals, {
     String? logSpeakerName,

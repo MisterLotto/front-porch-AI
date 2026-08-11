@@ -62,12 +62,14 @@ extension ChatServiceGenerationRag on ChatService {
         debugPrint('[RAG:Chat] Memory source IDs: $sourceIds');
 
         // Session isolation: the speaker/group bucket AND (in groups) every
-        // member stableGroupId that was added for Data Bank / priorities must
-        // be session-scoped. Without scoping members, their 1:1 conversation
-        // embeddings bleed into the group (second-look P2.16). Explicit
-        // cross-character memorySources that follow in sourceIds stay
-        // unscoped so opt-in cross-session recall still works. Data Bank is a
-        // separate path and never consults this set.
+        // member stableGroupId (added for Data Bank / priorities) must be
+        // session-scoped — otherwise 1:1 conversation embeddings bleed into
+        // the group (second-look P2.16). Explicit memorySources for ids that
+        // are NOT already group members stay unscoped for opt-in cross-session
+        // recall. A memorySource that IS a group member is already in the
+        // scoped set (members win / dedupe); that is deliberate anti-bleed,
+        // not a free cross-session path for someone sitting in the cast.
+        // Data Bank is a separate path and never consults this set.
         final sessionScoped = <String>{
           if (sourceIds.isNotEmpty) sourceIds.first,
           if (t.guestSpeaker == null && _activeGroup != null)

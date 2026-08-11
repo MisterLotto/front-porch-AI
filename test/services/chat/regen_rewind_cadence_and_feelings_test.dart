@@ -165,16 +165,10 @@ void main() {
     test(
       'regen overlays rejected-turn feelings AND cadence (P1.10 + twin)',
       () {
-        // Mirrors ChatService regen: restore previousMessageState first, then
-        // patch both out-of-band keys from lastMsg.realism_state. A test that
-        // only asserts "second restore wins" is true by construction — this
-        // one requires BOTH keys from the rejected stamp, and fails if either
-        // is omitted from the patch (the second-look cadence gap).
+        // Same pure builder ChatService calls (rejectedTurnRewindPatch). If
+        // someone removes cadence from the builder, this goes red.
         final h = _Harness()..inter['aerin'] = {'bo': 8};
-        (h.counters['aerin'] ??= {})['turnsSinceDecayCheck'] = 9;
 
-        // Older same-speaker stamp (previousMessageState) — wrong feelings
-        // and a cadence that already advanced past the boundary.
         h.svc.restoreFromMessageState(
           {
             'interCharacterRelationships': {'bo': 0},
@@ -185,49 +179,23 @@ void main() {
         expect(h.feelings['bo'], 0);
         expect(h.cadence, 10);
 
-        // Rejected turn's own pre-gen realism_state (the overlay ChatService
-        // now applies for both keys).
-        final rejectedPatch = <String, dynamic>{
+        final rejectedStamp = {
           'interCharacterRelationships': {'bo': 4},
           'turnsSinceDecayCheck': 7,
+          'affectionScore': 50, // noise — patch must ignore non-OOB keys
         };
-        h.svc.restoreFromMessageState(
-          rejectedPatch,
-          groupSpeakerId: 'aerin',
-        );
+        final patch = rejectedTurnRewindPatch(rejectedStamp);
         expect(
-          h.feelings['bo'],
-          4,
-          reason: 'rejected pre-gen feelings are the regen baseline',
+          patch.keys.toSet(),
+          {'interCharacterRelationships', 'turnsSinceDecayCheck'},
+          reason: 'builder must emit both OOB keys (and only those)',
         );
+        h.svc.restoreFromMessageState(patch, groupSpeakerId: 'aerin');
+        expect(h.feelings['bo'], 4);
         expect(
           h.cadence,
           7,
-          reason: 'cadence twin must come from the same rejected stamp — '
-              'else two regens near the decay boundary disagree',
-        );
-
-        // Guard would stay green if we only patched feelings: re-assert that
-        // leaving cadence out of the patch would leave the stale 10.
-        h.svc.restoreFromMessageState(
-          {
-            'interCharacterRelationships': {'bo': 0},
-            'turnsSinceDecayCheck': 10,
-          },
-          groupSpeakerId: 'aerin',
-        );
-        h.svc.restoreFromMessageState(
-          {
-            'interCharacterRelationships': {'bo': 4},
-            // deliberately NO turnsSinceDecayCheck — the old P1.10-only patch
-          },
-          groupSpeakerId: 'aerin',
-        );
-        expect(
-          h.cadence,
-          10,
-          reason: 'proves the twin is independent: feelings-only patch '
-              'does not rewind cadence (so ChatService must pass both)',
+          reason: 'cadence twin from the same rejected stamp',
         );
       },
     );
@@ -323,6 +291,31 @@ void main() {
             '_moodDecayCounter, which nothing read',
       );
     });
+
+    test(
+      '1:1 regen overlays rejected-stamp cadence (parity with group P1.10 twin)',
+      () {
+        // ChatService path: restore previousMessageState, then
+        // rejectedTurnRewindPatch(lastMsg.realism_state). Cadence is not
+        // group-only — the same pure builder must rewind 1:1.
+        final h = _Harness(isGroup: false);
+        h.svc.restoreFromMessageState({'turnsSinceDecayCheck': 10});
+        expect(h.svc.captureCadenceAndFeelings()['turnsSinceDecayCheck'], 10);
+
+        final patch = rejectedTurnRewindPatch({
+          'turnsSinceDecayCheck': 7,
+          // no inter-char key in 1:1 stamps
+        });
+        expect(patch, {'turnsSinceDecayCheck': 7});
+        h.svc.restoreFromMessageState(patch);
+        expect(
+          h.svc.captureCadenceAndFeelings()['turnsSinceDecayCheck'],
+          7,
+          reason: 'without the 1:1 overlay, two regens near the decay '
+              'boundary disagree — same bug as group, different mode',
+        );
+      },
+    );
 
     test('a 1:1 snapshot carries no inter-character key at all', () {
       // 1:1 has no other characters, so the key must be absent rather than an

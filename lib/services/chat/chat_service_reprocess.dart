@@ -383,28 +383,21 @@ extension ChatServiceReprocess on ChatService {
             previousMessageState,
             groupSpeakerId: isGroupHostRegen ? regenSpeakerSid : null,
           );
-          // Out-of-band registers (audit P1.10 + second-look cadence twin):
-          // inter-char feelings AND turnsSinceDecayCheck both ride capture/
-          // restore via realism_state. They mutate across the turn and are
-          // NOT restamped post-gen, so lastMsg.realism_state still holds the
-          // pre-turn values. previousMessageState is an older same-speaker
-          // stamp — restoring only from it left one exchange of feelings
-          // drift and a decay-cadence slip (two regens disagreeing).
-          if (isGroupHostRegen &&
-              lastMsg.activeMetadata?['realism_state'] is Map) {
-            final rejected =
-                lastMsg.activeMetadata!['realism_state'] as Map;
-            final patch = <String, dynamic>{};
-            final rels = rejected['interCharacterRelationships'];
-            if (rels is Map) patch['interCharacterRelationships'] = rels;
-            final cadence = rejected['turnsSinceDecayCheck'];
-            if (cadence is int) patch['turnsSinceDecayCheck'] = cadence;
-            if (patch.isNotEmpty) {
-              _relationshipService.restoreFromMessageState(
-                patch,
-                groupSpeakerId: regenSpeakerSid,
-              );
-            }
+          // Out-of-band registers from the rejected turn's own pre-gen stamp
+          // (audit P1.10 + second-look + 1:1 parity). Cadence is a scalar in
+          // both modes; inter-char feelings only exist in group stamps.
+          // previousMessageState is an older same-speaker stamp — restoring
+          // only from it left a one-exchange slip (two regens disagreeing).
+          // Pure builder so the unit test shares the key list with this path.
+          final rejectedMeta = lastMsg.activeMetadata?['realism_state'];
+          final patch = rejectedTurnRewindPatch(
+            rejectedMeta is Map ? rejectedMeta : null,
+          );
+          if (patch.isNotEmpty) {
+            _relationshipService.restoreFromMessageState(
+              patch,
+              groupSpeakerId: isGroupHostRegen ? regenSpeakerSid : null,
+            );
           }
           _characterEmotion =
               previousMessageState['characterEmotion'] as String? ??

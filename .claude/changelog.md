@@ -3,6 +3,14 @@
 
 # Changelog
 
+## 2026-08-11 — fix(audit): 1:1 cadence parity + pure regen patch builder
+- **P1.10 twin parity:** rejected-stamp cadence overlay runs in 1:1 as well as
+  group (was `isGroupHostRegen`-only). Pure `rejectedTurnRewindPatch` shared by
+  ChatService + tests so dropping a key reddens the suite.
+- **RAG comment honesty:** group members stay session-scoped even if also listed
+  as memorySources (anti-bleed); only non-member explicit sources stay unscoped.
+- **Minors:** full dartdoc on batch-verify helper; kRagReceiptOk default in view.
+
 ## 2026-08-11 — fix(audit): second-look CI + functional gaps
 - **CI:** chat_service.dart 1009→963 (doc shrink; fake-pinned getters stay);
   unused import removed from continue_finalize_test.

@@ -19,7 +19,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/services/chat/chat.dart'
-    show kRagReceiptError, kRagReceiptNotOperational;
+    show kRagReceiptError, kRagReceiptNotOperational, kRagReceiptOk;
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/chat_components/chat_components.dart';
 
@@ -55,7 +55,7 @@ class RagReceiptView extends StatelessWidget {
     final injected = (r?['injected'] as List?) ?? const [];
     final trimmed = (r?['budget_trimmed'] as num?)?.toInt() ?? 0;
     final deduped = (r?['journal_deduped'] as num?)?.toInt() ?? 0;
-    final status = r?['status'] as String? ?? 'ok';
+    final status = r?['status'] as String? ?? kRagReceiptOk;
 
     final String summary;
     if (r == null) {

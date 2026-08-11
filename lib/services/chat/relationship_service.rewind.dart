@@ -18,6 +18,26 @@
 
 part of 'relationship_service.dart';
 
+/// Regen overlay built from a rejected message's pre-gen `realism_state`.
+///
+/// Cadence ([turnsSinceDecayCheck]) is always taken when present — it is a
+/// plain scalar in **both** 1:1 and group. Inter-character feelings are taken
+/// when present (group stamps only). Pure so ChatService regen and the unit
+/// tests call the same builder: reverting the service patch while leaving a
+/// hand-built map in the test would stay green; changing this function
+/// reddens both (second-look / parity follow-up).
+Map<String, dynamic> rejectedTurnRewindPatch(Map? realismState) {
+  if (realismState == null) return const {};
+  final patch = <String, dynamic>{};
+  final cadence = realismState['turnsSinceDecayCheck'];
+  if (cadence is num) patch['turnsSinceDecayCheck'] = cadence.toInt();
+  final rels = realismState['interCharacterRelationships'];
+  if (rels is Map) {
+    patch['interCharacterRelationships'] = Map<dynamic, dynamic>.from(rels);
+  }
+  return patch;
+}
+
 // ── The two registers that live outside the scalar set ────────────────────
 //
 // Everything else the realism eval reads is a scalar, so it is snapshotted
