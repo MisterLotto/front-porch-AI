@@ -34,6 +34,10 @@ If you read only one thing before touching this codebase:
 - **Realism/Needs behaviour must be identical** in 1:1 and group chats.
 - **Anything user-visible ships on desktop *and* in `web_ui/`** — including its
   settings and toggles.
+- **Path-complete chat work** — Continue ≠ regen; group ≠ 1:1 storage; Growth ≠
+  Journal rewrite. Fill
+  [`docs/design/path-complete-chat-work.md`](docs/design/path-complete-chat-work.md)
+  before claiming chat/realism/memory work is done.
 - **Use `AppColors`** — no hard-coded `Color(0xFF…)`, no raw
   `Colors.whiteXX`/`Colors.blackXX` in new or refactored UI.
 - **Use the barrel imports** where a barrel covers the file.
@@ -45,4 +49,6 @@ If you read only one thing before touching this codebase:
 
 All of the above, with the reasoning, the exceptions and everything omitted here,
 is in [CLAUDE.md](CLAUDE.md). Human contributors should also read
-[CONTRIBUTING.md](CONTRIBUTING.md).
+[CONTRIBUTING.md](CONTRIBUTING.md). The maintainer cannot read Dart — see
+[`docs/maintainer-agent-playbook.md`](docs/maintainer-agent-playbook.md) for how
+to drive agents without code review.

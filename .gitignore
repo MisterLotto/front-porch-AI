@@ -169,6 +169,7 @@ docs/Newsletter-Since-March-28-2026.md
 !.claude/skills/dart-collect-coverage/
 !.claude/skills/dart-use-pattern-matching/
 !.claude/skills/flutter-add-integration-test/
+!.claude/skills/path-complete-chat/
 
 # Locally-built fpzip dylib for the native Draw Things client (scripts/build-fpzip-macos.sh)
 tools/fpzip/
