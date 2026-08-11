@@ -55,6 +55,7 @@ InventoryInjection make({
   getCurrentSpeakerIdForRealism: () => speakerId,
   getGroupCharacters: () => group,
   getCharacterIdFromCard: (c) => c.name,
+  getCurrentDay: () => 0,
   getPockets: (id) => records[id],
 );
 

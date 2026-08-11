@@ -278,8 +278,9 @@ class _CharacterStateGroupState extends State<CharacterStateGroup> {
                   padding: const EdgeInsets.only(top: 10),
                   child: PocketsRow(
                     pockets: p,
-                    onRemove: ({required worn, required index}) =>
-                        chat.removePocketItem(id, worn: worn, index: index),
+                    day: chat.storyDayCount,
+                    onRemove: ({required section, required index}) =>
+                        chat.removePocketItem(id, section: section, index: index),
                   ),
                 );
               },

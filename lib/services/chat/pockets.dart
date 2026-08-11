@@ -144,6 +144,53 @@ String _tidy(String s, int cap) {
   return t.length <= cap ? t : t.substring(0, cap).trimRight();
 }
 
+/// How many things may sit set aside at once — one full outfit plus one full
+/// set of carried things, since a bulk undress can park both in one op.
+const kMaxSetAside = kMaxWorn + kMaxCarrying;
+
+/// One thing set aside — still hers, still in the scene, just not on her
+/// body or in her hands. The nightstand, the chair, the doorway table.
+///
+/// The [clothing] flag is the whole asymmetry of the feature (maintainer
+/// design, 2026-08-11): clothes and possessions have OPPOSITE memory rules.
+/// Yesterday's shirt must not come back tomorrow — people dress fresh — so
+/// clothing entries expire at the next story morning. Yesterday's keys
+/// absolutely must come back — nobody picks out a fresh wallet — so
+/// possessions sit there until picked up, given away, dropped, or hand
+/// edited. [day] is the story day the thing was parked (0 = no story clock
+/// running, which means nothing ever expires: without a clock there is no
+/// "next morning").
+class SetAsideItem {
+  final PocketItem item;
+  final bool clothing;
+  final int day;
+
+  const SetAsideItem(this.item, {required this.clothing, this.day = 0});
+
+  SetAsideItem withItem(PocketItem it) =>
+      SetAsideItem(it, clothing: clothing, day: day);
+
+  Map<String, dynamic> toJson() => {
+    ...item.toJson(),
+    'clothing': clothing,
+    if (day > 0) 'day': day,
+  };
+
+  static SetAsideItem? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final i = PocketItem.fromJson(raw);
+    if (i == null) return null;
+    return SetAsideItem(
+      i,
+      clothing: raw['clothing'] == true,
+      day: (raw['day'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+/// Which of the record's three lists a hand edit targets.
+enum PocketSection { worn, carrying, setAside }
+
 /// What the eval is allowed to say happened.
 enum PocketOpKind {
   wear,
@@ -151,6 +198,7 @@ enum PocketOpKind {
   pickup,
   drop,
   give,
+  setdown,
   update,
   transform;
 
@@ -175,6 +223,13 @@ enum PocketOpKind {
       'discard': PocketOpKind.drop,
       'lose': PocketOpKind.drop,
       'hand': PocketOpKind.give,
+      'set_down': PocketOpKind.setdown,
+      'put_down': PocketOpKind.setdown,
+      'putdown': PocketOpKind.setdown,
+      'set_aside': PocketOpKind.setdown,
+      'setaside': PocketOpKind.setdown,
+      'place': PocketOpKind.setdown,
+      'stow': PocketOpKind.setdown,
       'become': PocketOpKind.transform,
       'becomes': PocketOpKind.transform,
     }[s];
@@ -220,17 +275,59 @@ class Pockets {
   final List<PocketItem> worn;
   final List<PocketItem> carrying;
 
-  Pockets({List<PocketItem>? worn, List<PocketItem>? carrying})
-    : worn = worn ?? [],
-      carrying = carrying ?? [];
+  /// Things parked in the scene — see [SetAsideItem] for the expiry
+  /// asymmetry. Serialised as an ADDITIVE `set_aside` key, omitted when
+  /// empty, so an untouched record stays byte-identical to one written
+  /// before this existed.
+  final List<SetAsideItem> setAside;
 
-  bool get isEmpty => worn.isEmpty && carrying.isEmpty;
+  Pockets({
+    List<PocketItem>? worn,
+    List<PocketItem>? carrying,
+    List<SetAsideItem>? setAside,
+  }) : worn = worn ?? [],
+       carrying = carrying ?? [],
+       setAside = setAside ?? [];
 
-  Pockets copy() => Pockets(worn: [...worn], carrying: [...carrying]);
+  bool get isEmpty => worn.isEmpty && carrying.isEmpty && setAside.isEmpty;
+
+  Pockets copy() => Pockets(
+    worn: [...worn],
+    carrying: [...carrying],
+    setAside: [...setAside],
+  );
+
+  /// Set-aside entries still standing on story [day]: possessions always,
+  /// clothing only until the story's next morning (people dress fresh —
+  /// maintainer ruling, 2026-08-11). Pure view for prompt builders and the
+  /// UI; [expireSetAside] is the matching cleanup for when the record is
+  /// actually being written.
+  List<SetAsideItem> setAsideOn(int day) => [
+    for (final e in setAside)
+      if (!e.clothing || e.day <= 0 || e.day >= day) e,
+  ];
+
+  /// Lazily applied whenever the record is touched — no timers. A `day` of
+  /// 0 (no story clock) expires nothing: without a clock there is no
+  /// "next morning".
+  void expireSetAside(int day) =>
+      setAside.removeWhere((e) => e.clothing && e.day > 0 && e.day < day);
 
   Map<String, dynamic> toJson() => {
     'worn': [for (final i in worn) i.toJson()],
     'carrying': [for (final i in carrying) i.toJson()],
+    if (setAside.isNotEmpty) 'set_aside': [for (final e in setAside) e.toJson()],
+  };
+
+  /// [toJson] as the story sees it on [day] — expired clothing filtered the
+  /// same way [setAsideOn] does. The web facade reads this so the PWA can
+  /// never show a stale morning-after outfit in the window before the next
+  /// pass touches (and actually expires) the stored record.
+  Map<String, dynamic> toJsonOn(int day) => {
+    'worn': [for (final i in worn) i.toJson()],
+    'carrying': [for (final i in carrying) i.toJson()],
+    if (setAsideOn(day).isNotEmpty)
+      'set_aside': [for (final e in setAsideOn(day)) e.toJson()],
   };
 
   /// Tolerates both the rich `{name, state}` shape and the plain-string shape a
@@ -248,6 +345,12 @@ class Pockets {
     return Pockets(
       worn: list(raw['worn'], kMaxWorn),
       carrying: list(raw['carrying'], kMaxCarrying),
+      setAside: [
+        for (final e
+            in (raw['set_aside'] is List ? raw['set_aside'] as List : const [])
+                .take(kMaxSetAside))
+          ?SetAsideItem.fromJson(e),
+      ],
     );
   }
 
@@ -400,21 +503,38 @@ bool sameItem(String a, String b) {
 /// the item from the giver. That is the floor and it is deliberate: the giver
 /// no longer holding what she handed over is true regardless of whether the
 /// app can work out who took it.
+/// [day] is the current story day, used to stamp newly parked set-aside
+/// entries and to expire yesterday's clothing before any op can match it.
+/// The default 0 means "no story clock": nothing is stamped, nothing expires.
 List<String> applyPocketOps(
   Pockets p,
   Iterable<PocketOpReport> ops, {
   void Function(String to, PocketItem item)? onTransfer,
+  int day = 0,
 }) {
   final receipts = <String>[];
 
+  // Housekeeping before ops, so everything below acts on the record as the
+  // story sees it: yesterday's set-aside clothes are already gone.
+  p.expireSetAside(day);
+
   int find(List<PocketItem> list, String name) =>
       list.indexWhere((i) => sameItem(i.name, name));
+  int findAside(String name) =>
+      p.setAside.indexWhere((e) => sameItem(e.item.name, name));
 
   void capTo(List<PocketItem> list, int max) {
     // Trim the OLDEST, not the newest: the thing just picked up is the thing
     // the scene is about.
     while (list.length > max) {
       list.removeAt(0);
+    }
+  }
+
+  void park(PocketItem item, {required bool clothing}) {
+    p.setAside.add(SetAsideItem(item, clothing: clothing, day: day));
+    while (p.setAside.length > kMaxSetAside) {
+      p.setAside.removeAt(0);
     }
   }
 
@@ -433,40 +553,78 @@ List<String> applyPocketOps(
           break;
         }
         final c = find(p.carrying, op.item);
+        final s = c == -1 ? findAside(op.item) : -1;
+        // Carrying first, then the set-aside pile (the shower case: her
+        // clothes are right there), then a genuinely new garment.
         final item = c != -1
             ? p.carrying.removeAt(c)
+            : s != -1
+            ? p.setAside.removeAt(s).item
             : PocketItem.clean(op.item, state: op.state);
         p.worn.add(op.state.isEmpty ? item : item.withState(op.state));
         capTo(p.worn, kMaxWorn);
         receipts.add('put on: ${op.item}');
 
       case PocketOpKind.remove:
-        // Clothing taken off LEAVES THE RECORD — it does not migrate to
-        // carrying. That was the original behaviour ("she is holding it"),
-        // and the maintainer overruled it (2026-08-11): people do not wear
-        // yesterday's outfit again tomorrow, so parking removed clothes in
-        // her hands all night is wrong more often than it is right.
-        // Tomorrow's outfit arrives as fresh `wear` ops when the story
-        // dresses her; a jacket she keeps carrying gets re-added the moment
-        // the model says so.
+        // Clothing taken off goes to SET ASIDE, not to carrying and not
+        // into thin air. The 2026-08-11 morning ruling ("remove deletes")
+        // was superseded the same day by the approved set-aside design: a
+        // mid-scene shower needs the outfit recoverable ("her clothes are
+        // right there"), while the overnight case still honours the ruling
+        // — clothing entries expire at the next story morning, so tomorrow
+        // she dresses fresh via wear ops and yesterday's shirt is gone.
         if (isGenericClothingRef(op.item)) {
-          // "She undresses" — strip the outfit, leave carried things alone.
+          // "She undresses" — the whole outfit comes off, and what she was
+          // carrying lands beside it (pockets are in the clothes; nobody
+          // showers holding their phone). Possessions park as
+          // non-expiring: the keys are still on the nightstand tomorrow.
           for (final it in p.worn) {
+            park(it, clothing: true);
             receipts.add('took off: ${it.name}');
           }
           p.worn.clear();
+          for (final it in p.carrying) {
+            park(it, clothing: false);
+            receipts.add('set aside: ${it.name}');
+          }
+          p.carrying.clear();
           break;
         }
         final w = find(p.worn, op.item);
         if (w == -1) break;
-        p.worn.removeAt(w);
+        park(p.worn.removeAt(w), clothing: true);
         receipts.add('took off: ${op.item}');
+
+      case PocketOpKind.setdown:
+        // Put down nearby, still hers — the mid-scene sibling of the bulk
+        // undress ("she sets her bag by the door"). Before this op existed
+        // the model's only honest choices were `drop` (which DELETES the
+        // bag) or silence (she "carries" it all evening) — the same
+        // data-loss shape as the undress bug, in miniature.
+        final sc = find(p.carrying, op.item);
+        if (sc != -1) {
+          park(p.carrying.removeAt(sc), clothing: false);
+          receipts.add('set aside: ${op.item}');
+          break;
+        }
+        // A worn thing set down (hat on the table) is clothing taken off.
+        final sw = find(p.worn, op.item);
+        if (sw == -1) break;
+        park(p.worn.removeAt(sw), clothing: true);
+        receipts.add('set aside: ${op.item}');
 
       case PocketOpKind.pickup:
         if (find(p.carrying, op.item) != -1 || find(p.worn, op.item) != -1) {
           break;
         }
-        p.carrying.add(PocketItem.clean(op.item, state: op.state));
+        // The set-aside pile first — taking back her own keys is not
+        // acquiring new ones, and the condition rides along.
+        final sa = findAside(op.item);
+        p.carrying.add(
+          sa != -1
+              ? p.setAside.removeAt(sa).item
+              : PocketItem.clean(op.item, state: op.state),
+        );
         capTo(p.carrying, kMaxCarrying);
         receipts.add('picked up: ${op.item}');
 
@@ -479,11 +637,19 @@ List<String> applyPocketOps(
       // caller can match to a real member, and otherwise keep the old floor.
       case PocketOpKind.drop:
       case PocketOpKind.give:
+        // All three locations: she can hand over or throw away something
+        // she set down five minutes ago ("gives Bob the keys from the
+        // nightstand") just as naturally as something in her hands.
         final c = find(p.carrying, op.item);
-        final w = find(p.worn, op.item);
-        if (c == -1 && w == -1) break;
+        final w = c == -1 ? find(p.worn, op.item) : -1;
+        final sa = c == -1 && w == -1 ? findAside(op.item) : -1;
+        if (c == -1 && w == -1 && sa == -1) break;
         // Take the item as it stands, so its condition travels with it.
-        final taken = c != -1 ? p.carrying.removeAt(c) : p.worn.removeAt(w);
+        final taken = c != -1
+            ? p.carrying.removeAt(c)
+            : w != -1
+            ? p.worn.removeAt(w)
+            : p.setAside.removeAt(sa).item;
         if (op.kind == PocketOpKind.give && op.to.isNotEmpty) {
           onTransfer?.call(op.to, taken);
         }
@@ -495,26 +661,41 @@ List<String> applyPocketOps(
 
       case PocketOpKind.update:
         if (op.state.isEmpty) break;
-        for (final list in [p.worn, p.carrying]) {
+        bool touch(List<PocketItem> list) {
           final i = find(list, op.item);
-          if (i == -1) continue;
-          if (list[i].state == op.state) break;
-          list[i] = list[i].withState(op.state);
-          receipts.add('${op.item}: ${op.state}');
-          break;
+          if (i == -1) return false;
+          if (list[i].state != op.state) {
+            list[i] = list[i].withState(op.state);
+            receipts.add('${op.item}: ${op.state}');
+          }
+          return true;
         }
+
+        if (touch(p.worn) || touch(p.carrying)) break;
+        final u = findAside(op.item);
+        if (u == -1 || p.setAside[u].item.state == op.state) break;
+        p.setAside[u] = p.setAside[u].withItem(
+          p.setAside[u].item.withState(op.state),
+        );
+        receipts.add('${op.item}: ${op.state}');
 
       case PocketOpKind.transform:
         // A candy bar becomes a wrapper. The item is REPLACED, not annotated,
         // because what she is holding is genuinely a different thing now.
         if (op.state.isEmpty) break;
-        for (final list in [p.worn, p.carrying]) {
+        bool morph(List<PocketItem> list) {
           final i = find(list, op.item);
-          if (i == -1) continue;
+          if (i == -1) return false;
           list[i] = PocketItem.clean(op.state);
           receipts.add('${op.item} → ${op.state}');
-          break;
+          return true;
         }
+
+        if (morph(p.worn) || morph(p.carrying)) break;
+        final t = findAside(op.item);
+        if (t == -1) break;
+        p.setAside[t] = p.setAside[t].withItem(PocketItem.clean(op.state));
+        receipts.add('${op.item} → ${op.state}');
     }
   }
   return receipts;

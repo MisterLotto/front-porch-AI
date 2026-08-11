@@ -162,9 +162,14 @@ class ChatToolsFacade {
       // The switch check lives in pocketsFor now, so `null` here still means
       // both "no focused participant" and "feature off" — and the web panel
       // still vanishes rather than going stale.
+      // toJsonOn, not toJson: set-aside clothing expired by the story day,
+      // so the PWA never shows yesterday's outfit in the window before the
+      // next pass rewrites the stored record.
       'pockets': focusedCard == null
           ? null
-          : _chat.pocketsFor(_chat.characterIdFor(focusedCard))?.toJson(),
+          : _chat
+                .pocketsFor(_chat.characterIdFor(focusedCard))
+                ?.toJsonOn(_chat.storyDayCount),
       'time': {
         'timeOfDay': time.timeOfDay,
         'dayCount': time.dayCount,

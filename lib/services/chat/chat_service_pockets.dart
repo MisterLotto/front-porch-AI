@@ -31,12 +31,19 @@ extension ChatServicePockets on ChatService {
   /// second write path.
   Future<void> removePocketItem(
     String characterId, {
-    required bool worn,
+    required PocketSection section,
     required int index,
   }) async {
     final p = pocketsFor(characterId);
     if (p == null) return;
-    final list = worn ? p.worn : p.carrying;
+    // Expire first so the index the UI computed from the day-filtered view
+    // lines up with the stored list it is about to strike from.
+    p.expireSetAside(storyDayCount);
+    final list = switch (section) {
+      PocketSection.worn => p.worn,
+      PocketSection.carrying => p.carrying,
+      PocketSection.setAside => p.setAside,
+    };
     if (index < 0 || index >= list.length) return;
     list.removeAt(index);
     setPocketsFor(characterId, p);
@@ -150,6 +157,11 @@ extension ChatServicePockets on ChatService {
     // the top of a user turn, so a character who ARRIVES mid-turn (a Scene
     // Guest, a cast change) reaches this without having been seeded.
     final record = pocketsFor(charId) ?? startingPocketsFor(speaker);
+    // Lazy morning housekeeping: yesterday's set-aside clothes leave the
+    // record the first time it is touched on a new story day, BEFORE any
+    // prompt or op can see them. Possessions stay (see SetAsideItem).
+    final day = storyDayCount;
+    record.expireSetAside(day);
 
     // Hand-offs (Porch Life -> "Hand things between characters"). Only ever in
     // a group: in a 1:1 the only other party is the user, who has no record to
@@ -187,7 +199,7 @@ extension ChatServicePockets on ChatService {
       final ops = PocketsEval.parseOps(fused);
       receipts = ops.isEmpty
           ? const []
-          : applyPocketOps(record, ops, onTransfer: onTransfer);
+          : applyPocketOps(record, ops, onTransfer: onTransfer, day: day);
     } else {
       receipts = await _pocketsEval.evaluateAndApply(
         charName: speaker.name,
@@ -198,6 +210,7 @@ extension ChatServicePockets on ChatService {
         recentExchange: recentExchange(_messages),
         others: others,
         onTransfer: onTransfer,
+        day: day,
       );
     }
 

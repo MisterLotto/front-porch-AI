@@ -688,6 +688,7 @@ void main() {
           getCurrentSpeakerIdForRealism: () => '',
           getGroupCharacters: () => const [],
           getCharacterIdFromCard: (c) => c.name,
+          getCurrentDay: () => 0,
           getPockets: (_) => null,
         ),
         // Promises off in composer tests — null session → '' (ambition/weather

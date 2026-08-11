@@ -52,6 +52,10 @@ class InventoryInjection with SpeakerCardResolver {
   /// the per-speaker state uses.
   final Pockets? Function(String characterId) getPockets;
 
+  /// Current story day — filters set-aside clothing (expired overnight per
+  /// the 2026-08-11 ruling) without mutating the record from a build path.
+  final int Function() getCurrentDay;
+
   InventoryInjection({
     required this.getIsGroupNonObserverMode,
     required this.getCurrentSpeakerIdForRealism,
@@ -59,12 +63,14 @@ class InventoryInjection with SpeakerCardResolver {
     required this.getCharacterIdFromCard,
     required this.getActiveCharacter,
     required this.getPockets,
+    required this.getCurrentDay,
   });
 
   /// Hard ceiling on the fragment, so a scene that accumulated a lot of clutter
   /// cannot quietly eat the context budget. The per-list caps in pockets.dart
-  /// already bound the count; this bounds the characters.
-  static const maxChars = 320;
+  /// already bound the count; this bounds the characters. (Raised from 320
+  /// when the set-aside sentence joined — three lists, same principle.)
+  static const maxChars = 440;
 
   String buildInventoryInjection() {
     final card = speakerCard();
@@ -78,12 +84,24 @@ class InventoryInjection with SpeakerCardResolver {
       if (p.carrying.isNotEmpty)
         'carrying ${p.carrying.map((i) => i.display).join(', ')}',
     ];
-    if (parts.isEmpty) return '';
+    // Fact, not instruction, and deliberately non-committal about what she
+    // does next: "set aside nearby" lets the model have her pull the same
+    // clothes back on after the shower OR reach for something else — never
+    // "she should re-dress in X".
+    final aside = p.setAsideOn(getCurrentDay());
+
+    final sentences = [
+      if (parts.isNotEmpty) '${card.name} is ${parts.join('; ')}.',
+      if (aside.isNotEmpty)
+        'Set aside nearby, still ${card.name}\'s: '
+            '${aside.map((e) => e.item.display).join(', ')}.',
+    ];
+    if (sentences.isEmpty) return '';
 
     // Stated as fact rather than instruction. "Keep this consistent" invites a
     // model to narrate an inventory check; naming what she has lets it simply
     // be true, which is what the feature is for.
-    final out = '${card.name} is ${parts.join('; ')}.';
+    final out = sentences.join(' ');
     return out.length <= maxChars ? out : '${out.substring(0, maxChars)}…';
   }
 }

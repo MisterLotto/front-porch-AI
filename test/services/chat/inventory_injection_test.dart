@@ -41,12 +41,14 @@ InventoryInjection make({
   List<CharacterCard> group = const [],
   String speakerId = '',
   Map<String, Pockets> records = const {},
+  int day = 0,
 }) => InventoryInjection(
   getActiveCharacter: () => active,
   getIsGroupNonObserverMode: () => group.isNotEmpty,
   getCurrentSpeakerIdForRealism: () => speakerId,
   getGroupCharacters: () => group,
   getCharacterIdFromCard: (c) => c.name,
+  getCurrentDay: () => day,
   getPockets: (id) => records[id],
 );
 
@@ -78,6 +80,48 @@ void main() {
       },
     ).buildInventoryInjection();
     expect(txt, contains('iron sword (notched)'));
+  });
+
+  test('set-aside things get their own factual sentence — same day only', () {
+    // The shower case: her clothes are right there, stated as fact ("set
+    // aside nearby"), never as an instruction to re-dress in them.
+    final p = Pockets(carrying: [const PocketItem('phone')]);
+    applyPocketOps(p, [PocketOpReport(kind: PocketOpKind.remove, item: 'her clothes')], day: 3);
+
+    final sameDay = make(
+      active: alice,
+      records: {'Alice': p},
+      day: 3,
+    ).buildInventoryInjection();
+    expect(sameDay, contains("Set aside nearby, still Alice's: phone"));
+
+    // Next story morning the possessions remain; expired clothing would
+    // not (none here — the record had no worn items — but the filter path
+    // is the same one setAsideOn pins in pockets_test).
+    final nextDay = make(
+      active: alice,
+      records: {'Alice': p},
+      day: 4,
+    ).buildInventoryInjection();
+    expect(nextDay, contains('phone'));
+  });
+
+  test('yesterday\'s set-aside clothes never reach the prompt', () {
+    final p = Pockets(worn: [const PocketItem('red sundress')]);
+    applyPocketOps(p, [PocketOpReport(kind: PocketOpKind.remove, item: 'sundress')], day: 3);
+
+    expect(
+      make(active: alice, records: {'Alice': p}, day: 3)
+          .buildInventoryInjection(),
+      contains('red sundress'),
+      reason: 'same day: the shower case, she can put it back on',
+    );
+    expect(
+      make(active: alice, records: {'Alice': p}, day: 4)
+          .buildInventoryInjection(),
+      isNot(contains('red sundress')),
+      reason: 'a night passed — telling the model would re-dress her in it',
+    );
   });
 
   test('one empty list omits its clause rather than saying "nothing"', () {

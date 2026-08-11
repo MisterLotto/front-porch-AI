@@ -488,8 +488,13 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                         padding: const EdgeInsets.only(top: 8),
                         child: PocketsRow(
                           pockets: p,
-                          onRemove: ({required worn, required index}) => chat
-                              .removePocketItem(id, worn: worn, index: index),
+                          day: chat.storyDayCount,
+                          onRemove: ({required section, required index}) =>
+                              chat.removePocketItem(
+                                id,
+                                section: section,
+                                index: index,
+                              ),
                         ),
                       );
                     },

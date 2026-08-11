@@ -58,16 +58,27 @@ void main() {
       expect(p.carrying, isEmpty);
     });
 
-    test('taking something off removes it from the record entirely', () {
-      // AMENDED 2026-08-11 on the maintainer's direction. This test used to
-      // pin the opposite ("taking something off leaves her holding it" —
-      // remove moved worn -> carrying). Overruled: people do not re-wear
-      // yesterday's outfit, so clothes taken off for bed or a shower must
-      // leave the record; tomorrow's outfit arrives as fresh wear ops.
+    test('taking something off parks it, and the story morning erases it', () {
+      // AMENDED TWICE 2026-08-11, both on the maintainer's direction. The
+      // original pinned remove -> carrying ("she is holding it"); the
+      // morning ruling flipped that to outright deletion (people do not
+      // re-wear yesterday's outfit); the approved set-aside design then
+      // reconciled both truths — same-day the scarf is right there to put
+      // back on (the shower case), and the next story morning it is gone
+      // (the fresh-outfit case).
       final p = Pockets(worn: [const PocketItem('scarf')]);
-      applyPocketOps(p, [op(PocketOpKind.remove, 'scarf')]);
+      applyPocketOps(p, [op(PocketOpKind.remove, 'scarf')], day: 3);
       expect(p.worn, isEmpty);
       expect(p.carrying, isEmpty);
+      expect(p.setAside.single.item.name, 'scarf');
+      expect(p.setAside.single.clothing, isTrue);
+      expect(p.setAside.single.day, 3);
+
+      // Same day: still there. Next story morning: gone, without any op.
+      applyPocketOps(p, const [], day: 3);
+      expect(p.setAside, hasLength(1), reason: 'same day — still on the chair');
+      applyPocketOps(p, const [], day: 4);
+      expect(p.setAside, isEmpty, reason: 'a night passed — she dresses fresh');
     });
 
     test('giving it away takes it from either list', () {
@@ -90,18 +101,34 @@ void main() {
       // enumeration. Before 2026-08-11 this matched nothing in the worn list
       // and silently no-opped — the maintainer's exact "she is in the shower
       // and the sidebar still shows her dressed" report.
+      //
+      // AMENDED same day for the approved set-aside design: carried things
+      // park BESIDE the outfit (pockets are in the clothes; nobody showers
+      // holding their phone) instead of staying in her hands, and nothing
+      // is deleted — the outfit expires overnight, the keys wait.
       final p = Pockets(
         worn: [const PocketItem('flannel shirt'), const PocketItem('jeans')],
         carrying: [const PocketItem('car keys')],
       );
-      final r = applyPocketOps(p, [op(PocketOpKind.remove, 'her clothes')]);
+      final r = applyPocketOps(p, [
+        op(PocketOpKind.remove, 'her clothes'),
+      ], day: 3);
       expect(p.worn, isEmpty);
+      expect(p.carrying, isEmpty);
       expect(
-        namesOf(p.carrying),
-        ['car keys'],
-        reason: 'undressing is about the outfit — carried things stay put',
+        [for (final e in p.setAside) e.item.name],
+        ['flannel shirt', 'jeans', 'car keys'],
       );
-      expect(r, ['took off: flannel shirt', 'took off: jeans']);
+      expect(
+        [for (final e in p.setAside) e.clothing],
+        [true, true, false],
+        reason: 'clothes expire overnight; possessions never do',
+      );
+      expect(r, [
+        'took off: flannel shirt',
+        'took off: jeans',
+        'set aside: car keys',
+      ]);
     });
 
     test('generic remove variants all mean the outfit', () {
@@ -122,11 +149,16 @@ void main() {
       expect(namesOf(p.worn), ['boots']);
     });
 
-    test('generic remove with nothing worn is silent', () {
+    test('generic remove with nothing worn still parks carried things', () {
+      // AMENDED 2026-08-11 (set-aside design): an undress with no worn
+      // items recorded still sets down what she was carrying — the phone
+      // goes on the nightstand whether or not the record knew her outfit.
       final p = Pockets(carrying: [const PocketItem('car keys')]);
       final r = applyPocketOps(p, [op(PocketOpKind.remove, 'clothes')]);
-      expect(r, isEmpty);
-      expect(namesOf(p.carrying), ['car keys']);
+      expect(r, ['set aside: car keys']);
+      expect(p.carrying, isEmpty);
+      expect(p.setAside.single.item.name, 'car keys');
+      expect(p.setAside.single.clothing, isFalse);
     });
 
     test('an op about something she does not have changes nothing', () {
@@ -151,6 +183,146 @@ void main() {
       expect(r, isEmpty);
       expect(namesOf(p.worn), ['sundress']);
       expect(p.carrying, isEmpty);
+    });
+  });
+
+  group('the set-aside pile (2026-08-11, maintainer-approved design)', () {
+    test('she takes her own clothes back after the shower, condition intact', () {
+      final p = Pockets(
+        worn: [const PocketItem('red sundress', state: 'rain-soaked')],
+      );
+      applyPocketOps(p, [op(PocketOpKind.remove, 'red sundress')], day: 3);
+      expect(p.worn, isEmpty);
+
+      // Same day, she dresses again: the pile is searched before a brand-new
+      // garment is invented, and taking it off did not launder it.
+      applyPocketOps(p, [op(PocketOpKind.wear, 'the sundress')], day: 3);
+      expect(p.worn.single.display, 'red sundress (rain-soaked)');
+      expect(p.setAside, isEmpty);
+    });
+
+    test('picking her keys back up is not acquiring new ones', () {
+      final p = Pockets(
+        carrying: [const PocketItem('car keys', state: 'scratched')],
+      );
+      applyPocketOps(p, [op(PocketOpKind.remove, 'everything')], day: 3);
+      expect(p.carrying, isEmpty);
+
+      // Days later — possessions never expire.
+      final r = applyPocketOps(p, [
+        op(PocketOpKind.pickup, 'keys'),
+      ], day: 7);
+      expect(r, ['picked up: keys']);
+      expect(p.carrying.single.display, 'car keys (scratched)');
+      expect(p.setAside, isEmpty);
+    });
+
+    test('setdown parks a possession mid-scene; synonyms understood', () {
+      // "She sets her bag by the door" — before this op the model's only
+      // honest choices were drop (which DELETED the bag) or silence.
+      expect(PocketOpKind.parse('put_down'), PocketOpKind.setdown);
+      expect(PocketOpKind.parse('set_aside'), PocketOpKind.setdown);
+      expect(PocketOpKind.parse('stow'), PocketOpKind.setdown);
+
+      final p = Pockets(carrying: [const PocketItem('canvas bag')]);
+      final r = applyPocketOps(p, [
+        op(PocketOpKind.setdown, 'the bag'),
+      ], day: 2);
+      expect(r, ['set aside: the bag']);
+      expect(p.carrying, isEmpty);
+      expect(p.setAside.single.item.name, 'canvas bag');
+      expect(
+        p.setAside.single.clothing,
+        isFalse,
+        reason: 'a set-down possession waits indefinitely',
+      );
+    });
+
+    test('a worn thing set down is clothing taken off', () {
+      final p = Pockets(worn: [const PocketItem('straw hat')]);
+      applyPocketOps(p, [op(PocketOpKind.setdown, 'hat')], day: 2);
+      expect(p.setAside.single.clothing, isTrue);
+    });
+
+    test('setdown of something she does not have changes nothing', () {
+      final p = Pockets(carrying: [const PocketItem('car keys')]);
+      final r = applyPocketOps(p, [op(PocketOpKind.setdown, 'a lantern')]);
+      expect(r, isEmpty);
+      expect(namesOf(p.carrying), ['car keys']);
+      expect(p.setAside, isEmpty);
+    });
+
+    test('drop and give reach the pile — gone for good, condition riding', () {
+      final given = <String, PocketItem>{};
+      final p = Pockets(
+        carrying: [const PocketItem('car keys', state: 'scratched')],
+      );
+      applyPocketOps(p, [op(PocketOpKind.setdown, 'keys')], day: 2);
+      final r = applyPocketOps(
+        p,
+        [op(PocketOpKind.give, 'keys', to: 'Sam')],
+        onTransfer: (to, item) => given[to] = item,
+        day: 2,
+      );
+      expect(r, ['gave keys to Sam']);
+      expect(p.setAside, isEmpty);
+      expect(given['Sam']?.display, 'car keys (scratched)');
+    });
+
+    test('no story clock means nothing ever expires', () {
+      // day 0 = clock not running: without a clock there is no "next
+      // morning", so the safe reading is that nothing is ever stale.
+      final p = Pockets(worn: [const PocketItem('scarf')]);
+      applyPocketOps(p, [op(PocketOpKind.remove, 'scarf')]); // day: 0
+      applyPocketOps(p, const [], day: 0);
+      expect(p.setAside, hasLength(1));
+    });
+
+    test('setAsideOn is a pure view — it filters without mutating', () {
+      final p = Pockets(worn: [const PocketItem('scarf')]);
+      applyPocketOps(p, [op(PocketOpKind.remove, 'scarf')], day: 3);
+      expect(p.setAsideOn(4), isEmpty, reason: 'tomorrow: filtered out');
+      expect(p.setAside, hasLength(1), reason: 'the record itself untouched');
+      expect(p.setAsideOn(3), hasLength(1));
+    });
+
+    test('the pile round-trips through JSON and is capped on the way in', () {
+      final p = Pockets(
+        worn: [const PocketItem('scarf')],
+        carrying: [const PocketItem('keys')],
+      );
+      applyPocketOps(p, [op(PocketOpKind.remove, 'everything')], day: 5);
+      final back = Pockets.fromJson(p.toJson());
+      expect([for (final e in back.setAside) e.item.name], ['scarf', 'keys']);
+      expect([for (final e in back.setAside) e.clothing], [true, false]);
+      expect([for (final e in back.setAside) e.day], [5, 5]);
+
+      // Empty pile = key omitted entirely, so an untouched record stays
+      // byte-identical to one written before set-aside existed.
+      expect(Pockets(worn: [const PocketItem('scarf')]).toJson().containsKey('set_aside'), isFalse);
+
+      // Hostile stored state is capped on the way in, like the other lists.
+      final hostile = Pockets.fromJson({
+        'set_aside': [
+          for (var i = 0; i < 400; i++) {'name': 's$i', 'clothing': false},
+        ],
+      });
+      expect(hostile.setAside.length, kMaxSetAside);
+    });
+
+    test('toJsonOn filters expired clothing for external readers', () {
+      final p = Pockets(
+        worn: [const PocketItem('scarf')],
+        carrying: [const PocketItem('keys')],
+      );
+      applyPocketOps(p, [op(PocketOpKind.remove, 'everything')], day: 5);
+      final j = p.toJsonOn(6);
+      final aside = (j['set_aside'] as List).cast<Map<String, dynamic>>();
+      expect(
+        [for (final e in aside) e['name']],
+        ['keys'],
+        reason: 'the scarf expired overnight; the keys wait',
+      );
     });
   });
 

@@ -129,7 +129,12 @@ class PocketsEval {
 
     return 'You are keeping track of what $charName is wearing and carrying.\n\n'
         '${list('Currently wearing', current.worn)}'
-        '${list('Currently carrying', current.carrying)}';
+        '${list('Currently carrying', current.carrying)}'
+        // Only when something IS set aside — most turns nothing is, and an
+        // always-on line would be prompt tax for nothing. Callers hand this
+        // an already-expired record, so yesterday's clothes never show.
+        '${current.setAside.isEmpty ? '' : 'Set aside nearby (still $charName\'s): '
+              '${current.setAside.map((e) => e.item.display).join(', ')}\n'}';
   }
 
   /// The op vocabulary and rules — the other shared fragment (see
@@ -149,7 +154,12 @@ class PocketsEval {
       'or a single remove of "clothes" to mean all of it. Changing clothes is '
       'a remove for each thing that came off plus a wear for each thing that '
       'went on\n'
-      '  pickup / drop — something taken up or set down, lost or thrown away\n'
+      '  pickup / drop — something taken up; or gone for GOOD (thrown away, '
+      'lost, destroyed, given up). Taking back something set aside is a '
+      'pickup\n'
+      '  setdown — put down nearby but still theirs: on the table, the '
+      'nightstand, by the door. It can be taken back later. Use drop only '
+      'when it is gone for good\n'
       '${others.isEmpty ? '  give — handed to someone else\n' : '  give — handed to someone else. Put their name in "to", spelled EXACTLY '
             'as it appears here: ${others.join(', ')}. If it went to anyone '
             'else — the person you are talking to, a passer-by, nobody in '
@@ -246,8 +256,13 @@ class PocketsEval {
     required String recentExchange,
     List<String> others = const [],
     void Function(String to, PocketItem item)? onTransfer,
+    int day = 0,
   }) async {
     if (reply.trim().isEmpty) return const [];
+    // Expire BEFORE the prompt is built, not only inside the applier: the
+    // model must never be shown yesterday's set-aside clothes, or it will
+    // dutifully re-dress her in them.
+    pockets.expireSetAside(day);
     try {
       final raw = await fire(
         debugLabel: 'pockets',
@@ -263,7 +278,7 @@ class PocketsEval {
       );
       final ops = parseOps(raw);
       if (ops.isEmpty) return const [];
-      return applyPocketOps(pockets, ops, onTransfer: onTransfer);
+      return applyPocketOps(pockets, ops, onTransfer: onTransfer, day: day);
     } catch (e) {
       // Never surface as a failed turn: the reply already happened and the
       // record simply misses one update. Logged rather than swallowed silently.

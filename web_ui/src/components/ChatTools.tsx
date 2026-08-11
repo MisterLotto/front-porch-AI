@@ -78,8 +78,14 @@ interface ToolsState {
   // `step` is the open quest climbing this ambition (v46); null when none.
   standingMood?: string;
   ambitions?: Array<{ text: string; progress: number; stage: string; step?: string | null }>;
-  // Pockets & Wardrobe (additive, null when the switch is off).
-  pockets?: { worn?: Array<{ name: string; state?: string }>; carrying?: Array<{ name: string; state?: string }> } | null;
+  // Pockets & Wardrobe (additive, null when the switch is off). set_aside:
+  // parked in the scene, still theirs — clothing entries expire at the next
+  // story morning server-side, so what arrives here is always current.
+  pockets?: {
+    worn?: Array<{ name: string; state?: string }>;
+    carrying?: Array<{ name: string; state?: string }>;
+    set_aside?: Array<{ name: string; state?: string; clothing?: boolean; day?: number }>;
+  } | null;
   time: {
     timeOfDay: string;
     dayCount: number;
@@ -385,7 +391,12 @@ export function ChatTools({
       {(() => {
         const worn = t.pockets?.worn ?? [];
         const carrying = t.pockets?.carrying ?? [];
-        if (worn.length === 0 && carrying.length === 0) return null;
+        // Parked in the scene, still theirs — greyed so "not on her" reads
+        // at a glance (the desktop sidebar's Set aside group, same rules;
+        // the server already filtered out clothing that expired overnight).
+        const setAside = t.pockets?.set_aside ?? [];
+        if (worn.length === 0 && carrying.length === 0 && setAside.length === 0)
+          return null;
         const label = (i: { name: string; state?: string }) =>
           i.state ? `${i.name} (${i.state})` : i.name;
         return (
@@ -408,6 +419,18 @@ export function ChatTools({
                   <div className="pocket-items">
                     {carrying.map((i, n) => (
                       <span className="pocket-item" key={`c${n}`}>{label(i)}</span>
+                    ))}
+                  </div>
+                </>
+              )}
+              {setAside.length > 0 && (
+                <>
+                  <div className="muted small side-quest-label">Set aside</div>
+                  <div className="pocket-items">
+                    {setAside.map((i, n) => (
+                      <span className="pocket-item pocket-item-aside" key={`s${n}`}>
+                        {label(i)}
+                      </span>
                     ))}
                   </div>
                 </>

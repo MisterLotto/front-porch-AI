@@ -14547,3 +14547,47 @@ two bulk tests were written first and failed against the old applier; the
 anti-greedy guard proven red under a deliberately greedy matcher
 (any-token + garment word in the set), restored, re-greened. Full
 test/services/chat directory: 1376 passing; analyze clean.
+
+## 2026-08-11 (UTC) — The Set-aside pile: where things go when they come off / get put down
+
+**Files:** `lib/services/chat/pockets.dart` (SetAsideItem, PocketSection,
+setdown op, applier rework, expiry), `pockets_eval.dart` (context line,
+rubric, day plumb), `chat_service_pockets.dart` (day + expiry + 3-section
+hand edit), `chat_service_reply_facts.dart` (prompt-side expiry),
+`chat_service_accessors.dart` (public storyDayCount),
+`chat_service_wiring_injection.dart` + `prompt_injection/inventory_injection.dart`
+(set-aside sentence, day filter, cap 320→440),
+`ui/.../pockets_row.dart` + `group_member_card.dart` +
+`character_state_group.dart` (greyed Set aside group, PocketSection remove),
+`web/facade/chat_tools_facade.dart` (toJsonOn), `web_ui` ChatTools.tsx +
+styles.css (+ rebuilt assets/web_app), tests (pockets_test amended×3 +
+9 new; inventory_injection_test +2; 6 files constructor-plumbed),
+`docs/Rawhide.md`.
+
+**Why:** The morning's "remove deletes" ruling fixed overnight (fresh
+outfits) but opened the same-day hole: after a mid-scene shower the model
+would invent a new outfit because the record forgot the one on the
+bathroom floor. And carried things had the opposite bug both before and
+after: they either lingered "in hand" through the night or (via drop)
+were deleted. Maintainer-approved design (this conversation): ONE
+set-aside bucket, day-stamped, with asymmetric expiry — clothing expires
+at the next story morning, possessions never do.
+
+**How:** remove parks (not deletes); bulk undress parks outfit AND
+carried things; new `setdown` op for mid-scene "sets her bag by the
+door" (drop remains gone-for-good); wear/pickup search the pile first
+and conditions ride along; give/drop/update/transform reach it; expiry
+is lazy on every record touch, day 0 (no clock) expires nothing, and
+every prompt path (standalone eval, fused prefetch, injection) filters
+or expires BEFORE the model can see yesterday's clothes. Injection
+states the pile as fact ("Set aside nearby, still Nia's: …"), never an
+instruction. Additive `set_aside` JSON key (omitted when empty — old
+records byte-identical); no migration. Greyed sidebar group desktop +
+web ("empty Wearing row with no explanation looks exactly like the old
+missed-update bug").
+
+**Verification:** red-then-green — expiry no-op'd → overnight test red;
+wear's pile search cut → shower test red; both restored green. Full
+unit suite 3535 passing, chat dir 1388, analyze clean, web lint+59
+vitest+build green. Test amendments documented in-file (the two
+morning-ruling pins were superseded same-day by this approved design).

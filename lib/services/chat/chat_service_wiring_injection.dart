@@ -438,6 +438,7 @@ extension ChatServiceWiringInjection on ChatService {
       // pocketsFor — one gate for every surface, rather than each caller
       // remembering to ask (the sidebar forgot).
       getPockets: pocketsFor,
+      getCurrentDay: () => _timeService.dayCount,
     );
   }
 

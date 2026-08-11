@@ -63,6 +63,10 @@ extension ChatServiceReplyFacts on ChatService {
     final record = askPockets
         ? (pocketsFor(charId) ?? startingPocketsFor(speaker))
         : null;
+    // Same lazy expiry the pass applies (idempotent — the pass re-runs it):
+    // the fused prompt must never show yesterday's set-aside clothes, or the
+    // model dutifully re-dresses her in them.
+    record?.expireSetAside(storyDayCount);
     final transfersOn = askPockets &&
         _storageService.realismSettings.pocketTransfersEnabled &&
         _activeGroup != null;

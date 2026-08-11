@@ -206,6 +206,7 @@ void main() {
         getCurrentSpeakerIdForRealism: () => '',
         getGroupCharacters: () => const [],
         getCharacterIdFromCard: (c) => c.name,
+        getCurrentDay: () => 0,
         getPockets: (_) => Pockets(
           worn: [const PocketItem('flour-dusted apron')],
           carrying: [const PocketItem('shop keys')],

@@ -2271,6 +2271,14 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
   border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
+/* Set aside — parked in the scene, still theirs: dimmed so "not on her"
+   reads at a glance (mirrors the desktop sidebar's greyed group). */
+.pocket-item-aside {
+  color: var(--muted);
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
 .ambition-bar-fill {
   height: 100%;
   background: var(--accent);

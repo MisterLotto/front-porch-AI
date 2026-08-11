@@ -373,6 +373,12 @@ extension ChatServiceAccessors on ChatService {
   }
 
   /// Today's story weather, or null when off (living-time-features.md §3).
+  /// The story clock's current day, for consumers outside the service — the
+  /// Pockets sidebar rows and the web facade filter set-aside clothing by it
+  /// (yesterday's outfit must not survive the story's morning). One
+  /// forwarder rather than exposing TimeService whole.
+  int get storyDayCount => _timeService.dayCount;
+
   /// Pure recompute from existing state — nothing stored, so save/load and
   /// group re-entry agree for free. Gate: a MOVING clock + the global toggle.
   /// Weather is deterministic math over the day count and needs no eval of its
