@@ -24,6 +24,7 @@ import 'package:shelf_router/shelf_router.dart';
 import 'package:front_porch_ai/app_version.dart';
 import 'package:front_porch_ai/services/web/auth/auth_service.dart';
 import 'package:front_porch_ai/services/web/auth/session_store.dart';
+import 'package:front_porch_ai/services/web/auth/setup_gate.dart';
 import 'package:front_porch_ai/services/web/middleware/auth_middleware.dart';
 import 'package:front_porch_ai/services/web/util/util.dart';
 import 'package:front_porch_ai/services/web/web_server_deps.dart';
@@ -53,10 +54,13 @@ class WebAuthRoutes {
   int get _cookieMaxAge => SessionStore.sessionTtl.inSeconds;
 
   Future<shelf.Response> _health(shelf.Request request) async {
+    final setupRequired = await _auth.isSetupRequired();
     return JsonResponse.ok({
       'status': 'ok',
       'version': appVersion,
-      'setupRequired': await _auth.isSetupRequired(),
+      'setupRequired': setupRequired,
+      if (setupRequired)
+        'setupTokenRequired': !_isDirectLoopbackSetupClient(request),
       'secure': _deps.isSecure(request),
     });
   }
@@ -68,8 +72,11 @@ class WebAuthRoutes {
     // Account details ride along ONLY for an authenticated caller — this
     // endpoint is public (pre-login) and must not leak the username.
     final info = userId != null ? await _auth.accountInfo() : null;
+    final setupRequired = await _auth.isSetupRequired();
     return JsonResponse.ok({
-      'setupRequired': await _auth.isSetupRequired(),
+      'setupRequired': setupRequired,
+      if (setupRequired)
+        'setupTokenRequired': !_isDirectLoopbackSetupClient(request),
       'authenticated': userId != null,
       if (info != null) 'username': info.username,
       if (info != null) 'totpEnabled': info.totpEnabled,
@@ -83,16 +90,41 @@ class WebAuthRoutes {
     } catch (_) {
       return JsonResponse.badRequest('Invalid request body');
     }
-    if (!await _auth.isSetupRequired()) {
-      return JsonResponse.forbidden('Account already configured');
-    }
     final username = (body['username'] ?? '').toString();
     final password = (body['password'] ?? '').toString();
-    final ok = await _auth.setupAccount(username, password);
-    if (!ok) {
-      return JsonResponse.badRequest(
-        'Username required and password must be at least 8 characters',
-      );
+    final status = await _auth.setupAccount(
+      username,
+      password,
+      setupToken: body['setupToken']?.toString(),
+      isDirectLoopbackClient: _isDirectLoopbackSetupClient(request),
+      ip: _clientIp(request),
+    );
+    switch (status) {
+      case SetupStatus.alreadyConfigured:
+        return JsonResponse.forbidden('Account already configured');
+      case SetupStatus.rateLimited:
+        return JsonResponse.tooManyRequests(
+          'Too many setup attempts, try again later',
+        );
+      case SetupStatus.tokenRequired:
+        return JsonResponse.error(
+          403,
+          'Setup requires the one-time code from the desktop app '
+          '(Settings → Web Server)',
+          extra: const {'setupTokenRequired': true},
+        );
+      case SetupStatus.invalidToken:
+        return JsonResponse.error(
+          403,
+          'Invalid setup code — check Settings → Web Server on the desktop',
+          extra: const {'setupTokenRequired': true},
+        );
+      case SetupStatus.invalidInput:
+        return JsonResponse.badRequest(
+          'Username required and password must be at least 8 characters',
+        );
+      case SetupStatus.success:
+        break;
     }
     // Immediately sign the new account in.
     final result = await _auth.login(
@@ -331,5 +363,17 @@ class WebAuthRoutes {
     final conn = request.context['shelf.io.connection_info'];
     if (conn is HttpConnectionInfo) return conn.remoteAddress.address;
     return null;
+  }
+
+  /// Direct host browser only — see [SetupGate.isDirectLoopbackClient].
+  bool _isDirectLoopbackSetupClient(shelf.Request request) {
+    final conn = request.context['shelf.io.connection_info'];
+    final peerLoopback =
+        conn is HttpConnectionInfo && conn.remoteAddress.isLoopback;
+    return SetupGate.isDirectLoopbackClient(
+      peerIsLoopback: peerLoopback,
+      xForwardedFor: request.headers['x-forwarded-for'],
+      xForwardedProto: request.headers['x-forwarded-proto'],
+    );
   }
 }

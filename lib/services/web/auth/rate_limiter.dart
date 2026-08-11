@@ -38,8 +38,14 @@ class RateLimiter {
   static const int _ipWindowMax = 50;
   static const Duration _ipWindow = Duration(minutes: 5);
 
+  /// First-run setup is a rarer, higher-stakes public endpoint — tighter cap
+  /// than login so LAN/tunnel exposure cannot brute-claim the account.
+  static const int setupWindowMax = 10;
+  static const Duration setupWindow = Duration(minutes: 15);
+
   final Map<String, _Attempts> _byUser = {};
   final Map<String, List<DateTime>> _byIp = {};
+  final Map<String, List<DateTime>> _setupByIp = {};
 
   /// Remaining lockout for [username], or null if a login attempt is allowed.
   Duration? lockoutFor(String username) {
@@ -68,6 +74,20 @@ class RateLimiter {
 
   /// Clear a username's failure streak after a successful login.
   void recordSuccess(String username) => _byUser.remove(username);
+
+  /// Whether [ip] may attempt first-run setup (stricter sliding window).
+  bool setupIpAllowed(String? ip) {
+    final key = (ip == null || ip.isEmpty) ? '_unknown' : ip;
+    final cutoff = _now().subtract(setupWindow);
+    final hits = (_setupByIp[key] ??= [])..removeWhere((t) => t.isBefore(cutoff));
+    return hits.length < setupWindowMax;
+  }
+
+  /// Count a setup attempt (success or fail) toward the setup IP window.
+  void recordSetupAttempt(String? ip) {
+    final key = (ip == null || ip.isEmpty) ? '_unknown' : ip;
+    (_setupByIp[key] ??= []).add(_now());
+  }
 
   void _touchIp(String? ip) {
     if (ip == null || ip.isEmpty) return;

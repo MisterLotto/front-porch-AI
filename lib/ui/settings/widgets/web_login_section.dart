@@ -17,6 +17,7 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:front_porch_ai/services/web/auth/auth_service.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
@@ -41,6 +42,7 @@ class WebLoginSection extends StatefulWidget {
 
 class _WebLoginSectionState extends State<WebLoginSection> {
   ({String username, bool totpEnabled})? _info;
+  String? _setupToken;
   bool _loaded = false;
 
   @override
@@ -51,9 +53,12 @@ class _WebLoginSectionState extends State<WebLoginSection> {
 
   Future<void> _refresh() async {
     final info = await widget.auth.accountInfo();
+    final token =
+        info == null ? await widget.auth.setupTokenForDesktop() : null;
     if (mounted) {
       setState(() {
         _info = info;
+        _setupToken = token;
         _loaded = true;
       });
     }
@@ -115,9 +120,44 @@ class _WebLoginSectionState extends State<WebLoginSection> {
       fontSize: 12,
     );
     if (info == null) {
-      return Text(
-        'No web login yet — it’s created in the browser on first visit.',
-        style: labelStyle,
+      final token = _setupToken;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'No web login yet. On this computer, open the browser at '
+            'localhost and create the account. From another device, phone, '
+            'or a public tunnel, enter this one-time setup code:',
+            style: labelStyle,
+          ),
+          if (token != null) ...[
+            const SizedBox(height: 8),
+            SelectableText(
+              token,
+              style: TextStyle(
+                color: AppColors.textPrimary(context),
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                fontFamily: 'monospace',
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 6),
+            OutlinedButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: token));
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Setup code copied.')),
+                );
+              },
+              child: const Text(
+                'Copy setup code',
+                style: TextStyle(fontSize: 12),
+              ),
+            ),
+          ],
+        ],
       );
     }
     return Column(

@@ -3,6 +3,18 @@
 
 # Changelog
 
+## 2026-08-11 — security(web): first-run setup token + rate limit (audit P0.5)
+- **Files:** `setup_gate.dart` / `auth_types.dart` (new), `auth_service.dart`,
+  `rate_limiter.dart`, `auth_routes.dart`, `web_login_section.dart`,
+  `web_ui` `SetupPage.tsx`, tests, Rawhide/user-guide.
+- **Why:** While setup was open, any client that could reach the server (LAN
+  bind, Tailscale/ngrok proxy) could claim the single local account with no
+  token and no setup-specific rate limit.
+- **Behavior:** Direct loopback (no X-Forwarded-*) may still set up without a
+  code. Remote/LAN/proxy requires a one-time code shown only on desktop
+  Settings → Web Server (never over HTTP). 10 setup attempts / 15 min / IP.
+  Reset login mints a fresh token.
+
 ## 2026-08-11 — fix(chat): Continue finalize keeps full body + safe partial (audit P0.1–3)
 - **Files:** `chat_service_generation*.dart` / `chat_service_accessors.dart`,
   `test/services/chat/continue_finalize_test.dart` (new).

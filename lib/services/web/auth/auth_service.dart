@@ -22,63 +22,14 @@ import 'dart:math';
 import 'package:drift/drift.dart' show Variable;
 
 import 'package:front_porch_ai/database/database.dart';
+import 'package:front_porch_ai/services/web/auth/auth_types.dart';
 import 'package:front_porch_ai/services/web/auth/password_hasher.dart';
 import 'package:front_porch_ai/services/web/auth/rate_limiter.dart';
 import 'package:front_porch_ai/services/web/auth/session_store.dart';
+import 'package:front_porch_ai/services/web/auth/setup_gate.dart';
 import 'package:front_porch_ai/services/web/auth/totp_service.dart';
 
-/// Outcome of a login attempt.
-enum LoginStatus {
-  success,
-  invalidCredentials,
-  totpRequired,
-  lockedOut,
-  rateLimited,
-  notSetUp,
-}
-
-class LoginResult {
-  const LoginResult(this.status, {this.token, this.retryAfterSeconds});
-  final LoginStatus status;
-  final String? token; // raw session cookie token on success
-  final int? retryAfterSeconds;
-}
-
-/// Result of confirming TOTP enrollment — recovery codes are returned ONCE.
-class TotpEnrollment {
-  const TotpEnrollment(this.secret, this.provisioningUri);
-  final String secret;
-  final String provisioningUri;
-}
-
-/// Outcome of a credential change (or another re-authenticated operation).
-enum CredentialChangeStatus {
-  success,
-  invalidCurrentPassword,
-  totpRequired,
-  invalidInput,
-  notSetUp,
-  lockedOut,
-
-  /// 2FA is already on — re-enroll is refused; disable first, then enroll.
-  /// Prevents a stolen session from silently replacing the owner's secret
-  /// and recovery codes (audit P0.4).
-  alreadyEnabled,
-}
-
-/// Outcome of [AuthService.beginTotpEnrollment] (password step-up required).
-class TotpBeginResult {
-  const TotpBeginResult(this.status, {this.enrollment});
-  final CredentialChangeStatus status;
-  final TotpEnrollment? enrollment;
-}
-
-/// Outcome of [AuthService.confirmTotpEnrollment] (password step-up required).
-class TotpConfirmResult {
-  const TotpConfirmResult(this.status, {this.recoveryCodes});
-  final CredentialChangeStatus status;
-  final List<String>? recoveryCodes;
-}
+export 'package:front_porch_ai/services/web/auth/auth_types.dart';
 
 /// The single-account secure-login service for the rewritten web server.
 ///
@@ -112,10 +63,25 @@ class AuthService {
   /// In-memory pending secret during TOTP enrollment (single host account).
   String? _pendingTotpSecret;
 
+  /// One-time token for non-local first-run setup. Never served over HTTP —
+  /// desktop Settings shows it while setup is open.
+  String? _setupToken;
+
   // ── Account lifecycle ───────────────────────────────────────────────────
 
   /// True when no account exists yet — the server runs in setup mode.
   Future<bool> isSetupRequired() async => (await _loadCredentials()) == null;
+
+  /// Desktop-only setup claim code while no account exists. Null once setup
+  /// completes. Lazy-minted so a fresh install always has something to show
+  /// after "Reset web login" or first server start with no credentials.
+  Future<String?> setupTokenForDesktop() async {
+    if (!await isSetupRequired()) {
+      _setupToken = null;
+      return null;
+    }
+    return _setupToken ??= SetupGate.generateToken();
+  }
 
   /// The account's public bits for display (web account page, desktop
   /// settings card). Null when no account exists yet.
@@ -125,11 +91,30 @@ class AuthService {
     return (username: creds.username, totpEnabled: creds.totpEnabled);
   }
 
-  /// Create the single account. Fails if one already exists or input is invalid.
-  Future<bool> setupAccount(String username, String password) async {
-    if (!await isSetupRequired()) return false;
+  /// Create the single account. Local (direct loopback) clients need no token;
+  /// LAN/proxy clients must supply [setupToken] matching the desktop value.
+  Future<SetupStatus> setupAccount(
+    String username,
+    String password, {
+    String? setupToken,
+    bool isDirectLoopbackClient = false,
+    String? ip,
+  }) async {
+    if (!await isSetupRequired()) return SetupStatus.alreadyConfigured;
+    if (!_limiter.setupIpAllowed(ip)) return SetupStatus.rateLimited;
+    _limiter.recordSetupAttempt(ip);
+
+    if (!isDirectLoopbackClient) {
+      await setupTokenForDesktop();
+      if (!SetupGate.tokensMatch(setupToken, _setupToken)) {
+        // Empty token from a remote client is "required", wrong token is invalid.
+        final blank = setupToken == null || setupToken.trim().isEmpty;
+        return blank ? SetupStatus.tokenRequired : SetupStatus.invalidToken;
+      }
+    }
+
     final u = username.trim();
-    if (u.isEmpty || password.length < 8) return false;
+    if (u.isEmpty || password.length < 8) return SetupStatus.invalidInput;
     final hash = await _hasher.hash(password);
     final nowSecs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     await _db.customInsert(
@@ -144,7 +129,8 @@ class AuthService {
         Variable<int>(nowSecs),
       ],
     );
-    return true;
+    _setupToken = null;
+    return SetupStatus.success;
   }
 
   // ── Login / logout ──────────────────────────────────────────────────────
@@ -250,6 +236,8 @@ class AuthService {
   /// than the web password — this is the "forgot password" path.
   Future<void> resetAccount() async {
     _pendingTotpSecret = null;
+    // Fresh token so a prior leak cannot reclaim after reset.
+    _setupToken = SetupGate.generateToken();
     await sessions.revokeAllFor(_accountId);
     await _db.customStatement(
       'DELETE FROM web_auth_credentials WHERE id = ?',

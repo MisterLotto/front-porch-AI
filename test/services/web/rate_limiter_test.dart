@@ -48,5 +48,19 @@ void main() {
       now = now.add(const Duration(minutes: 6));
       expect(rl.ipAllowed('9.9.9.9'), isTrue);
     });
+
+    test('setup IP window is tighter than login and independent', () {
+      var now = DateTime(2026, 1, 1, 12);
+      final rl = RateLimiter(now: () => now);
+      expect(rl.setupIpAllowed('7.7.7.7'), isTrue);
+      for (var i = 0; i < RateLimiter.setupWindowMax; i++) {
+        rl.recordSetupAttempt('7.7.7.7');
+      }
+      expect(rl.setupIpAllowed('7.7.7.7'), isFalse);
+      // Login IP window is not exhausted by setup attempts.
+      expect(rl.ipAllowed('7.7.7.7'), isTrue);
+      now = now.add(RateLimiter.setupWindow + const Duration(seconds: 1));
+      expect(rl.setupIpAllowed('7.7.7.7'), isTrue);
+    });
   });
 }
