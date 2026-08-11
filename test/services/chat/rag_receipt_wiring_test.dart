@@ -31,6 +31,19 @@
 //   * revert the query to displayText → the photo-marker query assertion
 //     goes red (the marked message's displayText carries no marker)
 //   * delete the stream-phase stamp → the receipt assertions go red
+//
+// TIMEOUT AMENDED 2026-08-11 (flake fix, subject unchanged): the gate test
+// drives 21 REAL ChatService turns with the engine on — roughly 190
+// scripted eval round-trips — which is seconds on a dev machine and
+// genuinely marginal against the default 30s per-test budget on a loaded
+// 2-core CI runner at --concurrency=4. It timed out exactly that way TWICE
+// (the suite's birth run 4da644b and run 31464121692), and worse, the
+// aborted turn's background continuation then contaminated the sibling
+// no-receipt test in the same file. Every assertion is untouched; the test
+// just gets room to finish where it is slowest.
+
+@Timeout(Duration(minutes: 4))
+library;
 
 import 'dart:io';
 

@@ -14621,3 +14621,20 @@ One live placement card per item — new placement retires the old.
 **Verification:** 3 guards proven red-then-green (lexical floor disabled →
 resurface test red; retire loop cut → dedupe red; undress-silence rule
 broken → mapper red). Full chat dir 1403, full unit 3550, analyze clean.
+
+## 2026-08-11 (UTC) — Flake fix: rag_receipt_wiring_test timeout on loaded CI runners
+
+**Files:** `test/services/chat/rag_receipt_wiring_test.dart` (timeout
+annotation + dated rationale only — zero assertion changes)
+
+**Why:** The gate test (21 real ChatService turns ≈190 scripted eval
+round-trips) timed out at the default 30s on loaded CI runners TWICE —
+the suite's own birth run (4da644b) and run 31464121692 (4a77265) — and
+the aborted turn's background continuation then contaminated the sibling
+no-receipt test in the same file (retrieval fired on a one-exchange
+transcript). Passed 4 CI runs in between and always passes locally; the
+item-memory commit it failed on is provably inert in this test's
+configuration (no cards, pockets off).
+
+**How:** `@Timeout(Duration(minutes: 4))` on the library. Amended openly
+per the never-quietly policy; the subject is unchanged.
