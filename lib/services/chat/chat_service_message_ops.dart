@@ -294,19 +294,30 @@ extension ChatServiceMessageOps on ChatService {
     if (position < _summaryLastIndex) {
       _summaryLastIndex = position;
     }
+    // Fire-and-forget BUT error-contained: this select+delete chain can
+    // outlive the service (delete a message, then close the app — or a test
+    // teardown closing the Drift isolate), and an unhandled "Channel was
+    // closed" from the zone is exactly how ec82f27's H3 guard went red on CI
+    // while every assertion in it passed. Same containment contract as
+    // _doSaveChat: log, never crash the zone; nothing could retry anyway.
     unawaited(
-      _journalStore.invalidateCardsCitingFrom(sessionId, position).then((
-        removed,
-      ) {
-        if (removed > 0 && !_disposed) {
-          _journalMaintenance.eventKickPending = true;
-          debugPrint(
-            '[Journal] Timeline rewrite at $position — removed $removed '
-            'card(s) citing the discarded region',
-          );
-          notifyListeners();
-        }
-      }),
+      _journalStore
+          .invalidateCardsCitingFrom(sessionId, position)
+          .then((removed) {
+            if (removed > 0 && !_disposed) {
+              _journalMaintenance.eventKickPending = true;
+              debugPrint(
+                '[Journal] Timeline rewrite at $position — removed $removed '
+                'card(s) citing the discarded region',
+              );
+              notifyListeners();
+            }
+          })
+          .catchError((Object e) {
+            debugPrint(
+              '[Journal] ⚠ card invalidation at $position skipped: $e',
+            );
+          }),
     );
   }
 

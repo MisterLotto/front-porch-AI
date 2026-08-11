@@ -3,6 +3,19 @@
 
 # Changelog
 
+## 2026-08-11 — fix(journal): contain the unawaited card-purge chain (CI red on ec82f27)
+- **Files:** `lib/services/chat/chat_service_message_ops.dart`
+  (`_invalidateJournalFrom` gets `.catchError` + log, same containment
+  contract as `_doSaveChat`),
+  `test/services/chat/journal_invalidation_shutdown_test.dart` (new
+  deterministic guard: DB closed → deleteMessage → chain must log, not
+  throw into the zone; proven red with the catchError removed).
+- **Why:** the H3 guard went red on CI (run 31479255223) with every
+  assertion passing — the fire-and-forget select in the card purge was
+  killed by tearDown's `db.close()` and escaped as an unhandled zone
+  error. Same hole exists in production: delete a message, close the app.
+- **Commit:** (this commit)
+
 ## 2026-08-11 — test(pockets): H3 user-tail delete + restamp guards (engine on)
 - **Files:** `test/services/chat/pockets_rewind_test.dart` (scripted LLM answers
   inert realism evals; two new cases with engine on).
