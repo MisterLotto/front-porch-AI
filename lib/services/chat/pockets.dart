@@ -500,6 +500,17 @@ bool isGenericClothingRef(String raw) {
   return toks.isNotEmpty && toks.every(generic.contains);
 }
 
+/// Did the model mean everything she is CARRYING? The setdown sibling of
+/// [isGenericClothingRef]: "she sets her things down" arrives as one op
+/// naming "her things"/"her belongings", which matched no single item and
+/// silently no-opped (hostile review, 2026-08-11 — the mid-scene half of
+/// the same bulk gap the undress fix closed).
+bool isGenericThingsRef(String raw) {
+  const generic = {'things', 'belongings', 'stuff', 'everything', 'all'};
+  final toks = _contentTokens(raw);
+  return toks.isNotEmpty && toks.every(generic.contains);
+}
+
 bool sameItem(String a, String b) {
   final an = _norm(a), bn = _norm(b);
   if (an.isEmpty || bn.isEmpty) return false;
@@ -581,7 +592,12 @@ List<String> applyPocketOps(
   void park(PocketItem item, {required bool clothing}) {
     p.setAside.add(SetAsideItem(item, clothing: clothing, day: day));
     while (p.setAside.length > kMaxSetAside) {
-      p.setAside.removeAt(0);
+      // Evict CLOTHING first — it expires at the next story morning anyway,
+      // while a possession is under the "never vanishes" promise. Trimming
+      // strictly oldest-first let tonight's bulk undress silently evict the
+      // mysterious letter parked three days ago (hostile review 2026-08-11).
+      final firstClothing = p.setAside.indexWhere((e) => e.clothing);
+      p.setAside.removeAt(firstClothing != -1 ? firstClothing : 0);
     }
   }
 
@@ -691,6 +707,19 @@ List<String> applyPocketOps(
         // the model's only honest choices were `drop` (which DELETES the
         // bag) or silence (she "carries" it all evening) — the same
         // data-loss shape as the undress bug, in miniature.
+        if (isGenericThingsRef(op.item)) {
+          // "She sets her things down" — everything in hand goes beside
+          // her. Carried only: undressing is remove's business.
+          for (final it in p.carrying) {
+            park(it, clothing: false);
+            receipts.add('set aside: ${it.name}');
+            events?.add(
+              PocketEvent(kind: op.kind, item: it.name, where: op.where),
+            );
+          }
+          p.carrying.clear();
+          break;
+        }
         final sc = find(p.carrying, op.item);
         if (sc != -1) {
           final down = p.carrying.removeAt(sc);

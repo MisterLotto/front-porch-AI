@@ -14702,3 +14702,19 @@ resolution. Guests skip (no pockets pass runs for them).
 
 **Verification:** 3 service-level journeys green; regen seam proven red
 with the restore call removed; full chat dir 1410; analyze clean.
+
+## 2026-08-11 (UTC) — P2 pair: things-down bulk + possession-sparing cap eviction
+
+**Files:** `lib/services/chat/pockets.dart` (isGenericThingsRef + setdown
+bulk branch; park() evicts clothing before possessions),
+`test/services/chat/pockets_test.dart` (+2 guards, op helper gains where).
+
+**Why:** hostile-review P2s riding approved design language: "she sets
+her things down" was the mid-scene half of the bulk gap (matched nothing,
+no-opped); strict oldest-first cap eviction let tonight's bulk undress
+evict the mysterious letter parked days ago — the possession the "never
+vanishes" promise exists for.
+
+**Verification:** both guards proven red (eviction reverted to
+oldest-first; things-branch disabled) then green. Full chat dir 1412;
+analyze clean.

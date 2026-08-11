@@ -36,7 +36,8 @@ PocketOpReport op(
   String item, {
   String to = '',
   String state = '',
-}) => PocketOpReport(kind: kind, item: item, to: to, state: state);
+  String where = '',
+}) => PocketOpReport(kind: kind, item: item, to: to, state: state, where: where);
 
 List<String> namesOf(List<PocketItem> l) => [for (final i in l) i.name];
 
@@ -298,6 +299,58 @@ void main() {
       expect(r, ['gave keys to Sam', 'gave letter to Sam']);
       expect(given, hasLength(2));
       expect(given.map((g) => g.$2.name), ['car keys', 'letter']);
+    });
+
+    test('"she sets her things down" parks everything in hand', () {
+      // The mid-scene sibling of the bulk undress: one generic setdown op,
+      // no enumeration. Matched nothing and silently no-opped before
+      // 2026-08-11's hostile review follow-up.
+      final p = Pockets(
+        worn: [const PocketItem('sundress')],
+        carrying: [const PocketItem('car keys'), const PocketItem('phone')],
+      );
+      final r = applyPocketOps(
+        p,
+        [op(PocketOpKind.setdown, 'her things', where: 'by the door')],
+        day: 2,
+      );
+      expect(r, ['set aside: car keys', 'set aside: phone']);
+      expect(p.carrying, isEmpty);
+      expect(
+        namesOf(p.worn),
+        ['sundress'],
+        reason: 'setting things down is not undressing',
+      );
+      expect(p.setAside.every((e) => !e.clothing), isTrue);
+    });
+
+    test('the cap evicts clothing before possessions', () {
+      // Trimming strictly oldest-first let tonight's bulk undress evict the
+      // mysterious letter parked days ago — the exact possession the
+      // "never vanishes" promise exists for.
+      final p = Pockets();
+      p.setAside.add(
+        const SetAsideItem(PocketItem('mysterious letter'), clothing: false, day: 1),
+      );
+      for (var i = 0; i < kMaxSetAside; i++) {
+        applyPocketOps(p, [op(PocketOpKind.setdown, 'thing $i')], day: 5);
+        p.carrying.add(PocketItem('thing ${i + 100}'));
+        // Re-park through the applier so the cap logic runs each time.
+      }
+      // Fill to the brim with parked clothing, then one more.
+      final q = Pockets(
+        worn: [for (var i = 0; i < kMaxWorn; i++) PocketItem('garment $i')],
+        carrying: [for (var i = 0; i < kMaxCarrying; i++) PocketItem('item $i')],
+      );
+      q.setAside.add(
+        const SetAsideItem(PocketItem('mysterious letter'), clothing: false, day: 1),
+      );
+      applyPocketOps(q, [op(PocketOpKind.remove, 'everything')], day: 5);
+      expect(
+        [for (final e in q.setAside) e.item.name],
+        contains('mysterious letter'),
+        reason: 'clothing (expires anyway) must be evicted first',
+      );
     });
 
     test('a worn thing set down is clothing taken off', () {
