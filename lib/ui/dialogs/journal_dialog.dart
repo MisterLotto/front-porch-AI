@@ -23,10 +23,10 @@ import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/models/models.dart';
-import 'package:front_porch_ai/services/chat/journal_physics.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'journal_card_editor.dart';
+import 'journal_card_tile.dart';
 import 'journal_promises_tab.dart';
 import 'journal_timeline_tab.dart';
 
@@ -173,15 +173,17 @@ class _JournalDialogState extends State<JournalDialog> {
               ),
             ),
             const SizedBox(height: 12),
-            // Diary | Our Story (Living Time §7) — the timeline tab lives in
-            // its own file (journal_timeline_tab.dart); only the scaffolding
-            // is here so this dialog doesn't regrow.
+            // Diary | Promises | Belongings | Our Story — Belongings used to
+            // bury at the bottom of a long Diary list (156+ cards); its own
+            // tab is the same pattern Promises got for the same reason.
             Expanded(
               child: DefaultTabController(
-                length: 3,
+                length: 4,
                 child: Column(
                   children: [
                     TabBar(
+                      isScrollable: true,
+                      tabAlignment: TabAlignment.start,
                       labelColor: accent,
                       unselectedLabelColor: AppColors.textTertiary(context),
                       indicatorColor: accent,
@@ -189,10 +191,16 @@ class _JournalDialogState extends State<JournalDialog> {
                         fontSize: 12.5,
                         fontWeight: FontWeight.w600,
                       ),
-                      tabs: const [
-                        Tab(height: 34, text: 'Diary'),
-                        Tab(height: 34, text: 'Promises'),
-                        Tab(height: 34, text: 'Our Story'),
+                      tabs: [
+                        const Tab(height: 34, text: 'Diary'),
+                        const Tab(height: 34, text: 'Promises'),
+                        Tab(
+                          height: 34,
+                          text: _belongingsCount == 0
+                              ? 'Belongings'
+                              : 'Belongings ($_belongingsCount)',
+                        ),
+                        const Tab(height: 34, text: 'Our Story'),
                       ],
                     ),
                     Expanded(
@@ -204,14 +212,36 @@ class _JournalDialogState extends State<JournalDialog> {
                                     color: accent,
                                   ),
                                 )
-                              : _cards.isEmpty
+                              : _diaryCards.isEmpty
                               ? _emptyState(context)
-                              : _cardList(context, userName),
+                              : _cardList(
+                                  context,
+                                  userName,
+                                  // Emotional diary only — item cards live
+                                  // on the Belongings tab (not buried at
+                                  // the bottom of this list).
+                                  categories: kJournalDisplayCategories
+                                      .where((c) => c != 'item')
+                                      .toList(),
+                                ),
                           JournalPromisesTab(
                             chat: _chat,
                             ownerId: _ownerId,
                             ownerName: widget.ownerName,
                           ),
+                          _loading
+                              ? Center(
+                                  child: CircularProgressIndicator(
+                                    color: accent,
+                                  ),
+                                )
+                              : _belongingsCount == 0
+                              ? _emptyBelongings(context)
+                              : _cardList(
+                                  context,
+                                  userName,
+                                  categories: const ['item'],
+                                ),
                           JournalTimelineTab(
                             chat: _chat,
                             ownerId: _ownerId,
@@ -266,6 +296,12 @@ class _JournalDialogState extends State<JournalDialog> {
     );
   }
 
+  int get _belongingsCount =>
+      _cards.where((c) => c.category == 'item').length;
+
+  List<JournalMemoryData> get _diaryCards =>
+      _cards.where((c) => c.category != 'item').toList();
+
   Widget _emptyState(BuildContext context) {
     return Center(
       child: Padding(
@@ -286,34 +322,60 @@ class _JournalDialogState extends State<JournalDialog> {
     );
   }
 
-  Widget _cardList(BuildContext context, String userName) {
-    final sections = <Widget>[];
-    // kJournalDisplayCategories, not kJournalCategories: the display list
-    // carries 'item' (Belongings), which the LLM-authoring enum must not —
-    // this inline list used to omit it, and every placement memory was
-    // silently invisible in the diary (maintainer-found, 2026-08-11).
-    for (final category in kJournalDisplayCategories) {
-      final cards = _cards.where((c) => c.category == category).toList();
-      if (cards.isEmpty) continue;
-      sections.add(
-        Padding(
-          padding: const EdgeInsets.only(top: 10, bottom: 6),
-          child: Text(
-            journalCategoryLabel(category, userName).toUpperCase(),
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.1,
-              color: AppColors.journalAccentOf(context),
-            ),
+  Widget _emptyBelongings(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(
+          'No belongings notes yet.\n\nWhen $_ownerName sets something down, '
+          'hands it over, or changes outfits, a short placement memory lands '
+          'here — so "where are my keys?" has an answer without scrolling the '
+          'whole diary.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 12,
+            height: 1.5,
+            color: AppColors.textTertiary(context),
           ),
         ),
-      );
+      ),
+    );
+  }
+
+  /// [categories] — diary uses [kJournalCategories] (no item); Belongings
+  /// uses `const ['item']`. Section headers omit when a single category is
+  /// already named by the tab.
+  Widget _cardList(
+    BuildContext context,
+    String userName, {
+    required List<String> categories,
+  }) {
+    final sections = <Widget>[];
+    final showHeaders = categories.length > 1;
+    for (final category in categories) {
+      final cards = _cards.where((c) => c.category == category).toList();
+      if (cards.isEmpty) continue;
+      if (showHeaders) {
+        sections.add(
+          Padding(
+            padding: const EdgeInsets.only(top: 10, bottom: 6),
+            child: Text(
+              journalCategoryLabel(category, userName).toUpperCase(),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.1,
+                color: AppColors.journalAccentOf(context),
+              ),
+            ),
+          ),
+        );
+      }
       sections.addAll([
         for (final card in cards)
           Padding(
             padding: const EdgeInsets.only(bottom: 6),
-            child: _JournalCardTile(
+            child: JournalCardTile(
               card: card,
               when: journalWhenLine(card, _chat.timeService.startDate),
               onPinToggle: () async {
@@ -514,188 +576,5 @@ class _JournalDialogState extends State<JournalDialog> {
     } catch (_) {
       return const [];
     }
-  }
-}
-
-/// One memory card row: emotion chip, the memory in the character's words,
-/// the feeling line (with the "once felt X — now feels Y" healed arc), and
-/// pinned/faded state. Pin is one tap; edit/receipts/retire live in the menu.
-class _JournalCardTile extends StatelessWidget {
-  final JournalMemoryData card;
-
-  /// "Day 5 · Tue, Mar 3" (story-calendar §4); null for pre-calendar cards.
-  final String? when;
-  final VoidCallback onPinToggle;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-  final VoidCallback onShowReceipts;
-
-  const _JournalCardTile({
-    required this.card,
-    this.when,
-    required this.onPinToggle,
-    required this.onEdit,
-    required this.onDelete,
-    required this.onShowReceipts,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final faded = !JournalPhysics.isHot(card);
-    final feelingLine = journalFeelingLine(card);
-    final feeling = feelingLine == null
-        ? when
-        : when == null
-        ? feelingLine
-        : '$feelingLine · $when';
-    final hasReceipts =
-        card.sourceMessageIds != null && card.sourceMessageIds!.isNotEmpty;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerOf(context),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: card.pinned
-              ? AppColors.porchHoneyOf(context).withValues(alpha: 0.5)
-              : AppColors.borderOf(context).withValues(alpha: 0.4),
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 1),
-            child: Opacity(
-              opacity: faded ? 0.45 : 1.0,
-              child: Text(
-                journalCardEmoji(card),
-                style: const TextStyle(fontSize: 16),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  card.content,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    height: 1.35,
-                    color: faded
-                        ? AppColors.textTertiary(context)
-                        : AppColors.textPrimary(context),
-                  ),
-                ),
-                if (feeling != null || faded) ...[
-                  const SizedBox(height: 3),
-                  Row(
-                    children: [
-                      if (feeling != null)
-                        Flexible(
-                          child: Text(
-                            feeling,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 10.5,
-                              fontStyle: FontStyle.italic,
-                              color: AppColors.textTertiary(context),
-                            ),
-                          ),
-                        ),
-                      if (faded) ...[
-                        if (feeling != null) const SizedBox(width: 6),
-                        Icon(
-                          Icons.ac_unit,
-                          size: 10,
-                          color: AppColors.frostAccentOf(context),
-                        ),
-                        const SizedBox(width: 2),
-                        Text(
-                          'faded',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: AppColors.frostAccentOf(context),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            iconSize: 15,
-            tooltip: card.pinned ? 'Unpin' : 'Pin (never fades)',
-            icon: Icon(
-              card.pinned ? Icons.push_pin : Icons.push_pin_outlined,
-              color: card.pinned
-                  ? AppColors.porchHoneyOf(context)
-                  : AppColors.iconSecondary(context),
-            ),
-            onPressed: onPinToggle,
-          ),
-          PopupMenuButton<String>(
-            padding: EdgeInsets.zero,
-            iconSize: 15,
-            icon: Icon(
-              Icons.more_vert,
-              color: AppColors.iconSecondary(context),
-            ),
-            color: AppColors.surfaceContainerOf(context),
-            onSelected: (action) {
-              if (action == 'edit') {
-                onEdit();
-              } else if (action == 'receipts') {
-                onShowReceipts();
-              } else {
-                onDelete();
-              }
-            },
-            itemBuilder: (ctx) => [
-              _menuItem(ctx, 'edit', Icons.edit_outlined, 'Edit'),
-              if (hasReceipts)
-                _menuItem(
-                  ctx,
-                  'receipts',
-                  Icons.format_quote,
-                  'Where this came from',
-                ),
-              _menuItem(ctx, 'retire', Icons.delete_outline, 'Retire'),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  PopupMenuItem<String> _menuItem(
-    BuildContext context,
-    String value,
-    IconData icon,
-    String label,
-  ) {
-    return PopupMenuItem(
-      value: value,
-      height: 36,
-      child: Row(
-        children: [
-          Icon(icon, size: 14, color: AppColors.iconSecondary(context)),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: AppColors.textPrimary(context),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }

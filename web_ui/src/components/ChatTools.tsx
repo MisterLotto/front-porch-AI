@@ -14,6 +14,7 @@ import { api } from '../api/client';
 import { GroupSettings, type GroupBlock } from './GroupSettings';
 import { GrowthPanel } from './GrowthPanel';
 import { MilestonesPanel } from './MilestonesPanel';
+import { BelongingsPanel } from './BelongingsPanel';
 import { PromisesPanel } from './PromisesPanel';
 import { StoryCalendarModal } from './StoryCalendarModal';
 import { ContextBudgetModal } from './ContextBudgetModal';
@@ -500,6 +501,13 @@ export function ChatTools({
         <summary>Promises 🤝</summary>
         <div className="tool-body">
           <PromisesPanel focusedId={focusedId} reloadKey={reloadKey} />
+        </div>
+      </details>
+
+      <details className="tool-section">
+        <summary>Belongings 🎒</summary>
+        <div className="tool-body">
+          <BelongingsPanel focusedId={focusedId} reloadKey={reloadKey} />
         </div>
       </details>
 

@@ -2369,6 +2369,12 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 .promise-actions { display: flex; gap: 8px; }
 .promise-actions button { font-size: 0.75rem; padding: 3px 10px; }
 
+/* Belongings — web mirror of desktop Journal "Belongings" tab */
+.belonging-row { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.belonging-row:last-child { border-bottom: none; }
+.belonging-row.pinned .belonging-text { font-weight: 600; }
+.belonging-text { font-size: 0.85rem; line-height: 1.4; margin-bottom: 4px; }
+
 /* Chip-list editor — the web mirror of ChipListEditor (approved sketch §4).
    Used for Ambitions now and Likes/Dislikes next, hence the neutral naming.
    `accent` is the amber-bordered treatment the sketch draws for ambitions. */

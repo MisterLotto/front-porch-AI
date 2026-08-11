@@ -22,6 +22,7 @@ export 'image_prompt_review_dialog.dart';
 export 'import_character_lore_dialog.dart';
 export 'import_name_collision_dialog.dart';
 export 'journal_card_editor.dart';
+export 'journal_card_tile.dart';
 export 'journal_dialog.dart';
 export 'journal_review_dialog.dart';
 export 'journal_timeline_tab.dart';

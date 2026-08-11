@@ -34,6 +34,7 @@ class WebChatToolsRoutes {
     router.get('/api/chat/tools/calendar', _calendar);
     router.get('/api/chat/tools/timeline', _timeline);
     router.get('/api/chat/tools/promises', _promises);
+    router.get('/api/chat/tools/belongings', _belongings);
     router.post('/api/chat/tools/promise-resolve', _promiseResolve);
     router.post('/api/chat/tools/pocket-remove', _pocketRemove);
     router.post('/api/chat/tools/to-story', _toStory);
@@ -169,6 +170,12 @@ class WebChatToolsRoutes {
   Future<shelf.Response> _promises(shelf.Request request) async {
     final owner = request.url.queryParameters['owner'];
     return JsonResponse.ok(await _facade.promises(owner));
+  }
+
+  /// Belongings / item-memory cards (desktop Journal "Belongings" tab parity).
+  Future<shelf.Response> _belongings(shelf.Request request) async {
+    final owner = request.url.queryParameters['owner'];
+    return JsonResponse.ok(await _facade.belongings(owner));
   }
 
   Future<shelf.Response> _promiseResolve(shelf.Request request) async {

@@ -613,6 +613,38 @@ class ChatToolsFacade {
     };
   }
 
+  /// Belongings / item-memory cards (web panel — desktop Journal "Belongings"
+  /// tab parity). Placement notes only (`category == item`). Owner defaults
+  /// like [calendar]. Additive endpoint; old clients never call it.
+  Future<Map<String, dynamic>> belongings(String? ownerId) async {
+    final sessionId = _chat.currentSessionId;
+    final owners = _chat.cast.where((p) => !p.isLite).toList();
+    final owner =
+        owners.where((p) => p.id == ownerId).firstOrNull ?? owners.firstOrNull;
+    final rows = <Map<String, dynamic>>[];
+    if (sessionId != null && owner != null) {
+      for (final card in await _chat.journalStore.cardsFor(
+        sessionId,
+        owner.id,
+      )) {
+        if (card.category != 'item') continue;
+        final (day, _) = JournalStore.stampOf(card);
+        rows.add({
+          'id': card.id,
+          'content': card.content,
+          'pinned': card.pinned,
+          'storyDay': day,
+          'item': JournalPhysics.itemOf(card),
+        });
+      }
+    }
+    return {
+      'owner': owner?.id,
+      'ownerName': owner?.name,
+      'belongings': rows,
+    };
+  }
+
   /// Promise ledger read (web Promises panel — desktop Journal "Promises"
   /// tab parity). Owner defaults to the first diary owner like [calendar].
   /// Additive endpoint; old clients never call it.
