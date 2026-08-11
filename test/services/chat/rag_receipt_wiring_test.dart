@@ -32,21 +32,21 @@
 //     goes red (the marked message's displayText carries no marker)
 //   * delete the stream-phase stamp → the receipt assertions go red
 //
-// TIMEOUT AMENDED 2026-08-11 (flake fix, subject unchanged): the gate test
-// drives 21 REAL ChatService turns with the engine on — roughly 190
-// scripted eval round-trips — which is seconds on a dev machine and
-// genuinely marginal against the default 30s per-test budget on a loaded
-// 2-core CI runner at --concurrency=4. It timed out exactly that way TWICE
-// (the suite's birth run 4da644b and run 31464121692), and worse, the
-// aborted turn's background continuation then contaminated the sibling
-// no-receipt test in the same file. Every assertion is untouched; the test
-// just gets room to finish where it is slowest.
-
-@Timeout(Duration(minutes: 4))
-library;
+// REDESIGNED 2026-08-11 (flake kill, subject unchanged): the gate test used
+// to DRIVE 21 real ChatService turns — ~190 scripted eval round-trips of
+// pure ceremony — just to make the transcript outgrow the context. That
+// wall-clock-heavy arrangement timed out at the default 30s on loaded CI
+// runners twice (the suite's birth run 4da644b and run 31464121692), and
+// the aborted turn's background churn then contaminated the sibling
+// no-receipt test. Maintainer ruling: a flaky test is worse than no test.
+// The precondition is now ARRANGED, not simulated — the oversized
+// transcript is seeded straight into the DB (the session_load_regression
+// pattern) and loaded, and exactly ONE real turn runs: the photo turn the
+// assertions are actually about. Every assertion is byte-identical.
 
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -233,13 +233,36 @@ void main() {
       )..dbId = 'char-ragwire-1';
       await chat.setActiveCharacter(card);
 
-      // Fill the context past its 3072-token budget so history drops and
-      // the retrieval gate opens.
-      for (var i = 0; i < 20; i++) {
-        await chat.sendMessage(
-          'Tell me more about the garden and the neighbours, turn $i.',
+      // The precondition, ARRANGED rather than simulated: a transcript
+      // already past the 3072-token budget, seeded straight into the DB and
+      // loaded. 24 long messages ≈ 3.9k tokens of history, so assembly
+      // drops the oldest and the retrieval gate opens on the very first
+      // real turn below. Position 2 carries the realism_state stamp the
+      // day-stamped own-chat line derives from.
+      await db.insertSession(
+        SessionsCompanion.insert(
+          id: 'sess-ragwire',
+          characterId: const Value('char-ragwire-1'),
+        ),
+      );
+      for (var i = 0; i < 24; i++) {
+        final isUser = i.isOdd;
+        await db.insertMessage(
+          MessagesCompanion.insert(
+            id: 'seed-$i',
+            sessionId: 'sess-ragwire',
+            position: i,
+            sender: isUser ? 'You' : 'Nia',
+            isUser: isUser,
+            swipes: Value('["${_ScriptedLlm._reply.replaceAll('*', '')}"]'),
+            metadata: i == 2
+                ? const Value('{"realism_state":{"dayCount":1}}')
+                : const Value.absent(),
+          ),
         );
       }
+      await chat.loadSession('sess-ragwire');
+      expect(chat.messages, hasLength(24), reason: 'the seed must load');
 
       // Mark an in-window user message as a photo turn: its promptText now
       // carries the marker, its displayText does not — which is exactly the

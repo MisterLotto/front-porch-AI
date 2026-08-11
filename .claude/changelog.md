@@ -14638,3 +14638,22 @@ configuration (no cards, pockets off).
 
 **How:** `@Timeout(Duration(minutes: 4))` on the library. Amended openly
 per the never-quietly policy; the subject is unchanged.
+
+## 2026-08-11 (UTC) — rag_receipt_wiring redesigned: arrange, don't simulate
+
+**Files:** `test/services/chat/rag_receipt_wiring_test.dart`
+
+**Why:** Maintainer ruling after the second CI timeout: "flaky tests are
+worse than no test." The earlier same-day timeout raise treated the
+symptom; the defect was the DESIGN — 21 real ChatService turns (~190
+scripted eval round-trips) of pure ceremony to arrange one precondition
+(transcript > context). Wall-clock-dependent arrangement is a flake
+factory by construction.
+
+**How:** the oversized transcript is now SEEDED directly into the DB
+(insertSession + insertMessage, the session_load_regression pattern) and
+loaded; exactly ONE real turn runs — the photo turn the assertions are
+about. The realism_state day stamp rides the seeded position-2 row. Every
+assertion byte-identical; the 4-minute timeout bandage removed. File
+runtime: ~1s (was 7s locally, 30s+ under CI load). Stability: 10/10
+consecutive green + full chat dir at --concurrency=4 green.
