@@ -125,8 +125,9 @@ void main() {
         reason: 'first reply must have landed (got: $preBody)',
       );
 
-      // Point Continue at a distinct continuation fragment (list is final,
-      // mutate in place).
+      // Point Continue at a distinct continuation fragment. FakeBackendServer
+      // owns a growable copy of replyPieces so clear/addAll is safe even when
+      // the suite passed a const list.
       backend.replyPieces
         ..clear()
         ..addAll(_kContinuePieces);

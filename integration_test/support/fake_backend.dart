@@ -112,7 +112,15 @@ class FakeBackendServer {
     Duration chatChunkDelay = Duration.zero,
   }) async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final fake = FakeBackendServer._(server, replyPieces, chatChunkDelay);
+    // Always own a growable copy. Suites pass const lists (or want to
+    // clear/replace mid-test for Continue), and mutating a const/unmodifiable
+    // list throws UnsupportedError mid-suite — that is exactly how
+    // continue_path_test red'd macOS + Windows CI (2026-08-11).
+    final fake = FakeBackendServer._(
+      server,
+      List<String>.of(replyPieces),
+      chatChunkDelay,
+    );
     server.listen(fake._handle);
     return fake;
   }

@@ -3,6 +3,15 @@
 
 # Changelog
 
+## 2026-08-11 — fix(ci): light-mode goldens + growable FakeBackend replyPieces
+- **Files:** `settings_menu_item.light.png`, `chat_settings.light.png`,
+  `integration_test/support/fake_backend.dart`,
+  `integration_test/continue_path_test.dart`.
+- **Why:** Rawhide CI red on every push since P3 light-mode contrast (goldens
+  never refreshed; macOS unit tests skip `@TestOn('linux')` goldens). Continue
+  E2E threw UnsupportedError clearing a const replyPieces list. FakeBackend
+  now owns a growable List.of copy; goldens re-baselined via ci-local.
+
 ## 2026-08-11 — test(e2e): coverage inventory + regen feelings/cadence + Continue path
 - **Files:** `docs/design/e2e-coverage-inventory.md`,
   `integration_test/regen_feelings_cadence_test.dart`,
