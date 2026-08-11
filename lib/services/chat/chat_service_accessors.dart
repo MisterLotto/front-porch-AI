@@ -270,6 +270,9 @@ extension ChatServiceAccessors on ChatService {
     _ttsService = service;
   }
 
+  /// The RAG [MemoryService] when wired (null until host injects it).
+  MemoryService? get memoryService => _memoryService;
+
   /// Set the MemoryService after construction (for RAG memory retrieval).
   void setMemoryService(MemoryService service) {
     _memoryService = service;

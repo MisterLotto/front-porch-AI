@@ -888,6 +888,19 @@ button.ghost.small, .ghost.small { font-size: 0.72rem; padding: 4px 8px; backgro
 .tool-section > summary::-webkit-details-marker { display: none; }
 .tool-section[open] > summary { border-bottom: 1px solid var(--border); }
 .tool-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+
+/* Memory (RAG) engine status — host download progress mirrored to web. */
+.rag-engine-status { display: flex; flex-direction: column; gap: 6px; }
+.rag-progress-track {
+  height: 6px; border-radius: 3px; overflow: hidden;
+  background: color-mix(in srgb, var(--border) 80%, transparent);
+}
+.rag-progress-fill {
+  height: 100%; border-radius: 3px;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+.rag-engine-error { color: color-mix(in srgb, #e07070 90%, var(--text)); }
 .tool-toggle {
   display: flex; align-items: center; justify-content: space-between;
   margin: 0; font-size: 0.85rem; color: var(--text);

@@ -80,6 +80,11 @@ class ChatToolsFacade {
         // shape) — the same anti-black-box surface the desktop sidebar
         // shows. Additive + nullable per the API compatibility rules.
         'lastRagReceipt': _chat.lastRagReceipt,
+        // Embedding-engine status (desktop RagEngineCard parity). Model
+        // download only runs on the host desktop; web surfaces progress
+        // and tells the user to use desktop if setup is needed.
+        'embedding':
+            _chat.memoryService?.embeddingService.statusSnapshot,
         'journalEnabled': _storage.journalEnabled,
         'journalInterval': _storage.journalInterval,
         'importLlmertaPorchMemories': _storage.importLlmertaPorchMemories,

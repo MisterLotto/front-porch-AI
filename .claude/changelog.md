@@ -3,6 +3,16 @@
 
 # Changelog
 
+## 2026-08-11 — ux(rag): Memory sidebar engine card + human settings
+- **Files:** `rag_engine_card.dart` / `rag_settings_well.dart` (new),
+  `memory_panel.dart`, `embedding_service.dart` (`ensureReady` starts setup
+  when the model is missing; `statusSnapshot` / `lastEngineError`),
+  `chat_tools_facade.dart` + web `ChatTools.tsx` / styles, Rawhide note.
+- **Why:** Settings were "Memories per turn" / "Window size" with no download
+  progress or failure path when nomic wasn't installed.
+- **Behavior:** progress bar + MB status during download; Retry on failure;
+  friendly slider labels; web shows host engine status (polls while setting up).
+
 ## 2026-08-11 — fix(release-audit nits): eraser diary lag + deep @depth prefix thrash
 - **Files:** `chat_service_pockets.dart` (`removePocketItem` retires item cards via
   shared `_retireItemCardsFor`), `lorebook_injector.dart` (`spliceDepthLore` +
@@ -15,6 +25,7 @@
   left "I set my keys down…" live for "where are my keys?".
 - **Guards:** depth-beyond-clamp goes red without max-from-end; eraser case
   expects zero live item cards after removePocketItem.
+- **Commit:** `16986f3a`
 
 ## 2026-08-11 — fix(journal): contain the unawaited card-purge chain (CI red on ec82f27)
 - **Files:** `lib/services/chat/chat_service_message_ops.dart`

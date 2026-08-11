@@ -7,6 +7,7 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 *Since nightly `20260811` (`aa66f57` — web eraser).*
 
+- 🧠 **Memory (RAG) sidebar got real setup feedback** — Settings say what they do (“past moments per reply”), and if the local model isn’t there you get Download / a progress bar / a real error + Retry — not a dead “Model not downloaded” dot. Web tools mirror the status (download still runs on the desktop host).
 - 🎒 **Belongings get their own Journal tab** — Placement notes (“I set my jacket down by the hot tub”) live under Journal → **Belongings** next to Promises / Our Story (count badge included). Same surface on the web tools sidebar. The diary section for these cards no longer crashes the editor.
 - 📍 **"Where we are" forgets discarded scenes** — Regen or delete clears a stale story recap until the Journal rewrites it from the real timeline (better empty than wrong).
 - 🧹 **Eraser clears the diary note too** — Striking an item off with ✕ also drops its Belongings memory, so “where are my keys?” doesn’t keep claiming a placement you deleted.

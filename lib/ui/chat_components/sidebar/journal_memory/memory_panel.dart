@@ -26,7 +26,9 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/data_bank_dialog.dart';
 import 'package:front_porch_ai/ui/chat_components/chat_components.dart';
 import 'memory_sources_list.dart';
+import 'rag_engine_card.dart';
 import 'rag_receipt_view.dart';
+import 'rag_settings_well.dart';
 
 /// Memory (RAG) sidebar panel — enable toggle (with first-run consent flow),
 /// embedding engine status, the last reply's retrieval receipt
@@ -55,8 +57,17 @@ class _MemoryPanelState extends State<MemoryPanel> {
   bool _showSources = false;
   Set<String> _selectedSources = {};
   bool _sourcesLoaded = false;
-  double? _dragRagRetrievalCount;
-  double? _dragRagWindowSize;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // If Memory is on but the engine is idle (model missing / not loaded),
+    // start setup so the RagEngineCard can show a real progress bar.
+    final storage = Provider.of<StorageService>(context);
+    if (storage.ragEnabled) {
+      Provider.of<EmbeddingService>(context, listen: false).ensureReady();
+    }
+  }
 
   /// Load current memorySources from DB
   Future<void> _loadSources() async {
@@ -162,40 +173,8 @@ class _MemoryPanelState extends State<MemoryPanel> {
 
         if (enabled) ...[
           const SizedBox(height: 6),
-          // Status indicator
-          Builder(
-            builder: (context) {
-              final embeddings = Provider.of<EmbeddingService>(context);
-              final statusColor = embeddings.isAvailable
-                  ? AppColors.bondHighOf(context)
-                  : AppColors.porchAmberOf(context);
-              final statusText = embeddings.isAvailable
-                  ? 'Memory engine ready'
-                  : embeddings.modelOnDisk
-                  ? 'Starting...'
-                  : 'Model not downloaded';
-              return Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: statusColor,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    statusText,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: AppColors.textTertiary(context),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
+          // Engine status — progress bar / download / retry (not a dead dot).
+          RagEngineCard(accent: accent),
           // What memory just did — the last reply's retrieval receipt.
           RagReceiptView(
             receipt: widget.chatService.lastRagReceipt,
@@ -319,133 +298,9 @@ class _MemoryPanelState extends State<MemoryPanel> {
             ],
           ),
 
-          // Expandable settings
           if (_showSettings) ...[
             const SizedBox(height: 8),
-            Container(
-              padding: SidebarTokens.wellPadding,
-              decoration: BoxDecoration(
-                color: AppColors.sunkenSurfaceOf(context),
-                borderRadius: BorderRadius.circular(SidebarTokens.wellRadius),
-                border: Border.all(color: AppColors.borderOf(context)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Memories per turn
-                  Row(
-                    children: [
-                      Text(
-                        'Memories per turn',
-                        style: TextStyle(
-                          color: AppColors.textSecondary(context),
-                          fontSize: 11,
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        (_dragRagRetrievalCount ??
-                                        storage.ragRetrievalCount.toDouble())
-                                    .round() ==
-                                0
-                            ? 'All'
-                            : '${(_dragRagRetrievalCount ?? storage.ragRetrievalCount.toDouble()).round()}',
-                        style: TextStyle(
-                          color: accent,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      trackHeight: 3,
-                      thumbShape: const RoundSliderThumbShape(
-                        enabledThumbRadius: 6,
-                      ),
-                    ),
-                    child: Slider(
-                      value:
-                          _dragRagRetrievalCount ??
-                          storage.ragRetrievalCount.toDouble(),
-                      min: 0,
-                      max: 50,
-                      divisions: 50,
-                      activeColor: accent,
-                      inactiveColor: AppColors.borderOf(context),
-                      onChanged: (val) =>
-                          setState(() => _dragRagRetrievalCount = val),
-                      onChangeEnd: (val) {
-                        _dragRagRetrievalCount = null;
-                        storage.setRagRetrievalCount(val.round());
-                      },
-                    ),
-                  ),
-                  // Window size
-                  Row(
-                    children: [
-                      Text(
-                        'Window size',
-                        style: TextStyle(
-                          color: AppColors.textSecondary(context),
-                          fontSize: 11,
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        '${(_dragRagWindowSize ?? storage.ragWindowSize.toDouble()).round()}',
-                        style: TextStyle(
-                          color: accent,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      trackHeight: 3,
-                      thumbShape: const RoundSliderThumbShape(
-                        enabledThumbRadius: 6,
-                      ),
-                    ),
-                    child: Slider(
-                      value:
-                          _dragRagWindowSize ??
-                          storage.ragWindowSize.toDouble(),
-                      min: 3,
-                      max: 10,
-                      divisions: 7,
-                      activeColor: accent,
-                      inactiveColor: AppColors.borderOf(context),
-                      onChanged: (val) =>
-                          setState(() => _dragRagWindowSize = val),
-                      onChangeEnd: (val) {
-                        _dragRagWindowSize = null;
-                        storage.setRagWindowSize(val.round());
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Icon(Icons.info_outline, size: 12, color: accent),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          'Uses local nomic-embed-text model — no data leaves your machine.',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: AppColors.textTertiary(context),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+            RagSettingsWell(accent: accent),
           ],
 
           // Expandable memory sources (cross-character picker)

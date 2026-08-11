@@ -50,6 +50,16 @@ interface ToolsState {
     growthEnabled: boolean;
     growthInterval: number;
     growthReviewFirst: boolean;
+    // Host embedding-engine status (additive). Download only runs on desktop.
+    embedding?: {
+      available?: boolean;
+      modelOnDisk?: boolean;
+      settingUp?: boolean;
+      setupProgress?: number;
+      setupStatus?: string;
+      setupError?: string | null;
+      lastEngineError?: string | null;
+    } | null;
     // The last reply's retrieval receipt (additive, 2026-08-10 — absent on
     // older facades; null when that reply needed no retrieval). Desktop
     // sidebar parity: what memory found / dropped / actually injected.
@@ -216,6 +226,17 @@ export function ChatTools({
     void load();
   }, [load, reloadKey]);
 
+  // While the host is downloading the embedding model, poll tools state so the
+  // progress bar moves (desktop listens to EmbeddingService; web only has GET).
+  const embeddingBusy = Boolean(t?.memory?.ragEnabled && t?.memory?.embedding?.settingUp);
+  useEffect(() => {
+    if (!embeddingBusy) return;
+    const id = window.setInterval(() => {
+      void load();
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [embeddingBusy, load]);
+
   // Every mutation endpoint returns the fresh (focus-scoped) tools state.
   const apply = (p: Promise<ToolsState>) => {
     void p.then(setT).catch(() => {});
@@ -285,8 +306,66 @@ export function ChatTools({
           <Toggle label="Use memory (RAG)" value={t.memory.ragEnabled} onChange={(v) => settings({ ragEnabled: v })} />
           {t.memory.ragEnabled && (
             <>
-              <NumField label="Retrieve count" value={t.memory.ragRetrievalCount} onCommit={(v) => settings({ ragRetrievalCount: v })} />
-              <NumField label="Window size" value={t.memory.ragWindowSize} onCommit={(v) => settings({ ragWindowSize: v })} />
+              {(() => {
+                const e = t.memory.embedding;
+                if (!e) {
+                  return (
+                    <p className="muted small">
+                      Memory setup runs on the desktop app (one ~550&nbsp;MB local model).
+                    </p>
+                  );
+                }
+                if (e.available) {
+                  return <p className="muted small">Memory engine ready — private on this computer.</p>;
+                }
+                if (e.settingUp) {
+                  const pct =
+                    typeof e.setupProgress === 'number' && e.setupProgress >= 0
+                      ? Math.round(e.setupProgress * 100)
+                      : null;
+                  return (
+                    <div className="rag-engine-status">
+                      <p className="muted small">{e.setupStatus || 'Setting up memory…'}</p>
+                      <div className="rag-progress-track" aria-hidden>
+                        <div
+                          className="rag-progress-fill"
+                          style={pct == null ? { width: '30%', opacity: 0.5 } : { width: `${pct}%` }}
+                        />
+                      </div>
+                      {pct != null && <p className="muted small">{pct}%</p>}
+                    </div>
+                  );
+                }
+                if (e.setupError || e.lastEngineError) {
+                  return (
+                    <p className="muted small rag-engine-error">
+                      Setup failed: {e.setupError || e.lastEngineError}. Use the desktop app to
+                      retry the download.
+                    </p>
+                  );
+                }
+                if (!e.modelOnDisk) {
+                  return (
+                    <p className="muted small">
+                      Memory model not installed yet. Open this chat on the desktop app and turn
+                      Memory on to download it (~550&nbsp;MB, one time).
+                    </p>
+                  );
+                }
+                return <p className="muted small">Starting memory engine…</p>;
+              })()}
+              <NumField
+                label="Past moments per reply"
+                value={t.memory.ragRetrievalCount}
+                onCommit={(v) => settings({ ragRetrievalCount: v })}
+              />
+              <p className="muted small">How many old moments to weave into each reply (0 = all strong matches).</p>
+              <NumField
+                label="Messages per moment"
+                value={t.memory.ragWindowSize}
+                onCommit={(v) => settings({ ragWindowSize: v })}
+              />
+              <p className="muted small">How much of each past scene to keep (3–10 messages).</p>
               {/* What memory just did — desktop RagReceiptView parity. */}
               {(() => {
                 const r = t.memory.lastRagReceipt;

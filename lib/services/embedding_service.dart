@@ -51,6 +51,10 @@ class EmbeddingService extends ChangeNotifier {
   String get activeSource => _available ? 'onnx' : 'none';
   int get dimensions => _dimensions;
 
+  /// Last engine self-test / load failure (null when healthy). Surfaced in
+  /// the Memory sidebar so "Model not downloaded" is never a dead end.
+  String? get lastEngineError => _lastEngineError;
+
   /// Whether the model files exist on disk (fastembed cache or the
   /// app-managed download dir) — drives the sidebar status line.
   bool get modelOnDisk =>
@@ -58,6 +62,18 @@ class EmbeddingService extends ChangeNotifier {
         _storage.rootPath,
       )) !=
       null;
+
+  /// Compact status for the web tools panel (and any other remote surface).
+  /// Additive fields only — never remove keys from an old reader.
+  Map<String, dynamic> get statusSnapshot => {
+        'available': _available,
+        'modelOnDisk': modelOnDisk,
+        'settingUp': _settingUp,
+        'setupProgress': _setupProgress,
+        'setupStatus': _setupStatus,
+        'setupError': _setupError,
+        'lastEngineError': _lastEngineError,
+      };
 
   EmbeddingService(this._storage);
 
@@ -165,9 +181,17 @@ class EmbeddingService extends ChangeNotifier {
 
   /// Kicks availability in the background if embeddings aren't live yet —
   /// the sidebar toggle calls this when RAG turns on with consent already
-  /// given.
+  /// given. If the model was never downloaded (or was deleted), starts
+  /// [runSetup] so the user gets a progress bar instead of a silent "Model
+  /// not downloaded" forever. After a failed setup, wait for an explicit
+  /// Retry (do not spin forever on open).
   void ensureReady() {
-    if (_available || _settingUp) return;
+    if (_available || _settingUp || _setupError != null) return;
+    _files = NativeEmbeddingEngine.resolveModelFiles(_storage.rootPath);
+    if (_files == null) {
+      unawaited(runSetup());
+      return;
+    }
     unawaited(checkAvailability());
   }
 
