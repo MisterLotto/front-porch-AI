@@ -353,6 +353,18 @@ void main() {
       );
     });
 
+    test('pickup from the pile takes a new condition, like wear does', () {
+      final p = Pockets(carrying: [const PocketItem('umbrella')]);
+      applyPocketOps(p, [op(PocketOpKind.setdown, 'umbrella')], day: 2);
+      applyPocketOps(
+        p,
+        [op(PocketOpKind.pickup, 'umbrella', state: 'dripping wet')],
+        day: 2,
+      );
+      expect(p.carrying.single.display, 'umbrella (dripping wet)');
+      expect(p.setAside, isEmpty);
+    });
+
     test('a worn thing set down is clothing taken off', () {
       final p = Pockets(worn: [const PocketItem('straw hat')]);
       applyPocketOps(p, [op(PocketOpKind.setdown, 'hat')], day: 2);

@@ -14718,3 +14718,10 @@ vanishes" promise exists for.
 **Verification:** both guards proven red (eviction reverted to
 oldest-first; things-branch disabled) then green. Full chat dir 1412;
 analyze clean.
+
+## 2026-08-11 (UTC) — pickup retrieval takes a new condition, like wear
+
+**Files:** `lib/services/chat/pockets.dart`, pockets_test (+1 guard).
+The two retrieval paths disagreed for no reason (hostile review P2):
+wear applied a reported new state on pile retrieval, pickup dropped it.
+Aligned; guard proven red with the old behavior restored.

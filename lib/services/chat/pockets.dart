@@ -750,13 +750,14 @@ List<String> applyPocketOps(
           break;
         }
         // The set-aside pile first — taking back her own keys is not
-        // acquiring new ones, and the condition rides along.
+        // acquiring new ones, and the condition rides along. A NEW state on
+        // the op updates it, the same rule wear's retrieval follows (the
+        // two paths disagreed for no reason — hostile review 2026-08-11).
         final sa = findAside(op.item);
-        p.carrying.add(
-          sa != -1
-              ? p.setAside.removeAt(sa).item
-              : PocketItem.clean(op.item, state: op.state),
-        );
+        final got = sa != -1
+            ? p.setAside.removeAt(sa).item
+            : PocketItem.clean(op.item, state: op.state);
+        p.carrying.add(op.state.isEmpty ? got : got.withState(op.state));
         capTo(p.carrying, kMaxCarrying);
         receipts.add('picked up: ${op.item}');
 
