@@ -379,16 +379,18 @@ extension ChatServiceReprocess on ChatService {
           // returned different bond/trust numbers while 1:1 regens returned
           // the same ones. Null in 1:1: there is no map, and the cadence there
           // is a scalar the same call restores.
+          // Cadence (and other scalars) come from the previous accepted stamp.
+          // Regen re-applies applyShortTermDecay below — that needs the
+          // pre-this-turn counter, not the rejected stamp (which is already
+          // post-decay). Overlaying lastMsg cadence then re-decaying skips or
+          // double-counts the every-10 bond fire (hostile self-review).
           _relationshipService.restoreFromMessageState(
             previousMessageState,
             groupSpeakerId: isGroupHostRegen ? regenSpeakerSid : null,
           );
-          // Out-of-band registers from the rejected turn's own pre-gen stamp
-          // (audit P1.10 + second-look + 1:1 parity). Cadence is a scalar in
-          // both modes; inter-char feelings only exist in group stamps.
-          // previousMessageState is an older same-speaker stamp — restoring
-          // only from it left a one-exchange slip (two regens disagreeing).
-          // Pure builder so the unit test shares the key list with this path.
+          // Feelings only (P1.10): post-gen keyword sweep mutates the map and
+          // is never restamped, so lastMsg still holds pre-sweep feelings while
+          // previousMessageState is an older same-speaker map.
           final rejectedMeta = lastMsg.activeMetadata?['realism_state'];
           final patch = rejectedTurnRewindPatch(
             rejectedMeta is Map ? rejectedMeta : null,

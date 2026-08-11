@@ -18,24 +18,24 @@
 
 part of 'relationship_service.dart';
 
-/// Regen overlay built from a rejected message's pre-gen `realism_state`.
+/// Regen overlay from a rejected message's pre-gen `realism_state` — **feelings
+/// only** (audit P1.10 + hostile self-review 2026-08-11).
 ///
-/// Cadence ([turnsSinceDecayCheck]) is always taken when present — it is a
-/// plain scalar in **both** 1:1 and group. Inter-character feelings are taken
-/// when present (group stamps only). Pure so ChatService regen and the unit
-/// tests call the same builder: reverting the service patch while leaving a
-/// hand-built map in the test would stay green; changing this function
-/// reddens both (second-look / parity follow-up).
+/// Inter-character feelings mutate **post-gen** and are never restamped, so the
+/// rejected turn's stamp still holds the honest pre-sweep map. Cadence is
+/// **not** included: it is stamped **after** that turn's decay tick, and regen
+/// re-applies [RelationshipService.applyShortTermDecay] after restore. Overlaying
+/// post-decay cadence then re-decaying skips or double-counts the every-10 bond
+/// fire. Cadence correctly comes from `previousMessageState` + one re-decay.
+///
+/// Pure so ChatService and unit tests share the key list.
 Map<String, dynamic> rejectedTurnRewindPatch(Map? realismState) {
   if (realismState == null) return const {};
-  final patch = <String, dynamic>{};
-  final cadence = realismState['turnsSinceDecayCheck'];
-  if (cadence is num) patch['turnsSinceDecayCheck'] = cadence.toInt();
   final rels = realismState['interCharacterRelationships'];
-  if (rels is Map) {
-    patch['interCharacterRelationships'] = Map<dynamic, dynamic>.from(rels);
-  }
-  return patch;
+  if (rels is! Map) return const {};
+  return {
+    'interCharacterRelationships': Map<dynamic, dynamic>.from(rels),
+  };
 }
 
 // ── The two registers that live outside the scalar set ────────────────────

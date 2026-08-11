@@ -3,6 +3,13 @@
 
 # Changelog
 
+## 2026-08-11 — fix(realism): rejected-stamp patch is feelings-only (cadence under re-decay)
+- **Files:** `relationship_service.rewind.dart` (`rejectedTurnRewindPatch`),
+  `chat_service_reprocess.dart`, `regen_rewind_cadence_and_feelings_test.dart`.
+- **Why:** Hostile self-review: lastMsg cadence is post-decay; regen re-decays
+  after restore. Overlaying cadence then re-decaying skips the every-10 fire.
+  Feelings still overlay from rejected stamp; cadence = previous stamp + re-decay.
+
 ## 2026-08-11 — docs: hostile self-review mandatory before ship (CLAUDE.md)
 - **Files:** `CLAUDE.md`, `AGENTS.md` (pointer).
 - **Why:** Maintainer ships on green excitement; independent second looks kept

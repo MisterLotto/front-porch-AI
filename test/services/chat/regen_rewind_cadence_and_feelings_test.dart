@@ -163,39 +163,53 @@ void main() {
     });
 
     test(
-      'regen overlays rejected-turn feelings AND cadence (P1.10 + twin)',
+      'regen overlays rejected-turn feelings only — not cadence (P1.10)',
       () {
-        // Same pure builder ChatService calls (rejectedTurnRewindPatch). If
-        // someone removes cadence from the builder, this goes red.
+        // Product path: restore previousMessageState (cadence + older feelings),
+        // then rejectedTurnRewindPatch (feelings only). Cadence must stay on the
+        // previous stamp so the later applyShortTermDecay re-runs this turn
+        // once — overlaying post-decay lastMsg cadence then re-decaying skips
+        // the every-10 fire (hostile self-review 2026-08-11).
         final h = _Harness()..inter['aerin'] = {'bo': 8};
 
+        final previousStamp = {
+          'interCharacterRelationships': {'bo': 0},
+          'turnsSinceDecayCheck': 9, // start of rejected turn (pre its decay)
+        };
+        final rejectedStamp = {
+          'interCharacterRelationships': {'bo': 4}, // pre post-gen sweep
+          'turnsSinceDecayCheck': 0, // post-decay of rejected turn (fired)
+          'affectionScore': 50, // noise — must not ride the patch
+        };
+
         h.svc.restoreFromMessageState(
-          {
-            'interCharacterRelationships': {'bo': 0},
-            'turnsSinceDecayCheck': 10,
-          },
+          previousStamp,
           groupSpeakerId: 'aerin',
         );
         expect(h.feelings['bo'], 0);
-        expect(h.cadence, 10);
+        expect(h.cadence, 9);
 
-        final rejectedStamp = {
-          'interCharacterRelationships': {'bo': 4},
-          'turnsSinceDecayCheck': 7,
-          'affectionScore': 50, // noise — patch must ignore non-OOB keys
-        };
         final patch = rejectedTurnRewindPatch(rejectedStamp);
         expect(
           patch.keys.toSet(),
-          {'interCharacterRelationships', 'turnsSinceDecayCheck'},
-          reason: 'builder must emit both OOB keys (and only those)',
+          {'interCharacterRelationships'},
+          reason: 'patch must be feelings-only; cadence is a re-decay input',
         );
+        expect(patch.containsKey('turnsSinceDecayCheck'), isFalse);
         h.svc.restoreFromMessageState(patch, groupSpeakerId: 'aerin');
-        expect(h.feelings['bo'], 4);
+        expect(h.feelings['bo'], 4, reason: 'feelings from rejected stamp');
         expect(
           h.cadence,
-          7,
-          reason: 'cadence twin from the same rejected stamp',
+          9,
+          reason: 'cadence must still be previous stamp after feelings overlay',
+        );
+
+        // Re-decay mirrors chat_service_reprocess after restore.
+        h.svc.applyShortTermDecay();
+        expect(
+          h.cadence,
+          0,
+          reason: '9→10 fires and resets — same as original turn N',
         );
       },
     );
@@ -293,26 +307,24 @@ void main() {
     });
 
     test(
-      '1:1 regen overlays rejected-stamp cadence (parity with group P1.10 twin)',
+      '1:1 regen: previous stamp + re-decay, patch emits nothing without feelings',
       () {
-        // ChatService path: restore previousMessageState, then
-        // rejectedTurnRewindPatch(lastMsg.realism_state). Cadence is not
-        // group-only — the same pure builder must rewind 1:1.
+        // 1:1 has no inter-char map; rejectedTurnRewindPatch is empty.
+        // Cadence = previousMessageState + applyShortTermDecay (same as group).
         final h = _Harness(isGroup: false);
-        h.svc.restoreFromMessageState({'turnsSinceDecayCheck': 10});
-        expect(h.svc.captureCadenceAndFeelings()['turnsSinceDecayCheck'], 10);
+        h.svc.restoreFromMessageState({'turnsSinceDecayCheck': 9});
+        expect(h.svc.captureCadenceAndFeelings()['turnsSinceDecayCheck'], 9);
 
         final patch = rejectedTurnRewindPatch({
-          'turnsSinceDecayCheck': 7,
-          // no inter-char key in 1:1 stamps
+          'turnsSinceDecayCheck': 0, // would be wrong if applied
         });
-        expect(patch, {'turnsSinceDecayCheck': 7});
-        h.svc.restoreFromMessageState(patch);
+        expect(patch, isEmpty, reason: '1:1 stamps have no feelings key');
+
+        h.svc.applyShortTermDecay();
         expect(
           h.svc.captureCadenceAndFeelings()['turnsSinceDecayCheck'],
-          7,
-          reason: 'without the 1:1 overlay, two regens near the decay '
-              'boundary disagree — same bug as group, different mode',
+          0,
+          reason: '9→10 fire+reset; must not start from rejected post-decay 0',
         );
       },
     );
