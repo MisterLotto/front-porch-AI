@@ -58,11 +58,16 @@ void main() {
       expect(p.carrying, isEmpty);
     });
 
-    test('taking something off leaves her holding it', () {
+    test('taking something off removes it from the record entirely', () {
+      // AMENDED 2026-08-11 on the maintainer's direction. This test used to
+      // pin the opposite ("taking something off leaves her holding it" —
+      // remove moved worn -> carrying). Overruled: people do not re-wear
+      // yesterday's outfit, so clothes taken off for bed or a shower must
+      // leave the record; tomorrow's outfit arrives as fresh wear ops.
       final p = Pockets(worn: [const PocketItem('scarf')]);
       applyPocketOps(p, [op(PocketOpKind.remove, 'scarf')]);
       expect(p.worn, isEmpty);
-      expect(namesOf(p.carrying), ['scarf']);
+      expect(p.carrying, isEmpty);
     });
 
     test('giving it away takes it from either list', () {
@@ -77,6 +82,51 @@ void main() {
       expect(p.carrying, isEmpty);
       expect(p.worn, isEmpty);
       expect(r, ['gave car keys to Sam', 'gave scarf to Sam']);
+    });
+
+    test('a generic "clothes" remove strips the whole outfit', () {
+      // The report that actually arrives when a character undresses for bed
+      // or a shower: ONE remove op naming "clothes"/"everything", not an
+      // enumeration. Before 2026-08-11 this matched nothing in the worn list
+      // and silently no-opped — the maintainer's exact "she is in the shower
+      // and the sidebar still shows her dressed" report.
+      final p = Pockets(
+        worn: [const PocketItem('flannel shirt'), const PocketItem('jeans')],
+        carrying: [const PocketItem('car keys')],
+      );
+      final r = applyPocketOps(p, [op(PocketOpKind.remove, 'her clothes')]);
+      expect(p.worn, isEmpty);
+      expect(
+        namesOf(p.carrying),
+        ['car keys'],
+        reason: 'undressing is about the outfit — carried things stay put',
+      );
+      expect(r, ['took off: flannel shirt', 'took off: jeans']);
+    });
+
+    test('generic remove variants all mean the outfit', () {
+      for (final phrase in ['clothes', 'everything', 'her outfit', 'all of her clothes']) {
+        final p = Pockets(worn: [const PocketItem('sundress')]);
+        applyPocketOps(p, [op(PocketOpKind.remove, phrase)]);
+        expect(p.worn, isEmpty, reason: '"$phrase" should strip the outfit');
+      }
+    });
+
+    test('a specific garment is never read as generic', () {
+      // "wet dress" must strike only the dress it matches — a phrase with any
+      // non-generic token falls through to ordinary item matching.
+      final p = Pockets(
+        worn: [const PocketItem('dress', state: 'wet'), const PocketItem('boots')],
+      );
+      applyPocketOps(p, [op(PocketOpKind.remove, 'wet dress')]);
+      expect(namesOf(p.worn), ['boots']);
+    });
+
+    test('generic remove with nothing worn is silent', () {
+      final p = Pockets(carrying: [const PocketItem('car keys')]);
+      final r = applyPocketOps(p, [op(PocketOpKind.remove, 'clothes')]);
+      expect(r, isEmpty);
+      expect(namesOf(p.carrying), ['car keys']);
     });
 
     test('an op about something she does not have changes nothing', () {

@@ -95,14 +95,20 @@ void main() {
     });
 
     test('the condition rides along when the item moves', () {
-      // Taking off a soaked dress must not launder it.
+      // AMENDED 2026-08-11. This used to pin remove -> carrying ("taking off
+      // a soaked dress must not launder it") — but remove now deletes the
+      // garment outright (maintainer ruling: people do not re-wear
+      // yesterday's outfit, so removed clothes leave the record). The
+      // property itself — a move must never launder the condition — still
+      // holds on the move that remains: putting on something she was
+      // carrying.
       final p = Pockets(
-        worn: [const PocketItem('red sundress', state: 'rain-soaked')],
+        carrying: [const PocketItem('red sundress', state: 'rain-soaked')],
       );
 
-      applyPocketOps(p, [op(PocketOpKind.remove, 'red sundress')]);
+      applyPocketOps(p, [op(PocketOpKind.wear, 'red sundress')]);
 
-      expect(p.carrying.single.display, 'red sundress (rain-soaked)');
+      expect(p.worn.single.display, 'red sundress (rain-soaked)');
     });
   });
 

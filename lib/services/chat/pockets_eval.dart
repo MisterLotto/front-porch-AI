@@ -135,12 +135,20 @@ class PocketsEval {
   /// The op vocabulary and rules — the other shared fragment (see
   /// [wardrobeContext] for the contract).
   static String opsRubric({List<String> others = const []}) =>
-      '\nWhat changed in the reply below? Report ONLY changes that actually '
-      'happened in it — not things they merely mentioned, remembered, wanted, '
-      'or were offered. If nothing changed, report an empty list; that is the '
-      'common answer and it is the right one.\n\n'
+      // "in the reply or the recent exchange": the old wording said "in it",
+      // scoping to the reply alone — which quietly re-opened the very hole
+      // recentExchange was added to close (a change the USER narrated was
+      // context the model had been told to ignore).
+      '\nWhat changed? Report ONLY changes that actually happened in the '
+      'reply or the recent exchange below — not things they merely mentioned, '
+      'remembered, wanted, or were offered. If nothing changed, report an '
+      'empty list; that is the common answer and it is the right one.\n\n'
       'Each change is one op:\n'
-      '  wear / remove — clothing put on or taken off\n'
+      '  wear / remove — clothing put on or taken off. Undressing (for bed, '
+      'a bath, a shower) is one remove per worn item, named as listed above — '
+      'or a single remove of "clothes" to mean all of it. Changing clothes is '
+      'a remove for each thing that came off plus a wear for each thing that '
+      'went on\n'
       '  pickup / drop — something taken up or set down, lost or thrown away\n'
       '${others.isEmpty ? '  give — handed to someone else\n' : '  give — handed to someone else. Put their name in "to", spelled EXACTLY '
             'as it appears here: ${others.join(', ')}. If it went to anyone '

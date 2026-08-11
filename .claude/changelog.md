@@ -14511,3 +14511,39 @@ stoop_test.dart (share-wizard tap timeout) — the suite is untouched since
 it passed green at 4eef84e, and it passed macOS+Linux in this very run.
 Second Windows-only single-suite tap flake in two runs (model_downloader
 before it); pattern worth watching, no code change.
+
+## 2026-08-11 (UTC) — Wardrobe: undressing, outfit changes, and remove-deletes semantics
+
+**Files:** `lib/services/chat/pockets.dart`, `lib/services/chat/pockets_eval.dart`,
+`test/services/chat/pockets_test.dart` (4 new tests + 1 amended),
+`test/services/chat/wardrobe_condition_test.dart` (1 amended), `docs/Rawhide.md`
+
+**Why:** Maintainer report: a character undressing for bed/shower stayed
+fully dressed in the sidebar, and a complete shirt change never registered.
+Root causes: (1) the op grammar had no whole-outfit concept — the model
+reports ONE `remove` of "clothes"/"everything" for an undress, which
+matched nothing in the worn list and silently no-opped; (2) nothing taught
+the model that a change of clothes is remove(old)+wear(new), so at best the
+new shirt stacked on the old; (3) the rubric's scope line ("changes that
+actually happened in it") told the model to ignore user-narrated changes,
+re-opening the hole recentExchange was added to close.
+
+**How:** `isGenericClothingRef` (every content token in {clothes, clothing,
+outfit, garments, everything, all}) makes a generic `remove` strip the whole
+worn list, carried items untouched. `remove` now DELETES the garment rather
+than moving it to carrying — maintainer overruled the "she is holding it"
+design (2026-08-11): people don't re-wear yesterday's outfit; tomorrow's
+outfit arrives as fresh wear ops. Rubric teaches both scene shapes and the
+scope line now reads "in the reply or the recent exchange below". Fused
+reply-facts transport inherits everything automatically (shared fragments).
+sameItem's norm/filler internals lifted to file-level helpers shared with
+the new matcher (no duplication).
+
+**Tests, openly amended per never-quietly policy:** pockets_test "taking
+something off leaves her holding it" → "removes it from the record
+entirely"; wardrobe_condition_test "condition rides along" re-anchored on
+the carrying→worn move (the move that still exists). Red-then-green: the
+two bulk tests were written first and failed against the old applier; the
+anti-greedy guard proven red under a deliberately greedy matcher
+(any-token + garment word in the set), restored, re-greened. Full
+test/services/chat directory: 1376 passing; analyze clean.

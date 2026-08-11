@@ -328,16 +328,38 @@ String? resolveRecipient(String to, List<String> names) {
   return null;
 }
 
+const _filler = {'a', 'an', 'the', 'her', 'his', 'their', 'my', 'your', 'of'};
+
+String _norm(String s) =>
+    s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9 ]'), '');
+
+Set<String> _contentTokens(String s) =>
+    _norm(s).split(' ').where((t) => t.isNotEmpty && !_filler.contains(t)).toSet();
+
+/// Did the model mean the whole outfit rather than one garment?
+///
+/// "She undresses for bed" arrives as ONE remove op naming "clothes" or
+/// "everything" — never an enumeration of the worn list. Before this existed
+/// that op matched nothing and silently no-opped, which is exactly the
+/// maintainer's report: she is in the shower and the sidebar still shows her
+/// fully dressed (2026-08-11).
+///
+/// A phrase counts as generic only when EVERY content token is a whole-outfit
+/// word: "her clothes" and "all of her clothes" qualify; "wet dress" has a
+/// garment token and falls through to ordinary item matching. Real garment
+/// names ("dress", "pajamas") are deliberately absent from this set.
+bool isGenericClothingRef(String raw) {
+  const generic = {'clothes', 'clothing', 'outfit', 'garments', 'everything', 'all'};
+  final toks = _contentTokens(raw);
+  return toks.isNotEmpty && toks.every(generic.contains);
+}
+
 bool sameItem(String a, String b) {
-  String norm(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9 ]'), '');
-  final an = norm(a), bn = norm(b);
+  final an = _norm(a), bn = _norm(b);
   if (an.isEmpty || bn.isEmpty) return false;
   if (an == bn) return true;
 
-  const filler = {'a', 'an', 'the', 'her', 'his', 'their', 'my', 'your', 'of'};
-  Set<String> toks(String s) =>
-      s.split(' ').where((t) => t.isNotEmpty && !filler.contains(t)).toSet();
-  final at = toks(an), bt = toks(bn);
+  final at = _contentTokens(a), bt = _contentTokens(b);
   if (at.isEmpty || bt.isEmpty) return false;
 
   // CONTAINMENT ONLY — deliberately not a shared-token ratio.
@@ -419,11 +441,25 @@ List<String> applyPocketOps(
         receipts.add('put on: ${op.item}');
 
       case PocketOpKind.remove:
+        // Clothing taken off LEAVES THE RECORD — it does not migrate to
+        // carrying. That was the original behaviour ("she is holding it"),
+        // and the maintainer overruled it (2026-08-11): people do not wear
+        // yesterday's outfit again tomorrow, so parking removed clothes in
+        // her hands all night is wrong more often than it is right.
+        // Tomorrow's outfit arrives as fresh `wear` ops when the story
+        // dresses her; a jacket she keeps carrying gets re-added the moment
+        // the model says so.
+        if (isGenericClothingRef(op.item)) {
+          // "She undresses" — strip the outfit, leave carried things alone.
+          for (final it in p.worn) {
+            receipts.add('took off: ${it.name}');
+          }
+          p.worn.clear();
+          break;
+        }
         final w = find(p.worn, op.item);
         if (w == -1) break;
-        // Taking something off does not make it vanish — she is holding it.
-        p.carrying.add(p.worn.removeAt(w));
-        capTo(p.carrying, kMaxCarrying);
+        p.worn.removeAt(w);
         receipts.add('took off: ${op.item}');
 
       case PocketOpKind.pickup:
