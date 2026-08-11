@@ -82,9 +82,12 @@ extension ChatServiceGenerationPlan on ChatService {
     ChatMessage? _continuePoppedMessage;
     if (t.mode == GenerationMode.continue_ && _messages.isNotEmpty) {
       _continuePoppedMessage = _messages.removeLast();
-      final partial = _continuePoppedMessage.text;
+      // Think-stripped / photo-aware (promptText), same contract as history
+      // lines — raw .text re-injects closed <think> plans into the Continue
+      // suffix (Nina-class hole on the Continue path only; audit P0.2).
+      final partial = _continuePoppedMessage.promptText;
       // For Continue: feed straight existing messages as the prompt (per user request).
-      // The suffix is the raw text of the message being continued (no re-added "Sender: " label).
+      // The suffix is the text being continued (no re-added "Sender: " label).
       // This makes the continuation prompt contain the plain previous messages + the exact
       // partial text to extend, so the model continues the string directly without beginning
       // the output with "Rachel:" or the speaker name.
@@ -499,6 +502,11 @@ extension ChatServiceGenerationPlan on ChatService {
       }
       plan.section('chance_time').text = '';
       plan.section('state_frame').text = '';
+      // Porch Night is registered outside kStateZoneSectionIds (force-ack
+      // table-talk, not a permanent state fragment). Leaving it armed made
+      // Continue inject "HARD REQUIRED OPENING / first 2–4 sentences" into
+      // a pure append (full-codebase audit 2026-08-11 P0.3).
+      plan.section('porch_night').text = '';
       // Also skip RAG "earlier memories" for pure straight continuation.
       t.droppedMessages = 0;
     }

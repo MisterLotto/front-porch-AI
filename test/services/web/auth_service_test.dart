@@ -66,19 +66,27 @@ void main() {
       final auth = make();
       await auth.setupAccount('admin', 'password123');
 
-      final enrollment = await auth.beginTotpEnrollment();
-      expect(enrollment, isNotNull);
+      final begin = await auth.beginTotpEnrollment(
+        currentPassword: 'password123',
+      );
+      expect(begin.status, CredentialChangeStatus.success);
+      expect(begin.enrollment, isNotNull);
       final code = OTP.generateTOTPCodeString(
-        enrollment!.secret,
+        begin.enrollment!.secret,
         fixedMs,
         length: 6,
         interval: 30,
         algorithm: Algorithm.SHA1,
         isGoogle: true,
       );
-      final recovery = await auth.confirmTotpEnrollment(code);
-      expect(recovery, isNotNull);
-      expect(recovery!.length, 10);
+      final confirm = await auth.confirmTotpEnrollment(
+        currentPassword: 'password123',
+        code: code,
+      );
+      expect(confirm.status, CredentialChangeStatus.success);
+      expect(confirm.recoveryCodes, isNotNull);
+      expect(confirm.recoveryCodes!.length, 10);
+      final recovery = confirm.recoveryCodes!;
 
       // Password alone now demands a second factor.
       final needsTotp = await auth.login('admin', 'password123');
@@ -101,6 +109,95 @@ void main() {
         totpCode: recovery[0],
       );
       expect(reuse.status, LoginStatus.totpRequired);
+    });
+
+    test('2FA begin/confirm demand the current password (session alone is not enough)',
+        () async {
+      final auth = make();
+      await auth.setupAccount('admin', 'password123');
+
+      // Hijacked session path: no / wrong password cannot start enrollment.
+      expect(
+        (await auth.beginTotpEnrollment(currentPassword: '')).status,
+        CredentialChangeStatus.invalidCurrentPassword,
+      );
+      expect(
+        (await auth.beginTotpEnrollment(currentPassword: 'wrong')).status,
+        CredentialChangeStatus.invalidCurrentPassword,
+      );
+
+      final begin = await auth.beginTotpEnrollment(
+        currentPassword: 'password123',
+      );
+      expect(begin.status, CredentialChangeStatus.success);
+      final code = OTP.generateTOTPCodeString(
+        begin.enrollment!.secret,
+        fixedMs,
+        length: 6,
+        interval: 30,
+        algorithm: Algorithm.SHA1,
+        isGoogle: true,
+      );
+
+      // Confirm also demands the password — a leaked pending secret + session
+      // cookie without the password still cannot enable 2FA.
+      expect(
+        (await auth.confirmTotpEnrollment(
+          currentPassword: 'wrong',
+          code: code,
+        ))
+            .status,
+        CredentialChangeStatus.invalidCurrentPassword,
+      );
+      expect(
+        (await auth.confirmTotpEnrollment(
+          currentPassword: 'password123',
+          code: code,
+        ))
+            .status,
+        CredentialChangeStatus.success,
+      );
+    });
+
+    test('2FA re-enroll is refused while already enabled (no silent replace)',
+        () async {
+      final auth = make();
+      await auth.setupAccount('admin', 'password123');
+      final begin = await auth.beginTotpEnrollment(
+        currentPassword: 'password123',
+      );
+      final code = OTP.generateTOTPCodeString(
+        begin.enrollment!.secret,
+        fixedMs,
+        length: 6,
+        interval: 30,
+        algorithm: Algorithm.SHA1,
+        isGoogle: true,
+      );
+      await auth.confirmTotpEnrollment(
+        currentPassword: 'password123',
+        code: code,
+      );
+
+      // Owner (or hijacker) with password still cannot replace the secret
+      // while 2FA is on — must disable first.
+      expect(
+        (await auth.beginTotpEnrollment(currentPassword: 'password123')).status,
+        CredentialChangeStatus.alreadyEnabled,
+      );
+      expect(
+        (await auth.confirmTotpEnrollment(
+          currentPassword: 'password123',
+          code: code,
+        ))
+            .status,
+        CredentialChangeStatus.alreadyEnabled,
+      );
+      // Original secret still works for login.
+      expect(
+        (await auth.login('admin', 'password123', totpCode: code)).status,
+        LoginStatus.success,
+      );
     });
 
     test('changeCredentials demands the current password', () async {
@@ -162,16 +259,21 @@ void main() {
     test('with 2FA on, credential changes demand a current code', () async {
       final auth = make();
       await auth.setupAccount('admin', 'password123');
-      final enrollment = await auth.beginTotpEnrollment();
+      final begin = await auth.beginTotpEnrollment(
+        currentPassword: 'password123',
+      );
       final code = OTP.generateTOTPCodeString(
-        enrollment!.secret,
+        begin.enrollment!.secret,
         fixedMs,
         length: 6,
         interval: 30,
         algorithm: Algorithm.SHA1,
         isGoogle: true,
       );
-      await auth.confirmTotpEnrollment(code);
+      await auth.confirmTotpEnrollment(
+        currentPassword: 'password123',
+        code: code,
+      );
 
       expect(
         await auth.changeCredentials(
@@ -193,16 +295,21 @@ void main() {
     test('disabling 2FA requires the password and a current code', () async {
       final auth = make();
       await auth.setupAccount('admin', 'password123');
-      final enrollment = await auth.beginTotpEnrollment();
+      final begin = await auth.beginTotpEnrollment(
+        currentPassword: 'password123',
+      );
       final code = OTP.generateTOTPCodeString(
-        enrollment!.secret,
+        begin.enrollment!.secret,
         fixedMs,
         length: 6,
         interval: 30,
         algorithm: Algorithm.SHA1,
         isGoogle: true,
       );
-      await auth.confirmTotpEnrollment(code);
+      await auth.confirmTotpEnrollment(
+        currentPassword: 'password123',
+        code: code,
+      );
 
       expect(
         await auth.disableTotp(currentPassword: 'wrong', totpCode: code),

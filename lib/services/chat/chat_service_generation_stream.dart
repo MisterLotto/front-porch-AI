@@ -68,7 +68,10 @@ extension ChatServiceGenerationStream on ChatService {
 
     if (t.mode == GenerationMode.continue_) {
       t.streamTarget = _messages.last;
-      originalText = t.streamTarget.text;
+      // Capture before any tokens arrive — postgen re-merges this with
+      // accumulatedResponse (new tokens only) after strip/sanitize.
+      t.continuePrefix = t.streamTarget.text;
+      originalText = t.continuePrefix;
       targetSender = t.streamTarget.sender;
       isUserTarget = t.streamTarget.isUser;
       // Merge metadata if continuing

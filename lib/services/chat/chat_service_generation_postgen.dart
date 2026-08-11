@@ -71,16 +71,23 @@ extension ChatServiceGenerationPostGen on ChatService {
 
     // Only finalize if this generation is still current
     if (t.epoch == _generationEpoch) {
-      String finalResponse = t.accumulatedResponse.trim();
+      // New tokens only from the stream. Continue paints
+      // `continuePrefix + tokens` mid-stream; we must re-merge before any
+      // write-back or sanitize, or the saved bubble collapses to the
+      // continuation fragment (full-codebase audit 2026-08-11 P0.1).
+      String newPart = t.accumulatedResponse;
 
-      // SillyTavern-like safety net for Continue (and call mode): even after requesting
-      // enabled:false + max_tokens:0 + exclude:true on the provider, some thinking models
-      // (Kimi 2.6:thinking etc.) can still emit stray <think> or reasoning text.
-      // Strip it from the final text before it becomes part of the character's message.
-      // This matches ST's "Strip Reasoning Tags" behavior as a client-side backstop.
+      // SillyTavern-like safety net for Continue (and call mode): even after
+      // requesting enabled:false + max_tokens:0 + exclude:true on the
+      // provider, some thinking models still emit stray <think> text. Strip
+      // from the NEW portion only — never re-strip the pre-continue body.
       if (t.mode == GenerationMode.continue_ || _callMode) {
-        finalResponse = _stripThinkBlocks(finalResponse);
+        newPart = _stripThinkBlocks(newPart);
       }
+
+      String finalResponse = t.mode == GenerationMode.continue_
+          ? '${t.continuePrefix}$newPart'.trimRight()
+          : newPart.trim();
 
       // Salvage a reply stranded inside an unclosed <think> block (the
       // BACKEND's own stop sequences can cut inside one even with the
@@ -91,7 +98,6 @@ extension ChatServiceGenerationPostGen on ChatService {
       if (lowerFinal.lastIndexOf('<think>') >
           lowerFinal.lastIndexOf('</think>')) {
         finalResponse = '$finalResponse\n</think>';
-        t.streamTarget.text = finalResponse;
       }
 
       // ── Output Sanitizer ──────────────────────────────────────────────
@@ -112,8 +118,14 @@ extension ChatServiceGenerationPostGen on ChatService {
           );
         } else {
           finalResponse = sanitized;
-          t.streamTarget.text = finalResponse;
         }
+      }
+
+      // Always persist the finalized body. Continue + strip without sanitizer
+      // used to leave streamTarget alone after mutating only finalResponse —
+      // and when sanitizer DID run it wrote new-tokens-only. One write-back.
+      if (finalResponse.isNotEmpty || t.mode == GenerationMode.continue_) {
+        t.streamTarget.text = finalResponse;
       }
 
       // Snapshot which entries were already triggered before scanning the AI response.

@@ -59,6 +59,25 @@ enum CredentialChangeStatus {
   invalidInput,
   notSetUp,
   lockedOut,
+
+  /// 2FA is already on — re-enroll is refused; disable first, then enroll.
+  /// Prevents a stolen session from silently replacing the owner's secret
+  /// and recovery codes (audit P0.4).
+  alreadyEnabled,
+}
+
+/// Outcome of [AuthService.beginTotpEnrollment] (password step-up required).
+class TotpBeginResult {
+  const TotpBeginResult(this.status, {this.enrollment});
+  final CredentialChangeStatus status;
+  final TotpEnrollment? enrollment;
+}
+
+/// Outcome of [AuthService.confirmTotpEnrollment] (password step-up required).
+class TotpConfirmResult {
+  const TotpConfirmResult(this.status, {this.recoveryCodes});
+  final CredentialChangeStatus status;
+  final List<String>? recoveryCodes;
 }
 
 /// The single-account secure-login service for the rewritten web server.
@@ -242,19 +261,63 @@ class AuthService {
 
   /// Start enrollment: returns a fresh secret + provisioning URI for the QR.
   /// Not persisted until [confirmTotpEnrollment] succeeds.
-  Future<TotpEnrollment?> beginTotpEnrollment() async {
+  ///
+  /// Requires the current password (same step-up as credential change /
+  /// disable). A session cookie alone must not mint a new secret — that is
+  /// how a hijacker replaces the owner's authenticator and recovery codes.
+  /// If 2FA is already on, enrollment is refused entirely; disable first.
+  Future<TotpBeginResult> beginTotpEnrollment({
+    required String currentPassword,
+    String? totpCode,
+    String? ip,
+  }) async {
     final creds = await _loadCredentials();
-    if (creds == null) return null;
+    if (creds == null) {
+      return const TotpBeginResult(CredentialChangeStatus.notSetUp);
+    }
+    if (creds.totpEnabled) {
+      return const TotpBeginResult(CredentialChangeStatus.alreadyEnabled);
+    }
+    final denied = await _reauthenticate(creds, currentPassword, totpCode, ip);
+    if (denied != null) return TotpBeginResult(denied);
     final secret = _totp.generateSecret();
     _pendingTotpSecret = secret;
-    return TotpEnrollment(secret, _totp.provisioningUri(creds.username, secret));
+    _limiter.recordSuccess(creds.username);
+    return TotpBeginResult(
+      CredentialChangeStatus.success,
+      enrollment: TotpEnrollment(
+        secret,
+        _totp.provisioningUri(creds.username, secret),
+      ),
+    );
   }
 
-  /// Confirm enrollment with a current code. On success persists the secret,
-  /// enables 2FA, and returns the one-time recovery codes (plaintext).
-  Future<List<String>?> confirmTotpEnrollment(String code) async {
+  /// Confirm enrollment with a current authenticator code. On success persists
+  /// the secret, enables 2FA, and returns the one-time recovery codes
+  /// (plaintext). Re-checks the current password so a hijacked session that
+  /// did not know the password still cannot complete enrollment if begin was
+  /// never reached (and cannot complete a race if begin somehow leaked).
+  Future<TotpConfirmResult> confirmTotpEnrollment({
+    required String currentPassword,
+    required String code,
+    String? totpCode,
+    String? ip,
+  }) async {
+    final creds = await _loadCredentials();
+    if (creds == null) {
+      return const TotpConfirmResult(CredentialChangeStatus.notSetUp);
+    }
+    if (creds.totpEnabled) {
+      _pendingTotpSecret = null;
+      return const TotpConfirmResult(CredentialChangeStatus.alreadyEnabled);
+    }
+    final denied = await _reauthenticate(creds, currentPassword, totpCode, ip);
+    if (denied != null) return TotpConfirmResult(denied);
+
     final secret = _pendingTotpSecret;
-    if (secret == null || !_totp.verify(secret, code)) return null;
+    if (secret == null || !_totp.verify(secret, code)) {
+      return const TotpConfirmResult(CredentialChangeStatus.invalidInput);
+    }
     final recovery = List.generate(_recoveryCodeCount, (_) => _recoveryCode());
     final hashed = <String>[];
     for (final c in recovery) {
@@ -273,7 +336,11 @@ class AuthService {
       ],
     );
     _pendingTotpSecret = null;
-    return recovery;
+    _limiter.recordSuccess(creds.username);
+    return TotpConfirmResult(
+      CredentialChangeStatus.success,
+      recoveryCodes: recovery,
+    );
   }
 
   /// Disable 2FA, clearing the secret and recovery codes. Requires the

@@ -102,6 +102,13 @@ class _GenTurn {
   // ── stream phase → postgen phase ──
   String accumulatedResponse = '';
   late ChatMessage streamTarget;
+
+  /// Pre-Continue body of the message being extended. Empty for non-Continue
+  /// modes. [accumulatedResponse] is only the NEW tokens; the stream phase
+  /// paints `continuePrefix + tokens` for display, and postgen must re-merge
+  /// before sanitize/persist or the bubble collapses to the continuation
+  /// fragment alone (full-codebase audit 2026-08-11 P0).
+  String continuePrefix = '';
 }
 
 /// The core response generation orchestrator (`_generateResponse`): speaker

@@ -273,6 +273,20 @@ extension ChatServiceAccessors on ChatService {
   /// The RAG [MemoryService] when wired (null until host injects it).
   MemoryService? get memoryService => _memoryService;
 
+  /// Test-only: arm Porch Night force-ack for [diaryCharacterId] so Continue
+  /// strip coverage can prove `porch_night` is cleared (audit P0.3).
+  @visibleForTesting
+  void debugArmPorchNightForTest({
+    required String diaryCharacterId,
+    required String injectionText,
+  }) {
+    _porchMemoryImport.ackState.arm(
+      diaryCharacterId: diaryCharacterId,
+      injectionText: injectionText,
+      journalCardIds: const [],
+    );
+  }
+
   /// Set the MemoryService after construction (for RAG memory retrieval).
   void setMemoryService(MemoryService service) {
     _memoryService = service;

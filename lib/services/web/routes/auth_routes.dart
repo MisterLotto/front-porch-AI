@@ -217,17 +217,32 @@ class WebAuthRoutes {
     return JsonResponse.ok({'ok': true});
   }
 
+  /// Start 2FA enrollment. Password step-up required — a stolen session alone
+  /// must not mint a new authenticator secret (audit P0.4).
   Future<shelf.Response> _beginTotp(shelf.Request request) async {
-    final enrollment = await _auth.beginTotpEnrollment();
-    if (enrollment == null) {
-      return JsonResponse.error(409, 'Account not configured');
+    final Map<String, dynamic> body;
+    try {
+      body = await RequestBody.readJsonMap(request);
+    } catch (_) {
+      return JsonResponse.badRequest('Invalid request body');
     }
-    return JsonResponse.ok({
-      'secret': enrollment.secret,
-      'otpauthUri': enrollment.provisioningUri,
-    });
+    final result = await _auth.beginTotpEnrollment(
+      currentPassword: body['currentPassword']?.toString() ?? '',
+      totpCode: body['totpCode']?.toString(),
+      ip: _clientIp(request),
+    );
+    if (result.status == CredentialChangeStatus.success &&
+        result.enrollment != null) {
+      return JsonResponse.ok({
+        'secret': result.enrollment!.secret,
+        'otpauthUri': result.enrollment!.provisioningUri,
+      });
+    }
+    return _credentialChangeResponse(result.status);
   }
 
+  /// Confirm 2FA enrollment with an authenticator code. Re-checks password
+  /// so enrollment cannot complete on a session cookie alone.
   Future<shelf.Response> _confirmTotp(shelf.Request request) async {
     final Map<String, dynamic> body;
     try {
@@ -235,13 +250,20 @@ class WebAuthRoutes {
     } catch (_) {
       return JsonResponse.badRequest('Invalid request body');
     }
-    final codes = await _auth.confirmTotpEnrollment(
-      (body['code'] ?? '').toString(),
+    final result = await _auth.confirmTotpEnrollment(
+      currentPassword: body['currentPassword']?.toString() ?? '',
+      code: (body['code'] ?? '').toString(),
+      totpCode: body['totpCode']?.toString(),
+      ip: _clientIp(request),
     );
-    if (codes == null) {
+    if (result.status == CredentialChangeStatus.success &&
+        result.recoveryCodes != null) {
+      return JsonResponse.ok({'recoveryCodes': result.recoveryCodes});
+    }
+    if (result.status == CredentialChangeStatus.invalidInput) {
       return JsonResponse.badRequest('Invalid or expired code');
     }
-    return JsonResponse.ok({'recoveryCodes': codes});
+    return _credentialChangeResponse(result.status);
   }
 
   /// Turning 2FA off is a credential change: it demands the current password
@@ -264,7 +286,7 @@ class WebAuthRoutes {
   // ── helpers ──────────────────────────────────────────────────────────────
 
   /// Map a [CredentialChangeStatus] to its HTTP response (shared by the
-  /// change-credentials and 2FA-disable endpoints).
+  /// change-credentials, 2FA-enroll, and 2FA-disable endpoints).
   shelf.Response _credentialChangeResponse(CredentialChangeStatus status) {
     switch (status) {
       case CredentialChangeStatus.success:
@@ -281,6 +303,12 @@ class WebAuthRoutes {
         return JsonResponse.tooManyRequests('Too many attempts, try again later');
       case CredentialChangeStatus.notSetUp:
         return JsonResponse.error(409, 'Account not configured');
+      case CredentialChangeStatus.alreadyEnabled:
+        return JsonResponse.error(
+          409,
+          'Two-factor authentication is already enabled',
+          extra: const {'alreadyEnabled': true},
+        );
       case CredentialChangeStatus.invalidInput:
         return JsonResponse.badRequest(
           'Provide a new username or a new password of at least 8 characters',

@@ -3,6 +3,29 @@
 
 # Changelog
 
+## 2026-08-11 — fix(chat): Continue finalize keeps full body + safe partial (audit P0.1–3)
+- **Files:** `chat_service_generation*.dart` / `chat_service_accessors.dart`,
+  `test/services/chat/continue_finalize_test.dart` (new).
+- **Why:** Continue finalize treated new tokens as the full bubble (sanitizer /
+  think-strip could wipe the pre-continue body); partial used raw text (think
+  blocks re-entered the prompt); plan left `porch_night` armed for pure appends.
+- **Behavior:** re-merge prefix + stream before strip/sanitize write-back;
+  Continue partial uses history-safe/promptText; plan clears porch_night with
+  other state-zone strips. Tests for merge, strip partial, porch clear.
+
+## 2026-08-11 — security(web): 2FA enroll requires password step-up (audit P0.4)
+- **Files:** `lib/services/web/auth/auth_service.dart`,
+  `lib/services/web/routes/auth_routes.dart`, `web_ui/src/pages/AccountPage.tsx`,
+  `test/services/web/auth_service_test.dart`, Rawhide note.
+- **Why:** Stolen session cookie alone could begin/confirm TOTP enrollment and
+  replace recovery codes, locking the owner out of web login. Disable + password
+  change already re-authed; enroll did not.
+- **Behavior:** `beginTotpEnrollment` / `confirmTotpEnrollment` demand
+  `currentPassword` via shared `_reauthenticate`; refuse re-enroll while 2FA is
+  already on (`alreadyEnabled` → 409). Account page collects password on Set up
+  and Confirm. Tests proven red (skip reauth) then green.
+- **Out of scope this item:** setup bind (P0.5), tunnel step-up (P0.6).
+
 ## 2026-08-11 — docs: path-complete chat law + maintainer agent playbook
 - **Files:** `docs/design/path-complete-chat-work.md`,
   `docs/maintainer-agent-playbook.md`, `CLAUDE.md` / `Agents.md` pointers,
