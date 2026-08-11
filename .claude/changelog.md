@@ -3,6 +3,16 @@
 
 # Changelog
 
+## 2026-08-11 — fix(audit): second-look CI + functional gaps
+- **CI:** chat_service.dart 1009→963 (doc shrink; fake-pinned getters stay);
+  unused import removed from continue_finalize_test.
+- **RAG P2.16:** session-scope member stable ids (Data Bank without 1:1 bleed).
+- **Stoop P2.15:** relay forwards GET query on token/creator paths (not only browse).
+- **P1.10 twin:** regen also rewinds turnsSinceDecayCheck from rejected stamp.
+- **P1.11:** _runBatchedRealismVerification + _fireTrustRepairRemainingEvals.
+- **Hygiene:** kRagReceipt* in RagReceiptView; ensureReady doc placement;
+  growthPassWindowStart pure helper for the real window-cap test.
+
 ## 2026-08-11 — fix(ui,p3): light-mode Main Settings + Chat Settings contrast
 - **Files:** `settings_menu_item.dart` (AppColors text/icon),
   `chat_page.sidebar_widgets.dart` (drop hard-coded white70 on Main Settings

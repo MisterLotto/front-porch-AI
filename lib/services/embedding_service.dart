@@ -179,16 +179,16 @@ class EmbeddingService extends ChangeNotifier {
     _native.shutdown();
   }
 
-  /// Kicks availability in the background if embeddings aren't live yet —
-  /// the sidebar toggle calls this when RAG turns on with consent already
-  /// given. If the model was never downloaded (or was deleted), starts
-  /// [runSetup] so the user gets a progress bar instead of a silent "Model
-  /// not downloaded" forever. After a failed setup, wait for an explicit
-  /// Retry (do not spin forever on open).
   /// True while [checkAvailability] is in flight — prevents parallel re-tests
   /// from every Memory-panel rebuild (audit P2.18).
   bool _checking = false;
 
+  /// Kicks availability in the background if embeddings aren't live yet —
+  /// the sidebar toggle calls this when RAG turns on with consent already
+  /// given. If the model was never downloaded (or was deleted), starts
+  /// [runSetup] so the user gets a progress bar instead of a silent "Model
+  /// not downloaded" forever. After a failed setup OR self-test, wait for
+  /// an explicit Retry (do not spin forever on open).
   void ensureReady() {
     // Latch on setup failure AND self-test failure (_setupError is set by
     // both paths) so we never spin forever on open. Explicit Retry clears it.

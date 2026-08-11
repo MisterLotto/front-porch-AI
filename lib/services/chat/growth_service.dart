@@ -30,6 +30,17 @@ import 'growth_store.dart';
 import 'journal_physics.dart';
 import 'pass_support.dart';
 
+/// Pass-window start index: clamp [cursor] into [messageCount], then cap the
+/// open window at [JournalPhysics.kFirstPassCap] (audit P1.9 — Journal twin).
+/// Pure so the unit test calls the same function the pass uses.
+int growthPassWindowStart(int cursor, int messageCount) {
+  var start = cursor.clamp(0, messageCount);
+  if (messageCount - start > JournalPhysics.kFirstPassCap) {
+    start = messageCount - JournalPhysics.kFirstPassCap;
+  }
+  return start;
+}
+
 /// Growth Rings — the growth pass + effective-personality layering
 /// (docs/design/growth-rings.md). Replaces EvolutionService's monolithic
 /// personality/scenario rewrites with small receipt-backed ring operations.
@@ -203,17 +214,14 @@ class GrowthService {
       await refreshCache();
 
       final messages = getMessages();
-      var start = (await store.cursorFor(sessionToken)).clamp(
-        0,
-        messages.length,
-      );
       // THE WINDOW IS CAPPED ON EVERY PASS (audit P1.9) — Journal twin.
       // Gating on `start == 0` only protected a virgin growth record; a
       // stuck non-zero cursor on a long chat reopened an unbounded window
       // after one failed pass. Same trap Journal fixed in journal_maintenance.
-      if (messages.length - start > JournalPhysics.kFirstPassCap) {
-        start = messages.length - JournalPhysics.kFirstPassCap;
-      }
+      var start = growthPassWindowStart(
+        await store.cursorFor(sessionToken),
+        messages.length,
+      );
       if (start >= messages.length) {
         if (!force) return;
         start = (messages.length - kForceWindowFallback).clamp(

@@ -18,6 +18,8 @@
 
 import 'package:flutter/material.dart';
 
+import 'package:front_porch_ai/services/chat/chat.dart'
+    show kRagReceiptError, kRagReceiptNotOperational;
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/chat_components/chat_components.dart';
 
@@ -60,12 +62,12 @@ class RagReceiptView extends StatelessWidget {
       summary =
           'Last reply: nothing had scrolled out of view — no lookup '
           'needed.';
-    } else if (status == 'error') {
+    } else if (status == kRagReceiptError) {
       // audit P2.17 — never "no lookup needed" after a failed attempt
       summary =
           'Last reply: tried to search the archive but the memory engine '
           'hit an error — nothing was brought back.';
-    } else if (status == 'not_operational') {
+    } else if (status == kRagReceiptNotOperational) {
       summary =
           'Last reply: older messages had scrolled out of view, but the '
           'memory engine is not ready — install/start Memory to look them up.';

@@ -383,24 +383,25 @@ extension ChatServiceReprocess on ChatService {
             previousMessageState,
             groupSpeakerId: isGroupHostRegen ? regenSpeakerSid : null,
           );
-          // Inter-character feelings (audit P1.10): the rejected turn's own
-          // pre-gen stamp is the honest baseline. Feelings mutate POST-gen and
-          // are NOT restamped, so realism_state on lastMsg still holds pre-turn
-          // feelings. previousMessageState is an older same-speaker stamp
-          // (start of a prior turn) — restoring from it left one exchange of
-          // feelings drift on every group regen.
+          // Out-of-band registers (audit P1.10 + second-look cadence twin):
+          // inter-char feelings AND turnsSinceDecayCheck both ride capture/
+          // restore via realism_state. They mutate across the turn and are
+          // NOT restamped post-gen, so lastMsg.realism_state still holds the
+          // pre-turn values. previousMessageState is an older same-speaker
+          // stamp — restoring only from it left one exchange of feelings
+          // drift and a decay-cadence slip (two regens disagreeing).
           if (isGroupHostRegen &&
               lastMsg.activeMetadata?['realism_state'] is Map) {
             final rejected =
                 lastMsg.activeMetadata!['realism_state'] as Map;
+            final patch = <String, dynamic>{};
             final rels = rejected['interCharacterRelationships'];
-            if (rels is Map) {
+            if (rels is Map) patch['interCharacterRelationships'] = rels;
+            final cadence = rejected['turnsSinceDecayCheck'];
+            if (cadence is int) patch['turnsSinceDecayCheck'] = cadence;
+            if (patch.isNotEmpty) {
               _relationshipService.restoreFromMessageState(
-                {
-                  // Scalars already restored above; pass only the map so
-                  // restoreFromMessageState's group branch rewrites feelings.
-                  'interCharacterRelationships': rels,
-                },
+                patch,
                 groupSpeakerId: regenSpeakerSid,
               );
             }
@@ -540,37 +541,11 @@ extension ChatServiceReprocess on ChatService {
         if (_oneShotActive) {
           await _evaluateOneShotCall(onChunk: handleChunk);
         } else {
-          _realismEvals.beginCollectForBatchedVerification();
-          await _fireStaggeredRealismEvals(handleChunk);
-          await _realismEvals.finalizeBatchedRealismVerifications();
-
-          // Mirror of the primary send path: apply the one director batch (or the cheap
-          // accepted-originals path) so relationship/emotional/narrative deltas and side
-          // effects (bond/trust/arousal chips, fixation, autonomous objectives, emotion)
-          // are produced for swiped/regenerated assistant messages too.
-          final collected = _realismEvals.getCollectedForBatch();
-          if (collected.isNotEmpty) {
-            final items = collected
-                .map(
-                  (p) => (
-                    evalKind: p['kind'] as String,
-                    rawOutput: p['raw'] as String,
-                    sceneResponse: p['scene'] as String,
-                    preState: null,
-                    activeChar: _activeCharacter,
-                    activeGroup: _activeGroup,
-                    recentMessages: _messages,
-                    promptText: p['prompt'] as String?,
-                    injections: (p['injections'] as Map?)
-                        ?.cast<String, String>(),
-                    strictnessOverride: null,
-                    maxPassesOverride: null,
-                  ),
-                )
-                .toList();
-            final batchRes = await _realismVerifier.verifyBatch(items);
-            await _realismEvals.applyBatchResults(batchRes);
-          }
+          // Same batch-verify helper as the primary send path so regen
+          // cannot drift (chips, fixation, autonomous objectives).
+          await _runBatchedRealismVerification(
+            () => _fireStaggeredRealismEvals(handleChunk),
+          );
         }
 
         // Check for cancellation after evals complete

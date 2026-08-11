@@ -163,34 +163,71 @@ void main() {
     });
 
     test(
-      'regen prefers rejected-turn feelings over older same-speaker stamp (P1.10)',
+      'regen overlays rejected-turn feelings AND cadence (P1.10 + twin)',
       () {
-        // ChatService regen first restores previousMessageState (older
-        // same-speaker stamp), then overlays the rejected turn's own pre-gen
-        // interCharacterRelationships. Without the second step, feelings lag
-        // one full exchange behind the truth.
+        // Mirrors ChatService regen: restore previousMessageState first, then
+        // patch both out-of-band keys from lastMsg.realism_state. A test that
+        // only asserts "second restore wins" is true by construction — this
+        // one requires BOTH keys from the rejected stamp, and fails if either
+        // is omitted from the patch (the second-look cadence gap).
         final h = _Harness()..inter['aerin'] = {'bo': 8};
-        final olderSameSpeaker = {
-          'interCharacterRelationships': {'bo': 0},
-        };
-        final rejectedPreGen = {
-          'interCharacterRelationships': {'bo': 4},
-        };
+        (h.counters['aerin'] ??= {})['turnsSinceDecayCheck'] = 9;
 
+        // Older same-speaker stamp (previousMessageState) — wrong feelings
+        // and a cadence that already advanced past the boundary.
         h.svc.restoreFromMessageState(
-          olderSameSpeaker,
+          {
+            'interCharacterRelationships': {'bo': 0},
+            'turnsSinceDecayCheck': 10,
+          },
           groupSpeakerId: 'aerin',
         );
         expect(h.feelings['bo'], 0);
+        expect(h.cadence, 10);
+
+        // Rejected turn's own pre-gen realism_state (the overlay ChatService
+        // now applies for both keys).
+        final rejectedPatch = <String, dynamic>{
+          'interCharacterRelationships': {'bo': 4},
+          'turnsSinceDecayCheck': 7,
+        };
         h.svc.restoreFromMessageState(
-          rejectedPreGen,
+          rejectedPatch,
           groupSpeakerId: 'aerin',
         );
         expect(
           h.feelings['bo'],
           4,
-          reason: 'rejected message pre-gen stamp is the regen baseline for '
-              'inter-char feelings',
+          reason: 'rejected pre-gen feelings are the regen baseline',
+        );
+        expect(
+          h.cadence,
+          7,
+          reason: 'cadence twin must come from the same rejected stamp — '
+              'else two regens near the decay boundary disagree',
+        );
+
+        // Guard would stay green if we only patched feelings: re-assert that
+        // leaving cadence out of the patch would leave the stale 10.
+        h.svc.restoreFromMessageState(
+          {
+            'interCharacterRelationships': {'bo': 0},
+            'turnsSinceDecayCheck': 10,
+          },
+          groupSpeakerId: 'aerin',
+        );
+        h.svc.restoreFromMessageState(
+          {
+            'interCharacterRelationships': {'bo': 4},
+            // deliberately NO turnsSinceDecayCheck — the old P1.10-only patch
+          },
+          groupSpeakerId: 'aerin',
+        );
+        expect(
+          h.cadence,
+          10,
+          reason: 'proves the twin is independent: feelings-only patch '
+              'does not rewind cadence (so ChatService must pass both)',
         );
       },
     );

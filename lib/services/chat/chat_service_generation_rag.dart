@@ -61,12 +61,19 @@ extension ChatServiceGenerationRag on ChatService {
         final sourceIds = await _getMemorySourceIds(guest: t.guestSpeaker);
         debugPrint('[RAG:Chat] Memory source IDs: $sourceIds');
 
-        // Session isolation: only the speaker's OWN id (always sourceIds.first)
-        // is session-scoped, so a prior chat with this same character can no
-        // longer bleed its locations/storyline into this one. Any explicit
-        // cross-character sources that follow keep their intended cross-session
-        // reach. Applies identically to 1:1 and group (same retrieve() path).
-        final selfSourceId = sourceIds.isNotEmpty ? sourceIds.first : '';
+        // Session isolation: the speaker/group bucket AND (in groups) every
+        // member stableGroupId that was added for Data Bank / priorities must
+        // be session-scoped. Without scoping members, their 1:1 conversation
+        // embeddings bleed into the group (second-look P2.16). Explicit
+        // cross-character memorySources that follow in sourceIds stay
+        // unscoped so opt-in cross-session recall still works. Data Bank is a
+        // separate path and never consults this set.
+        final sessionScoped = <String>{
+          if (sourceIds.isNotEmpty) sourceIds.first,
+          if (t.guestSpeaker == null && _activeGroup != null)
+            for (final c in _groupCharacters)
+              _getCharacterIdFromCard(c),
+        }..remove('');
 
         // Retrieval limit: groups use the per-session group setting; 1:1
         // uses the user's "Memories per turn" slider (memory panel + web).
@@ -84,9 +91,7 @@ extension ChatServiceGenerationRag on ChatService {
               t.droppedMessages, // only search messages that are out of context
           limit: retrievalLimit == 0 ? 9999 : retrievalLimit,
           characterPriorities: currentGroupRAGPriorities,
-          sessionScopedCharacterIds: selfSourceId.isEmpty
-              ? const {}
-              : {selfSourceId},
+          sessionScopedCharacterIds: sessionScoped,
         );
         // Two-tier memory dedupe: the journal expanded these exact lines
         // above — never pay for them twice.

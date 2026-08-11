@@ -328,27 +328,23 @@ Some prose the model wrote.
     });
 
     test('window start caps unconditionally (stuck cursor twin of Journal)', () {
-      // Mirrors growth_service.runGrowthPass math after P1.9 — a non-zero
-      // stuck cursor on a long chat must not open an unbounded window.
-      int startFor(int cursor, int len) {
-        var start = cursor.clamp(0, len);
-        if (len - start > JournalPhysics.kFirstPassCap) {
-          start = len - JournalPhysics.kFirstPassCap;
-        }
-        return start;
-      }
-
+      // Calls the same pure helper runGrowthPass uses — a reimplemented
+      // formula would stay green if the service drifted (second-look).
       expect(
-        startFor(590, 9488),
+        growthPassWindowStart(590, 9488),
         9488 - JournalPhysics.kFirstPassCap,
         reason: 'stuck cursor must jump the gap like Journal',
       );
       expect(
-        startFor(0, 200),
+        growthPassWindowStart(0, 200),
         200 - JournalPhysics.kFirstPassCap,
         reason: 'virgin long chat still capped',
       );
-      expect(startFor(5, 20), 5, reason: 'under the cap is unchanged');
+      expect(
+        growthPassWindowStart(5, 20),
+        5,
+        reason: 'under the cap is unchanged',
+      );
     });
 
     test('reinforce merges receipts and bumps strength; fade retires at zero', () async {

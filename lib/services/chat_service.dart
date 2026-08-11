@@ -235,26 +235,11 @@ class ChatService extends ChangeNotifier {
   }) => _addGeneratedImageMessageImpl(path, prompt,
       senderName: senderName, characterId: characterId);
 
-  /// Whether Scene Guests automatically chime in after the primary's turn.
-  /// Phase 1 keeps this in-memory (default ON) rather than persisted — there is
-  /// no settings UI yet; a public setter lets callers toggle it.
+  /// Scene Guests auto-chime after the primary (in-memory default ON).
   bool autoChimeEnabled = true;
 
-  // ── Scene Guest cast detection (Phase 2) ────────────────────────────────
-  // Periodically (not every turn) scans the primary's recent narration in a
-  // 1:1 chat for a newly-introduced, recurring, named side character and offers
-  // to promote it to a Scene Guest. Detection only reads text + triggers the
-  // existing parity-safe mint/enter flow, so it adds ZERO Realism/Needs work.
-
-  // The switch lives in Porch Life as `realismSettings.sceneGuestDetectionEnabled`
-  // and is read at the ONE gate in `_maybeRunCastDetection`. There used to be an
-  // in-memory `sceneDetectionEnabled` field here, default true, which no code
-  // ever wrote and no surface ever exposed — scaffolding for a setting that was
-  // never built. It is deleted rather than left beside the real one, because two
-  // switches for one behaviour is how they end up disagreeing.
-
-  // (_castScanInterval moved to chat_service_defaults.dart as a
-  // library-top-level const)
+  // Scene Guest cast detection: gate is realismSettings.sceneGuestDetectionEnabled
+  // (read in _maybeRunCastDetection). _castScanInterval → chat_service_defaults.
 
   final List<ChatMessage> _messages = [];
   Future<void> _saveChain = Future.value();
@@ -900,18 +885,13 @@ class ChatService extends ChangeNotifier {
   // Fake-pinned (see the class doc): body in accessors, member stays here.
   bool get objectivesActive => _objectivesActiveImpl;
 
-  /// RAG [MemoryService] when wired. Class-pinned so FakeChatService can
-  /// override — an extension getter would read `_memoryService` on fakes and
-  /// NoSuchMethodError (CI red on chat_tools_facade_test after the embedding
-  /// statusSnapshot was added to ChatToolsFacade.state).
+  /// RAG [MemoryService] when wired. Class-pinned for FakeChatService.
   MemoryService? get memoryService => _memoryService;
 
-  /// Last character-reply RAG receipt (or null). Class-pinned for the same
-  /// fake-dispatch reason as [memoryService]; body in accessors.
+  /// Last RAG receipt (or null). Class-pinned; body in accessors.
   Map<String, dynamic>? get lastRagReceipt => _lastRagReceiptImpl;
 
-  /// Fake-pinned (see the class doc): body in chat/chat_service_mood.dart.
-  /// What the speaker walked in carrying before the user said anything, or ''.
+  /// Standing mood line, or ''. Fake-pinned; body in chat_service_mood.dart.
   String get standingMoodSummary => standingMoodSummaryImpl;
 
   bool get isEvaluatingRealism => _isEvaluatingRealism;
@@ -934,13 +914,7 @@ class ChatService extends ChangeNotifier {
 
   String get emotionIntensity => _emotionIntensity;
 
-  /// Whether the per-session Needs (Sims-style) simulation is active.
-  /// When true and `enjoysLowHygiene` is also true, low hygiene becomes desirable.
-  ///
-  /// When enabled, [needsVector] holds the current 0–100 levels and the engine
-  /// performs decay, prompt injection, and LLM-verified fulfillment restores.
-  /// New chats seed this from the character's [FrontPorchExtensions.needsSimEnabled].
-  /// Disabling mid-chat clears the vector; historical snapshots cannot re-enable it.
+  /// Per-session Needs (Sims-style) simulation active. Seeded from the card.
   bool get needsSimEnabled => _needsSimEnabled;
 
   bool get chaosNsfwEnabled => _chaosModeService.chaosNsfwEnabled;
@@ -965,29 +939,9 @@ class ChatService extends ChangeNotifier {
   void editMessage(int index, String newText) =>
       _editMessageImpl(index, newText);
 
-  // ── Growth Rings runtime state (full feature in growth_service.dart leaf
-  // + chat_service_growth.dart part; docs/design/growth-rings.md) ──
-
-  /// Transient re-entrancy/spinner flag for the growth pass. Defensively
-  /// zeroed on all reset/new-chat/0-session/group/setActive/load/fork paths
-  /// (the same "keep reset blocks in sync" sites the old evolution flag
-  /// used). Ring/legacy data itself lives in the session-scoped GrowthStore
-  /// cache, invalidated/refreshed at the context-switch sites.
+  // Growth Rings flag (zeroed on all reset/entry sites). Class-pinned for fakes.
   bool _isGrowthPassRunning = false;
-
-  /// Kept as an instance getter (not in the growth part) because test fakes
-  /// (`FakeChatService implements ChatService`) override it — extension
-  /// getters are statically dispatched and cannot be overridden via
-  /// `implements`.
   bool get isGrowthPassRunning => _isGrowthPassRunning;
-
-  // ── Prompt Injection Builders (thins only; full in lib/services/chat/prompt_injection/* step 8) ──
-
-  // The individual _get* thins for relationship/emotion/time/behavioral/nsfw are no longer used
-  // for main prompt assembly — the _realismStateInjection composer owns the words-only
-  // "[How <Name> is right now: …]" block (see realism_state_injection.dart + design doc).
-  // The sub-builders themselves are still instantiated and passed to the composer.
-  // Chance Time remains separate (it is not part of the per-turn realism state bundle).
 
   /// Active objectives for [character] in the current session; body in chat_service_objectives.dart.
   Future<List<Objective>> getActiveObjectivesFor(CharacterCard character) =>

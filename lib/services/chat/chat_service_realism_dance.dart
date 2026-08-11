@@ -267,41 +267,9 @@ extension ChatServiceRealismDance on ChatService {
             .text;
         await _evaluateTrustRepairCall(userText, onChunk: handleChunk);
         if (_realismEvalCancelled) return;
-        _realismEvals.beginCollectForBatchedVerification();
-        await Future.wait([
-          _evaluateEmotionalStateCall(onChunk: handleChunk),
-          Future.delayed(
-            _kEvalDispatchStagger,
-            () => _evaluateNarrativeCall(onChunk: handleChunk),
-          ),
-          Future.delayed(
-            _kEvalDispatchStagger * 2,
-            () => _evaluatePhysicalStateCall(onChunk: handleChunk),
-          ),
-        ]);
-        await _realismEvals.finalizeBatchedRealismVerifications();
-        final collected = _realismEvals.getCollectedForBatch();
-        if (collected.isNotEmpty) {
-          final items = collected
-              .map(
-                (p) => (
-                  evalKind: p['kind'] as String,
-                  rawOutput: p['raw'] as String,
-                  sceneResponse: p['scene'] as String,
-                  preState: null,
-                  activeChar: _activeCharacter,
-                  activeGroup: _activeGroup,
-                  recentMessages: _messages,
-                  promptText: p['prompt'] as String?,
-                  injections: (p['injections'] as Map?)?.cast<String, String>(),
-                  strictnessOverride: null,
-                  maxPassesOverride: null,
-                ),
-              )
-              .toList();
-          final batchRes = await _realismVerifier.verifyBatch(items);
-          await _realismEvals.applyBatchResults(batchRes);
-        }
+        await _runBatchedRealismVerification(
+          () => _fireTrustRepairRemainingEvals(handleChunk),
+        );
       } else if (_oneShotActive) {
         debugPrint(
           '[Realism:Unified] One-shot eval for ${speaker.name} ($charId)',
@@ -314,36 +282,10 @@ extension ChatServiceRealismDance on ChatService {
         debugPrint(
           '[Realism:Unified] 4-call eval + verifier for ${speaker.name} ($charId)',
         );
-        _realismEvals.beginCollectForBatchedVerification();
-        await _fireStaggeredRealismEvals(handleChunk);
-        await _realismEvals.finalizeBatchedRealismVerifications();
-
-        final collected = _realismEvals.getCollectedForBatch();
-        if (collected.isNotEmpty) {
-          debugPrint(
-            '[Realism:Unified] Verifying ${collected.length} eval(s) for '
-            '${speaker.name}',
-          );
-          final items = collected
-              .map(
-                (p) => (
-                  evalKind: p['kind'] as String,
-                  rawOutput: p['raw'] as String,
-                  sceneResponse: p['scene'] as String,
-                  preState: null,
-                  activeChar: _activeCharacter,
-                  activeGroup: _activeGroup,
-                  recentMessages: _messages,
-                  promptText: p['prompt'] as String?,
-                  injections: (p['injections'] as Map?)?.cast<String, String>(),
-                  strictnessOverride: null,
-                  maxPassesOverride: null,
-                ),
-              )
-              .toList();
-          final batchRes = await _realismVerifier.verifyBatch(items);
-          await _realismEvals.applyBatchResults(batchRes);
-        }
+        await _runBatchedRealismVerification(
+          () => _fireStaggeredRealismEvals(handleChunk),
+          logSpeakerName: speaker.name,
+        );
       }
 
       // Handle cancellation after the eval calls. The flag is deliberately

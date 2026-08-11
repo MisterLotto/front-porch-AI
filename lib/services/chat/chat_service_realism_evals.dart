@@ -279,4 +279,62 @@ extension ChatServiceRealismEvals on ChatService {
       ),
     ]);
   }
+
+  /// Emotion + narrative + scene-time only — the remaining judges after a
+  /// trust-repair relationship substitute (audit P1.11). Same stagger /
+  /// scene-time-last order as [_fireStaggeredRealismEvals].
+  Future<void> _fireTrustRepairRemainingEvals(
+    void Function(String) onChunk,
+  ) async {
+    await Future.wait([
+      _evaluateEmotionalStateCall(onChunk: onChunk),
+      Future.delayed(
+        _kEvalDispatchStagger,
+        () => _evaluateNarrativeCall(onChunk: onChunk),
+      ),
+      Future.delayed(
+        _kEvalDispatchStagger * 2,
+        () => _evaluatePhysicalStateCall(onChunk: onChunk),
+      ),
+    ]);
+  }
+
+  /// beginCollect → [fireEvals] → finalize → verifyBatch → apply. The three
+  // multi-call sites (dance normal, dance trust-repair remainder, regen)
+  // share this so the item-map / verifier wiring cannot drift (second-look).
+  Future<void> _runBatchedRealismVerification(
+    Future<void> Function() fireEvals, {
+    String? logSpeakerName,
+  }) async {
+    _realismEvals.beginCollectForBatchedVerification();
+    await fireEvals();
+    await _realismEvals.finalizeBatchedRealismVerifications();
+    final collected = _realismEvals.getCollectedForBatch();
+    if (collected.isEmpty) return;
+    if (logSpeakerName != null) {
+      debugPrint(
+        '[Realism:Unified] Verifying ${collected.length} eval(s) for '
+        '$logSpeakerName',
+      );
+    }
+    final items = collected
+        .map(
+          (p) => (
+            evalKind: p['kind'] as String,
+            rawOutput: p['raw'] as String,
+            sceneResponse: p['scene'] as String,
+            preState: null,
+            activeChar: _activeCharacter,
+            activeGroup: _activeGroup,
+            recentMessages: _messages,
+            promptText: p['prompt'] as String?,
+            injections: (p['injections'] as Map?)?.cast<String, String>(),
+            strictnessOverride: null,
+            maxPassesOverride: null,
+          ),
+        )
+        .toList();
+    final batchRes = await _realismVerifier.verifyBatch(items);
+    await _realismEvals.applyBatchResults(batchRes);
+  }
 }
