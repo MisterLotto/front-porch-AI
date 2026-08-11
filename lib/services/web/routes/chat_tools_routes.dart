@@ -35,6 +35,7 @@ class WebChatToolsRoutes {
     router.get('/api/chat/tools/timeline', _timeline);
     router.get('/api/chat/tools/promises', _promises);
     router.post('/api/chat/tools/promise-resolve', _promiseResolve);
+    router.post('/api/chat/tools/pocket-remove', _pocketRemove);
     router.post('/api/chat/tools/to-story', _toStory);
     router.post('/api/chat/tools/summary', _summary);
     router.post('/api/chat/tools/objective', _objective);
@@ -57,6 +58,18 @@ class WebChatToolsRoutes {
   /// Apply global memory/summary settings (only keys present are changed).
   Future<shelf.Response> _settings(shelf.Request request) async {
     await _facade.applySettings(await _json(request));
+    return JsonResponse.ok(_snapshot(request));
+  }
+
+  /// Strike one pocket item (worn / carrying / set_aside) by index — the web
+  /// half of the desktop chips' ✕ (parity, hostile review 2026-08-11).
+  Future<shelf.Response> _pocketRemove(shelf.Request request) async {
+    final body = await _json(request);
+    await _facade.removePocketItem(
+      participantId: request.url.queryParameters['participant'],
+      section: body['section']?.toString() ?? '',
+      index: (body['index'] as num?)?.toInt() ?? -1,
+    );
     return JsonResponse.ok(_snapshot(request));
   }
 

@@ -323,6 +323,36 @@ class ChatToolsFacade {
 
   // ── Toggles (chat-scoped; delegate to the same ChatService methods the
   //    desktop sidebar calls, which persist + handle group parity) ──────────
+  /// Strike one pocket item by hand from the web panel — the same eraser the
+  /// desktop chips have. The extraction bet's whole defense is "a wrong entry
+  /// is one tap from corrected", and the PWA had zero taps (hostile review
+  /// 2026-08-11). Delegates to the SAME [ChatService.removePocketItem] the
+  /// desktop rows call; the section strings mirror the snapshot's JSON keys.
+  /// Unknown section or missing chat is a silent no-op — a stale bundle must
+  /// never turn a tap into a 500.
+  Future<void> removePocketItem({
+    String? participantId,
+    required String section,
+    required int index,
+  }) async {
+    final focused = _focusedParticipant(participantId);
+    final card = focused?.card ?? _chat.activeCharacter;
+    if (card == null) return;
+    final target = switch (section) {
+      'worn' => PocketSection.worn,
+      'carrying' => PocketSection.carrying,
+      'set_aside' => PocketSection.setAside,
+      _ => null,
+    };
+    if (target == null || index < 0) return;
+    await _chat.removePocketItem(
+      _chat.characterIdFor(card),
+      section: target,
+      index: index,
+    );
+    _notify();
+  }
+
   Future<void> setRealismEnabled(bool v) async {
     await _chat.setRealismEnabled(v);
     _notify();

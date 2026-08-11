@@ -14725,3 +14725,21 @@ analyze clean.
 The two retrieval paths disagreed for no reason (hostile review P2):
 wear applied a reported new state on pile retrieval, pickup dropped it.
 Aligned; guard proven red with the old behavior restored.
+
+## 2026-08-11 (UTC) — Web ✕ parity + group record cache (last two review items)
+
+**Files:** `chat_tools_facade.dart` (removePocketItem), `chat_tools_routes.dart`
+(POST /api/chat/tools/pocket-remove), `ChatTools.tsx` + styles.css (✕ per
+chip, all three sections; rebuilt assets/web_app),
+`group_member_realism.dart` (parsed-record cache — the getter ran
+Pockets.fromJson per read, and the sidebar reads it per streamed token per
+member card), `test/services/chat/pockets_cache_test.dart` (NEW, 3 guards),
+docs/Rawhide.md.
+
+**Coherence:** the typed setter is the ONLY writer of the pockets key
+('pockets' is deliberately absent from GroupRealismKeys.runtime, so the
+generic setValue bridge cannot touch it); fromJson instances start cold.
+Cache red-proofed (getter assignment removed → identical-instance test
+red). Web route tolerates unknown sections silently (stale bundles must
+never 500). Full chat dir 1416; analyze clean; web lint + 59 vitest +
+bundle rebuild green.

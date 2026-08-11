@@ -223,6 +223,11 @@ export function ChatTools({
     apply(api.post<ToolsState>(`/api/chat/tools/settings${q}`, fields));
   const toggle = (name: string, value: boolean) =>
     apply(api.post<ToolsState>(`/api/chat/tools/toggle${q}`, { name, value }));
+  // The eraser: strike one wardrobe entry by hand — the same ✕ the desktop
+  // chips have (a wrong entry must be one tap from corrected on every
+  // surface). The endpoint answers with the fresh snapshot.
+  const pocketRemove = (section: string, index: number) =>
+    apply(api.post<ToolsState>(`/api/chat/tools/pocket-remove${q}`, { section, index }));
   // Same endpoint, string value — the one tri-state control (see the route's
   // oneShotMode case). Falls back to the legacy bool on an older facade.
   const oneShotMode = t?.realismOneShotMode ?? (t?.realismOneShotEval ? 'on' : 'auto');
@@ -408,7 +413,16 @@ export function ChatTools({
                   <div className="muted small side-quest-label">Wearing</div>
                   <div className="pocket-items">
                     {worn.map((i, n) => (
-                      <span className="pocket-item" key={`w${n}`}>{label(i)}</span>
+                      <span className="pocket-item" key={`w${n}`}>
+                        {label(i)}
+                        <button
+                          className="pocket-x"
+                          title="Remove from the record"
+                          onClick={() => pocketRemove('worn', n)}
+                        >
+                          ×
+                        </button>
+                      </span>
                     ))}
                   </div>
                 </>
@@ -418,7 +432,16 @@ export function ChatTools({
                   <div className="muted small side-quest-label">Carrying</div>
                   <div className="pocket-items">
                     {carrying.map((i, n) => (
-                      <span className="pocket-item" key={`c${n}`}>{label(i)}</span>
+                      <span className="pocket-item" key={`c${n}`}>
+                        {label(i)}
+                        <button
+                          className="pocket-x"
+                          title="Remove from the record"
+                          onClick={() => pocketRemove('carrying', n)}
+                        >
+                          ×
+                        </button>
+                      </span>
                     ))}
                   </div>
                 </>
@@ -430,6 +453,13 @@ export function ChatTools({
                     {setAside.map((i, n) => (
                       <span className="pocket-item pocket-item-aside" key={`s${n}`}>
                         {label(i)}
+                        <button
+                          className="pocket-x"
+                          title="Remove from the record"
+                          onClick={() => pocketRemove('set_aside', n)}
+                        >
+                          ×
+                        </button>
                       </span>
                     ))}
                   </div>

@@ -199,12 +199,26 @@ class GroupMemberRealism {
   // ── Structured members ────────────────────────────────────────────────
   /// Raw needs vector, coerced, or null when the slot has never carried one —
   /// and that null is load-bearing (needs-enabled inference; see class doc).
+  /// Parsed-record cache. The getter used to run [Pockets.fromJson] on EVERY
+  /// read — and the sidebar and member cards read it from `build`, which
+  /// reruns per streamed token per visible card: JSON deserialization as
+  /// per-frame work, the coverImageFileFor lesson in miniature (hostile
+  /// review 2026-08-11). Coherent by construction: the typed setter below is
+  /// the ONLY writer of this key ('pockets' is deliberately absent from
+  /// [GroupRealismKeys.runtime], so the generic setValue bridge cannot touch
+  /// it), and fromJson builds a fresh instance whose cache starts cold.
+  /// The cached object is the LIVE record — every mutation path already ends
+  /// with the setter (the "no second write path" invariant).
+  Pockets? _pocketsCache;
+
   /// What this member is wearing and carrying. Absent (not empty) when the
   /// feature has never run for them, so an untouched member serialises exactly
   /// as they did before Pockets existed.
   Pockets? get pockets {
+    final cached = _pocketsCache;
+    if (cached != null) return cached;
     final v = _data[GroupRealismKeys.pockets];
-    return v is Map ? Pockets.fromJson(v) : null;
+    return v is Map ? _pocketsCache = Pockets.fromJson(v) : null;
   }
 
   set pockets(Pockets? v) {
@@ -215,6 +229,7 @@ class GroupMemberRealism {
     // end a scene empty-handed. (Grok, 2026-08-07.) Only an explicit null —
     // meaning "this member has no record at all" — clears the slot, which is
     // what keeps an untouched member serialising exactly as before.
+    _pocketsCache = v;
     if (v == null) {
       _data.remove(GroupRealismKeys.pockets);
     } else {
