@@ -14675,3 +14675,30 @@ transfer fix's pass-level half has NO automated guard (needs a group-mode
 ChatService harness that unit tests lack); the applier half is guarded
 (onTransfer fires per item). Stated per the no-silent-gaps rule.
 Full chat dir 1407 green; analyze clean.
+
+## 2026-08-11 (UTC) — The pockets rewind: regen/swipe/tail-delete restore (last P0)
+
+**Files:** `chat_service_pockets.dart` (pockets_before shared stamp +
+pockets_after per-swipe stamp + _restorePocketsFromStamp),
+`chat_service_message_ops.dart` (swipe-nav restore ×2, tail-delete
+restore), `chat_service_reprocess.dart` (regen restore beside
+_revertObjectiveTurnOps), `test/services/chat/pockets_rewind_test.dart`
+(NEW, 3 journeys), docs/Rawhide.md.
+
+**Why:** the last P0 from the hostile review — pockets ops were the one
+non-scalar turn effect nothing put back, violating CLAUDE.md's own
+non-scalar-rewind rule. Regenerate was a slot machine for belongings.
+
+**How:** the pass stamps pre-turn record (shared metadata — identical
+across swipes by construction since regen restores before replaying) and
+post-turn record (per-swipe metadata). One restore helper, three seams:
+regen restores 'before' pre-replay (item cards already invalidated via
+receipts); swipe navigation restores the target variant's 'after' (or
+'before' when that variant changed nothing — no stamp = no ops); tail
+delete restores 'before'. OLDER deletes deliberately leave the record
+(later turns built on it; ops have no arithmetic inverse — documented in
+the seam). Group-safe: stamps carry the speaker's charId, no name
+resolution. Guests skip (no pockets pass runs for them).
+
+**Verification:** 3 service-level journeys green; regen seam proven red
+with the restore call removed; full chat dir 1410; analyze clean.

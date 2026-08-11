@@ -163,6 +163,10 @@ extension ChatServicePockets on ChatService {
     final day = storyDayCount;
     record.expireSetAside(day);
 
+    // Pre-turn snapshot for the rewind stamps below — taken AFTER expiry on
+    // purpose, so a later restore can never resurrect expired clothes.
+    final beforeJson = record.toJson();
+
     // Hand-offs (Porch Life -> "Hand things between characters"). Only ever in
     // a group: in a 1:1 the only other party is the user, who has no record to
     // put anything into, so the roster stays empty and the model is never
@@ -279,9 +283,44 @@ extension ChatServicePockets on ChatService {
     final msg = _messages.isNotEmpty ? _messages.last : null;
     if (msg != null && !msg.isUser) {
       msg.metadata = {...?msg.metadata, 'pocket_changes': receipts};
+      // The rewind stamps (hostile review 2026-08-11 — pockets ops were the
+      // one non-scalar turn effect nothing ever put back):
+      //  * pockets_before rides the SHARED metadata: the pre-turn record is
+      //    the same for every swipe by construction, because regen restores
+      //    it before replaying (below) — regen and tail-delete read it.
+      //  * pockets_after rides THIS SWIPE's metadata: what this variant's
+      //    ops produced — swipe navigation reads it, and a swipe whose pass
+      //    changed nothing carries no stamp and correctly restores 'before'.
+      msg.metadata!['pockets_before'] = {'char': charId, 'record': beforeJson};
+      msg.activeMetadata = {
+        ...?msg.activeMetadata,
+        'pockets_after': record.toJson(),
+      };
       await _saveChat();
     }
     notifyListeners();
+  }
+
+  /// Restore a speaker's record from a message's rewind stamps — the pockets
+  /// half of the time-travel every other turn effect already had (realism
+  /// scalars via realism_state, needs via the arithmetic refund, journal
+  /// cards via timeline invalidation). [after] picks the swipe's post-turn
+  /// state (swipe navigation); otherwise the turn's pre-state (regenerate,
+  /// tail delete). A message with no stamps applied no ops — nothing to do.
+  /// Group-safe by construction: the stamp carries the speaker's own charId,
+  /// so no name resolution can rewind the wrong member.
+  void _restorePocketsFromStamp(ChatMessage msg, {required bool after}) {
+    if (!_storageService.realismSettings.pocketsEnabled) return;
+    final before = msg.metadata?['pockets_before'];
+    if (before is! Map) return;
+    final chId = before['char'];
+    if (chId is! String || chId.isEmpty) return;
+    Object? recordJson = before['record'];
+    if (after) {
+      final a = msg.activeMetadata?['pockets_after'];
+      if (a is Map) recordJson = a;
+    }
+    setPocketsFor(chId, Pockets.fromJson(recordJson));
   }
 
   /// Write this turn's item-memory cards ([itemCardsFrom] decides which

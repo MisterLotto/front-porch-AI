@@ -46,6 +46,10 @@ extension ChatServiceMessageOps on ChatService {
       if (newIndex >= 0) {
         msg.swipeIndex = newIndex;
         if (!isGuestMsg) _syncRealismStateForSwipe(msg);
+        // Pockets follow the selected variant too — this swipe's own
+        // post-turn record, or the shared pre-turn base when this variant's
+        // pass changed nothing (hostile review 2026-08-11).
+        if (!isGuestMsg) _restorePocketsFromStamp(msg, after: true);
         // Timeline integrity: the active variant at this position changed —
         // cards journaled from the other swipe are now phantom.
         _invalidateJournalFrom(messageIndex);
@@ -60,6 +64,8 @@ extension ChatServiceMessageOps on ChatService {
       // Navigate to existing swipe
       msg.swipeIndex = newIndex;
       if (!isGuestMsg) _syncRealismStateForSwipe(msg);
+      // Same pockets rewind as the left branch.
+      if (!isGuestMsg) _restorePocketsFromStamp(msg, after: true);
       // Timeline integrity — same as the left-swipe branch above.
       _invalidateJournalFrom(messageIndex);
       await _saveChat();
@@ -146,6 +152,18 @@ extension ChatServiceMessageOps on ChatService {
     if (_isTurnBusy) return;
     if (index >= 0 && index < _messages.length) {
       final deleted = _messages[index];
+      final wasTail = index == _messages.length - 1;
+
+      // Pockets rewind on TAIL deletes only (hostile review 2026-08-11):
+      // deleting the last reply un-happens its turn, so the record returns
+      // to its pre-turn state — the same tail-only semantics the realism
+      // time-travel below has always had. Deleting an OLDER message leaves
+      // the record alone on purpose: later turns built on its changes, and
+      // rewinding past them would invent history (the needs refund solves
+      // this with arithmetic; pocket ops have no arithmetic inverse).
+      if (wasTail && !deleted.isUser && deleted.sender != 'System') {
+        _restorePocketsFromStamp(deleted, after: false);
+      }
 
       // Needs are refunded by ARITHMETIC (subtract this message's own chips),
       // not by the realism time-travel below — that only ever rewinds the

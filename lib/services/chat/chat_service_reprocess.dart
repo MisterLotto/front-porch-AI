@@ -226,6 +226,14 @@ extension ChatServiceReprocess on ChatService {
       // ops keep 1:1 and group identical. Guest turns never touch objectives.
       if (regenGuest == null) {
         await _revertObjectiveTurnOps(lastMsg);
+        // Rewind the rejected turn's pockets ops to the pre-turn record, so
+        // the regenerated reply's own pass re-applies from the same base
+        // instead of stacking — "she hands you her keys", regenerate, she
+        // keeps knitting, and the keys used to be gone anyway (hostile
+        // review 2026-08-11). Group-safe: the stamp carries the speaker's
+        // own charId. The journal invalidation above already took the
+        // rejected turn's item cards with it.
+        _restorePocketsFromStamp(lastMsg, after: false);
       }
 
       // Revert realism state from the rejected swipe and re-evaluate.
