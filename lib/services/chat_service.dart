@@ -28,6 +28,7 @@ import 'package:uuid/uuid.dart';
 import 'package:front_porch_ai/app_version.dart';
 import 'package:front_porch_ai/services/kobold_service.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
+import 'package:front_porch_ai/services/reasoning_effort.dart';
 import 'package:front_porch_ai/services/capability/vision_support_resolver.dart';
 import 'package:front_porch_ai/services/caption/local_caption_service.dart';
 import 'package:front_porch_ai/services/vision_eval.dart';

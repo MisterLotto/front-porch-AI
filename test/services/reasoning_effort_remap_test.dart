@@ -17,9 +17,10 @@
 // (which lists it) and substitutes the closest supported value, exactly like
 // the mandatory-reasoning learn-once-and-retry beside it.
 //
-// :thinking-suffixed ids (Nano convention) are pre-hinted to {none,high,max}
-// so the FIRST turn never 400s either — the Discord System-bubble failure
-// mode.
+// DeepSeek `:thinking` ids are pre-hinted to {none,high,max} so the FIRST
+// turn never 400s — the Discord System-bubble failure mode. Other
+// `:thinking` ids are Nano's "use the thinking variant" tag, not that
+// ladder (Kimi 2.6 still has Low).
 //
 // Guard proven to fail before passing: with the learn+retry block removed
 // from generateStream, the non-:thinking case throws the exact production

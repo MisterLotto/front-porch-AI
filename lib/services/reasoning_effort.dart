@@ -1,12 +1,13 @@
 // Copyright (C) 2026 Front Porch AI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// App-facing thinking strength (low / medium / high) and how it maps onto
-// whatever ladder a remote model actually accepts. Shared by the remote
-// payload builder and the settings UI so the labels users see match the
-// wire behaviour.
+// App-facing thinking strength and how it maps onto whatever ladder a
+// remote model actually accepts. The chip row is that model's kitchen
+// menu — not a fixed Low/Medium/High card we then remap.
 
-/// App surface values — what the user picks in Settings / chat settings.
+import 'package:flutter/foundation.dart';
+
+/// Fallback chips when we have not yet learned this model's menu.
 const List<String> kAppReasoningEfforts = ['low', 'medium', 'high'];
 
 /// Full ladder any provider has used (for nearest-match math).
@@ -16,7 +17,8 @@ const Map<String, int> kReasoningEffortRank = {
   'low': 2,
   'medium': 3,
   'high': 4,
-  'max': 5,
+  'xhigh': 5,
+  'max': 6,
 };
 
 /// Short display title for a strength id.
@@ -26,6 +28,7 @@ String reasoningEffortTitle(String id) => switch (id) {
       'low' => 'Low',
       'medium' => 'Medium',
       'high' => 'High',
+      'xhigh' => 'Extra high',
       'max' => 'Max',
       _ => id,
     };
@@ -35,29 +38,90 @@ String reasoningEffortBlurb(String id) => switch (id) {
       'low' => 'Light think — faster, cheaper',
       'medium' => 'Balanced — default',
       'high' => 'Deep think — slower, richer',
-      'none' => 'No thinking tokens',
+      'xhigh' => 'Heavier than high',
       'max' => 'Full thinking budget',
+      'none' => 'No thinking tokens',
       'minimal' => 'Bare-minimum thinking',
       _ => '',
     };
 
 /// Models whose provider taught us a supported set (process lifetime).
-/// Written by [OpenRouterService] when a 400 lists supported values.
 final Map<String, Set<String>> kLearnedReasoningEffortsByModel =
     <String, Set<String>>{};
 
-/// Nano-style `:thinking` suffix often only accepts none / high / max.
-const Set<String> kThinkingSuffixEffortHint = {'none', 'high', 'max'};
+/// Bumped when the learned menu changes so Settings can redraw chips.
+final ValueNotifier<int> kReasoningEffortCatalogTick = ValueNotifier<int>(0);
 
-/// Hint (not a hard table): ids with `:thinking` commonly lack low/medium.
+void _bumpReasoningEffortCatalog() {
+  if (_catalogBatchDepth == 0) kReasoningEffortCatalogTick.value++;
+}
+
+int _catalogBatchDepth = 0;
+
+/// Hold tick notifications across a /models seed (one redraw at the end).
+void beginReasoningEffortCatalogBatch() => _catalogBatchDepth++;
+
+/// True while [beginReasoningEffortCatalogBatch] is open (persist no-ops).
+bool get reasoningEffortCatalogIsBatching => _catalogBatchDepth > 0;
+
+void Function()? persistReasoningEffortMenusFlushHook;
+
+void endReasoningEffortCatalogBatch() {
+  if (_catalogBatchDepth == 0) return;
+  _catalogBatchDepth--;
+  if (_catalogBatchDepth == 0) {
+    kReasoningEffortCatalogTick.value++;
+    persistReasoningEffortMenusFlushHook?.call();
+  }
+}
+
+/// Loopback / RFC1918 / Tailscale CGNAT / .local — do not poke these.
+bool isLocalRemoteUrl(String url) {
+  final host = (Uri.tryParse(url)?.host ?? '').toLowerCase();
+  if (host.isEmpty) return false;
+  if (host == 'localhost' ||
+      host == '127.0.0.1' ||
+      host == '0.0.0.0' ||
+      host == '::1') {
+    return true;
+  }
+  if (host.endsWith('.local')) return true;
+  if (host.startsWith('192.168.') || host.startsWith('10.')) return true;
+  if (RegExp(r'^172\.(1[6-9]|2\d|3[0-1])\.').hasMatch(host)) return true;
+  // 100.64.0.0/10 (Tailscale)
+  if (RegExp(r'^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.').hasMatch(host)) {
+    return true;
+  }
+  return false;
+}
+
+/// Models that reject turning thinking off (catalog `mandatory` or a 400).
+final Set<String> kMandatoryReasoningModels = <String>{};
+
+/// DeepSeek-on-Nano `:thinking` 400: none / high / max (Discord 2026-07-18).
+/// Same pair is GLM-5.2's native ladder (Together / Z.ai). Not a universal
+/// `:thinking` menu — that suffix is Nano's "use the thinking variant" tag.
+const Set<String> kHighMaxEffortHint = {'none', 'high', 'max'};
+
+/// Kimi K2.6 official: low / high / max; thinking can be switched off.
+const Set<String> kLowHighMaxEffortHint = {'none', 'low', 'high', 'max'};
+
+/// Family hints only. `:thinking` alone is not a ladder.
 Set<String>? reasoningEffortHintForModel(String model) {
-  if (model.toLowerCase().contains(':thinking')) {
-    return kThinkingSuffixEffortHint;
+  final id = model.toLowerCase();
+  if (id.contains('deepseek') && id.contains(':thinking')) {
+    return kHighMaxEffortHint;
+  }
+  if (id.contains('glm-5.2') || id.contains('glm5.2')) {
+    return kHighMaxEffortHint;
+  }
+  if (id.contains('kimi-k2.6') || id.contains('kimi-k2-6')) {
+    return kLowHighMaxEffortHint;
   }
   return null;
 }
 
-/// Supported set for [model]: learned 400 > `:thinking` hint > null (verbatim).
+/// Supported set for [model]: learned / catalog > family hint > null.
 Set<String>? reasoningEffortSupportedFor(String model) {
   if (model.isEmpty) return null;
   return kLearnedReasoningEffortsByModel[model] ??
@@ -88,35 +152,52 @@ String wireReasoningEffort(String model, String requested) {
   return nearestReasoningEffort(requested, supported);
 }
 
-/// True when the app pick differs from what the model will receive.
-bool reasoningEffortIsRemapped(String model, String requested) {
-  if (model.isEmpty || requested.isEmpty) return false;
-  return wireReasoningEffort(model, requested) != requested;
+/// True when this model rejects turning thinking off.
+bool reasoningEffortIsMandatory(String model) =>
+    model.isNotEmpty && kMandatoryReasoningModels.contains(model);
+
+/// User asked for thinking, or the model will not allow Off.
+bool reasoningEffortThinkingOn(String model, bool requested) =>
+    requested || reasoningEffortIsMandatory(model);
+
+/// Thinking-on chips for [model], weakest → strongest. Unknown → Low/Med/High.
+List<String> reasoningEffortChipsFor(String model) {
+  final supported = reasoningEffortSupportedFor(model);
+  if (supported == null) return List<String>.from(kAppReasoningEfforts);
+  final chips = supported
+      .where((s) => s != 'none' && kReasoningEffortRank.containsKey(s))
+      .toList()
+    ..sort((a, b) =>
+        kReasoningEffortRank[a]!.compareTo(kReasoningEffortRank[b]!));
+  if (chips.isEmpty) return const <String>[];
+  return chips;
 }
 
-/// User-facing caption: what this strength becomes on the current model.
-///
-/// Empty when there is no model context or no remap.
+/// Highlight a real chip. Old saved Low/Medium snap to the nearest live one.
+String reasoningEffortDisplayedSelection(String model, String requested) {
+  final chips = reasoningEffortChipsFor(model);
+  if (chips.contains(requested)) return requested;
+  return nearestReasoningEffort(
+    requested.isEmpty ? 'medium' : requested,
+    chips.toSet(),
+  );
+}
+
+/// User-facing caption: this model's real menu (and Off, if locked).
 String reasoningEffortMappingCaption(String model, String requested) {
-  if (model.isEmpty || requested.isEmpty) return '';
+  if (model.isEmpty) return '';
+  final chips = reasoningEffortChipsFor(model);
+  final allowed = chips.map(reasoningEffortTitle).join(' · ');
+  if (reasoningEffortIsMandatory(model)) {
+    return 'This model always thinks. Strengths: $allowed.';
+  }
   final supported = reasoningEffortSupportedFor(model);
   if (supported == null) {
+    if (requested.isEmpty) return '';
     return 'Sent as ${reasoningEffortTitle(requested).toLowerCase()}. '
-        'If this model only accepts other levels, Front Porch maps to the '
-        'closest one automatically.';
+        'When we know this model\'s levels, the chips match them.';
   }
-  final wire = nearestReasoningEffort(requested, supported);
-  final allowed = supported
-      .where((s) => s != 'none')
-      .map(reasoningEffortTitle)
-      .join(' · ');
-  if (wire == requested) {
-    return 'This model accepts: $allowed. '
-        'Your pick matches — sent as ${reasoningEffortTitle(wire).toLowerCase()}.';
-  }
-  return 'This model accepts: $allowed. '
-      '${reasoningEffortTitle(requested)} → sent as '
-      '${reasoningEffortTitle(wire).toLowerCase()}.';
+  return 'This model\'s thinking levels: $allowed.';
 }
 
 /// Parse "Supported values are: none, high, max" from a provider error body.
@@ -137,8 +218,54 @@ Set<String>? supportedReasoningEffortsFromError(String msg) {
   return values.isEmpty ? null : values;
 }
 
-/// Remember a provider's supported set for [model] (process lifetime).
-void rememberReasoningEffortsForModel(String model, Set<String> supported) {
+/// Remember a provider's supported set for [model] (process + disk).
+void rememberReasoningEffortsForModel(
+  String model,
+  Set<String> supported, {
+  bool persist = true,
+}) {
   if (model.isEmpty || supported.isEmpty) return;
   kLearnedReasoningEffortsByModel[model] = Set<String>.from(supported);
+  _bumpReasoningEffortCatalog();
+  if (persist) persistReasoningEffortMenuHook?.call(model, probed: false);
+}
+
+/// Remember that [model] cannot turn thinking off.
+void rememberMandatoryReasoning(String model, {bool persist = true}) {
+  if (model.isEmpty) return;
+  if (kMandatoryReasoningModels.add(model)) {
+    _bumpReasoningEffortCatalog();
+    if (persist) persistReasoningEffortMenuHook?.call(model, probed: true);
+  }
+}
+
+/// Wired by [attachReasoningEffortMenuStore] so this file does not import disk.
+void Function(String model, {required bool probed})?
+    persistReasoningEffortMenuHook;
+
+/// Seed from an OpenRouter (or similar) `reasoning` catalog object.
+void rememberReasoningProfileFromCatalog(String model, Object? reasoning) {
+  if (model.isEmpty || reasoning is! Map) return;
+  final raw = reasoning['supported_efforts'];
+  if (raw is List) {
+    final set = raw
+        .map((e) => e.toString().toLowerCase())
+        .where(kReasoningEffortRank.containsKey)
+        .toSet();
+    if (set.isNotEmpty) rememberReasoningEffortsForModel(model, set);
+  }
+  if (reasoning['mandatory'] == true) {
+    rememberMandatoryReasoning(model);
+  } else if (reasoning.containsKey('mandatory') &&
+      kMandatoryReasoningModels.remove(model)) {
+    _bumpReasoningEffortCatalog();
+    persistReasoningEffortMenuHook?.call(model, probed: false);
+  }
+}
+
+/// Test helper: drop process-lifetime catalog state.
+void clearReasoningEffortCatalog() {
+  kLearnedReasoningEffortsByModel.clear();
+  kMandatoryReasoningModels.clear();
+  _bumpReasoningEffortCatalog();
 }

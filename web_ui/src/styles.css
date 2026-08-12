@@ -1277,7 +1277,7 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 }
 .chip-toggle.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 
-/* Thinking strength — visible Low/Medium/High with model-mapping caption */
+/* Thinking strength — chips match this model's real levels */
 .thinking-strength { margin: 10px 0 4px; display: flex; flex-direction: column; gap: 8px; }
 .thinking-strength-label {
   font-size: 0.9rem; font-weight: 600; color: var(--text);
@@ -1302,14 +1302,6 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
   font-size: 0.72rem; line-height: 1.25; opacity: 0.85;
 }
 .thinking-strength-chip.on .thinking-strength-chip-sub { opacity: 0.9; }
-.thinking-strength-chip.remapped .thinking-strength-chip-sub { font-weight: 600; }
-.thinking-strength-map-banner {
-  font-size: 0.82rem; font-weight: 600; line-height: 1.3;
-  padding: 8px 10px; border-radius: 8px;
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
-  color: var(--text);
-}
 .thinking-strength-caption { margin: 0; }
 .char-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
 .wizard-nav { display: flex; justify-content: space-between; gap: 8px; margin-top: 14px; }

@@ -207,6 +207,25 @@ class BackendFacade {
         .toList();
   }
 
+  /// Poke the provider for [model]'s real reasoning.effort menu (Nano has
+  /// none in /models). Returns chips + whether Off is locked.
+  Future<Map<String, dynamic>> reasoningMenu({
+    required String model,
+    String? apiUrl,
+    String? apiKey,
+  }) async {
+    final c = _remoteCreds(apiUrl, apiKey);
+    await probeReasoningEfforts(
+      model: model,
+      apiUrl: c.url,
+      apiKey: c.key,
+    );
+    return {
+      'efforts': reasoningEffortChipsFor(model),
+      'mandatory': reasoningEffortIsMandatory(model),
+    };
+  }
+
   /// Test the remote API connection (same credential fallback as
   /// [remoteModels]). Returns the human-readable status from the service.
   Future<String> testRemoteConnection({String? apiUrl, String? apiKey}) async {

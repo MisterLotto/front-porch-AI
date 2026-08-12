@@ -9,10 +9,12 @@ const RANK: Record<string, number> = {
   low: 2,
   medium: 3,
   high: 4,
-  max: 5,
+  xhigh: 5,
+  max: 6,
 }
 
-const THINKING_HINT = new Set(['none', 'high', 'max'])
+const HIGH_MAX = new Set(['none', 'high', 'max'])
+const LOW_HIGH_MAX = new Set(['none', 'low', 'high', 'max'])
 
 export function reasoningEffortTitle(id: string): string {
   switch (id) {
@@ -21,6 +23,7 @@ export function reasoningEffortTitle(id: string): string {
     case 'low': return 'Low'
     case 'medium': return 'Medium'
     case 'high': return 'High'
+    case 'xhigh': return 'Extra high'
     case 'max': return 'Max'
     default: return id
   }
@@ -31,13 +34,20 @@ export function reasoningEffortBlurb(id: string): string {
     case 'low': return 'Light think — faster, cheaper'
     case 'medium': return 'Balanced — default'
     case 'high': return 'Deep think — slower, richer'
+    case 'xhigh': return 'Heavier than high'
+    case 'max': return 'Full thinking budget'
+    case 'minimal': return 'Bare-minimum thinking'
     default: return ''
   }
 }
 
 function supportedFor(model: string): Set<string> | null {
   if (!model) return null
-  if (model.toLowerCase().includes(':thinking')) return THINKING_HINT
+  const id = model.toLowerCase()
+  // `:thinking` is Nano's "use the thinking variant" tag, not a ladder.
+  if (id.includes('deepseek') && id.includes(':thinking')) return HIGH_MAX
+  if (id.includes('glm-5.2') || id.includes('glm5.2')) return HIGH_MAX
+  if (id.includes('kimi-k2.6') || id.includes('kimi-k2-6')) return LOW_HIGH_MAX
   return null
 }
 
@@ -61,19 +71,40 @@ export function wireReasoningEffort(model: string, requested: string): string {
   return nearest(requested, supported)
 }
 
-export function reasoningEffortMappingCaption(model: string, requested: string): string {
-  if (!requested) return ''
+export function reasoningEffortChipsFor(model: string): string[] {
+  const supported = supportedFor(model)
+  if (!supported) return [...APP_REASONING_EFFORTS]
+  const chips = [...supported]
+    .filter((s) => s !== 'none' && s in RANK)
+    .sort((a, b) => RANK[a]! - RANK[b]!)
+  return chips.length ? chips : [...APP_REASONING_EFFORTS]
+}
+
+export function reasoningEffortDisplayedSelection(
+  model: string,
+  requested: string,
+  chips?: string[],
+): string {
+  const row = chips?.length ? chips : reasoningEffortChipsFor(model)
+  if (row.includes(requested)) return requested
+  return nearest(requested || 'medium', new Set(row))
+}
+
+export function reasoningEffortMappingCaption(
+  model: string,
+  requested: string,
+  chips?: string[],
+  mandatory?: boolean,
+): string {
+  if (!model) return ''
+  const row = chips?.length ? chips : reasoningEffortChipsFor(model)
+  const allowed = row.map(reasoningEffortTitle).join(' · ')
+  if (mandatory) return `This model always thinks. Strengths: ${allowed}.`
+  if (chips?.length) return `This model's thinking levels: ${allowed}.`
   const supported = supportedFor(model)
   if (!supported) {
-    return 'Sent as-is. If this model only accepts other levels, Front Porch maps to the closest one automatically.'
+    if (!requested) return ''
+    return `Sent as ${reasoningEffortTitle(requested).toLowerCase()}. When we know this model's levels, the chips match them.`
   }
-  const wire = nearest(requested, supported)
-  const allowed = [...supported]
-    .filter((s) => s !== 'none')
-    .map(reasoningEffortTitle)
-    .join(' · ')
-  if (wire === requested) {
-    return `This model accepts: ${allowed}. Your pick matches — sent as ${reasoningEffortTitle(wire).toLowerCase()}.`
-  }
-  return `This model accepts: ${allowed}. ${reasoningEffortTitle(requested)} → sent as ${reasoningEffortTitle(wire).toLowerCase()}.`
+  return `This model's thinking levels: ${allowed}.`
 }

@@ -55,42 +55,13 @@ class _GenerationTabState extends State<GenerationTab> {
           // ── Reasoning (thinking models — local KoboldCpp & remote) ─────
           const SectionHeader('Thinking'),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'Request thinking',
-                  style: TextStyle(color: AppColors.textPrimary(context)),
-                ),
-              ),
-              Switch(
-                value: storage.reasoningEnabled,
-                activeTrackColor: accent,
-                onChanged: (val) => storage.setReasoningEnabled(val),
-              ),
-            ],
+          ThinkingSettingsBlock(
+            enabled: storage.reasoningEnabled,
+            onEnabledChanged: storage.setReasoningEnabled,
+            effort: storage.reasoningEffort,
+            onEffortChanged: storage.setReasoningEffort,
+            modelId: storage.remoteModelName,
           ),
-          if (storage.reasoningEnabled) ...[
-            const SizedBox(height: 12),
-            ThinkingStrengthControl(
-              value: storage.reasoningEffort,
-              modelId: storage.remoteModelName,
-              onChanged: (val) => storage.setReasoningEffort(val),
-            ),
-          ] else
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                'Turn on for reasoning models so their think-steps are '
-                'captured under each reply. Strength maps to whatever '
-                'levels the model accepts (some only support high / max).',
-                style: TextStyle(
-                  color: AppColors.textTertiary(context),
-                  fontSize: 12,
-                  height: 1.35,
-                ),
-              ),
-            ),
           const SizedBox(height: 24),
 
           // ── Generation Parameters ──────────────────────────────────────

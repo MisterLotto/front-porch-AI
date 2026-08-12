@@ -11,9 +11,10 @@ import { spellCheckLabel, sortedByLabel } from '../spellCheckLabels';
 import { applySpellCheckLang } from '../spellCheckLang';
 import {
   reasoningEffortBlurb,
+  reasoningEffortChipsFor,
+  reasoningEffortDisplayedSelection,
   reasoningEffortMappingCaption,
   reasoningEffortTitle,
-  wireReasoningEffort,
 } from '../utils/reasoningEffort';
 
 // A single backend picker (replacing the old Backend + Provider dropdowns,
@@ -73,6 +74,8 @@ interface Settings {
   contextSize: number;
   reasoningEnabled: boolean;
   reasoningEffort: string;
+  reasoningMandatory?: boolean;
+  reasoningEfforts?: string[];
   generation: Gen;
   /** Dictionary tag ('en_US') or 'off'. Optional for the same reason. */
   spellCheckLanguage?: string;
@@ -132,8 +135,12 @@ export function SettingsPage() {
 
   if (!s) return <div className="centered"><div className="spinner" /></div>;
 
-  const patch = (p: Partial<Settings>) => setS({ ...s, ...p });
-  const patchGen = (p: Partial<Gen>) => setS({ ...s, generation: { ...s.generation, ...p } });
+  const patch = (p: Partial<Settings>) =>
+    setS((prev) => (prev ? { ...prev, ...p } : prev));
+  const patchGen = (p: Partial<Gen>) =>
+    setS((prev) =>
+      prev ? { ...prev, generation: { ...prev.generation, ...p } } : prev,
+    );
 
   const save = async () => {
     setSaving(true);
@@ -261,7 +268,32 @@ export function SettingsPage() {
                 apiUrl={s.remoteApiUrl}
                 apiKey={apiKey}
                 value={s.remoteModelName}
-                onChange={(id) => patch({ remoteModelName: id })}
+                onChange={(id) => {
+                  patch({ remoteModelName: id })
+                  void (async () => {
+                    try {
+                      const menu = await api.post<{
+                        efforts?: string[]
+                        mandatory?: boolean
+                      }>('/api/backend/reasoning-menu', {
+                        model: id,
+                        apiUrl: s.remoteApiUrl,
+                        ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+                      })
+                      setS((prev) =>
+                        prev && prev.remoteModelName === id
+                          ? {
+                              ...prev,
+                              reasoningEfforts: menu.efforts ?? [],
+                              reasoningMandatory: Boolean(menu.mandatory),
+                            }
+                          : prev,
+                      )
+                    } catch {
+                      /* family-hint chips stay until Save */
+                    }
+                  })()
+                }}
               />
             </label>
             {showKeyField && (
@@ -349,59 +381,66 @@ export function SettingsPage() {
           <span>Request thinking</span>
           <input
             type="checkbox"
-            checked={s.reasoningEnabled}
-            onChange={(e) => patch({ reasoningEnabled: e.target.checked })}
+            checked={Boolean(s.reasoningEnabled) || (Boolean(s.reasoningMandatory) && !s.isLocal)}
+            disabled={Boolean(s.reasoningMandatory) && !s.isLocal}
+            onChange={(e) => {
+              if (!(s.reasoningMandatory && !s.isLocal)) {
+                patch({ reasoningEnabled: e.target.checked })
+              }
+            }}
           />
         </label>
-        {s.reasoningEnabled && (
+        {s.reasoningMandatory && !s.isLocal && (
+          <p className="muted small">This model always thinks — Off is not available.</p>
+        )}
+        {(s.reasoningEnabled || (s.reasoningMandatory && !s.isLocal)) && (
           <div className="thinking-strength">
             <div className="thinking-strength-label">Thinking strength</div>
             <div className="thinking-strength-chips" role="group" aria-label="Thinking strength">
-              {(['low', 'medium', 'high'] as const).map((id) => {
-                const wire = wireReasoningEffort(s.remoteModelName ?? '', id)
-                const remapped = wire !== id
-                const on = (s.reasoningEffort || 'medium') === id
+              {(s.reasoningEfforts?.length
+                ? s.reasoningEfforts
+                : reasoningEffortChipsFor(s.isLocal ? '' : (s.remoteModelName ?? ''))
+              ).map((id) => {
+                const model = s.isLocal ? '' : (s.remoteModelName ?? '')
+                const row = s.reasoningEfforts?.length
+                  ? s.reasoningEfforts
+                  : undefined
+                const on = reasoningEffortDisplayedSelection(
+                  model,
+                  s.reasoningEffort || 'medium',
+                  row,
+                ) === id
                 return (
                   <button
                     key={id}
                     type="button"
-                    className={`thinking-strength-chip${on ? ' on' : ''}${remapped ? ' remapped' : ''}`}
+                    className={`thinking-strength-chip${on ? ' on' : ''}`}
                     onClick={() => patch({ reasoningEffort: id })}
                   >
                     <span className="thinking-strength-chip-title">
                       {reasoningEffortTitle(id)}
                     </span>
                     <span className="thinking-strength-chip-sub">
-                      {remapped
-                        ? `→ ${reasoningEffortTitle(wire)}`
-                        : reasoningEffortBlurb(id)}
+                      {reasoningEffortBlurb(id)}
                     </span>
                   </button>
                 )
               })}
             </div>
-            {wireReasoningEffort(s.remoteModelName ?? '', s.reasoningEffort || 'medium') !==
-              (s.reasoningEffort || 'medium') && (
-              <div className="thinking-strength-map-banner" role="status">
-                Maps to{' '}
-                {reasoningEffortTitle(
-                  wireReasoningEffort(s.remoteModelName ?? '', s.reasoningEffort || 'medium'),
-                )}{' '}
-                on this model
-              </div>
-            )}
             <p className="muted small thinking-strength-caption">
               {reasoningEffortMappingCaption(
-                s.remoteModelName ?? '',
+                s.isLocal ? '' : (s.remoteModelName ?? ''),
                 s.reasoningEffort || 'medium',
+                s.reasoningEfforts,
+                s.reasoningMandatory,
               )}
             </p>
           </div>
         )}
-        {!s.reasoningEnabled && (
+        {!s.reasoningEnabled && !s.reasoningMandatory && (
           <p className="muted small">
             Turn on for reasoning models so their think-steps are captured under each reply.
-            Strength maps to the levels the model accepts (some only support high / max).
+            The chips then show this model's real levels.
           </p>
         )}
         <label className="row-label">

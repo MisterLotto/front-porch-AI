@@ -28,15 +28,6 @@ import 'package:front_porch_ai/services/remote_model_info.dart';
 // RemoteModelInfo lived here for years — re-export so importers keep working.
 export 'package:front_porch_ai/services/remote_model_info.dart';
 
-/// LLM backend that connects to OpenAI-compatible APIs
-/// (OpenRouter, Nano-GPT, vLLM, LM Studio, etc).
-/// Models that reject `reasoning:{enabled:false}` because their reasoning
-/// cannot be switched off. Learned from the provider's own 400 (see the payload
-/// builder), remembered for the process so the rejection is paid once per model
-/// rather than on every eval of every turn. Static because the model outlives
-/// any one service instance — a backend switch and back must not re-learn it.
-final Set<String> _mandatoryReasoningModels = <String>{};
-
 /// Does this provider error mean "you may not switch my reasoning off"?
 ///
 /// Matched on the message rather than a status code because 400 covers every
@@ -75,6 +66,7 @@ String _remoteApiErrorMessage(String body, int statusCode) {
   return body.length > 800 ? '${body.substring(0, 800)}…' : body;
 }
 
+/// LLM backend for OpenAI-compatible APIs (OpenRouter, Nano-GPT, vLLM, …).
 class OpenRouterService extends LLMService {
   String _apiUrl;
   String _apiKey;
@@ -198,6 +190,7 @@ class OpenRouterService extends LLMService {
     if (key.isEmpty && !isLocal) return [];
 
     final client = http.Client();
+    var batched = false;
     try {
       final uri = Uri.parse('$url/models');
       debugPrint('[OpenRouter] Fetching models from: $uri');
@@ -228,6 +221,8 @@ class OpenRouterService extends LLMService {
         debugPrint('[OpenRouter] First entry type: ${data.first.runtimeType}');
         debugPrint('[OpenRouter] First entry: ${data.first}');
       }
+      beginReasoningEffortCatalogBatch();
+      batched = true;
       final models = <RemoteModelInfo>[];
 
       for (final m in data) {
@@ -252,6 +247,9 @@ class OpenRouterService extends LLMService {
               id;
         }
         if (id.isEmpty) continue;
+        if (m is Map) {
+          rememberReasoningProfileFromCatalog(id, m['reasoning']);
+        }
         final pricing = m['pricing'] as Map<String, dynamic>?;
 
         // API returns USD per token; convert to per 1M tokens for readability
@@ -285,6 +283,7 @@ class OpenRouterService extends LLMService {
       debugPrint('[OpenRouter] Error fetching models: $e');
       return [];
     } finally {
+      if (batched) endReasoningEffortCatalogBatch();
       client.close();
     }
   }
@@ -371,7 +370,7 @@ class OpenRouterService extends LLMService {
         // what actually saves money on models that honour it, and silently
         // paying for discarded reasoning tokens on every eval, forever, is a bill
         // the user never agreed to. One rejection per model is the whole cost.
-        if (_mandatoryReasoningModels.contains(modelName)) {
+        if (kMandatoryReasoningModels.contains(modelName)) {
           reasoning.remove('enabled');
         }
       }
@@ -521,9 +520,9 @@ class OpenRouterService extends LLMService {
         // without the retry the caller still loses this eval, and for the
         // reported case that is every judge on the turn the user is waiting on.
         // The rejection then costs one round trip for the life of the process.
-        if (!_mandatoryReasoningModels.contains(modelName) &&
+        if (!kMandatoryReasoningModels.contains(modelName) &&
             _isMandatoryReasoningRejection(errorMsg)) {
-          _mandatoryReasoningModels.add(modelName);
+          rememberMandatoryReasoning(modelName);
           debugPrint(
             '[RemoteAPI] $modelName cannot disable reasoning — retrying with '
             'reasoning.exclude only (remembered for this session)',

@@ -190,48 +190,20 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Text(
-                            'Request thinking',
-                            style: TextStyle(color: AppColors.textPrimary(context)),
-                          ),
-                          const Spacer(),
-                          Switch(
-                            value: _gen.resolveReasoningEnabled(storage),
-                            onChanged: (val) {
-                              setState(() => _gen.reasoningEnabled = val);
-                              _save();
-                            },
-                            activeTrackColor: AppColors.formMasterAccent,
-                          ),
-                        ],
+                      ThinkingSettingsBlock(
+                        compact: true,
+                        enabled: _gen.resolveReasoningEnabled(storage),
+                        onEnabledChanged: (val) {
+                          setState(() => _gen.reasoningEnabled = val);
+                          _save();
+                        },
+                        effort: _gen.resolveReasoningEffort(storage),
+                        onEffortChanged: (val) {
+                          setState(() => _gen.reasoningEffort = val);
+                          _save();
+                        },
+                        modelId: storage.remoteModelName,
                       ),
-                      if (_gen.resolveReasoningEnabled(storage))
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8, top: 4),
-                          child: ThinkingStrengthControl(
-                            compact: true,
-                            value: _gen.resolveReasoningEffort(storage),
-                            modelId: storage.remoteModelName,
-                            onChanged: (val) {
-                              setState(() => _gen.reasoningEffort = val);
-                              _save();
-                            },
-                          ),
-                        ),
-                      if (!_gen.resolveReasoningEnabled(storage))
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Text(
-                            'Enable to request thinking from compatible models. '
-                            'Strength maps to the levels the model accepts.',
-                            style: TextStyle(
-                              color: AppColors.textTertiary(context),
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
                       const SizedBox(height: 8),
                       Divider(color: AppColors.borderOf(context)),
                       const SizedBox(height: 8),

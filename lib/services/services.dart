@@ -59,6 +59,8 @@ export 'chat_service.dart';
 export 'backend_manager.dart';
 export 'open_router_service.dart';
 export 'reasoning_effort.dart';
+export 'reasoning_effort_probe.dart';
+export 'reasoning_effort_store.dart';
 
 // Chat domain leaves (curated high-freq per extraction policy; needs impact evaluator
 // for the consolidated eval/impact layer; direct import also supported).

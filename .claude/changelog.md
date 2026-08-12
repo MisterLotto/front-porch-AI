@@ -3,6 +3,49 @@
 
 # Changelog
 
+## 2026-08-12 — persist thinking menus + Claude review fixes
+- **Files:** `reasoning_effort_store.dart` (prefs, beta-prefixed), probe
+  `_probed` gate + persist + tick on listing-less poke, settings_facade
+  raw prefs + fire-and-forget poke after API key, remote user-send ORs
+  mandatory (Continue/evals stay off), local chips ignore leftover
+  remote model, chat settings no /models fetch, web functional patch,
+  catalog batch persist + balanced begin/end, Tailscale/LAN skip, tests.
+- **Why:** Menus died on quit; round-two review: Save must not rewrite
+  Medium→High; local Kobold must not inherit a remote chalkboard.
+
+## 2026-08-12 — feat: poke Nano for thinking chips at model pick
+- **Files:** `reasoning_effort_probe.dart` (tiny bogus-effort completion),
+  catalog tick so Settings redraws, ThinkingSettingsBlock kick, backend
+  `/api/backend/reasoning-menu` + web ModelPicker, settings save also
+  awaits the poke, tests.
+- **Why:** Nano-GPT does not advertise supported_efforts. Ask at selection
+  time and rebuild the chip row from "Supported values are: …".
+
+## 2026-08-12 — fix: `:thinking` is not DeepSeek's effort menu
+- **Files:** `reasoning_effort.dart` + web twin (family hints: DeepSeek
+  `:thinking` and GLM-5.2 → High/Max; Kimi K2.6 → Low/High/Max; bare
+  `:thinking` no longer guessed), tests.
+- **Why:** Nano's `:thinking` suffix means "use the thinking variant", not
+  "this model only accepts none/high/max". That stole Low from Kimi 2.6.
+
+## 2026-08-12 — ux: thinking chips are the model's real menu
+- **Files:** `reasoning_effort.dart` (chips-from-catalog, mandatory Off,
+  xhigh/max ranks), `thinking_settings_block.dart`, strength control,
+  OpenRouter model-list seed + shared mandatory set, generation send ORs
+  mandatory, settings facade + web Settings, tests, Rawhide.
+- **Why:** Fixed Low/Medium/High was wrong for DeepSeek (High/Max), Gemini
+  (Minimal…), Grok (xhigh, sometimes no Off). Don't remap two chips onto one
+  wire value — show the kitchen's actual sizes, lock Off when it can't decaf.
+
+## 2026-08-12 — ux: disable unsupported thinking-strength chips
+- **Files:** `reasoning_effort.dart` (native/enabled/displayed helpers + caption),
+  `thinking_strength_control.dart` (grey out remapped chips, drop "Maps to"
+  banner), generation_tab copy, web Settings +
+  `reasoningEffort.ts` + styles, tests, Rawhide.
+- **Why:** Low and Medium both mapping to High while staying selectable looked
+  like two options for the same thing. Disable the levels the model does not
+  accept; keep the send-path remap so an old saved Medium still wires as High.
+
 ## 2026-08-12 — feat(chat): .fpchat Phase 2 — ST JSONL + Growth + Objectives
 - **Files:** `fpchat_format.dart` (encode/parse ST JSONL), `fpchat_codec.dart`,
   `chat_service_sillytavern.dart` (JSONL export), `chat_service_package_extras.dart`

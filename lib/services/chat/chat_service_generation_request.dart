@@ -154,7 +154,12 @@ extension ChatServiceGenerationRequest on ChatService {
       stopSequences: stopList,
       reasoningEnabled: (_callMode || t.mode == GenerationMode.continue_)
           ? false
-          : g2.resolveReasoningEnabled(_storageService),
+          : (_llmProvider != null && !_llmProvider!.isLocal)
+              ? reasoningEffortThinkingOn(
+                  _llmProvider!.openRouterService.modelName,
+                  g2.resolveReasoningEnabled(_storageService),
+                )
+              : g2.resolveReasoningEnabled(_storageService),
       reasoningEffort: g2.resolveReasoningEffort(_storageService),
       // Force zero thinking budget on Continue (and call mode) for providers like OpenRouter/Nano-GPT.
       // This tells supported models (Kimi K2 Thinking, DeepSeek hybrid reasoning models, certain Qwen3 etc.)

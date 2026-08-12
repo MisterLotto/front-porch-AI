@@ -40,6 +40,7 @@ import 'storage/settings/memory_settings.dart';
 import 'storage/settings/lorebook_settings.dart';
 import 'storage/settings/preset_settings.dart';
 import 'desktop_spell_check_service.dart';
+import 'reasoning_effort_store.dart';
 
 class StorageService extends ChangeNotifier {
   final Completer<void> _initCompleter = Completer<void>();
@@ -866,6 +867,7 @@ class StorageService extends ChangeNotifier {
     _memorySettings.load();
     _presetSettings.load();
     _lorebookSettings.load();
+    attachReasoningEffortMenuStore(_prefs);
 
     // Ensure default immersive prompt (was in god init; now on preset)
     if (!_presetSettings.savedPrompts.any(

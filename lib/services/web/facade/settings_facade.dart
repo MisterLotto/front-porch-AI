@@ -16,6 +16,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
+
 import 'package:path/path.dart' as p;
 
 import 'package:front_porch_ai/models/models.dart';
@@ -41,7 +43,20 @@ class SettingsFacade {
 
   static const List<String> backends = ['kobold', 'openRouter', 'omlx'];
 
+  static String? _seededReasoningCatalogUrl;
+
+  void _seedReasoningCatalog() {
+    if (_llm.isLocal) return;
+    final b = _storage.backendSettings;
+    if (b.remoteApiKey.isEmpty && !isLocalRemoteUrl(b.remoteApiUrl)) return;
+    final url = b.remoteApiUrl;
+    if (_seededReasoningCatalogUrl == url) return;
+    _seededReasoningCatalogUrl = url;
+    unawaited(_llm.openRouterService.fetchAvailableModels());
+  }
+
   Map<String, dynamic> read() {
+    _seedReasoningCatalog();
     final g = _storage.generationSettings;
     final b = _storage.backendSettings;
     return {
@@ -58,6 +73,11 @@ class SettingsFacade {
       // <think> block is ever produced for the chat to show.
       'reasoningEnabled': b.reasoningEnabled,
       'reasoningEffort': b.reasoningEffort,
+      'reasoningMandatory': !_llm.isLocal &&
+          reasoningEffortIsMandatory(b.remoteModelName),
+      'reasoningEfforts': _llm.isLocal
+          ? const <String>[]
+          : reasoningEffortChipsFor(b.remoteModelName),
       'generation': {
         'temperature': g.temperature,
         'minP': g.minP,
@@ -271,7 +291,11 @@ class SettingsFacade {
     if (ctx is num) await b.setContextSize(ctx.toInt());
 
     final reasoning = body['reasoningEnabled'];
-    if (reasoning is bool) await b.setReasoningEnabled(reasoning);
+    if (reasoning is bool) {
+      final lockedOff = !reasoning &&
+          reasoningEffortIsMandatory(b.remoteModelName);
+      if (!lockedOff) await b.setReasoningEnabled(reasoning);
+    }
     final effort = body['reasoningEffort']?.toString();
     if (effort != null && effort.isNotEmpty) await b.setReasoningEffort(effort);
     if (remoteChanged) {
@@ -279,6 +303,11 @@ class SettingsFacade {
         apiUrl: b.remoteApiUrl,
         apiKey: b.remoteApiKey,
         modelName: b.remoteModelName,
+      );
+      kickReasoningEffortProbe(
+        model: b.remoteModelName,
+        apiUrl: b.remoteApiUrl,
+        apiKey: b.remoteApiKey,
       );
     }
 
