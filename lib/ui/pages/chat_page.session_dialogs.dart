@@ -38,25 +38,65 @@ extension _ChatPageSessionDialogs on _ChatPageState {
       final result = await PickerPrefs.pickFiles(
         category: PickerPrefs.catImport,
         type: FileType.custom,
-        allowedExtensions: ['json'],
+        allowedExtensions: ['fpchat', 'json', 'jsonl'],
       );
 
       if (result == null || result.files.single.path == null) return;
 
       final file = File(result.files.single.path!);
-      final jsonData = await file.readAsString();
+      final bytes = await file.readAsBytes();
 
       if (!mounted) return;
 
       final chatService = Provider.of<ChatService>(context, listen: false);
-      await chatService.importFromSillyTavern(jsonData);
+      final outcome = await chatService.importChatPackage(
+        bytes,
+        onCharacterMismatch: (packageName, activeName) async {
+          if (!mounted) return false;
+          final choice = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: AppColors.surfaceOf(ctx),
+              title: const Text('Different character'),
+              content: Text(
+                'This chat was exported for "$packageName", but the open '
+                'card is "$activeName".\n\n'
+                'Restore full Front Porch state anyway, or import dialogue only?',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Dialogue only'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.formMasterAccent,
+                    foregroundColor: AppColors.onChaosAccent,
+                  ),
+                  child: const Text('Full restore'),
+                ),
+              ],
+            ),
+          );
+          return choice ?? false;
+        },
+      );
 
       if (!mounted) return;
 
+      final msg = outcome.fullRestore
+          ? (outcome.warning != null
+                ? 'Chat imported (with note: ${outcome.warning})'
+                : 'Chat imported with full Front Porch state')
+          : (outcome.warning != null
+                ? 'Chat imported as dialogue only (${outcome.warning})'
+                : 'Chat imported (dialogue only)');
+
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Chat imported successfully!'),
-          backgroundColor: Colors.green,
+        SnackBar(
+          content: Text(msg),
+          backgroundColor: AppColors.formMasterAccent,
         ),
       );
     } catch (e) {
@@ -82,45 +122,110 @@ extension _ChatPageSessionDialogs on _ChatPageState {
   Future<void> _exportChat() async {
     try {
       final chatService = Provider.of<ChatService>(context, listen: false);
-      final jsonData = chatService.exportToSillyTavern();
-
-      if (jsonData == null) {
+      if (chatService.messages.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No chat to export'),
-            backgroundColor: Colors.orange,
+          SnackBar(
+            content: const Text('No chat to export'),
+            backgroundColor: AppColors.formMasterAccent,
           ),
         );
         return;
       }
 
-      final characterName = chatService.activeCharacter?.name ?? 'chat';
+      final mode = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.surfaceOf(ctx),
+          title: const Text('Export Chat'),
+          content: const Text(
+            'Full Front Porch keeps Realism, Needs, swipes, journal, Growth, '
+            'and objectives so you can reimport and fork mid-history.\n\n'
+            'Transcript is SillyTavern JSONL (dialogue only) for other apps.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 'transcript'),
+              child: const Text('Transcript (JSONL)'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, 'fpchat'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.formMasterAccent,
+                foregroundColor: AppColors.onChaosAccent,
+              ),
+              child: const Text('Full Front Porch'),
+            ),
+          ],
+        ),
+      );
+      if (mode == null || !mounted) return;
+
+      final characterName =
+          chatService.activeCharacter?.name ??
+          chatService.activeGroup?.name ??
+          'chat';
       final timestamp = DateTime.now()
           .toIso8601String()
           .replaceAll(':', '-')
           .split('.')
           .first;
-      final fileName = '${characterName}_$timestamp.json';
 
-      final path = await PickerPrefs.saveFile(
-        category: PickerPrefs.catExport,
-        dialogTitle: 'Export Chat',
-        fileName: fileName,
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-      );
-
-      if (path == null) return;
-
-      final file = File(path);
-      await file.writeAsString(jsonData);
+      if (mode == 'fpchat') {
+        final bytes = await chatService.exportToFpchat();
+        if (bytes == null) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('No chat to export'),
+              backgroundColor: AppColors.formMasterAccent,
+            ),
+          );
+          return;
+        }
+        final fileName = '${characterName}_$timestamp.fpchat';
+        final outPath = await PickerPrefs.saveFile(
+          category: PickerPrefs.catExport,
+          dialogTitle: 'Export Full Front Porch Chat',
+          fileName: fileName,
+          type: FileType.custom,
+          allowedExtensions: ['fpchat'],
+        );
+        if (outPath == null) return;
+        await File(outPath).writeAsBytes(bytes, flush: true);
+      } else {
+        final jsonl = chatService.exportToSillyTavern();
+        if (jsonl == null) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('No chat to export'),
+              backgroundColor: AppColors.formMasterAccent,
+            ),
+          );
+          return;
+        }
+        final fileName = '${characterName}_$timestamp.jsonl';
+        final outPath = await PickerPrefs.saveFile(
+          category: PickerPrefs.catExport,
+          dialogTitle: 'Export SillyTavern JSONL',
+          fileName: fileName,
+          type: FileType.custom,
+          allowedExtensions: ['jsonl', 'json'],
+        );
+        if (outPath == null) return;
+        await File(outPath).writeAsString(jsonl);
+      }
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Chat exported successfully!'),
-          backgroundColor: Colors.green,
+        SnackBar(
+          content: Text(
+            mode == 'fpchat'
+                ? 'Full Front Porch chat exported'
+                : 'Transcript exported',
+          ),
+          backgroundColor: AppColors.formMasterAccent,
         ),
       );
     } catch (e) {

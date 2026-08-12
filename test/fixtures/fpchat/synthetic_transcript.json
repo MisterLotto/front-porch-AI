@@ -1,0 +1,28 @@
+{
+  "chat_metadata": {
+    "note_prompt": "",
+    "note_interval": 0
+  },
+  "messages": [
+    {
+      "name": "User",
+      "is_user": true,
+      "mes": "Hello Synthetic — this is a public fixture, not a real chat."
+    },
+    {
+      "name": "Synthetic",
+      "is_user": false,
+      "mes": "Hi! I am a disposable test character. Bond and needs are fake numbers for CI."
+    },
+    {
+      "name": "User",
+      "is_user": true,
+      "mes": "Can you remember that the garden gate is blue?"
+    },
+    {
+      "name": "Synthetic",
+      "is_user": false,
+      "mes": "Yes — the garden gate is blue. (fixture line for stamp + journal tests)"
+    }
+  ]
+}

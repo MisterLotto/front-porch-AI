@@ -9,6 +9,12 @@ import { ChatColorsSettings } from '../components/ChatColorsSettings';
 import { PorchLifeSettings } from '../components/PorchLifeSettings';
 import { spellCheckLabel, sortedByLabel } from '../spellCheckLabels';
 import { applySpellCheckLang } from '../spellCheckLang';
+import {
+  reasoningEffortBlurb,
+  reasoningEffortMappingCaption,
+  reasoningEffortTitle,
+  wireReasoningEffort,
+} from '../utils/reasoningEffort';
 
 // A single backend picker (replacing the old Backend + Provider dropdowns,
 // which overlapped). Each entry maps to a real BackendType; the OpenAI-compatible
@@ -340,7 +346,7 @@ export function SettingsPage() {
           </label>
         )}
         <label className="row-label">
-          <span>Reasoning / thinking</span>
+          <span>Request thinking</span>
           <input
             type="checkbox"
             checked={s.reasoningEnabled}
@@ -348,19 +354,56 @@ export function SettingsPage() {
           />
         </label>
         {s.reasoningEnabled && (
-          <label>
-            Reasoning effort
-            <select value={s.reasoningEffort} onChange={(e) => patch({ reasoningEffort: e.target.value })}>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-            </select>
-          </label>
+          <div className="thinking-strength">
+            <div className="thinking-strength-label">Thinking strength</div>
+            <div className="thinking-strength-chips" role="group" aria-label="Thinking strength">
+              {(['low', 'medium', 'high'] as const).map((id) => {
+                const wire = wireReasoningEffort(s.remoteModelName ?? '', id)
+                const remapped = wire !== id
+                const on = (s.reasoningEffort || 'medium') === id
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    className={`thinking-strength-chip${on ? ' on' : ''}${remapped ? ' remapped' : ''}`}
+                    onClick={() => patch({ reasoningEffort: id })}
+                  >
+                    <span className="thinking-strength-chip-title">
+                      {reasoningEffortTitle(id)}
+                    </span>
+                    <span className="thinking-strength-chip-sub">
+                      {remapped
+                        ? `→ ${reasoningEffortTitle(wire)}`
+                        : reasoningEffortBlurb(id)}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            {wireReasoningEffort(s.remoteModelName ?? '', s.reasoningEffort || 'medium') !==
+              (s.reasoningEffort || 'medium') && (
+              <div className="thinking-strength-map-banner" role="status">
+                Maps to{' '}
+                {reasoningEffortTitle(
+                  wireReasoningEffort(s.remoteModelName ?? '', s.reasoningEffort || 'medium'),
+                )}{' '}
+                on this model
+              </div>
+            )}
+            <p className="muted small thinking-strength-caption">
+              {reasoningEffortMappingCaption(
+                s.remoteModelName ?? '',
+                s.reasoningEffort || 'medium',
+              )}
+            </p>
+          </div>
         )}
-        <p className="muted small">
-          Turn on for reasoning models (e.g. GLM-*:thinking) so their thinking is captured and shown
-          as a collapsible block under each reply. Off discards the reasoning.
-        </p>
+        {!s.reasoningEnabled && (
+          <p className="muted small">
+            Turn on for reasoning models so their think-steps are captured under each reply.
+            Strength maps to the levels the model accepts (some only support high / max).
+          </p>
+        )}
         <label className="row-label">
           <span>Provide periodic responses when user is AFK?</span>
           <input

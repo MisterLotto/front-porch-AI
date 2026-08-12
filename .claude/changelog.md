@@ -3,6 +3,163 @@
 
 # Changelog
 
+## 2026-08-12 — feat(chat): .fpchat Phase 2 — ST JSONL + Growth + Objectives
+- **Files:** `fpchat_format.dart` (encode/parse ST JSONL), `fpchat_codec.dart`,
+  `chat_service_sillytavern.dart` (JSONL export), `chat_service_package_extras.dart`
+  (growth/objectives pack), `chat_service_chat_package.dart` (wire),
+  session export UI (.jsonl), tests, Rawhide.
+- **Why:** Plan Phase 2 leftovers — real ST JSONL transcript; Growth rings +
+  session objectives ride the suitcase with journal.
+
+## 2026-08-12 — ux: visible Thinking strength + model mapping caption
+- **Files:** `reasoning_effort.dart` (labels + wire map, shared with remote),
+  `thinking_strength_control.dart`, generation_tab + chat_settings_dialog,
+  `web_ui` SettingsPage + reasoningEffort.ts + styles, tests, Rawhide,
+  open_router uses shared helpers.
+- **Why:** Users could not see that Low/Medium map onto a model's accepted
+  tiers (none/high/max). Chips + "Maps to High on this model" banner.
+
+## 2026-08-12 — fix(remote): :thinking effort never 400s on turn one (eb3b66f2)
+- **Files:** `open_router_service.dart` (`_wireReasoningEffort`, `:thinking`
+  hint {none,high,max}, robust error body parse, re-tier overwrite),
+  `reasoning_effort_remap_test.dart`, `docs/Rawhide.md`.
+- **Why:** Same Discord report — learn+retry alone still failed turn one as a
+  System bubble when low/medium went out first; plain-text bodies skipped
+  learn. Pre-map `:thinking` ids so first wire value is already valid.
+
+## 2026-08-12 — fix(remote): learn re-tiered reasoning.effort values from the provider's 400
+- **Files:** `lib/services/open_router_service.dart` (`_supportedEffortsByModel`
+  + `_supportedEffortsFrom` parse + `_nearestSupportedEffort` ladder;
+  payload builder substitutes once learned; generateStream learns + retries
+  once, same pattern as `_mandatoryReasoningModels`),
+  `test/services/reasoning_effort_remap_test.dart` (fake Nano-GPT 400s
+  low/medium with the exact production message; proven red with the
+  learn+retry removed), `docs/Rawhide.md` bullet.
+- **Why:** Discord report (adv997, 2026-07-18): DeepSeek v4-flash:thinking on
+  Nano-GPT now accepts only none/high/max for reasoning.effort, so the app's
+  low/medium choices failed every generation with "API error: Invalid value
+  for reasoning.effort". Hardcoding per-model tables would be stale on
+  arrival; the provider's own error lists the supported set, so learn it
+  once per model per process and remap to the closest thinking-on value.
+- **Commit:** 070fa52f
+## 2026-08-11 — test(chat): group stamp-less fork keeps live story re-anchor
+- **Files:** `test/services/chat/fpchat_group_fork_test.dart`
+- **Why:** Opus 54f49828 #1 — group live-only storyStartDate had no guard;
+  proven red when floor preferred timeSeed.storyStartDate (1887 vs 1890).
+
+## 2026-08-11 — fix(chat): fork restore always keeps live story calendar
+- **Files:** `chat_service_import_walk.dart` (1:1 + group floor use live
+  storyStartDateIso only; story_day re-applies day+period),
+  `fpchat_import_bleed_test.dart` (user re-anchor over card date),
+  `.claude/changelog.md`.
+- **Why:** Opus 87c0a041 — card storyStartDate overwrote mid-chat re-anchor
+  on stamp-less fork; live always wins on restore path.
+
+## 2026-08-11 — fix(chat): 1:1 fork never today-anchors story calendar
+- **Files:** `chat_service_import_walk.dart` (ext.storyStartDate ?? live;
+  story_day re-apply keeps anchor+period), `fpchat_import_bleed_test.dart`
+  (1:1 story_day + no-story_day anchor tests), `fpchat_group_fork_test.dart`
+  (anchor assert + group story_day).
+- **Why:** Opus c83b296f/3c1d81f8 — card-null storyStartDate today-anchored
+  stamp-less 1:1 forks; story_day path needed live anchor; tests only hit group.
+
+## 2026-08-11 — fix(chat): Opus d285304d — test gaps, story_day, dayCount num
+- **Files:** `chat_service_import_walk.dart` (split from import_seed; story_day
+  scan; keep storyStartDateIso on floor), `chat_service_import_seed.dart`
+  (seed+head only), `time_service.dart` (dayCount as num),
+  `fpchat_group_fork_test.dart` (pockets-off keep + empty timeSeed floor),
+  `chat_service.dart` (part).
+- **Why:** Re-review — neither fix had a red-able test; clock floor
+  today-anchored; standalone story_day ignored; dayCount 9.0 TypeError.
+
+## 2026-08-11 — fix(chat): Opus 462ad7ec follow-up — pockets-off + clock floor
+- **Files:** `chat_service_import_seed.dart` (stamp-less keep pockets when off;
+  day-1 floor when no stamp/timeSeed), `fpchat_group_fork_test.dart` (clock
+  pins last-roster≠nearest; stamp-less second case).
+- **Why:** Re-review of 462ad7ec — group path still erased wardrobe when
+  Pockets off; tip clock bled when no stamp/seed; prior test couldn't fail
+  the clock bug.
+
+## 2026-08-11 — fix(chat): Opus 0ca90227 1–7 — group clock, pockets, empty-safe
+- **Files:** `chat_service_import_seed.dart` (chat-scoped clock scan after
+  member loop; seedPocketsFromCards on group path; empty-list loop bound;
+  ambiguous-name → seed; pockets null only when enabled; relationship/
+  expression/needs buffer resets; drop no-op keep flags),
+  `test/services/chat/fpchat_group_fork_test.dart` (new), `docs/Rawhide.md`.
+- **Why:** Group fork used last roster stamp for clock (wrong day / day-1 on
+  rename); stamp-less wardrobes empty; RangeError trap; tip bond on duplicate
+  names; pockets erased when feature off.
+
+## 2026-08-11 — fix(chat): Opus eae4e8f2 1–7 — group fork parity, pockets, Rawhide
+- **Files:** `chat_service_import_seed.dart` (group per-member walk-back + seed;
+  pockets reset on 1:1 stamp-less), `chat_service_chat_package.dart` (image
+  name fallback keeps sid + short ext), `database.queries.memory.dart` (doc),
+  `docs/Rawhide.md`, tests (card seed 45/-20).
+- **Why:** Group stamp-less fork left tip bond in `_groupRealism`; pockets
+  disagreed stamped vs stamp-less; tests couldn't prove card seed vs zero.
+
+## 2026-08-11 — fix(chat): Opus b32789fd findings 1–11 (fork scalars + toggles)
+- **Files:** `chat_service_import_seed.dart` (`_rewindScalarsFromCardKeepingToggles`),
+  `chat_service_session_manage.dart` (comment), `database.queries.memory.dart`
+  (delete dead getEmbeddingsForSession; empty charId filter),
+  `chat_service_chat_package.dart` (image name stem/ext + import sid regex),
+  tests (bond rewound + Realism off).
+- **Why:** Stamp-less fork must reseed scalars without wiping feature toggles;
+  dead full-row embed query; group cadence capture wrong speaker.
+
+## 2026-08-11 — fix(chat): Opus 3642f748 findings 1–10 (fork toggles, embed lock)
+- **Files:** `chat_service_import_seed.dart` (fork hygiene = idle only; head
+  cadence/tier keys), `memory_service.dart` (per-session embed lock + range
+  query), `database.queries.memory.dart` (`getEmbeddingRangesForSession`),
+  `chat_service_chat_package.dart` (session-alive backfill, strip image
+  prefixes), `image_gen_service.backends.dart` (no notify on package saves),
+  tests (Realism-off stamp-less fork).
+- **Why:** Opus review — stamp-less fork reseeding wiped Objectives/Realism
+  toggles; backfill×live race could double-insert embeddings; blob load per
+  chunk; missing cadence in session head; stacked image names; orphan backfill.
+
+## 2026-08-11 — fix(chat): Muse review follow-up on import seed / RAG loop
+- **Files:** `chat_service_import_seed.dart` (no early `_isNewChat`; no
+  `_importAuthoredTask` on import), `chat_service_chat_package.dart` (backfill
+  stall bound + backoff, journal max clamp, export isolate try/catch).
+- **Why:** OpenCode Muse-glimmer review of 03d46d9a — several claims were wrong
+  (return type breakage, raw ST JSON path, part privacy) but real ones were
+  busy-yield loop, isNewChat window, authored-task microtask on import.
+
+## 2026-08-11 — fix(chat): .fpchat review findings 1–8 (images, guards, fork, RAG)
+- **Files:** `image_gen_service.backends.dart` (unique preferred names),
+  `chat_service_chat_package.dart` (symmetric group/1:1 guards, group RAG,
+  preferred image names), `chat_service_import_seed.dart` (fork hygiene split,
+  start_day_of_week), `memory_service.dart` (hasMore/aborted result + capped
+  discovery), UI snackbars AppColors, tests, `~/.grok/skills/claude` reviews
+  always opus (never fable).
+- **Why:** Second Claude review of 03d46d9a — multi-image name collision,
+  group package silent full restore, stamp-less fork wiped lineage, backfill
+  `n==0` ambiguity, O(N²) chunk scan, group RAG skip, weekday head field.
+
+## 2026-08-11 — fix(chat): review of .fpchat Phase 0/1 (arousal bleed + RAG freeze)
+- **Files:** `chat_service_import_seed.dart` (split), `chat_service_chat_package.dart`,
+  `memory_service.dart` (`maxWindows`/`shouldContinue` + int return),
+  `chat_service_turn_flow.dart` (shared RAG formatter),
+  `chat_service_sillytavern.dart` (deleted dead `importFromSillyTavern`),
+  `fpchat_format.dart` (removed unused helpers), UI snackbars → AppColors,
+  tests `fpchat_*`, `docs/Rawhide.md` (web parity deferral note).
+- **Why:** Hostile review of 675a7254 — Phase 0 missed arousal/cooldown;
+  import RAG awaited the full embed chain on the ONNX FIFO (Send could stall);
+  bleed test pinned a dead method; dual RAG formatters; stamp-key test was decoration.
+
+## 2026-08-11 — feat(chat): .fpchat dual-lane export + import bleed fix
+- **Files:** `chat_service_chat_package.dart` (new part), `fpchat_format.dart`,
+  `fpchat_codec.dart`, `chat_service.dart` (part wire), `chat_service_sillytavern.dart`,
+  `chat_service_session_manage.dart` (fork walk-back), `journal_store.dart`
+  (heat/pinned on addCard), `chat_page.session_dialogs.dart` (UI),
+  `chat.dart` barrel, tests under `test/services/chat/fpchat_*`,
+  `docs/Rawhide.md`.
+- **Why:** ST export dropped all FPAI stamps; ST import could bleed live
+  bond/trust into the new session. Dual-lane `.fpchat` zip keeps Lane A
+  ST-shaped dialogue + Lane B timeline (realism_state, session head, journal).
+  Phase 0 reseed on import; fork walks back to nearest stamp.
+
 ## 2026-08-11 — fix(host): MallocStackLogging=0 was breaking local macOS E2E
 - **Host:** `~/.zshrc` had `export MallocStackLogging=0` (and Lite/NoCompact).
   On modern macOS any *presence* of those vars makes every process print MSL

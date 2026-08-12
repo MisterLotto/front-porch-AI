@@ -22,6 +22,7 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/chat_settings_generation_section.dart';
+import 'package:front_porch_ai/ui/settings/widgets/widgets.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 class ChatSettingsDialog extends StatefulWidget {
@@ -177,13 +178,12 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Reasoning toggle — all backends. KoboldCpp honors
-                    // thinking too now (native chat_template_kwargs +
-                    // reasoning_effort in openai_chat_stream.dart), so this is
-                    // no longer remote-only.
+                    // Thinking toggle — all backends. KoboldCpp honors
+                    // thinking too (native chat_template_kwargs +
+                    // reasoning_effort in openai_chat_stream.dart).
                     ...[
                       const Text(
-                        'Reasoning',
+                        'Thinking',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: AppColors.formMasterAccent,
@@ -193,7 +193,7 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                       Row(
                         children: [
                           Text(
-                            'Request Reasoning',
+                            'Request thinking',
                             style: TextStyle(color: AppColors.textPrimary(context)),
                           ),
                           const Spacer(),
@@ -209,61 +209,23 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                       ),
                       if (_gen.resolveReasoningEnabled(storage))
                         Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Row(
-                            children: [
-                              Text(
-                                'Effort Level',
-                                style: TextStyle(color: AppColors.textSecondary(context)),
-                              ),
-                              const Spacer(),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.surfaceContainerOf(context),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: DropdownButtonHideUnderline(
-                                  child: DropdownButton<String>(
-                                    value: _gen.resolveReasoningEffort(storage),
-                                    dropdownColor:
-                                        AppColors.surfaceContainerOf(context),
-                                    style: TextStyle(color: AppColors.textPrimary(context)),
-                                    items: const [
-                                      DropdownMenuItem(
-                                        value: 'low',
-                                        child: Text('Low'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'medium',
-                                        child: Text('Medium'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'high',
-                                        child: Text('High'),
-                                      ),
-                                    ],
-                                    onChanged: (val) {
-                                      if (val != null) {
-                                        setState(
-                                          () => _gen.reasoningEffort = val,
-                                        );
-                                        _save();
-                                      }
-                                    },
-                                  ),
-                                ),
-                              ),
-                            ],
+                          padding: const EdgeInsets.only(bottom: 8, top: 4),
+                          child: ThinkingStrengthControl(
+                            compact: true,
+                            value: _gen.resolveReasoningEffort(storage),
+                            modelId: storage.remoteModelName,
+                            onChanged: (val) {
+                              setState(() => _gen.reasoningEffort = val);
+                              _save();
+                            },
                           ),
                         ),
                       if (!_gen.resolveReasoningEnabled(storage))
                         Padding(
                           padding: const EdgeInsets.only(bottom: 8),
                           child: Text(
-                            'Enable to request thinking/reasoning from compatible models',
+                            'Enable to request thinking from compatible models. '
+                            'Strength maps to the levels the model accepts.',
                             style: TextStyle(
                               color: AppColors.textTertiary(context),
                               fontSize: 12,

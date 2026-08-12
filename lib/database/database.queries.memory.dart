@@ -36,11 +36,35 @@ extension AppDatabaseMemoryQueries on AppDatabase {
     )..where((e) => e.characterId.isIn(characterIds))).get();
   }
 
-  /// Get all embeddings for a specific session.
-  Future<List<MessageEmbedding>> getEmbeddingsForSession(String sessionId) =>
-      (select(
-        messageEmbeddings,
-      )..where((e) => e.sessionId.equals(sessionId))).get();
+  /// Presence-only ranges for one session (+ optional character). Does **not**
+  /// load embedding BLOBs — used by chunked import backfill so each pass is
+  /// not O(N) blob copies into the UI isolate.
+  ///
+  /// - `characterId == null` → all characters in the session.
+  /// - `characterId` non-null (even `''`) → only that exact character id.
+  ///   Not a wildcard: empty string matches only rows stored under `''`.
+  Future<Set<(int, int)>> getEmbeddingRangesForSession(
+    String sessionId, {
+    String? characterId,
+  }) async {
+    final q = selectOnly(messageEmbeddings)
+      ..addColumns([
+        messageEmbeddings.positionStart,
+        messageEmbeddings.positionEnd,
+      ])
+      ..where(messageEmbeddings.sessionId.equals(sessionId));
+    if (characterId != null) {
+      q.where(messageEmbeddings.characterId.equals(characterId));
+    }
+    final rows = await q.get();
+    return {
+      for (final r in rows)
+        (
+          r.read(messageEmbeddings.positionStart)!,
+          r.read(messageEmbeddings.positionEnd)!,
+        ),
+    };
+  }
 
   /// Delete all embeddings for a session (cascading cleanup).
   Future<int> deleteEmbeddingsForSession(String sessionId) => (delete(

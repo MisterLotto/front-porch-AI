@@ -179,3 +179,12 @@ tools/fpzip/
 # died at GitHub's file-size wall. Never again.
 /*.pkg
 /*.dmg
+
+# Local-only live poke against a private DB copy (real chats — never share)
+test/services/chat/.local_poke/
+*.local_poke.dart
+
+# Regenerated binary zip from fpchat_synthetic_roundtrip_test (timestamps
+# change every run). The test builds bytes in-memory; keep the ST JSON only.
+test/fixtures/fpchat/synthetic.fpchat
+test/fixtures/fpchat/*.fpchat

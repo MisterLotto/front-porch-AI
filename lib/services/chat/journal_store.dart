@@ -106,6 +106,13 @@ class JournalStore {
     /// LLMerta imports). Overwrites same keys as story/kind only if the
     /// caller passes them in the map.
     Map<String, dynamic>? extraMetadata,
+
+    /// Optional heat (0–1) for package reimport / restore. Defaults to full
+    /// heat when omitted (new cards feel "just written").
+    double? heat,
+
+    /// Optional pinned flag for package reimport.
+    bool pinned = false,
     required int maxCards,
   }) async {
     final db = getDb();
@@ -143,6 +150,10 @@ class JournalStore {
           sourcePositions.isEmpty ? null : jsonEncode(sourcePositions),
         ),
         metadata: Value(meta.isEmpty ? null : jsonEncode(meta)),
+        heat: heat != null
+            ? Value(heat.clamp(0.0, 1.0))
+            : const Value.absent(),
+        pinned: Value(pinned),
       ),
     );
   }

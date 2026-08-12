@@ -244,13 +244,9 @@ extension ChatServiceTurnFlow on ChatService {
 
     final characterId = characterIdOverride ?? _getCharacterId();
 
-    // Format messages for embedding (skip hidden group state checkpoints)
-    final formatted = _messages.map((m) {
-      if (m.characterId == '__director__') {
-        return '[Director: ${m.text}]';
-      }
-      return '${m.sender}: ${m.text}';
-    }).toList();
+    // One formatter shared with import backfill (fpchat) so the corpus text
+    // is identical whether a window was first written live or after reimport.
+    final formatted = _formatMessagesForRagEmbedding(_messages);
 
     debugPrint(
       '[RAG:Chat] ▶ Triggering background embedding (session: $_currentSessionId, char: $characterId, ${formatted.length} msgs)',
@@ -263,6 +259,19 @@ extension ChatServiceTurnFlow on ChatService {
       formattedMessages: formatted,
       totalMessageCount: _messages.length,
     );
+  }
+
+  /// Canonical RAG message lines for [MemoryService.embedMessageWindow].
+  /// Live post-gen and post-import backfill MUST use this exact shape —
+  /// dedup is positional only, so a second formatter permanently splits the
+  /// corpus wording for the same session.
+  List<String> _formatMessagesForRagEmbedding(List<ChatMessage> messages) {
+    return messages.map((m) {
+      if (m.characterId == '__director__') {
+        return '[Director: ${m.text}]';
+      }
+      return '${m.sender}: ${m.text}';
+    }).toList();
   }
 
   /// Coordinator for the periodic background evals (now just Scene Guest cast

@@ -58,6 +58,7 @@ export 'kobold_service.dart';
 export 'chat_service.dart';
 export 'backend_manager.dart';
 export 'open_router_service.dart';
+export 'reasoning_effort.dart';
 
 // Chat domain leaves (curated high-freq per extraction policy; needs impact evaluator
 // for the consolidated eval/impact layer; direct import also supported).

@@ -19,11 +19,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:math' as math;
 import 'package:path/path.dart' as path;
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:front_porch_ai/app_version.dart';
 import 'package:front_porch_ai/services/kobold_service.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/capability/vision_support_resolver.dart';
@@ -59,6 +61,10 @@ part 'chat/chat_service_group_read.dart';
 part 'chat/chat_service_group_settings.dart';
 part 'chat/chat_service_growth.dart';
 part 'chat/chat_service_sillytavern.dart';
+part 'chat/chat_service_import_seed.dart';
+part 'chat/chat_service_import_walk.dart';
+part 'chat/chat_service_chat_package.dart';
+part 'chat/chat_service_package_extras.dart';
 part 'chat/chat_service_group_realism_helpers.dart';
 part 'chat/chat_service_history.dart';
 part 'chat/chat_service_group_membership.dart';

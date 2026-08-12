@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -119,8 +120,31 @@ class MemoryService extends ChangeNotifier {
   int _pendingEmbeddings = 0;
   bool _availabilityChecked = false;
 
+  /// Per-session chain so import backfill and live post-gen embed cannot both
+  /// discover the same missing window and insert duplicate rows (no unique
+  /// key on position ranges).
+  final Map<String, Future<void>> _embedChains = {};
+
   bool get isEmbedding => _isEmbedding;
   int get pendingEmbeddings => _pendingEmbeddings;
+
+  Future<T> _withSessionEmbedLock<T>(
+    String sessionId,
+    Future<T> Function() body,
+  ) async {
+    final prev = _embedChains[sessionId] ?? Future<void>.value();
+    final gate = Completer<void>();
+    _embedChains[sessionId] = gate.future;
+    await prev;
+    try {
+      return await body();
+    } finally {
+      gate.complete();
+      if (identical(_embedChains[sessionId], gate.future)) {
+        _embedChains.remove(sessionId);
+      }
+    }
+  }
 
   /// Expose the embedding service for use by other services (e.g. persona fact dedup).
   EmbeddingService get embeddingService => _embeddingService;
@@ -165,16 +189,55 @@ class MemoryService extends ChangeNotifier {
     return cleaned.substring(0, _maxEmbedChars);
   }
 
+  /// Result of one [embedMessageWindow] pass.
+  ///
+  /// - [stored] windows written this call
+  /// - [hasMore] true if missing windows remain (or pass aborted early)
+  /// - [aborted] true if [shouldContinue] returned false mid-pass
+  ///
+  /// Callers must not treat `stored == 0` alone as "done" (a paused pass and a
+  /// null-embed skip both used to return 0 and look finished).
   /// Embed a sliding window of messages and store the vectors.
   ///
   /// Called asynchronously after each message generation. Embeds messages
   /// in windows of [ragWindowSize] messages, skipping windows that are
   /// already embedded (by checking existing position ranges).
-  Future<void> embedMessageWindow({
+  ///
+  /// Optional [maxWindows] caps work so a large import backfill can yield
+  /// between chunks; the live path omits it (full pass). When set, only that
+  /// many *missing* windows are discovered per call (avoids O(N²) full-history
+  /// rescans on every chunk). Optional [shouldContinue] aborts mid-pass without
+  /// losing already-stored progress.
+  Future<({int stored, bool hasMore, bool aborted})> embedMessageWindow({
     required String sessionId,
     required String characterId,
     required List<String> formattedMessages,
     required int totalMessageCount,
+    int? maxWindows,
+    bool Function()? shouldContinue,
+  }) {
+    // Serialize discover+insert per session so import backfill and live
+    // post-gen cannot double-insert the same range (no unique DB key).
+    return _withSessionEmbedLock(
+      sessionId,
+      () => _embedMessageWindowBody(
+        sessionId: sessionId,
+        characterId: characterId,
+        formattedMessages: formattedMessages,
+        totalMessageCount: totalMessageCount,
+        maxWindows: maxWindows,
+        shouldContinue: shouldContinue,
+      ),
+    );
+  }
+
+  Future<({int stored, bool hasMore, bool aborted})> _embedMessageWindowBody({
+    required String sessionId,
+    required String characterId,
+    required List<String> formattedMessages,
+    required int totalMessageCount,
+    int? maxWindows,
+    bool Function()? shouldContinue,
   }) async {
     // Lazy availability check — run once on first use
     if (!_availabilityChecked) {
@@ -186,7 +249,7 @@ class MemoryService extends ChangeNotifier {
       debugPrint(
         '[RAG:Memory] embedMessageWindow skipped — not operational (enabled=${_storageService.ragEnabled}, available=${_embeddingService.isAvailable})',
       );
-      return;
+      return (stored: 0, hasMore: false, aborted: false);
     }
 
     debugPrint(
@@ -197,27 +260,26 @@ class MemoryService extends ChangeNotifier {
     _pendingEmbeddings++;
     notifyListeners();
 
+    var stored = 0;
+    var aborted = false;
+    var hasMore = false;
     try {
       final windowSize = _storageService.ragWindowSize;
 
-      // Get existing embeddings to avoid re-embedding. Dedup is scoped to THIS
-      // character: a single session can hold windows for more than one speaker
-      // (e.g. a 1:1 host plus a Scene Guest), and each must store its own copy
-      // under its own id so memory round-trips per character. Without the
-      // characterId filter, the second speaker's identical position range would
-      // be wrongly skipped as "already embedded".
-      final existing = await _db.getEmbeddingsForSession(sessionId);
-      final existingRanges = existing
-          .where((e) => e.characterId == characterId)
-          .map((e) => (e.positionStart, e.positionEnd))
-          .toSet();
-
-      debugPrint(
-        '[RAG:Memory] Existing embeddings: ${existing.length}, window size: $windowSize',
+      // Ranges only — never load embedding BLOBs for a presence check.
+      final existingRanges = await _db.getEmbeddingRangesForSession(
+        sessionId,
+        characterId: characterId,
       );
 
-      // Build windows from oldest to newest
+      debugPrint(
+        '[RAG:Memory] Existing ranges: ${existingRanges.length}, window size: $windowSize',
+      );
+
+      // Discover missing windows. When [maxWindows] is set, stop after finding
+      // that many candidates and remember that more may exist past the scan.
       final newWindows = <({int start, int end, String text})>[];
+      var cappedDiscovery = false;
 
       for (
         int i = 0;
@@ -235,22 +297,50 @@ class MemoryService extends ChangeNotifier {
         final cleanedText = _cleanForEmbedding(windowText);
         if (cleanedText.isEmpty) continue; // Skip if only think blocks
         newWindows.add((start: i, end: end, text: cleanedText));
+        if (maxWindows != null && newWindows.length >= maxWindows) {
+          // Peek whether any further missing range exists without cleaning.
+          for (
+            int j = i + windowSize;
+            j <= formattedMessages.length - windowSize;
+            j += windowSize
+          ) {
+            final jEnd =
+                (j + windowSize - 1).clamp(0, formattedMessages.length - 1);
+            if (!existingRanges.contains((j, jEnd))) {
+              cappedDiscovery = true;
+              break;
+            }
+          }
+          break;
+        }
       }
 
       if (newWindows.isEmpty) {
         debugPrint(
           '[RAG:Memory] No new windows to embed (all ${existingRanges.length} windows already stored)',
         );
-        return;
+        return (stored: 0, hasMore: false, aborted: false);
       }
 
       debugPrint(
-        '[RAG:Memory] ▶ Embedding ${newWindows.length} new window(s)...',
+        '[RAG:Memory] ▶ Embedding up to ${newWindows.length} window(s)'
+        '${maxWindows != null ? ' (budget $maxWindows)' : ''}'
+        '${cappedDiscovery ? ', more remain' : ''}...',
       );
 
-      // Embed each window and store
-      int stored = 0;
-      for (final window in newWindows) {
+      // Embed each window and store. Null embeds skip to the next candidate
+      // in this pass rather than treating the whole backfill as finished.
+      for (var wi = 0; wi < newWindows.length; wi++) {
+        final window = newWindows[wi];
+        if (shouldContinue != null && !shouldContinue()) {
+          aborted = true;
+          hasMore = true;
+          debugPrint(
+            '[RAG:Memory]   ⏸ Aborting mid-pass (shouldContinue=false); '
+            '$stored stored — remaining resume later',
+          );
+          break;
+        }
         debugPrint(
           '[RAG:Memory]   Window [${window.start}-${window.end}] (${window.text.length} chars)...',
         );
@@ -259,6 +349,8 @@ class MemoryService extends ChangeNotifier {
           debugPrint(
             '[RAG:Memory]   ✗ Embedding returned null for window [${window.start}-${window.end}]',
           );
+          // Still more work (this window + any after) — do not claim done.
+          hasMore = true;
           continue;
         }
 
@@ -283,16 +375,24 @@ class MemoryService extends ChangeNotifier {
         );
       }
 
+      if (!aborted) {
+        hasMore = cappedDiscovery || hasMore;
+      }
+
       debugPrint(
-        '[RAG:Memory] ── Done: $stored/${newWindows.length} windows stored ──',
+        '[RAG:Memory] ── Done: $stored stored this call '
+        '(hasMore=$hasMore aborted=$aborted) ──',
       );
     } catch (e) {
       debugPrint('[RAG:Memory] ✗ Embedding failed: $e');
+      // Fail soft: allow caller to retry later rather than claim finished.
+      hasMore = true;
     } finally {
       _pendingEmbeddings--;
       _isEmbedding = _pendingEmbeddings > 0;
       notifyListeners();
     }
+    return (stored: stored, hasMore: hasMore, aborted: aborted);
   }
 
   /// Retrieve relevant past memories for the current conversation context.

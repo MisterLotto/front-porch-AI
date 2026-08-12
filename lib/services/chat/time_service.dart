@@ -381,7 +381,8 @@ class TimeService {
       return;
     }
     final tod = state['timeOfDay'] as String?;
-    final dc = state['dayCount'] as int?;
+    // .fpchat / JSON may carry 9.0 — accept num (fork walk-back hasClock uses num).
+    final dc = (state['dayCount'] as num?)?.toInt();
     if (tod == null && dc == null) return;
     if (anchor != null) _startDate = StoryClock.dateOnly(anchor);
     // A pre-calendar snapshot says only "Day N, period P". Read it against

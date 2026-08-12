@@ -53,55 +53,43 @@ class _GenerationTabState extends State<GenerationTab> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Reasoning (thinking models — local KoboldCpp & remote) ─────
-          const SectionHeader('Reasoning'),
+          const SectionHeader('Thinking'),
           const SizedBox(height: 8),
           Row(
             children: [
-              Text(
-                'Request Reasoning',
-                style: TextStyle(color: AppColors.textPrimary(context)),
+              Expanded(
+                child: Text(
+                  'Request thinking',
+                  style: TextStyle(color: AppColors.textPrimary(context)),
+                ),
               ),
-              const Spacer(),
               Switch(
                 value: storage.reasoningEnabled,
+                activeTrackColor: accent,
                 onChanged: (val) => storage.setReasoningEnabled(val),
               ),
             ],
           ),
-          if (storage.reasoningEnabled)
-            Row(
-              children: [
-                Text(
-                  'Effort Level',
-                  style: TextStyle(color: AppColors.textSecondary(context)),
+          if (storage.reasoningEnabled) ...[
+            const SizedBox(height: 12),
+            ThinkingStrengthControl(
+              value: storage.reasoningEffort,
+              modelId: storage.remoteModelName,
+              onChanged: (val) => storage.setReasoningEffort(val),
+            ),
+          ] else
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                'Turn on for reasoning models so their think-steps are '
+                'captured under each reply. Strength maps to whatever '
+                'levels the model accepts (some only support high / max).',
+                style: TextStyle(
+                  color: AppColors.textTertiary(context),
+                  fontSize: 12,
+                  height: 1.35,
                 ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: AppColors.cardOf(context),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: storage.reasoningEffort,
-                      dropdownColor: AppColors.cardOf(context),
-                      style: TextStyle(color: AppColors.textPrimary(context)),
-                      items: const [
-                        DropdownMenuItem(value: 'low', child: Text('Low')),
-                        DropdownMenuItem(
-                          value: 'medium',
-                          child: Text('Medium'),
-                        ),
-                        DropdownMenuItem(value: 'high', child: Text('High')),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) storage.setReasoningEffort(val);
-                      },
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           const SizedBox(height: 24),
 

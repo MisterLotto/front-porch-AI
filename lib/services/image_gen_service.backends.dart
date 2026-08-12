@@ -41,7 +41,15 @@ extension ImageGenBackends on ImageGenService {
   /// Save the last generated image to disk.
   ///
   /// Returns the saved file path, or null on failure.
-  Future<String?> saveImageToDisk([Uint8List? imageBytes]) async {
+  ///
+  /// [preferredFileName] — optional basename (e.g. package import). Sanitized
+  /// and uniquified if a file already exists so back-to-back writes never
+  /// collide on the same millisecond (review 03d46d9a finding 1).
+  /// When omitted, uses `img_<ms>.png` with the same collision guard.
+  Future<String?> saveImageToDisk([
+    Uint8List? imageBytes,
+    String? preferredFileName,
+  ]) async {
     final bytes = imageBytes ?? _lastGeneratedImage;
     if (bytes == null) return null;
 
@@ -50,12 +58,32 @@ extension ImageGenBackends on ImageGenService {
       await dir.create(recursive: true);
 
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final filename = 'img_$timestamp.png';
-      final file = File(path.join(dir.path, filename));
+      var base = (preferredFileName != null && preferredFileName.trim().isNotEmpty)
+          ? path.basename(preferredFileName.trim())
+          : 'img_$timestamp.png';
+      // Strip path traversal; force a png-ish name if empty after sanitize.
+      base = base.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+      if (base.isEmpty || base == '.' || base == '..') {
+        base = 'img_$timestamp.png';
+      }
+      var file = File(path.join(dir.path, base));
+      if (await file.exists()) {
+        final stem = path.basenameWithoutExtension(base);
+        final ext = path.extension(base).isEmpty ? '.png' : path.extension(base);
+        var n = 1;
+        do {
+          file = File(path.join(dir.path, '${stem}_$n$ext'));
+          n++;
+        } while (await file.exists());
+      }
       await file.writeAsBytes(bytes);
 
-      _lastSavedPath = file.path;
-      _notify();
+      // Import/package paths pass preferredFileName — do not clobber Image
+      // Studio "last saved" or fire a notify storm (one per imported image).
+      if (preferredFileName == null || preferredFileName.trim().isEmpty) {
+        _lastSavedPath = file.path;
+        _notify();
+      }
       return file.path;
     } catch (e) {
       debugPrint('Failed to save image: $e');

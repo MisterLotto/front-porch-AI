@@ -18,61 +18,30 @@
 
 part of '../chat_service.dart';
 
-/// SillyTavern chat JSON import/export. Extracted verbatim from
-/// `chat_service.dart` (zero behaviour change) to shrink the god file. As
-/// `part of` the same library it reaches `_messages`, `_activeCharacter`,
-/// `_currentSessionId`, and `_saveChat` exactly as the in-class methods did.
+/// SillyTavern-shaped **transcript export** only.
+///
+/// Import of ST JSON / `.fpchat` is unified in [ChatService.importChatPackage]
+/// (Phase 0 reseed + Phase 1 timeline). The old `importFromSillyTavern` path
+/// was deleted so the bleed guard cannot pin a dead method while the UI
+/// routes everything through the package importer.
 extension ChatServiceSillyTavern on ChatService {
-  // Import chat from SillyTavern JSON format
-  Future<void> importFromSillyTavern(String jsonData) async {
-    if (_activeCharacter == null) throw Exception('No active character');
-
-    try {
-      final Map<String, dynamic> data = jsonDecode(jsonData);
-      final List<dynamic> messages = data['messages'] ?? [];
-
-      debugPrint(
-        '[ChatService] 🟡 importFromSillyTavern: clearing messages for import',
-      );
-      _messages.clear();
-
-      for (final msg in messages) {
-        final String name = msg['name'] ?? '';
-        final bool isUser = msg['is_user'] ?? false;
-        final String text = msg['mes'] ?? '';
-
-        _messages.add(ChatMessage(text: text, sender: name, isUser: isUser));
-      }
-
-      // Create new session for imported chat
-      _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
-      // Seed chat worlds like any other new session (Living Worlds).
-      await _seedChatWorldsForNewSession();
-      await _saveChat();
-      notifyListeners();
-    } catch (e) {
-      throw Exception('Failed to parse SillyTavern JSON: $e');
-    }
-  }
-
-  // Export current chat to SillyTavern JSON format
+  /// Export current chat as **SillyTavern JSONL** (one JSON object per line).
+  /// Dialogue only — no FPAI stamps. Use [exportToFpchat] for a full package.
+  ///
+  /// Phase 2: real `.jsonl` rather than a single JSON wrapper so ST and other
+  /// tools that expect JSONL chats can import without conversion.
   String? exportToSillyTavern() {
     if (_messages.isEmpty) return null;
-
-    final List<Map<String, dynamic>> messages = _messages.map((msg) {
-      return {
-        'name': msg.sender,
-        'is_user': msg.isUser,
-        'mes': msg.text,
-        'send_date': DateTime.now().millisecondsSinceEpoch,
-      };
-    }).toList();
-
-    final Map<String, dynamic> export = {
-      'chat_metadata': {'note_prompt': '', 'note_interval': 0},
-      'messages': messages,
-    };
-
-    return jsonEncode(export);
+    final personaName = _userPersonaService.persona.name.trim();
+    final userName = personaName.isEmpty ? 'User' : personaName;
+    final charName = _activeCharacter?.name ??
+        _activeGroup?.name ??
+        'Character';
+    return encodeSillyTavernJsonl(
+      List<ChatMessage>.from(_messages),
+      userName: userName,
+      characterName: charName,
+    );
   }
+
 }

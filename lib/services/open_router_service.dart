@@ -21,6 +21,7 @@ import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/llm_tool_parsing.dart';
+import 'package:front_porch_ai/services/reasoning_effort.dart';
 import 'package:front_porch_ai/services/reasoning_stream_wrapper.dart';
 import 'package:front_porch_ai/services/remote_model_info.dart';
 
@@ -50,6 +51,28 @@ bool _isMandatoryReasoningRejection(String msg) {
       (m.contains('mandatory') ||
           m.contains('cannot be disabled') ||
           m.contains('exclude=true'));
+}
+
+/// Pull a human error string out of a provider JSON body (or the raw body).
+/// Several Nano/OpenRouter shapes exist; we try them all so the effort
+/// learn-path is not skipped just because the envelope moved.
+String _remoteApiErrorMessage(String body, int statusCode) {
+  final fallback = 'HTTP $statusCode';
+  if (body.isEmpty) return fallback;
+  try {
+    final decoded = jsonDecode(body);
+    if (decoded is Map) {
+      final err = decoded['error'];
+      if (err is Map && err['message'] != null) {
+        return err['message'].toString();
+      }
+      if (err is String && err.isNotEmpty) return err;
+      if (decoded['message'] != null) return decoded['message'].toString();
+    }
+    if (decoded is String && decoded.isNotEmpty) return decoded;
+  } catch (_) {}
+  // Plain-text / HTML body still carries the effort rejection wording.
+  return body.length > 800 ? '${body.substring(0, 800)}…' : body;
 }
 
 class OpenRouterService extends LLMService {
@@ -315,7 +338,10 @@ class OpenRouterService extends LLMService {
         'enabled': params.reasoningEnabled,
       };
       if (params.reasoningEnabled) {
-        reasoning['effort'] = params.reasoningEffort;
+        // User setting stays in prefs; wire value may adapt (learned 400 or
+        // :thinking suffix hint — see wireReasoningEffort).
+        reasoning['effort'] =
+            wireReasoningEffort(modelName, params.reasoningEffort);
       }
       if (params.reasoningMaxTokens != null) {
         reasoning['max_tokens'] = params.reasoningMaxTokens;
@@ -489,11 +515,7 @@ class OpenRouterService extends LLMService {
 
       if (response.statusCode != 200) {
         final body = await response.stream.bytesToString();
-        String errorMsg = 'HTTP ${response.statusCode}';
-        try {
-          final errJson = jsonDecode(body);
-          errorMsg = errJson['error']?['message'] ?? errorMsg;
-        } catch (_) {}
+        final errorMsg = _remoteApiErrorMessage(body, response.statusCode);
         // A mandatory-reasoning model refusing `reasoning:{enabled:false}`.
         // Remember it and RETRY ONCE right here rather than just throwing:
         // without the retry the caller still loses this eval, and for the
@@ -508,6 +530,47 @@ class OpenRouterService extends LLMService {
           );
           yield* generateStream(params);
           return;
+        }
+        // The provider re-tiered this model's reasoning.effort values under
+        // us (DeepSeek v4-flash:thinking dropped low/medium, 2026-07-18) and
+        // its 400 names the values it still takes. Same learn-once-and-retry
+        // as the mandatory-reasoning case above: remember the supported set,
+        // let the payload builder substitute the closest one, and retry right
+        // here so the turn the user is waiting on still completes. The
+        // containsKey guard makes a second rejection for the same model
+        // throw instead of loop. Parse message AND raw body — some providers
+        // put the listing only in one of the two.
+        final supportedEfforts = supportedReasoningEffortsFromError(errorMsg) ??
+            supportedReasoningEffortsFromError(body);
+        if (supportedEfforts != null &&
+            !kLearnedReasoningEffortsByModel.containsKey(modelName)) {
+          rememberReasoningEffortsForModel(modelName, supportedEfforts);
+          debugPrint(
+            '[RemoteAPI] $modelName rejected reasoning.effort '
+            '"${params.reasoningEffort}" — provider supports '
+            '${supportedEfforts.join('/')}; retrying with '
+            '"${nearestReasoningEffort(params.reasoningEffort, supportedEfforts)}" '
+            '(remembered for this session)',
+          );
+          yield* generateStream(params);
+          return;
+        }
+        // Already learned / hinted but still rejected — allow one overwrite
+        // when the provider's new listing differs (re-tier mid-session).
+        if (supportedEfforts != null) {
+          final prev = kLearnedReasoningEffortsByModel[modelName];
+          final same = prev != null &&
+              prev.length == supportedEfforts.length &&
+              prev.containsAll(supportedEfforts);
+          if (!same) {
+            rememberReasoningEffortsForModel(modelName, supportedEfforts);
+            debugPrint(
+              '[RemoteAPI] $modelName re-tiered reasoning.effort again — '
+              'now ${supportedEfforts.join('/')}; retrying once',
+            );
+            yield* generateStream(params);
+            return;
+          }
         }
         throw Exception('API error: $errorMsg');
       }
