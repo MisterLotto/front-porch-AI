@@ -448,7 +448,12 @@ extension ChatServiceWiringInjection on ChatService {
       // user turn drops it (see _dropConsumedItemIntros). Marking here and
       // clearing there is what lets a regen rebuild reproduce the reaction.
       takePendingIntros: (charId) {
-        final list = _pendingItemIntrosOf[this]?[charId];
+        // Session filter: only intros added in THIS chat fire — an add made
+        // in another session stays queued for that chat (see the session
+        // stamp on _PendingItemIntro). Mark included only what fired.
+        final list = _pendingItemIntrosOf[this]?[charId]
+            ?.where((n) => n.session == _currentSessionId)
+            .toList();
         if (list == null || list.isEmpty) {
           return const <({String item, bool gift, PocketSection section})>[];
         }

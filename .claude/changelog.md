@@ -3,6 +3,23 @@
 
 # Changelog
 
+## 2026-08-13 — fix(pockets): hostile-review findings — session-scoped reactions + web guest-focus guard
+- **Files:** `chat_service_pockets.dart` (`_PendingItemIntro.session` stamp;
+  stale seed comment updated), `chat_service_wiring_injection.dart` (intro
+  filter on current session), `chat_tools_facade.dart` (`_isGuestFocus`:
+  snapshot hides + add/remove no-op for a focused Scene Guest in 1:1),
+  `pocket_add_intro_test.dart` (+ session-isolation guard, red-proven —
+  first red-proof attempt DIDN'T go red because an empty second-chat
+  record masked the missing filter; the card now authors an inventory).
+- **Why:** self-review of bcea783. (1) The intro queue was keyed per
+  character only — add an item, switch chats, and the surprise fired in
+  the wrong chat about an item that record never had. (2) Scene Guests
+  are in `cast` and web-focusable, and the 1:1 record accessors ignore
+  the character id, so guest-focused pocket add (new) AND the ✕ eraser
+  (pre-existing) wrote the HOST's kit under the guest's name; the
+  snapshot also displayed the host's pockets as the guest's.
+- **Commit:** (this commit)
+
 ## 2026-08-13 — feat(pockets): hand-add + user-give with the surprise Easter egg
 - **Files:** `chat_service_pockets.dart` (`addPocketItem` + `_PendingItemIntro`
   Expando queue + `pocketsFeatureEnabled` + `_dropConsumedItemIntros`),

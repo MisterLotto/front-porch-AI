@@ -174,7 +174,10 @@ class ChatToolsFacade {
       // toJsonOn, not toJson: set-aside clothing expired by the story day,
       // so the PWA never shows yesterday's outfit in the window before the
       // next pass rewrites the stored record.
-      'pockets': focusedCard == null || !_chat.pocketsFeatureEnabled
+      'pockets':
+          focusedCard == null ||
+              !_chat.pocketsFeatureEnabled ||
+              _isGuestFocus(focused)
           ? null
           : (_chat.pocketsFor(_chat.characterIdFor(focusedCard)) ?? Pockets())
                 .toJsonOn(_chat.storyDayCount),
@@ -264,6 +267,15 @@ class ChatToolsFacade {
     return null;
   }
 
+  /// A focused Scene Guest (1:1 non-host cast entry). Guests carry NO pockets
+  /// record — but the 1:1 record accessors ignore the character id (there is
+  /// only `_pockets`, the host's), so a guest-focused pocket surface would
+  /// silently read AND WRITE the host's kit under the guest's name (hostile
+  /// self-review, 2026-08-13; the ✕ had the same hole). In a group every
+  /// participant is a real member, so this is 1:1-only by construction.
+  bool _isGuestFocus(ChatParticipant? focused) =>
+      focused != null && !focused.isHost && !_chat.isGroupMode;
+
   /// Objectives block for [card] (split primary/secondary). Empty when null.
   Map<String, dynamic> _objectivesBlock(CharacterCard? card) {
     if (card == null) {
@@ -344,6 +356,10 @@ class ChatToolsFacade {
     required int index,
   }) async {
     final focused = _focusedParticipant(participantId);
+    // Guests have no record — without this, the strike lands on the HOST's
+    // kit (see _isGuestFocus). The panel is hidden for a guest focus, but
+    // the endpoint must hold the same line a stale bundle could cross.
+    if (_isGuestFocus(focused)) return;
     final card = focused?.card ?? _chat.activeCharacter;
     if (card == null) return;
     final target = switch (section) {
@@ -373,6 +389,9 @@ class ChatToolsFacade {
     bool gift = false,
   }) async {
     final focused = _focusedParticipant(participantId);
+    // Same guest guard as the eraser — an add would otherwise write the
+    // HOST's record under the guest's name.
+    if (_isGuestFocus(focused)) return;
     final card = focused?.card ?? _chat.activeCharacter;
     if (card == null) return;
     final target = switch (section) {

@@ -37,8 +37,21 @@ class _PendingItemIntro {
   final String item;
   final bool gift;
   final PocketSection section;
+
+  /// The chat the add happened in. The queue is keyed per CHARACTER, and a
+  /// character can appear in many chats — without this stamp, adding an item
+  /// and switching sessions before sending made the reaction fire in the
+  /// WRONG chat, about an item that record never had (hostile self-review,
+  /// 2026-08-13). The injection wiring filters on it; an intro from another
+  /// session stays queued and fires if the user returns to that chat.
+  final String? session;
   bool included = false;
-  _PendingItemIntro(this.item, {required this.gift, required this.section});
+  _PendingItemIntro(
+    this.item, {
+    required this.gift,
+    required this.section,
+    required this.session,
+  });
 }
 
 /// Per-service pending-intro queues, charId → intros. An [Expando] rather
@@ -117,7 +130,14 @@ extension ChatServicePockets on ChatService {
     }
     setPocketsFor(characterId, p);
     final queue = _pendingItemIntros[characterId] ??= [];
-    queue.add(_PendingItemIntro(item.display, gift: gift, section: target));
+    queue.add(
+      _PendingItemIntro(
+        item.display,
+        gift: gift,
+        section: target,
+        session: _currentSessionId,
+      ),
+    );
     // Bounded so a pile of rapid edits cannot flood the prompt: the newest
     // three reactions are plenty of theatre for one reply.
     while (queue.length > 3) {
@@ -257,8 +277,9 @@ extension ChatServicePockets on ChatService {
       if (pocketsFor(id) != null) continue;
       final seed = startingPocketsFor(c);
       // Nothing authored — leave the record ABSENT rather than empty. Every
-      // reader treats null and empty alike, but the web facade sends `null` to
-      // hide its panel, so an empty record would show an empty panel instead.
+      // reader treats null and empty alike (since the add-by-hand change the
+      // panels render for an empty record anyway when the feature is on, so
+      // this is pure tidiness now: don't persist a record nothing wrote).
       if (seed.isEmpty) continue;
       setPocketsFor(id, seed);
     }

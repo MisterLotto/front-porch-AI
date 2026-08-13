@@ -126,11 +126,15 @@ void main() {
     await db.close();
   });
 
-  CharacterCard card(String dbId) => CharacterCard(
-    name: 'Mara',
-    description: 'Exists only inside the pocket-add test.',
-    firstMessage: 'The porch light hums.',
-  )..dbId = dbId;
+  CharacterCard card(String dbId, {Map<String, dynamic>? inventory}) =>
+      CharacterCard(
+        name: 'Mara',
+        description: 'Exists only inside the pocket-add test.',
+        firstMessage: 'The porch light hums.',
+        frontPorchExtensions: inventory == null
+            ? null
+            : FrontPorchExtensions(inventory: inventory),
+      )..dbId = dbId;
 
   Future<void> drainTurn() async {
     for (
@@ -221,6 +225,51 @@ void main() {
       isNot(contains('NO memory of how it got there')),
       reason: 'a gift is the opposite fiction — she knows exactly where it '
           'came from',
+    );
+  });
+
+  test('the reaction fires in the chat the add happened in — not whichever '
+      'chat is open when the user next sends', () async {
+    // Hostile self-review find (2026-08-13): the intro queue is keyed per
+    // CHARACTER, and a character appears in many chats. Without the session
+    // stamp, add-then-switch made the NEXT chat's reply react to an item
+    // its record never had. The card MUST author an inventory here: an
+    // empty second-chat record would suppress the whole fragment and mask
+    // the missing filter (that is how this guard's first red-proof failed
+    // to go red).
+    await chat.setActiveCharacter(
+      card('char-padd-4', inventory: {'carrying': ['sun hat']}),
+    );
+    final id = chat.characterIdFor(chat.activeCharacter!);
+    final firstSession = chat.currentSessionId!;
+
+    await chat.addPocketItem(
+      id,
+      section: PocketSection.carrying,
+      name: 'brass key',
+    );
+
+    // A second chat with the same character, opened before the reaction ran.
+    await chat.startNewChat();
+    expect(chat.currentSessionId, isNot(firstSession));
+    await chat.sendMessage('Fresh porch, fresh start.');
+    await drainTurn();
+    expect(
+      llm.chatPrompts.last,
+      isNot(contains('NO memory of how it got there')),
+      reason: 'the add belongs to the FIRST chat — reacting here would have '
+          'her baffled by an item this record does not hold',
+    );
+
+    // Back in the original chat, the queued reaction still fires.
+    await chat.loadSession(firstSession);
+    await chat.sendMessage('Anything new?');
+    await drainTurn();
+    expect(
+      llm.chatPrompts.last,
+      contains('NO memory of how it got there'),
+      reason: 'returning to the chat the add happened in must still pay off '
+          'the queued reaction',
     );
   });
 
