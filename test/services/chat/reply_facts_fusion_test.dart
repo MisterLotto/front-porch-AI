@@ -256,13 +256,20 @@ void main() {
     // Structural, and labelled as such: the ORDER (prefetch before the three
     // passes, carrier cleared after them) is the part a green unit suite
     // cannot see, exactly like the afterglow placement guards next door.
+    //
+    // ANCHOR RENAME (2026-08-12, with the Continue incremental-scoring
+    // change): the passes now take `scoredReply` — the full reply on a
+    // normal turn, the NEW text only on Continue — so the old
+    // `(finalResponse)` anchors no longer exist in the source. The ordering
+    // property these tests pin is unchanged and still asserted verbatim;
+    // only the anchor strings moved with the argument they name.
     final postgen = File(
       'lib/services/chat/chat_service_generation_postgen.dart',
     ).readAsStringSync();
 
     test('the prefetch runs before the first consumer', () {
-      final prefetch = postgen.indexOf('_prefetchReplyFacts(finalResponse)');
-      final climax = postgen.indexOf('_runClimaxPass(finalResponse)');
+      final prefetch = postgen.indexOf('_prefetchReplyFacts(scoredReply)');
+      final climax = postgen.indexOf('_runClimaxPass(scoredReply)');
       expect(prefetch, greaterThan(-1));
       expect(climax, greaterThan(-1));
       expect(
@@ -274,8 +281,9 @@ void main() {
     });
 
     test('the carrier is cleared inside the same phase', () {
-      final pockets = postgen.indexOf('_runPocketsPass(finalResponse)');
+      final pockets = postgen.indexOf('_runPocketsPass(\n              scoredReply,');
       final clear = postgen.indexOf('_replyFactsRaw = null;', pockets);
+      expect(pockets, greaterThan(-1));
       expect(
         clear,
         greaterThan(pockets),

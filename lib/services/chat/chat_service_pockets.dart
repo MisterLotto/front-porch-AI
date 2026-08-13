@@ -161,7 +161,19 @@ extension ChatServicePockets on ChatService {
   /// switched on. The eval leaf itself consults no settings — that separation
   /// is what stops a second gate appearing somewhere later and disagreeing
   /// with this one.
-  Future<void> _runPocketsPass(String reply) async {
+  ///
+  /// [asContinuation]: the Continue button's incremental run — [reply] is the
+  /// NEW text only (the first half was bookkept when the reply was first
+  /// generated). Ops apply on top of the current record exactly like any
+  /// other exchange extension; what changes is the stamps: the message's
+  /// existing `pockets_before` is PRESERVED (it holds the turn's true
+  /// pre-state — overwriting it with the mid-turn record would make regen
+  /// and tail-delete rewind to the middle of the turn), new transfer
+  /// recipients union into it, and receipts append instead of replacing.
+  Future<void> _runPocketsPass(
+    String reply, {
+    bool asContinuation = false,
+  }) async {
     if (!_storageService.realismSettings.pocketsEnabled) return;
     if (reply.trim().isEmpty) return;
 
@@ -329,20 +341,72 @@ extension ChatServicePockets on ChatService {
     final msg = _messages.isNotEmpty ? _messages.last : null;
     if (msg != null && !msg.isUser) {
       if (receipts.isNotEmpty) {
-        msg.metadata = {...?msg.metadata, 'pocket_changes': receipts};
+        final prior = asContinuation
+            ? (msg.metadata?['pocket_changes'] as List?)?.whereType<String>()
+            : null;
+        msg.metadata = {
+          ...?msg.metadata,
+          'pocket_changes': [...?prior, ...receipts],
+        };
       }
-      final beforeStamp = <String, dynamic>{
-        'char': charId,
-        'record': beforeJson,
-      };
-      if (othersBefore.isNotEmpty) beforeStamp['others'] = othersBefore;
-      msg.metadata = {...?msg.metadata, 'pockets_before': beforeStamp};
+      final existingBefore = msg.metadata?['pockets_before'];
+      if (asContinuation &&
+          existingBefore is Map &&
+          existingBefore['char'] == charId) {
+        // The first half already stamped the turn's true pre-state — keep
+        // it. Only NEW transfer recipients union in (their pre-continuation
+        // kit IS their pre-turn kit: the first half never touched them, or
+        // they are already stamped and the first stamp wins).
+        if (othersBefore.isNotEmpty) {
+          final prior = (existingBefore['others'] as List?) ?? const [];
+          final priorChars = <Object?>{
+            for (final o in prior)
+              if (o is Map) o['char'],
+          };
+          msg.metadata = {
+            ...?msg.metadata,
+            'pockets_before': {
+              ...existingBefore,
+              'others': [
+                ...prior,
+                for (final ob in othersBefore)
+                  if (!priorChars.contains(ob['char'])) ob,
+              ],
+            },
+          };
+        }
+      } else {
+        // Normal turn — or a continuation whose first half applied no ops
+        // and therefore never stamped: the record was still the turn's
+        // pre-state when this pass captured beforeJson, so writing it now
+        // is the same truth.
+        final beforeStamp = <String, dynamic>{
+          'char': charId,
+          'record': beforeJson,
+        };
+        if (othersBefore.isNotEmpty) beforeStamp['others'] = othersBefore;
+        msg.metadata = {...?msg.metadata, 'pockets_before': beforeStamp};
+      }
       final afterMeta = <String, dynamic>{
         ...?msg.activeMetadata,
         'pockets_after': record.toJson(),
       };
-      if (othersAfter.isNotEmpty) {
-        afterMeta['pockets_after_others'] = othersAfter;
+      // After-stamps carry each recipient's CURRENT kit: this pass's
+      // recipients replace their old entry; first-half recipients this pass
+      // did not touch keep theirs (their kit has not changed since).
+      final priorAfterOthers = asContinuation
+          ? (msg.activeMetadata?['pockets_after_others'] as List?)
+          : null;
+      if (othersAfter.isNotEmpty || (priorAfterOthers?.isNotEmpty ?? false)) {
+        final newChars = <Object?>{
+          for (final oa in othersAfter) oa['char'],
+        };
+        afterMeta['pockets_after_others'] = [
+          ...?priorAfterOthers?.where(
+            (o) => o is Map && !newChars.contains(o['char']),
+          ),
+          ...othersAfter,
+        ];
       }
       msg.activeMetadata = afterMeta;
       await _saveChat();

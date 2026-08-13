@@ -37,9 +37,13 @@ extension ChatServiceClimax on ChatService {
   /// Ask whether the reply narrated the character's own climax, and start the
   /// refractory if it did.
   ///
-  /// Skipped on Continue by its caller, exactly as the needs checks are: a
-  /// continuation extends the same exchange, and re-reading it would restart a
-  /// refractory that is already running.
+  /// On Continue the caller passes the NEW text only (2026-08-12; the pass
+  /// used to be skipped outright): a climax the first half already registered
+  /// is not re-claimed by its aftermath, and one the continuation adds
+  /// finally starts its refractory. `applyClimaxEffects` is absolute
+  /// (remaining = turns, arousal = 0), so even a re-affirmation cannot
+  /// stack; the metadata guard below keeps the FIRST reading's
+  /// pre-climax arousal, because by the second reading it is already 0.
   Future<void> _runClimaxPass(String reply) async {
     if (!_afterglowActive) return;
     if (reply.trim().isEmpty) return;
@@ -72,9 +76,11 @@ extension ChatServiceClimax on ChatService {
     if (_messages.isNotEmpty && !_messages.last.isUser) {
       final msg = _messages.last;
       final meta = Map<String, dynamic>.from(msg.activeMetadata ?? {});
-      meta['climax_triggered'] = true;
-      meta['pre_climax_arousal'] = preClimaxArousal;
-      msg.swipeMetadata[msg.swipeIndex] = meta;
+      if (meta['climax_triggered'] != true) {
+        meta['climax_triggered'] = true;
+        meta['pre_climax_arousal'] = preClimaxArousal;
+        msg.swipeMetadata[msg.swipeIndex] = meta;
+      }
     }
     _nsfwService.applyClimaxEffects(turns: turns);
 

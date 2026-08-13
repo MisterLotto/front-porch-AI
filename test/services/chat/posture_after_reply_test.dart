@@ -52,7 +52,8 @@
 //     → the reply-window, regen and group guards go red
 //   * put the posture ask back into the pre-generation clock prompt
 //     → the "clock no longer asks" guard goes red
-//   * drop the Continue skip → the Continue guard goes red
+//   * restore the old Continue skip (score '' on continue_) → the Continue
+//     guard goes red (contract reversed 2026-08-12 — see that test's note)
 //   * drop the spatialStance line from the post-gen snapshot restamp
 //     → the regen-rewind guard goes red
 //   * drop setGroupSpatialStance from the per-speaker persist
@@ -322,23 +323,46 @@ void main() {
   );
 
   test(
-    'Continue extends the same exchange and does not re-run the pass',
+    'Continue re-asks — a continuation that moves her moves the stance',
     () async {
-      await boot(['*She settles on the windowsill.*', ' *And stays there.*']);
+      // CONTRACT REVERSED 2026-08-12 (maintainer-directed). This test used
+      // to pin "Continue does not re-run the pass", and that skip was the
+      // teleport hole reborn through one button: a continuation that walked
+      // her to the porch left next turn's "Position:" line asserting the
+      // windowsill — the exact bug that moved this pass post-generation in
+      // the first place. Continue now runs the same post-gen family on the
+      // NEW text only (double-apply impossible; posture is absolute anyway),
+      // so the old "exactly one pass" assertion is false by design, not
+      // merely inconvenient. The replacement pins both halves of the new
+      // contract: the pass fires once more, and the continuation's room is
+      // what sticks.
+      await boot([
+        '*She settles on the windowsill.*',
+        ' *Then drifts out to the porch after all.*',
+      ]);
       await chat.setActiveCharacter(porchCard('Nia', 'char-posture-cont'));
 
       await chat.sendMessage('Where did you get to?');
       expect(llm.postureAfterReply, hasLength(1));
+      expect(
+        chat.relationshipService.spatialStance,
+        'sitting on the windowsill',
+      );
 
       await chat.continueGeneration();
 
       expect(
         llm.postureAfterReply,
-        hasLength(1),
+        hasLength(2),
         reason:
-            'a continuation is the same exchange — re-asking would spend a '
-            'second call to re-answer a question already answered, exactly '
-            'as the needs checks, climax and pockets passes skip it',
+            'the continuation is new reply text the pre-continue pass never '
+            'saw — skipping it is how she teleported back to the windowsill '
+            'on the next turn',
+      );
+      expect(
+        chat.relationshipService.spatialStance,
+        'leaning on the porch rail',
+        reason: 'the position she establishes via Continue must stick',
       );
     },
     timeout: const Timeout(Duration(minutes: 2)),

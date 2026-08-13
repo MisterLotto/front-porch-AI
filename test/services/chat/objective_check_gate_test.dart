@@ -159,9 +159,13 @@ void main() {
       final postgen = File(
         'lib/services/chat/chat_service_generation_postgen.dart',
       ).readAsStringSync();
+      // Anchors renamed (finalResponse → scoredReply) 2026-08-12 with the
+      // Continue incremental-scoring change; the concurrency property this
+      // pins is unchanged and asserted verbatim.
       final wait = postgen.indexOf('Future.wait');
-      final climax = postgen.indexOf('_runClimaxPass(finalResponse)');
+      final climax = postgen.indexOf('_runClimaxPass(scoredReply)');
       expect(wait, greaterThan(-1));
+      expect(climax, greaterThan(-1));
       expect(
         wait,
         lessThan(climax),
@@ -169,8 +173,8 @@ void main() {
             'sequential re-ordering quietly doubles post-gen latency on '
             'remote backends',
       );
-      expect(postgen, contains('_runPostGenNeedsChecks(finalResponse),'));
-      expect(postgen, contains('_prefetchReplyFacts(finalResponse)'));
+      expect(postgen, contains('_runPostGenNeedsChecks(scoredReply),'));
+      expect(postgen, contains('_prefetchReplyFacts(scoredReply)'));
     });
   });
 }

@@ -208,13 +208,34 @@ extension ChatServiceGenerationPostGen on ChatService {
             }
           }
 
-          // Skipped on Continue for the same reason: this applies THIS
-          // exchange's scene impact (needs deltas, climax/sexual/daily
-          // checks), and the exchange already had it applied when the reply
-          // was first generated. Running it again applied a second set of
-          // deltas in both 1:1 and group — invisible to the user, because
-          // the chips are not re-attached on a continuation.
-          if (t.mode != GenerationMode.continue_) {
+          // On Continue the SAME family runs on the NEW text only — an
+          // incremental extension of the exchange, not a second scoring of
+          // it. The blanket skip this replaces (2026-08-12) existed because
+          // re-reading the FULL reply applied the first half's deltas a
+          // second time; scoring only the continuation makes a double-apply
+          // impossible by construction while events the user paid a
+          // Continue for — she sets the keys down, moves to the swing,
+          // finishes the meal — finally reach the bookkeeping. The evals
+          // keep full context either way: each gets recentExchange(), and
+          // the write-back above already put the whole continued reply into
+          // the last message, so the fragment is never read blind.
+          // Arithmetic stays exact: needs_pre_turn_vector + re-computed
+          // chips still equals the live vector (the chip helper measures
+          // live-minus-stamp, so the merge is free), and pockets keeps the
+          // ORIGINAL pre-turn stamp so regen/tail-delete rewind to the true
+          // base (see _runPocketsPass's asContinuation).
+          // Guest-authored tail: a Continue of a Scene Guest's message must
+          // score NOTHING — the speaker resolution falls back to the host in
+          // 1:1, so the guest's words would mutate the host's pockets, needs
+          // and stance. (Guest TURNS never reach here — guestSpeaker != null
+          // skips this whole block — but continueGeneration re-enters with
+          // guestSpeaker null.) Pre-change the blanket skip masked this.
+          final scoredReply = t.mode == GenerationMode.continue_
+              ? (_isGuestAuthoredMessage(t.streamTarget)
+                    ? ''
+                    : newPart.trim())
+              : finalResponse;
+          if (scoredReply.isNotEmpty) {
             // The needs-impact eval and the fused reply-facts fetch run
             // CONCURRENTLY (same pattern as the pre-generation 4-eval block,
             // same stagger so KoboldCpp's FIFO queue sees them in intended
@@ -231,21 +252,25 @@ extension ChatServiceGenerationPostGen on ChatService {
             // no-op and each pass fires its own call exactly as before. See
             // ReplyFactsEval for the composition rules.
             await Future.wait([
-              _runPostGenNeedsChecks(finalResponse),
+              _runPostGenNeedsChecks(scoredReply),
               Future<void>.delayed(
                 _kEvalDispatchStagger,
-              ).then((_) => _prefetchReplyFacts(finalResponse)),
+              ).then((_) => _prefetchReplyFacts(scoredReply)),
             ]);
-            // Pockets & Wardrobe — its own pass, skipped on Continue for the
-            // SAME reason as the needs checks above: a continuation extends
-            // this exchange rather than being a new one, and re-reading it
-            // would apply the same item changes twice (she would pick the
-            // keys up again). Answers to its own switch and nothing else.
             // Afterglow. Reads the reply that was just written, which is why
-            // it lives here and not on the pre-generation judges. Skipped on
-            // Continue for the same reason the needs checks are.
-            await _runClimaxPass(finalResponse);
-            await _runPocketsPass(finalResponse);
+            // it lives here and not on the pre-generation judges. On Continue
+            // it reads only the new text — a climax the first half already
+            // registered is not re-claimed by its aftermath, and one the
+            // continuation adds finally counts.
+            await _runClimaxPass(scoredReply);
+            // Pockets & Wardrobe — its own pass; answers to its own switch
+            // and nothing else. asContinuation preserves the message's
+            // original pockets_before stamp (the turn's true pre-state) and
+            // appends receipts instead of replacing them.
+            await _runPocketsPass(
+              scoredReply,
+              asContinuation: t.mode == GenerationMode.continue_,
+            );
             // Spatial stance — where this reply LEFT her. Third of the same
             // family, and it belongs here for the identical reason: a
             // position the character establishes in her own words cannot be
@@ -272,7 +297,7 @@ extension ChatServiceGenerationPostGen on ChatService {
             // `_saveChat` below, putting the write back outside any save and
             // recreating the bug this block was rewritten to fix. Same
             // reasoning, same phase, same awaiting as its two siblings above.
-            if (finalResponse.isNotEmpty) {
+            {
               final fused = _replyFactsRaw;
               if (fused != null) {
                 // The fused call already asked "where did this reply leave
@@ -329,8 +354,14 @@ extension ChatServiceGenerationPostGen on ChatService {
           // EVERY speaker gets them (group auto-advance, /speak, chime-ins)
           // — and regens too: a regen replays the turn in normal mode, and
           // the swipe-merge copies these chips onto the accepted swipe.
-          // The ONE chip source. Continue never re-attaches.
-          if (t.mode == GenerationMode.normal) {
+          // The ONE chip source. Continue re-attaches whenever its
+          // incremental pass ran: the helper measures live-vector minus the
+          // message's own needs_pre_turn_vector, so the recomputed chip IS
+          // the merged whole-turn delta — stale first-half chips would
+          // misreport the turn the moment the continuation moved a need.
+          if (t.mode == GenerationMode.normal ||
+              (t.mode == GenerationMode.continue_ &&
+                  scoredReply.isNotEmpty)) {
             _attachNeedsDeltaChipToLastMessage();
           }
 
@@ -357,9 +388,10 @@ extension ChatServiceGenerationPostGen on ChatService {
           // Moving the save out of the chip helper and putting it here costs
           // the same one write per turn it always did, and now it covers
           // everything the phase produced instead of one feature's slice.
-          // Skipped on Continue with the passes themselves: a continuation
-          // re-runs none of them, so there is nothing new to write.
-          if (t.mode != GenerationMode.continue_) {
+          // A continuation persists too whenever its incremental pass ran —
+          // the needs/climax/pockets/stance it just wrote would otherwise
+          // ride memory only until some later turn happened to save.
+          if (t.mode != GenerationMode.continue_ || scoredReply.isNotEmpty) {
             await _saveChat();
             notifyListeners();
           }

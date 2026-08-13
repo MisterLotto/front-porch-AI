@@ -3,6 +3,28 @@
 
 # Changelog
 
+## 2026-08-12 — feat(chat): Continue scores its new text — post-gen passes no longer skip it
+- **Files:** `lib/services/chat/chat_service_generation_postgen.dart`
+  (`scoredReply` = newPart on continue_, full reply otherwise; chips +
+  phase persist now fire on continue when the pass ran; guest-tail
+  continue scores nothing), `chat_service_pockets.dart`
+  (`_runPocketsPass(asContinuation:)` — preserve `pockets_before`, union
+  transfer recipients, append receipts), `chat_service_climax.dart`
+  (keep the FIRST `pre_climax_arousal` stamp), CLAUDE.md tracing section,
+  docs/Rawhide.md; new `test/services/chat/continue_postgen_test.dart`
+  (4 guards, each proven red); anchor renames with dated rationale in
+  reply_facts_fusion / objective_check_gate / realism_shared_prefix /
+  afterglow_independence tests; the posture Continue pin REVERSED in
+  posture_after_reply_test (maintainer-directed contract change).
+- **Why:** maintainer report — Continue was invisible to every
+  reply-reading eval, permanently (each pass only reads the newest
+  reply). Incremental scoring of the new text makes double-apply
+  impossible while keys-set-down/moves/meals/climaxes arriving via
+  Continue finally reach the bookkeeping. Inter-char feelings,
+  promise/debt, periodic evals stay new-turn-only (delta heuristics, no
+  stamp).
+- **Commit:** (this commit)
+
 ## 2026-08-12 — persist thinking menus + Claude review fixes
 - **Files:** `reasoning_effort_store.dart` (prefs, beta-prefixed), probe
   `_probed` gate + persist + tick on listing-less poke, settings_facade

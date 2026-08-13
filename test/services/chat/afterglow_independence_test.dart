@@ -138,11 +138,15 @@ void main() {
         File('lib/services/chat/$name').readAsStringSync();
 
     test('the pass is called from the post-generation phase', () {
+      // Anchor renamed (finalResponse → scoredReply) 2026-08-12 with the
+      // Continue incremental-scoring change; the placement rule this pins
+      // is unchanged — scoredReply is the just-written reply text (full on
+      // a normal turn, the new part on Continue).
       expect(
         read('chat_service_generation_postgen.dart'),
-        contains('_runClimaxPass(finalResponse)'),
-        reason: 'finalResponse is the reply that was just written — the only '
-            'thing there is to judge',
+        contains('_runClimaxPass(scoredReply)'),
+        reason: 'scoredReply is the reply text that was just written — the '
+            'only thing there is to judge',
       );
     });
 

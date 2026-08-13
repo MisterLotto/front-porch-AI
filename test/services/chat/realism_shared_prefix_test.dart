@@ -196,11 +196,14 @@ void main() {
     });
 
     test('the reply-readers fire from the post-generation phase', () {
+      // Anchors renamed (finalResponse → scoredReply) 2026-08-12 with the
+      // Continue incremental-scoring change; the phase-placement rule this
+      // pins ("no evals can change from pre to post") is unchanged.
       for (final replyReader in const [
-        '_runClimaxPass(finalResponse)',
-        '_runPocketsPass(finalResponse)',
-        '_runPostGenNeedsChecks(finalResponse)',
-        '_prefetchReplyFacts(finalResponse)',
+        '_runClimaxPass(scoredReply)',
+        '_runPocketsPass(',
+        '_runPostGenNeedsChecks(scoredReply)',
+        '_prefetchReplyFacts(scoredReply)',
       ]) {
         expect(postGen, contains(replyReader));
       }
