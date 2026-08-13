@@ -165,19 +165,19 @@ class ChatToolsFacade {
             }(),
       // Pockets & Wardrobe for the focused participant. Same record and same
       // per-character resolution the desktop sidebar reads, so the two
-      // surfaces cannot disagree about what she is holding. Absent when the
-      // switch is off, so the web panel vanishes rather than going stale.
-      // The switch check lives in pocketsFor now, so `null` here still means
-      // both "no focused participant" and "feature off" — and the web panel
-      // still vanishes rather than going stale.
+      // surfaces cannot disagree about what she is holding. Absent (null)
+      // when the switch is off or nothing is focused, so the web panel
+      // vanishes rather than going stale. Feature ON with no record sends an
+      // EMPTY record instead of null (2026-08-13, add-by-hand parity): the
+      // panel must render its add row so the FIRST item can be added — the
+      // same off-absent / on-even-when-empty gate the desktop sidebar got.
       // toJsonOn, not toJson: set-aside clothing expired by the story day,
       // so the PWA never shows yesterday's outfit in the window before the
       // next pass rewrites the stored record.
-      'pockets': focusedCard == null
+      'pockets': focusedCard == null || !_chat.pocketsFeatureEnabled
           ? null
-          : _chat
-                .pocketsFor(_chat.characterIdFor(focusedCard))
-                ?.toJsonOn(_chat.storyDayCount),
+          : (_chat.pocketsFor(_chat.characterIdFor(focusedCard)) ?? Pockets())
+                .toJsonOn(_chat.storyDayCount),
       'time': {
         'timeOfDay': time.timeOfDay,
         'dayCount': time.dayCount,
@@ -357,6 +357,36 @@ class ChatToolsFacade {
       _chat.characterIdFor(card),
       section: target,
       index: index,
+    );
+    _notify();
+  }
+
+  /// Add one pocket item by hand from the web panel — the other half of the
+  /// eraser, delegating to the SAME [ChatService.addPocketItem] the desktop
+  /// dialog calls (gift → her hands + she knows it came from the user;
+  /// otherwise the surprise Easter egg). Same section strings, same
+  /// silent-no-op contract for a stale bundle.
+  Future<void> addPocketItem({
+    String? participantId,
+    required String section,
+    required String name,
+    bool gift = false,
+  }) async {
+    final focused = _focusedParticipant(participantId);
+    final card = focused?.card ?? _chat.activeCharacter;
+    if (card == null) return;
+    final target = switch (section) {
+      'worn' => PocketSection.worn,
+      'carrying' => PocketSection.carrying,
+      'set_aside' => PocketSection.setAside,
+      _ => null,
+    };
+    if (target == null || name.trim().isEmpty) return;
+    await _chat.addPocketItem(
+      _chat.characterIdFor(card),
+      section: target,
+      name: name,
+      gift: gift,
     );
     _notify();
   }

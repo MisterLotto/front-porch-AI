@@ -18,6 +18,36 @@
 
 part of '../chat_service.dart';
 
+/// One-shot introduction for an item the USER put into a character's kit from
+/// the sidebar (maintainer feature, 2026-08-13). Two flavors, opposite
+/// fictions:
+///
+///  * [gift] — the user handed it over in-scene. The character accepts it
+///    KNOWING where it came from.
+///  * not a gift — the user conjured it out-of-band (the Easter egg): the
+///    character notices something she cannot account for and reacts with
+///    surprise ("how did I end up with this?").
+///
+/// Injected once beside the inventory fragment; `included` is set when a
+/// prompt actually carried it, and consumed intros are dropped at the top of
+/// the NEXT user turn — not at build time — so a regenerate of the reacting
+/// reply reproduces the same reaction (the regen law: identical inputs,
+/// identical turn).
+class _PendingItemIntro {
+  final String item;
+  final bool gift;
+  final PocketSection section;
+  bool included = false;
+  _PendingItemIntro(this.item, {required this.gift, required this.section});
+}
+
+/// Per-service pending-intro queues, charId → intros. An [Expando] rather
+/// than a ChatService field only because the shell rides the 1,000-line
+/// ratchet's edge (same precedent as `_historyAnchorOf`); per-instance,
+/// garbage-collected with the service, invisible to golden fakes.
+final Expando<Map<String, List<_PendingItemIntro>>> _pendingItemIntrosOf =
+    Expando();
+
 /// The Pockets & Wardrobe post-generation pass — the one place the eval is
 /// fired and its result stored.
 ///
@@ -25,6 +55,86 @@ part of '../chat_service.dart';
 /// generation pipeline, because the pipeline part is already long and this is
 /// self-contained: read the speaker's record, ask what changed, write it back.
 extension ChatServicePockets on ChatService {
+  Map<String, List<_PendingItemIntro>> get _pendingItemIntros =>
+      _pendingItemIntrosOf[this] ??= {};
+
+  /// The one Pockets switch, exposed for UI gating. [pocketsFor] returning
+  /// null cannot distinguish "feature off" (panel absent) from "no record
+  /// yet" (panel present with just the add affordance) — this can.
+  bool get pocketsFeatureEnabled =>
+      _storageService.realismSettings.pocketsEnabled;
+
+  /// Put one item INTO a character's kit by hand — the other half of the ✕
+  /// eraser, from the same sidebar panel (and the web tools panel).
+  ///
+  /// [gift] is the in-fiction path: the user hands the thing over, it lands
+  /// in her CARRYING list regardless of which section the panel had open
+  /// (you hand someone a sweater; you don't dress them in it), and the next
+  /// reply has her accept it knowing who it came from. Without [gift] the
+  /// item is added out-of-band to [section], and the next reply has her
+  /// SURPRISED by something she cannot explain — see [_PendingItemIntro].
+  ///
+  /// The eval recognizes either immediately because the record IS its ground
+  /// truth: the very next bookkeeping prompt lists the item in her kit.
+  Future<void> addPocketItem(
+    String characterId, {
+    required PocketSection section,
+    required String name,
+    bool gift = false,
+  }) async {
+    // Same single switch every pockets surface answers to.
+    if (!_storageService.realismSettings.pocketsEnabled) return;
+    // Same "name (state)" chip convention the character editor teaches.
+    final item = PocketItem.parseDisplay(name);
+    if (item.isEmpty) return;
+    final p = pocketsFor(characterId) ?? Pockets();
+    // Expire first, exactly like the eraser: the stored list must match the
+    // day-filtered view the user was looking at.
+    p.expireSetAside(storyDayCount);
+    final target = gift ? PocketSection.carrying : section;
+    switch (target) {
+      case PocketSection.worn:
+        p.worn.add(item);
+        while (p.worn.length > kMaxWorn) {
+          p.worn.removeAt(0);
+        }
+      case PocketSection.carrying:
+        p.carrying.add(item);
+        while (p.carrying.length > kMaxCarrying) {
+          p.carrying.removeAt(0);
+        }
+      case PocketSection.setAside:
+        // Possession semantics on purpose: a hand-placed thing must not
+        // evaporate at the next story morning the way set-aside CLOTHING
+        // does — the user put it there; only the user (or the story) moves
+        // it.
+        p.setAside.add(
+          SetAsideItem(item, clothing: false, day: storyDayCount),
+        );
+        while (p.setAside.length > kMaxSetAside) {
+          p.setAside.removeAt(0);
+        }
+    }
+    setPocketsFor(characterId, p);
+    final queue = _pendingItemIntros[characterId] ??= [];
+    queue.add(_PendingItemIntro(item.display, gift: gift, section: target));
+    // Bounded so a pile of rapid edits cannot flood the prompt: the newest
+    // three reactions are plenty of theatre for one reply.
+    while (queue.length > 3) {
+      queue.removeAt(0);
+    }
+    await _saveChat();
+    notifyListeners();
+  }
+
+  /// Drop intros a generated reply already reacted to. Called at the top of
+  /// the next USER turn (beside seedPocketsFromCards) rather than at prompt
+  /// build, so regenerating the reacting reply reproduces the reaction.
+  void _dropConsumedItemIntros() {
+    for (final list in _pendingItemIntros.values) {
+      list.removeWhere((n) => n.included);
+    }
+  }
   /// Strike one item off by hand. The detection eval is a model doing
   /// bookkeeping; when it misses, this is what stops a wrong entry becoming
   /// permanent. Routed through the same setter the pass uses, so there is no

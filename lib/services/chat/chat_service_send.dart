@@ -86,6 +86,11 @@ extension ChatServiceSend on ChatService {
     // the pass that used to do it runs after the reply exists, so the first
     // real answer was generated blind to what she was wearing.
     seedPocketsFromCards();
+    // Hand-added item reactions the previous reply already played out are
+    // done; ones still pending (never made it into a prompt) stay queued for
+    // THIS turn. Cleared here, not at prompt build, so a regenerate of the
+    // reacting reply reproduces the reaction.
+    _dropConsumedItemIntros();
 
     // A new message while an /image prompt review is parked cancels it —
     // the desktop dialog is modal, but the web modal can be typed around.

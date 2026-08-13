@@ -184,6 +184,55 @@ function NumField({
   );
 }
 
+/** Hand-add row for Pockets & Wardrobe (desktop dialog parity, 2026-08-13).
+ *  "Give" hands the item over in-scene — it lands in her hands and she knows
+ *  it came from you. "Add" is the quiet drop (the Easter egg): it lands in
+ *  the chosen section and her next reply is surprised to find it. Item text
+ *  follows the same "name (state)" convention as everywhere else. */
+function PocketAddRow({
+  onAdd,
+}: {
+  onAdd: (section: string, name: string, gift: boolean) => void;
+}) {
+  const [name, setName] = useState('');
+  const [section, setSection] = useState('carrying');
+  const submit = (gift: boolean) => {
+    const n = name.trim();
+    if (!n) return;
+    // A gift lands in her hands regardless of the selected section — you
+    // hand someone a sweater, you don't dress them in it (desktop rule).
+    onAdd(gift ? 'carrying' : section, n, gift);
+    setName('');
+  };
+  return (
+    <div className="pocket-add">
+      <input
+        value={name}
+        placeholder="brass key (scuffed)"
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && submit(false)}
+      />
+      <select value={section} onChange={(e) => setSection(e.target.value)}>
+        <option value="worn">Wearing</option>
+        <option value="carrying">Carrying</option>
+        <option value="set_aside">Set aside</option>
+      </select>
+      <button
+        title="Slip it in quietly — she'll be surprised to find it"
+        onClick={() => submit(false)}
+      >
+        Add
+      </button>
+      <button
+        title="Hand it over in-scene — she'll know it came from you"
+        onClick={() => submit(true)}
+      >
+        Give
+      </button>
+    </div>
+  );
+}
+
 /** Scene-time periods + their single-letter dot labels (mirror the desktop
  *  realism_section _timeDotLabel exactly: D / M / LM / A / E / N). */
 const TIME_DOTS: [string, string][] = [
@@ -253,6 +302,11 @@ export function ChatTools({
   // surface). The endpoint answers with the fresh snapshot.
   const pocketRemove = (section: string, index: number) =>
     apply(api.post<ToolsState>(`/api/chat/tools/pocket-remove${q}`, { section, index }));
+  // The other half of the eraser: hand-add an item (desktop dialog parity,
+  // 2026-08-13). gift=true is handed over in-scene (she knows it came from
+  // you); gift=false is the Easter egg (she's surprised to find it).
+  const pocketAdd = (section: string, name: string, gift: boolean) =>
+    apply(api.post<ToolsState>(`/api/chat/tools/pocket-add${q}`, { section, name, gift }));
   // Same endpoint, string value — the one tri-state control (see the route's
   // oneShotMode case). Falls back to the legacy bool on an older facade.
   const oneShotMode = t?.realismOneShotMode ?? (t?.realismOneShotEval ? 'on' : 'auto');
@@ -494,14 +548,16 @@ export function ChatTools({
       )}
 
       {(() => {
-        const worn = t.pockets?.worn ?? [];
-        const carrying = t.pockets?.carrying ?? [];
+        // `pockets` is null when the feature is OFF (panel absent) and an
+        // EMPTY object when it is on with nothing recorded — the panel still
+        // renders then, so the first item can be hand-added (desktop parity).
+        if (!t.pockets) return null;
+        const worn = t.pockets.worn ?? [];
+        const carrying = t.pockets.carrying ?? [];
         // Parked in the scene, still theirs — greyed so "not on her" reads
         // at a glance (the desktop sidebar's Set aside group, same rules;
         // the server already filtered out clothing that expired overnight).
-        const setAside = t.pockets?.set_aside ?? [];
-        if (worn.length === 0 && carrying.length === 0 && setAside.length === 0)
-          return null;
+        const setAside = t.pockets.set_aside ?? [];
         const label = (i: { name: string; state?: string }) =>
           i.state ? `${i.name} (${i.state})` : i.name;
         return (
@@ -565,6 +621,7 @@ export function ChatTools({
                   </div>
                 </>
               )}
+              <PocketAddRow onAdd={pocketAdd} />
             </div>
           </details>
         );

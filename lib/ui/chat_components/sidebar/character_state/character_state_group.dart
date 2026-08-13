@@ -18,8 +18,11 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:front_porch_ai/services/chat/chat.dart' show AmbitionService;
+import 'package:front_porch_ai/services/chat/chat.dart'
+    show AmbitionService, Pockets;
 import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/ui/dialogs/dialogs.dart'
+    show showPocketItemDialog;
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import '../porch_accordion.dart';
@@ -271,9 +274,15 @@ class _CharacterStateGroupState extends State<CharacterStateGroup> {
           if (!widget.isGroup && chat.activeCharacter != null) ...[
             Builder(
               builder: (context) {
-                final id = chat.characterIdFor(chat.activeCharacter!);
-                final p = chat.pocketsFor(id);
-                if (p == null || p.isEmpty) return const SizedBox.shrink();
+                // Feature off = panel absent. With it ON the panel renders
+                // even for a missing/empty record, so the FIRST item can be
+                // added by hand (2026-08-13 — the panel used to be ✕-only).
+                if (!chat.pocketsFeatureEnabled) {
+                  return const SizedBox.shrink();
+                }
+                final card = chat.activeCharacter!;
+                final id = chat.characterIdFor(card);
+                final p = chat.pocketsFor(id) ?? Pockets();
                 return Padding(
                   padding: const EdgeInsets.only(top: 10),
                   child: PocketsRow(
@@ -281,6 +290,19 @@ class _CharacterStateGroupState extends State<CharacterStateGroup> {
                     day: chat.storyDayCount,
                     onRemove: ({required section, required index}) =>
                         chat.removePocketItem(id, section: section, index: index),
+                    onAdd: () async {
+                      final add = await showPocketItemDialog(
+                        context,
+                        characterName: card.name,
+                      );
+                      if (add == null) return;
+                      await chat.addPocketItem(
+                        id,
+                        section: add.section,
+                        name: add.name,
+                        gift: add.gift,
+                      );
+                    },
                   ),
                 );
               },

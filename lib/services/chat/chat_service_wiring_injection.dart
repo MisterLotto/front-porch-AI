@@ -444,6 +444,23 @@ extension ChatServiceWiringInjection on ChatService {
       // remembering to ask (the sidebar forgot).
       getPockets: pocketsFor,
       getCurrentDay: () => _timeService.dayCount,
+      // Get-and-mark: a prompt that carries an intro flags it so the NEXT
+      // user turn drops it (see _dropConsumedItemIntros). Marking here and
+      // clearing there is what lets a regen rebuild reproduce the reaction.
+      takePendingIntros: (charId) {
+        final list = _pendingItemIntrosOf[this]?[charId];
+        if (list == null || list.isEmpty) {
+          return const <({String item, bool gift, PocketSection section})>[];
+        }
+        for (final n in list) {
+          n.included = true;
+        }
+        return [
+          for (final n in list)
+            (item: n.item, gift: n.gift, section: n.section),
+        ];
+      },
+      getUserName: () => _userPersonaService.persona.name,
     );
   }
 

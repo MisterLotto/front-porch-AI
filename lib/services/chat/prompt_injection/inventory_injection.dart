@@ -56,6 +56,27 @@ class InventoryInjection with SpeakerCardResolver {
   /// the 2026-08-11 ruling) without mutating the record from a build path.
   final int Function() getCurrentDay;
 
+  /// One-shot reactions to items the USER hand-added from the panel — a gift
+  /// she accepts knowingly, or a conjured thing she is surprised by (the
+  /// Easter egg). GET-AND-MARK: the wiring flags returned intros as included
+  /// so the turn after the reaction drops them; a regen rebuild returns the
+  /// same list again (still queued), which is what makes the reaction
+  /// reproducible. Section is where the item LANDED (gifts land in hands).
+  final List<({String item, bool gift, PocketSection section})> Function(
+    String characterId,
+  )
+  takePendingIntros;
+
+  /// Who handed the gift over — named so the model attributes it correctly.
+  final String Function() getUserName;
+
+  /// No-op defaults so the many direct test constructions (and any caller
+  /// that has no hand-add surface) stay source-compatible — additive change.
+  static List<({String item, bool gift, PocketSection section})> _noIntros(
+    String _,
+  ) => const [];
+  static String _defaultUserName() => 'The user';
+
   InventoryInjection({
     required this.getIsGroupNonObserverMode,
     required this.getCurrentSpeakerIdForRealism,
@@ -64,6 +85,8 @@ class InventoryInjection with SpeakerCardResolver {
     required this.getActiveCharacter,
     required this.getPockets,
     required this.getCurrentDay,
+    this.takePendingIntros = _noIntros,
+    this.getUserName = _defaultUserName,
   });
 
   /// Hard ceiling on the fragment, so a scene that accumulated a lot of clutter
@@ -96,12 +119,40 @@ class InventoryInjection with SpeakerCardResolver {
         'Set aside nearby, still ${card.name}\'s: '
             '${aside.map((e) => e.item.display).join(', ')}.',
     ];
-    if (sentences.isEmpty) return '';
+    // Hand-added item reactions ride OUTSIDE the record cap below: they are
+    // one-shot (three at most, see the queue bound) and being truncated away
+    // is the one thing a reaction must never be. Gift vs conjured are
+    // opposite fictions — attribution vs bafflement — and the wording keeps
+    // them apart on purpose.
+    final intros = <String>[
+      for (final n in takePendingIntros(getCharacterIdFromCard(card)))
+        n.gift
+            ? '${getUserName()} has just handed ${card.name} ${n.item} — '
+                  'she accepts it in-scene, knowing it came from '
+                  '${getUserName()}.'
+            : '${card.name} has just noticed ${n.item} '
+                  '${switch (n.section) {
+                    PocketSection.worn => 'on her person',
+                    PocketSection.carrying => 'among her things',
+                    PocketSection.setAside => 'sitting nearby',
+                  }} '
+                  'with NO memory of how it got there — she is genuinely '
+                  'surprised and reacts to it in-scene ("how did I end up '
+                  'with ${n.item}?").',
+    ];
+
+    if (sentences.isEmpty && intros.isEmpty) return '';
 
     // Stated as fact rather than instruction. "Keep this consistent" invites a
     // model to narrate an inventory check; naming what she has lets it simply
     // be true, which is what the feature is for.
     final out = sentences.join(' ');
-    return out.length <= maxChars ? out : '${out.substring(0, maxChars)}…';
+    final capped = out.length <= maxChars
+        ? out
+        : '${out.substring(0, maxChars)}…';
+    return [
+      if (capped.isNotEmpty) capped,
+      ...intros,
+    ].join(' ');
   }
 }

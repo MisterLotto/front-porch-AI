@@ -3,6 +3,28 @@
 
 # Changelog
 
+## 2026-08-13 — feat(pockets): hand-add + user-give with the surprise Easter egg
+- **Files:** `chat_service_pockets.dart` (`addPocketItem` + `_PendingItemIntro`
+  Expando queue + `pocketsFeatureEnabled` + `_dropConsumedItemIntros`),
+  `chat_service_send.dart` (consume-clear beside seedPocketsFromCards),
+  `inventory_injection.dart` (one-shot gift/surprise notes, optional
+  callbacks with no-op defaults), `chat_service_wiring_injection.dart`
+  (get-and-mark closure), `ui/dialogs/pocket_item_dialog.dart` (new) +
+  dialogs barrel, `pockets_row.dart` (+ onAdd, renders when empty),
+  `character_state_group.dart` + `group_member_card.dart` (off-absent /
+  on-even-when-empty gate + dialog wiring), web: `chat_tools_facade.dart`
+  (addPocketItem + empty-record snapshot when feature on),
+  `chat_tools_routes.dart` (/pocket-add), `ChatTools.tsx` (PocketAddRow) +
+  `styles.css` + rebuilt bundle. Tests: `pocket_add_intro_test.dart` (3,
+  red-proven ×2: intros neutered, consumption unwired),
+  `pocket_item_dialog_test.dart` (3, red-proven: gift flag swap).
+- **Why:** maintainer feature — the panel was ✕-only. Give = in-fiction
+  hand-over (she knows); quiet add = the Easter egg (she's surprised:
+  "how did I end up with $Item?"). Note is one-shot, regen-honest
+  (cleared at next user turn, not at prompt build). Eval recognition is
+  free: the record is the bookkeeping prompt's ground truth.
+- **Commit:** (this commit)
+
 ## 2026-08-12 — feat(chat): Continue scores its new text — post-gen passes no longer skip it
 - **Files:** `lib/services/chat/chat_service_generation_postgen.dart`
   (`scoredReply` = newPart on continue_, full reply otherwise; chips +

@@ -37,6 +37,7 @@ class WebChatToolsRoutes {
     router.get('/api/chat/tools/belongings', _belongings);
     router.post('/api/chat/tools/promise-resolve', _promiseResolve);
     router.post('/api/chat/tools/pocket-remove', _pocketRemove);
+    router.post('/api/chat/tools/pocket-add', _pocketAdd);
     router.post('/api/chat/tools/to-story', _toStory);
     router.post('/api/chat/tools/summary', _summary);
     router.post('/api/chat/tools/objective', _objective);
@@ -75,6 +76,20 @@ class WebChatToolsRoutes {
       participantId: request.url.queryParameters['participant'],
       section: body['section']?.toString() ?? '',
       index: (body['index'] as num?)?.toInt() ?? -1,
+    );
+    return JsonResponse.ok(_snapshot(request));
+  }
+
+  /// Add one pocket item by hand — the web half of the desktop add dialog
+  /// (parity, 2026-08-13). `gift: true` = handed over in-scene; otherwise the
+  /// surprise Easter egg fires on the next reply.
+  Future<shelf.Response> _pocketAdd(shelf.Request request) async {
+    final body = await _json(request);
+    await _facade.addPocketItem(
+      participantId: request.url.queryParameters['participant'],
+      section: body['section']?.toString() ?? '',
+      name: body['name']?.toString() ?? '',
+      gift: body['gift'] == true,
     );
     return JsonResponse.ok(_snapshot(request));
   }

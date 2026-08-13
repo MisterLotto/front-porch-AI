@@ -2331,6 +2331,39 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 }
 .pocket-x:hover { color: var(--muted); }
 
+/* Hand-add row — desktop add-dialog parity (2026-08-13). */
+.pocket-add { display: flex; gap: 5px; margin-top: 6px; align-items: center; }
+.pocket-add input {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+.pocket-add select {
+  font-size: 11px;
+  padding: 3px 4px;
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+.pocket-add button {
+  font-size: 11px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.pocket-add button:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
 .ambition-bar-fill {
   height: 100%;
   background: var(--accent);

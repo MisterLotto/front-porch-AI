@@ -22,6 +22,8 @@ import 'package:flutter/material.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/chat/chat.dart';
+import 'package:front_porch_ai/ui/dialogs/dialogs.dart'
+    show showPocketItemDialog;
 import 'package:front_porch_ai/ui/pages/pages.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/theme/tier_colors.dart';
@@ -481,9 +483,13 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                   // here; wardrobe simply never followed them across.
                   Builder(
                     builder: (context) {
+                      // Same off-absent / on-even-when-empty gate as the 1:1
+                      // panel (2026-08-13, add-by-hand parity).
+                      if (!chat.pocketsFeatureEnabled) {
+                        return const SizedBox.shrink();
+                      }
                       final id = chat.characterIdFor(widget.character);
-                      final p = chat.pocketsFor(id);
-                      if (p == null || p.isEmpty) return const SizedBox.shrink();
+                      final p = chat.pocketsFor(id) ?? Pockets();
                       return Padding(
                         padding: const EdgeInsets.only(top: 8),
                         child: PocketsRow(
@@ -495,6 +501,19 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                                 section: section,
                                 index: index,
                               ),
+                          onAdd: () async {
+                            final add = await showPocketItemDialog(
+                              context,
+                              characterName: widget.character.name,
+                            );
+                            if (add == null) return;
+                            await chat.addPocketItem(
+                              id,
+                              section: add.section,
+                              name: add.name,
+                              gift: add.gift,
+                            );
+                          },
                         ),
                       );
                     },

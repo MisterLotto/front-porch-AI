@@ -46,11 +46,17 @@ class PocketsRow extends StatelessWidget {
   final void Function({required PocketSection section, required int index})?
   onRemove;
 
+  /// Open the add-item flow (the parent owns the dialog and the write, same
+  /// as the eraser). When set, the panel renders even for an EMPTY record —
+  /// otherwise the very first item could never be added by hand.
+  final VoidCallback? onAdd;
+
   const PocketsRow({
     super.key,
     required this.pockets,
     required this.day,
     this.onRemove,
+    this.onAdd,
   });
 
   @override
@@ -61,18 +67,41 @@ class PocketsRow extends StatelessWidget {
     // Wearing row goes empty, and an empty row with no explanation looks
     // exactly like the missed-update bug this feature used to have.
     final aside = [for (final e in pockets.setAsideOn(day)) e.item];
-    if (pockets.worn.isEmpty && pockets.carrying.isEmpty && aside.isEmpty) {
+    if (pockets.worn.isEmpty &&
+        pockets.carrying.isEmpty &&
+        aside.isEmpty &&
+        onAdd == null) {
       return const SizedBox.shrink();
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Pockets & Wardrobe',
-          style: TextStyle(
-            fontSize: 11,
-            color: AppColors.textSecondary(context),
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Pockets & Wardrobe',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary(context),
+              ),
+            ),
+            if (onAdd != null)
+              InkWell(
+                onTap: onAdd,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 2,
+                  ),
+                  child: Icon(
+                    Icons.add_circle_outline,
+                    size: 13,
+                    color: AppColors.porchAmberOf(context),
+                  ),
+                ),
+              ),
+          ],
         ),
         const SizedBox(height: 4),
         if (pockets.worn.isNotEmpty)
