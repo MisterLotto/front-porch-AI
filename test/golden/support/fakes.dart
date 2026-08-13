@@ -349,6 +349,12 @@ class FakeChatService extends ChangeNotifier implements ChatService {
   String characterIdFor(CharacterCard c) => c.name;
   @override
   Pockets? pocketsFor(String characterId) => null;
+  // Feature off in every golden scene, so the panel (which since the
+  // add-by-hand change renders even for an EMPTY record when the switch is
+  // on) stays absent and existing goldens are unmoved — same contract as
+  // the null pocketsFor above.
+  @override
+  bool get pocketsFeatureEnabled => false;
 
   // Objective surface — empty by default (renders the "propose an objective" UI).
   @override

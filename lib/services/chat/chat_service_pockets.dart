@@ -71,12 +71,6 @@ extension ChatServicePockets on ChatService {
   Map<String, List<_PendingItemIntro>> get _pendingItemIntros =>
       _pendingItemIntrosOf[this] ??= {};
 
-  /// The one Pockets switch, exposed for UI gating. [pocketsFor] returning
-  /// null cannot distinguish "feature off" (panel absent) from "no record
-  /// yet" (panel present with just the add affordance) — this can.
-  bool get pocketsFeatureEnabled =>
-      _storageService.realismSettings.pocketsEnabled;
-
   /// Put one item INTO a character's kit by hand — the other half of the ✕
   /// eraser, from the same sidebar panel (and the web tools panel).
   ///

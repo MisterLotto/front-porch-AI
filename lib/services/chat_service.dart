@@ -656,6 +656,16 @@ class ChatService extends ChangeNotifier {
     return _groupRealism[characterId]?.pockets;
   }
 
+  /// The one Pockets switch, exposed for UI gating. [pocketsFor] returning
+  /// null cannot distinguish "feature off" (panel absent) from "no record
+  /// yet" (panel present with just the add affordance) — this can. A CLASS
+  /// member, not an extension one, on purpose: the sidebar calls it in
+  /// build(), and the golden FakeChatService can only override class members
+  /// (its pocketsFor note documents the same contract — this getter riding
+  /// the extension is exactly how bcea783 turned a sidebar golden red).
+  bool get pocketsFeatureEnabled =>
+      _storageService.realismSettings.pocketsEnabled;
+
   /// The stable id for a card, exposed so UI can look a record up without
   /// reaching for a private. Same resolver every Pockets surface uses.
   String characterIdFor(CharacterCard c) => _getCharacterIdFromCard(c);
