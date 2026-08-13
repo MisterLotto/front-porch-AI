@@ -24,13 +24,16 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/chargen/chargen.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
-/// Old-vs-new review of an AI Enhance run. Every rewritten field is shown
-/// beside the original, editable, with a per-field "use this" switch.
-/// Saving creates a NEW `<Name> (Enhanced)` character (via the same
-/// duplicate machinery as the context menu's Duplicate action) — the original
-/// is never written, and Discard writes nothing at all.
-class EnhanceReviewPage extends StatefulWidget {
-  const EnhanceReviewPage({
+/// Old-vs-new review of an AI Enhance run — the Review step's body inside
+/// [EnhanceWizardPage] (reworked from the old standalone EnhanceReviewPage;
+/// the wizard owns the chrome and the nav buttons now). Every rewritten
+/// field is shown beside the original, editable, with a per-field "use this"
+/// switch. [EnhanceReviewBodyState.save] creates a NEW `<Name> (Enhanced)`
+/// character (via the same duplicate machinery as the context menu's
+/// Duplicate action) and returns it — the original is never written, and
+/// backing out writes nothing at all.
+class EnhanceReviewBody extends StatefulWidget {
+  const EnhanceReviewBody({
     super.key,
     required this.original,
     required this.enhanced,
@@ -42,10 +45,11 @@ class EnhanceReviewPage extends StatefulWidget {
   final EnhanceSelection selection;
 
   @override
-  State<EnhanceReviewPage> createState() => _EnhanceReviewPageState();
+  State<EnhanceReviewBody> createState() => EnhanceReviewBodyState();
 }
 
-class _EnhanceReviewPageState extends State<EnhanceReviewPage> {
+/// Public so the wizard can drive [save] through a page-owned GlobalKey.
+class EnhanceReviewBodyState extends State<EnhanceReviewBody> {
   final _controllers = <String, TextEditingController>{};
   final _use = <String, bool>{};
   late final List<bool> _useLoreEntry;
@@ -88,8 +92,11 @@ class _EnhanceReviewPageState extends State<EnhanceReviewPage> {
     super.dispose();
   }
 
-  Future<void> _save() async {
-    if (_saving) return;
+  /// Create the "(Enhanced)" duplicate, apply the accepted fields, and
+  /// return the saved copy — or null on failure (surfaced via SnackBar).
+  /// Re-entrant-safe: a second call while saving returns null immediately.
+  Future<CharacterCard?> save() async {
+    if (_saving) return null;
     setState(() => _saving = true);
     try {
       final repo = Provider.of<CharacterRepository>(context, listen: false);
@@ -131,17 +138,15 @@ class _EnhanceReviewPageState extends State<EnhanceReviewPage> {
       }
 
       await repo.updateCharacter(copy);
-      if (!mounted) return;
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('"${copy.name}" added to your library.')),
-      );
+      if (mounted) setState(() => _saving = false);
+      return copy;
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) return null;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not save the enhanced character: $e')),
       );
+      return null;
     }
   }
 
@@ -165,88 +170,22 @@ class _EnhanceReviewPageState extends State<EnhanceReviewPage> {
         _lorebookSection(),
     ];
 
-    return Scaffold(
-      backgroundColor: AppColors.backgroundOf(context),
-      appBar: AppBar(
-        backgroundColor: AppColors.surfaceOf(context),
-        foregroundColor: AppColors.textPrimary(context),
-        title: Row(
-          children: [
-            Icon(Icons.auto_awesome,
-                color: AppColors.porchAmberOf(context), size: 20),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Review: ${widget.original.name} (Enhanced)',
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text(
-            'Nothing is saved yet. Edit anything below, untick what you don\'t '
-            'want, then Save to add the enhanced copy to your library. Your '
-            'original ${widget.original.name} stays exactly as-is either way.',
-            style: TextStyle(
-              fontSize: 12,
-              color: AppColors.textSecondary(context),
-            ),
-          ),
-          const SizedBox(height: 12),
-          ...sections,
-          const SizedBox(height: 80),
-        ],
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceOf(context),
-            border: Border(top: BorderSide(color: AppColors.borderOf(context))),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _saving
-                      ? null
-                      : () => Navigator.of(context).pop(),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.textSecondary(context),
-                    side: BorderSide(color: AppColors.borderOf(context)),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  child: const Text('Discard'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: FilledButton.icon(
-                  onPressed: _saving ? null : _save,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.porchAmberOf(context),
-                    foregroundColor: AppColors.onChaosAccent,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  icon: _saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.save_alt, size: 18),
-                  label: const Text('Save as New Character'),
-                ),
-              ),
-            ],
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text(
+          'Nothing is saved yet. Edit anything below, untick what you don\'t '
+          'want, then save to add the enhanced copy to your library. Your '
+          'original ${widget.original.name} stays exactly as-is either way.',
+          style: TextStyle(
+            fontSize: 12,
+            color: AppColors.textSecondary(context),
           ),
         ),
-      ),
+        const SizedBox(height: 12),
+        ...sections,
+        const SizedBox(height: 24),
+      ],
     );
   }
 

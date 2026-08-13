@@ -505,6 +505,7 @@ class WebServerHost extends ChangeNotifier {
             streamHub,
             _imageGenService,
             _storage,
+            chatService,
           )
         : null;
 

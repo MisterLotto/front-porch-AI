@@ -19,6 +19,7 @@
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf_router/shelf_router.dart';
 
+import 'package:front_porch_ai/services/chat/chat.dart';
 import 'package:front_porch_ai/services/web/facade/chargen_facade.dart';
 import 'package:front_porch_ai/services/web/util/util.dart';
 
@@ -30,6 +31,7 @@ class WebChargenRoutes {
     router.get('/api/chargen/status', _status);
     router.post('/api/chargen/create', _create);
     router.post('/api/chargen/enhance', _enhance);
+    router.post('/api/chargen/enhance-chats', _enhanceChats);
     router.post('/api/chargen/lore/urls', _loreUrls);
     router.post('/api/chargen/lore/file', _loreFile);
   }
@@ -70,6 +72,36 @@ class WebChargenRoutes {
       );
     }
     return JsonResponse.ok({'status': 'started'});
+  }
+
+  /// Bring the base character's chats along onto the saved "(Enhanced)"
+  /// copy — the web twin of the desktop wizard's last step. Body:
+  /// `{fromId, toId}` (character dbIds); returns `{copied}`. 409 when a
+  /// reply is mid-flight (same contract as the chat import route).
+  Future<shelf.Response> _enhanceChats(shelf.Request r) async {
+    Map<String, dynamic> body;
+    try {
+      body = await RequestBody.readJsonMap(r);
+    } catch (_) {
+      body = const {};
+    }
+    final fromId = body['fromId']?.toString().trim() ?? '';
+    final toId = body['toId']?.toString().trim() ?? '';
+    if (fromId.isEmpty || toId.isEmpty) {
+      return JsonResponse.badRequest('fromId and toId are required');
+    }
+    try {
+      final result = await _facade.copyEnhanceChats(fromId, toId);
+      if (result['ok'] != true) {
+        return JsonResponse.error(
+          400,
+          result['error']?.toString() ?? 'Bad request',
+        );
+      }
+      return JsonResponse.ok({'copied': result['copied']});
+    } on ChatImportBusy catch (e) {
+      return JsonResponse.error(409, e.toString());
+    }
   }
 
   /// Scrape lore from one or more URLs. Body: `{urls: [..]}` (or `{urls: "a,b"}`).

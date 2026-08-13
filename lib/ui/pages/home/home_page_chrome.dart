@@ -276,7 +276,11 @@ extension _HomePageChrome on _HomePageState {
         _editCharacter(context, character);
         break;
       case 'ai_enhance':
-        runAiEnhanceFlow(context, character);
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => EnhanceWizardPage(character: character),
+          ),
+        );
         break;
       case 'avatar_gallery':
         // Replace-portrait / star both call repository.updateCharacter, which

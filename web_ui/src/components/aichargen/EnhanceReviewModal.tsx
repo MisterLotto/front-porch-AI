@@ -48,6 +48,12 @@ export function EnhanceReviewModal({
   const [edits, setEdits] = useState<EnhanceEdits>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // Post-apply "bring your chats along" offer (web twin of the desktop
+  // wizard's last step): applied = the saved duplicate's id.
+  const [applied, setApplied] = useState<string | null>(null);
+  const [copying, setCopying] = useState(false);
+  const [copied, setCopied] = useState<number | null>(null);
+  const [copyError, setCopyError] = useState('');
 
   useEffect(() => {
     api
@@ -66,12 +72,34 @@ export function EnhanceReviewModal({
         { newName: `${characterName} (Enhanced)` },
       );
       await api.post(`/api/characters/${dup.id}`, buildApplyBody(proposal, accepted, edits));
-      onApplied(dup.id);
+      // Don't leave yet — offer to bring the base character's chats along.
+      setBusy(false);
+      setApplied(dup.id);
     } catch (e) {
       setBusy(false);
       setError(e instanceof ApiError ? e.message : 'Could not save the enhanced character');
     }
   };
+
+  const copyChats = async () => {
+    if (!applied || copying) return;
+    setCopying(true);
+    setCopyError('');
+    try {
+      const r = await api.post<{ copied: number }>('/api/chargen/enhance-chats', {
+        fromId: characterId,
+        toId: applied,
+      });
+      setCopied(r.copied);
+    } catch (e) {
+      setCopyError(e instanceof ApiError ? e.message : 'Could not copy the chats');
+    } finally {
+      setCopying(false);
+    }
+  };
+
+  // Once the copy is saved, leaving the modal by any door lands on it.
+  const leave = () => (applied ? onApplied(applied) : onClose());
 
   const section = (
     key: keyof EnhanceAccepted,
@@ -123,6 +151,53 @@ export function EnhanceReviewModal({
   const loreCount = Array.isArray((proposal.lorebook as { entries?: unknown[] })?.entries)
     ? (proposal.lorebook as { entries: unknown[] }).entries.length
     : 0;
+
+  if (applied !== null) {
+    return (
+      <div className="drawer-backdrop center" onClick={copying ? undefined : leave}>
+        <div className="modal enh-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="drawer-head">
+            <span>✨ “{characterName} (Enhanced)” is saved!</span>
+            {!copying && (
+              <button className="link-btn" onClick={leave}>
+                Close
+              </button>
+            )}
+          </div>
+          <p className="muted">
+            One last thing: the enhanced copy starts with an empty chat list. Want to
+            bring {characterName}'s chats along? Each one is copied in full — messages,
+            journal memories, relationship state — so you can pick up right where you
+            left off. {characterName} keeps the originals either way.
+          </p>
+          {copied !== null && (
+            <p className="muted">
+              {copied === 0
+                ? 'Nothing to copy — no chats yet.'
+                : `Copied ${copied} chat${copied === 1 ? '' : 's'} over.`}
+            </p>
+          )}
+          {copyError && <p className="error">{copyError}</p>}
+          <div className="modal-actions">
+            {copied === null ? (
+              <>
+                <button className="ghost" disabled={copying} onClick={leave}>
+                  Skip
+                </button>
+                <button className="primary" disabled={copying} onClick={copyChats}>
+                  {copying ? 'Copying…' : 'Copy my chats over'}
+                </button>
+              </>
+            ) : (
+              <button className="primary" onClick={leave}>
+                Done
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="drawer-backdrop center" onClick={busy ? undefined : onClose}>

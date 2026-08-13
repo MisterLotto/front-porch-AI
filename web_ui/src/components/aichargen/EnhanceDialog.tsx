@@ -154,6 +154,12 @@ export function EnhanceDialog({
 
         {sessions !== null && sessions.length > 0 && !running && (
           <>
+            <p className="muted">
+              Character cards are written before the first hello — but after a few real
+              conversations, {characterName} has become someone more specific than the
+              card ever described. AI Enhance reads one real chat and rewrites the card
+              so the character on paper matches the one you actually know.
+            </p>
             {sessions.length > 1 && (
               <div className="enh-sessions">
                 <p className="muted">Which chat should ground the rewrite?</p>

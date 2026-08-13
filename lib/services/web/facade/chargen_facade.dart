@@ -25,6 +25,7 @@ import 'package:front_porch_ai/database/database.dart' hide World;
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/chargen/chargen.dart';
+import 'package:front_porch_ai/services/chat/chat.dart';
 import 'package:front_porch_ai/services/lore_extraction_service.dart';
 import 'package:front_porch_ai/services/web/facade/character_facade.dart';
 import 'package:front_porch_ai/services/web/streaming/stream_hub.dart';
@@ -42,6 +43,7 @@ class ChargenFacade {
     this._hub, [
     this._imageGen,
     this._storage,
+    this._chat,
   ]);
 
   final LLMProvider _llm;
@@ -49,6 +51,7 @@ class ChargenFacade {
   final StreamHub? _hub;
   final ImageGenService? _imageGen;
   final StorageService? _storage;
+  final ChatService? _chat;
 
   /// Whether an LLM backend is ready to generate.
   bool get available => _llm.activeService.isReady;
@@ -175,6 +178,27 @@ class ChargenFacade {
     } catch (e) {
       _hub?.broadcast({'event': 'chargen_error', 'error': '$e'});
     }
+  }
+
+  /// Copy every chat of the base character onto its freshly saved
+  /// "(Enhanced)" duplicate — the web twin of the desktop wizard's final
+  /// "bring your chats along" step, riding the exact same `.fpchat`
+  /// round-trip ([ChatServiceEnhanceChats.copyChatsForEnhance]).
+  /// [ChatImportBusy] propagates to the route (→ 409) when a reply is
+  /// mid-flight in the open chat.
+  Future<Map<String, dynamic>> copyEnhanceChats(
+    String fromId,
+    String toId,
+  ) async {
+    final chat = _chat;
+    if (chat == null) return {'ok': false, 'error': 'chat is not available'};
+    final from = _characters.cardByDbId(fromId);
+    final to = _characters.cardByDbId(toId);
+    if (from == null || to == null) {
+      return {'ok': false, 'error': 'character not found'};
+    }
+    final copied = await chat.copyChatsForEnhance(from: from, to: to);
+    return {'ok': true, 'copied': copied};
   }
 
   /// Scrape + clean one or more wiki/lore URLs into plain text (the web mirror of

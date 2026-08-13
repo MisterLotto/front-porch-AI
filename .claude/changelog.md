@@ -3,6 +3,31 @@
 
 # Changelog
 
+## 2026-08-13 — feat(enhance): explainer-first wizard + "bring your chats along" (desktop + web)
+- **Files:** NEW enhance_wizard_page.dart (+.chrome/.steps parts, creator-pattern
+  stepper: About → Model → Chat → Interview → Review → Chats),
+  NEW enhance_review_body.dart (embeddable review, save() returns the copy),
+  NEW chat_service_enhance_chats.dart (copyChatsForEnhance — .fpchat round-trip
+  per maintainer direction; early _isTurnBusy guard) + part directive;
+  DELETED enhance_flow.dart / enhance_setup_page.dart /
+  enhance_options_dialog.dart / enhance_review_page.dart (absorbed);
+  home_page.dart import + home_page_chrome.dart pushes the wizard;
+  chargen_facade (ChatService param + copyEnhanceChats) + chargen_routes
+  (POST /api/chargen/enhance-chats, 409 on busy) + web_server_host wiring;
+  EnhanceDialog.tsx intro explainer, EnhanceReviewModal.tsx post-apply
+  copy-chats offer pane; web bundle rebuilt.
+- **Tests:** NEW enhance_chat_copy_test (full-restore count red-proven via
+  mismatch=false), NEW enhance_wizard_test (zero-chat gate red-proven by
+  removing it; replaces deleted enhance_setup_page_test — SetupStep-hosting
+  contract re-pinned at the Model step), enhance_ui_test reworked onto
+  EnhanceReviewBody (dated rationale in-file), chat_package_facade_test
+  readiness spins made wall-clock-bounded (load flake, ~1 in 3 full-tree
+  runs at concurrency 4; assertions untouched).
+- **Why:** maintainer: the shipped AI Enhance never explained itself; use the
+  creator-style wizard UI, explain on page 1, and offer importing the base
+  character's chats into the enhanced copy as the last step.
+- **Commit:** (this commit)
+
 ## 2026-08-13 — fix(web): second-review import/export (notice, send race, CI)
 - **Files:** ChatPage import notice outlives the drawer; `_isImporting`
   blocks Send + second import; gzip ndjson test split to a new file;

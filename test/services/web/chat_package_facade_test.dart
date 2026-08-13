@@ -216,8 +216,16 @@ void main() {
     final hang = _HangingLlm();
     chat.testLlmServiceOverride = hang;
     final send = chat.sendMessage('hold this');
-    for (var i = 0; i < 400 && !chat.isGenerating; i++) {
-      await Future<void>.delayed(Duration.zero);
+    // Readiness wait REWORKED 2026-08-13 (wait primitive only — the
+    // assertion below is untouched): 400 zero-delay yields burn out in
+    // under a millisecond, and on a loaded 4-way concurrent run a
+    // CPU-heavy sibling suite (the auth lockout hashing loop) can starve
+    // sendMessage's own awaits past that window — red with no product
+    // bug (reproduced ~1 in 3 full-tree runs locally). Real-time bound
+    // instead; the settle path stays identical once isGenerating flips.
+    final genDeadline = DateTime.now().add(const Duration(seconds: 10));
+    while (!chat.isGenerating && DateTime.now().isBefore(genDeadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
     }
     expect(chat.isGenerating, isTrue);
 
@@ -308,8 +316,11 @@ void main() {
 
     chat.testImportHold = Completer<void>();
     final import = facade.importBytes(bytes!);
-    for (var i = 0; i < 400 && !chat.isImporting; i++) {
-      await Future<void>.delayed(Duration.zero);
+    // Same load-robust readiness wait as the streaming test above
+    // (2026-08-13) — the zero-delay spin is the flaky primitive.
+    final impDeadline = DateTime.now().add(const Duration(seconds: 10));
+    while (!chat.isImporting && DateTime.now().isBefore(impDeadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
     }
     expect(chat.isImporting, isTrue);
 
