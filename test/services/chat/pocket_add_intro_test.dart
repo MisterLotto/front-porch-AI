@@ -273,6 +273,33 @@ void main() {
     );
   });
 
+  test('the intro rides the plan TAIL with the one-shot events — not the '
+      'state zone', () {
+    // Structural, like the reply-facts wiring pins: the maintainer's field
+    // report ("silently adding an item did not make them surprised") was
+    // the intro riding the realism-state block mid-prompt, where models
+    // read it as background. It must sit with Chance Time / Porch Night at
+    // maximum recency, and Continue must strip it like its siblings.
+    final plan = File(
+      'lib/services/chat/chat_service_generation_plan.dart',
+    ).readAsStringSync();
+    final porchNight = plan.indexOf("plan.add(id: 'porch_night'");
+    final itemIntro = plan.indexOf("plan.add(id: 'item_intro'");
+    expect(porchNight, greaterThan(-1));
+    expect(
+      itemIntro,
+      greaterThan(porchNight),
+      reason: 'the one-shot directive belongs after the suffix with the '
+          'event class, or models ignore it again',
+    );
+    expect(
+      plan.contains("plan.section('item_intro').text = ''"),
+      isTrue,
+      reason: 'Continue extends the reply that already reacted — '
+          're-injecting has her notice the same thing twice in one message',
+    );
+  });
+
   test('feature off or empty name: a strict no-op', () async {
     await chat.setActiveCharacter(card('char-padd-3'));
     final id = chat.characterIdFor(chat.activeCharacter!);

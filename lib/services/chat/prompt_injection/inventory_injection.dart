@@ -119,40 +119,48 @@ class InventoryInjection with SpeakerCardResolver {
         'Set aside nearby, still ${card.name}\'s: '
             '${aside.map((e) => e.item.display).join(', ')}.',
     ];
-    // Hand-added item reactions ride OUTSIDE the record cap below: they are
-    // one-shot (three at most, see the queue bound) and being truncated away
-    // is the one thing a reaction must never be. Gift vs conjured are
-    // opposite fictions — attribution vs bafflement — and the wording keeps
-    // them apart on purpose.
-    final intros = <String>[
-      for (final n in takePendingIntros(getCharacterIdFromCard(card)))
-        n.gift
-            ? '${getUserName()} has just handed ${card.name} ${n.item} — '
-                  'she accepts it in-scene, knowing it came from '
-                  '${getUserName()}.'
-            : '${card.name} has just noticed ${n.item} '
-                  '${switch (n.section) {
-                    PocketSection.worn => 'on her person',
-                    PocketSection.carrying => 'among her things',
-                    PocketSection.setAside => 'sitting nearby',
-                  }} '
-                  'with NO memory of how it got there — she is genuinely '
-                  'surprised and reacts to it in-scene ("how did I end up '
-                  'with ${n.item}?").',
-    ];
-
-    if (sentences.isEmpty && intros.isEmpty) return '';
+    if (sentences.isEmpty) return '';
 
     // Stated as fact rather than instruction. "Keep this consistent" invites a
     // model to narrate an inventory check; naming what she has lets it simply
     // be true, which is what the feature is for.
     final out = sentences.join(' ');
-    final capped = out.length <= maxChars
-        ? out
-        : '${out.substring(0, maxChars)}…';
+    return out.length <= maxChars ? out : '${out.substring(0, maxChars)}…';
+  }
+
+  /// One-shot directives for items the USER hand-added — its OWN plan
+  /// section, injected at the TAIL of the prompt with the Chance Time class
+  /// of one-shot events, NOT inside the record fragment above.
+  ///
+  /// It lived inside [buildInventoryInjection] first, and the maintainer's
+  /// report was immediate (2026-08-13): "silently adding an item ... did not
+  /// make them surprised." The record fragment rides the realism-state
+  /// block — mid-prompt, one background fact among a dozen — and models
+  /// read it as description, not as something to DO this reply. The blocks
+  /// that reliably drive a reply (Chance Time, Porch Night) all sit after
+  /// the suffix at maximum recency, phrased as bracketed directives; this
+  /// follows them. Get-and-mark and the per-session filter are unchanged —
+  /// only the address and the imperative phrasing moved.
+  String buildItemIntroInjection() {
+    final card = speakerCard();
+    if (card == null) return '';
+    final intros = takePendingIntros(getCharacterIdFromCard(card));
+    if (intros.isEmpty) return '';
     return [
-      if (capped.isNotEmpty) capped,
-      ...intros,
-    ].join(' ');
+      for (final n in intros)
+        n.gift
+            ? '[This reply: ${getUserName()} has just handed ${card.name} '
+                  '${n.item} — they accept it in-scene, knowing it came '
+                  'from ${getUserName()}.]'
+            : '[This reply: ${card.name} just now notices ${n.item} '
+                  '${switch (n.section) {
+                    PocketSection.worn => 'on their person',
+                    PocketSection.carrying => 'among their things',
+                    PocketSection.setAside => 'sitting nearby',
+                  }} '
+                  'and has NO memory of how it got there. Before anything '
+                  'else, they react with genuine surprise ("how did I end '
+                  'up with ${n.item}?").]',
+    ].join('\n');
   }
 }

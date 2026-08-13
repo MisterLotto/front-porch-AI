@@ -217,6 +217,12 @@ extension ChatServiceGenerationPlan on ChatService {
       // Chance Time injection — independent of realism mode
       final chanceTimeBlock = _getChanceTimeInjection();
 
+      // Hand-added item one-shots (gift / the surprise Easter egg) — same
+      // register as Chance Time: a bracketed directive at maximum recency.
+      // Inside the realism-state block it was read as background and ignored
+      // (maintainer report, 2026-08-13).
+      final itemIntroBlock = _inventoryInjection.buildItemIntroInjection();
+
       // LLMerta Mafia-night force-ack (Chance Time register). Re-arms from
       // diary if needed; stays armed through regen of this AI message until
       // the *next* user send clears it.
@@ -409,6 +415,8 @@ extension ChatServiceGenerationPlan on ChatService {
       // High-recency with Chance Time so the first post-import reply
       // cannot bury the Mafia night (docs/design/llmerta-porch-memories.md §7b).
       plan.add(id: 'porch_night', text: porchNightBlock);
+      // Hand-added item one-shots ride the same tail (see the fetch above).
+      plan.add(id: 'item_intro', text: itemIntroBlock);
 
       // The zone is introduced only when it actually has something in it
       // (salience gating — a quiet turn stays quiet, and a frame introducing
@@ -507,6 +515,10 @@ extension ChatServiceGenerationPlan on ChatService {
       // Continue inject "HARD REQUIRED OPENING / first 2–4 sentences" into
       // a pure append (full-codebase audit 2026-08-11 P0.3).
       plan.section('porch_night').text = '';
+      // Item one-shots are the same class: a Continue extends the reply that
+      // already reacted — re-injecting would have them notice the same thing
+      // twice in one message.
+      plan.section('item_intro').text = '';
       // Also skip RAG "earlier memories" for pure straight continuation.
       t.droppedMessages = 0;
     }

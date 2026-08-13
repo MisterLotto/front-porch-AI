@@ -3,6 +3,21 @@
 
 # Changelog
 
+## 2026-08-13 — fix(pockets): the surprise Easter egg was being ignored — moved to the plan tail
+- **Files:** `inventory_injection.dart` (intros split into
+  buildItemIntroInjection — bracketed imperative directives; record
+  fragment back to facts only), `chat_service_generation_plan.dart`
+  (new 'item_intro' section after porch_night at max recency; stripped on
+  Continue with its one-shot siblings), `pocket_add_intro_test.dart`
+  (+ structural placement pin; e2e suite proven red with the section
+  neutered — 3 tests).
+- **Why:** maintainer field report — "silently adding an item did not
+  make them surprised." The directive rode the realism-state block
+  mid-prompt where models read it as background description. The blocks
+  that reliably drive a reply (Chance Time, Porch Night) sit after the
+  suffix as bracketed directives; the intro now does too.
+- **Commit:** (this commit)
+
 ## 2026-08-13 — fix(image-studio): Remote API stops looking free (no-key honesty)
 - **Files:** `image_gen_service.dart` (fetchImageModels: no key -> [] — the
   curated catalog is for CONFIGURED Nano-GPT-style providers only),
