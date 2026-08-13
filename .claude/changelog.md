@@ -3,6 +3,21 @@
 
 # Changelog
 
+## 2026-08-13 — fix(image-studio): Remote API stops looking free (no-key honesty)
+- **Files:** `image_gen_service.dart` (fetchImageModels: no key -> [] — the
+  curated catalog is for CONFIGURED Nano-GPT-style providers only),
+  `generation_options_tab.source.dart` (no-key warning card pointing to
+  Settings -> Backend; billing note naming the provider host when keyed),
+  `generation_options_tab_test.dart` (fake gains real BackendSettings; two
+  new mutually-exclusive-state tests, red-proven via gate inversion),
+  `image_models_honesty_test.dart` (new; no-key -> empty, red-proven),
+  goldens: image_gen_settings dark/light regenerated (intentional — the
+  dialog embeds the tab; local Flutter 3.44.8 == CI pin, full set green).
+- **Why:** maintainer report — a user picked Remote API, saw a populated
+  model list with no key configured anywhere in the studio, concluded it
+  was free, and hit the (then-unreadable) "No API key configured." error.
+- **Commit:** (this commit)
+
 ## 2026-08-13 — fix(image-studio): error banner was red-on-red (unreadable)
 - **Files:** `lib/ui/image_studio/generation_panel.dart` (tinted card +
   border + textPrimary ink + SelectableText; mangled double-nested

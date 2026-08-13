@@ -94,9 +94,54 @@ extension _GenerationOptionsSource on _GenerationOptionsTabState {
   }
 
   Widget _buildRemotePanel(StorageService st) {
+    // Honesty first (maintainer report, 2026-08-13): "Remote API" here is
+    // the SAME account chat uses, configured in Settings → Backend — this
+    // panel has no key field of its own, so without these lines a user who
+    // never set one saw a working-looking model menu and reasonably
+    // concluded remote images were free. Say where the key lives and who
+    // bills, BEFORE they craft a prompt and hit a dead Generate.
+    final apiKey = st.backendSettings.remoteApiKey;
+    final host = Uri.tryParse(st.backendSettings.remoteApiUrl)?.host ?? '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (apiKey.isEmpty) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(10),
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              color: AppColors.logError.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: AppColors.logError.withValues(alpha: 0.55),
+              ),
+            ),
+            child: Text(
+              'No Remote API key configured. Remote images use the same '
+              'API account as chat — nothing runs locally and nothing is '
+              'free. Add your provider key under Settings → Backend → '
+              'Remote API first; models will list once it\'s set.',
+              style: TextStyle(
+                color: AppColors.textPrimary(context),
+                fontSize: 11.5,
+              ),
+            ),
+          ),
+        ] else ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              'Bills your Remote API account'
+              '${host.isEmpty ? '' : ' ($host)'} per image.',
+              style: TextStyle(
+                color: AppColors.textSecondary(context),
+                fontSize: 11,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ),
+        ],
         Text(
           'Image Model',
           style: TextStyle(

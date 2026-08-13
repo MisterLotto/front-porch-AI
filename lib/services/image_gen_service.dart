@@ -230,7 +230,14 @@ class ImageGenService extends ChangeNotifier {
   Future<List<ImageModelInfo>> fetchImageModels() async {
     final apiUrl = _storage.backendSettings.remoteApiUrl;
     final apiKey = _storage.backendSettings.remoteApiKey;
-    if (apiUrl.isEmpty || apiKey.isEmpty) return List.from(_commonImageModels);
+    // No account = no models. This used to fall back to the curated catalog,
+    // which is how the Remote API option showed a real-looking model menu to
+    // a user with no key configured at all — who reasonably concluded the
+    // whole thing was free and ready, then hit "No API key configured." on
+    // Generate (maintainer report, 2026-08-13). The catalog below is a
+    // convenience for CONFIGURED providers without an image-listing endpoint
+    // (Nano-GPT), never a stand-in for having an account.
+    if (apiUrl.isEmpty || apiKey.isEmpty) return const [];
 
     // Detect if this is OpenRouter
     final isOpenRouter = _isOpenRouterStyle(apiUrl);
