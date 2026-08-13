@@ -512,6 +512,9 @@ extension ChatServiceSessionLoad on ChatService {
     // (chip attach's _saveChat can land AFTER getMessagesForSession below),
     // and that turn's finalization would then write onto the replaced list.
     await _waitForTurnToSettle();
+    // Persist the chat we are leaving (or this same session's live list)
+    // before replacing `_messages` from rows.
+    await flushPendingSaves();
 
     // Reset AFK idle state when loading a new session
     _cancelIdleTimer();

@@ -179,48 +179,14 @@ extension ChatServiceSessionState on ChatService {
     }
   }
 
-  Future<void> _saveChat() async {
-    // catchError keeps the chain alive: without it, one _doSaveChat throw
-    // (SQLite busy from an external writer, session nulled mid-save, …) turns
-    // _saveChain into an errored future, and every later save chained onto it
-    // silently never runs again for the rest of the app session.
-    _saveChain = _saveChain.then((_) => _doSaveChat()).catchError((Object e) {
-      debugPrint('[ChatService] ⚠ _doSaveChat failed — save skipped: $e');
-    });
-    await _saveChain;
-  }
-
-  /// Shutdown flush: guarantee the current in-memory chat state — most
-  /// importantly the just-applied Needs vector and Realism scalars from the
-  /// last turn — is durably on disk before the process exits.
-  ///
-  /// Why this exists: the post-generation Needs deltas are applied to
-  /// `_needsSimulation.vector` in memory and only reach the DB through
-  /// `_saveChat()`. Several `_saveChat()` calls across the service are
-  /// fire-and-forget (`unawaited`, `Future.microtask`, non-awaited setters), so
-  /// the write carrying the last message's post-impact vector can still be
-  /// queued or mid-commit when the user closes the window. Before this flush,
-  /// `onWindowClose` tore down backends and called `exit(0)` without waiting,
-  /// killing that pending write — the message text survived (saved earlier,
-  /// pre-impact) but the sidebar levels reverted on reopen. That was the
-  /// intermittent "the needs deltas from the last message didn't stick" bug.
-  ///
-  /// Awaiting `_saveChat()` here drains every already-queued save on
-  /// `_saveChain` (so nothing in flight is dropped) and then writes the live
-  /// state one final time — bounded and fast (a few SQLite writes). Safe to
-  /// call with no active chat: `_doSaveChat` no-ops when there is no session or
-  /// no messages.
-  Future<void> flushPendingSaves() => _saveChat();
-
-  Future<void> _doSaveChat() async {
+  Future<void> _saveChat({bool replaceAll = false}) async {
+    // Turn taken = this write. Snapshot at enqueue so a later reload
+    // cannot shrink the queued transcript. [replaceAll] is only for
+    // delete/regen-pop — the default upsert cannot erase a landed turn.
     if ((_activeCharacter == null && _activeGroup == null) ||
         _currentSessionId == null) {
       return;
     }
-
-    // ── Safety guard: never overwrite existing session data with empty messages.
-    // This prevents data loss if _messages is momentarily empty due to a rebuild
-    // race, nav glitch, or any other transient state issue.
     if (_messages.isEmpty) {
       debugPrint(
         '[ChatService] ⚠ _saveChat called with empty messages for '
@@ -228,14 +194,44 @@ extension ChatServiceSessionState on ChatService {
       );
       return;
     }
-
-    // Capture the session identity ONCE. Everything below — especially code
-    // that runs after an await — must use this local, never _currentSessionId:
-    // loadSession/setActiveCharacter flip the live field synchronously, so a
-    // re-read after an await once deleted the NEW session's messages and
-    // replaced them with this (old) snapshot — cross-chat data loss. The
-    // per-session gen settings are captured for the same reason.
     final sessionId = _currentSessionId!;
+    final snapshot = List<ChatMessage>.from(_messages);
+    _saveChain = _saveChain.then((_) async {
+      for (var i = 0; i < 3; i++) {
+        try {
+          await _doSaveChat(sessionId, snapshot, replaceAll: replaceAll);
+          return;
+        } catch (e) {
+          debugPrint('[ChatService] ⚠ persist ${i + 1}/3 failed: $e');
+          if (i == 2) return; // keep the chain healthy
+          await Future<void>.delayed(Duration(milliseconds: 40 * (i + 1)));
+        }
+      }
+    });
+    await _saveChain;
+  }
+
+  /// Drain `_saveChain` and write live state (window-close + session swap).
+  Future<void> flushPendingSaves() => _saveChat();
+
+  Future<void> _doSaveChat(
+    String sessionId,
+    List<ChatMessage> snapshot, {
+    bool replaceAll = false,
+  }) async {
+    if (snapshot.isEmpty) return;
+
+    // Switched chats since this write was queued: persist the captured
+    // transcript onto ITS session, but do not stamp this chat's live
+    // scalars onto that row (that is the inverse of the cross-chat wipe
+    // this method's sessionId local was introduced to stop).
+    if (_currentSessionId != sessionId) {
+      await _replaceSessionMessages(sessionId, snapshot);
+      return;
+    }
+
+    // Per-session gen settings captured with the still-this-session check
+    // so a switch after this line cannot bleed the new chat's overrides.
     final genSettingsJson = _sessionGenSettings.toJsonString();
 
     // v30: For group chats, serialize current per-character realism state into the
@@ -293,9 +289,6 @@ extension ChatServiceSessionState on ChatService {
       if (chatBook != null) stateMap['chatLorebook'] = chatBook;
       groupRealismJson = jsonEncode(stateMap);
     }
-
-    // Snapshot messages at the start so async gaps can't see a mutated list.
-    final snapshot = List<ChatMessage>.from(_messages);
 
     // Look up character DB id if in 1:1 mode
     String? characterDbId;
@@ -408,41 +401,55 @@ extension ChatServiceSessionState on ChatService {
     // Context Budget snapshot (last real send) — raw SQL, schema v44.
     await _persistContextBudgetForSession(sessionId);
 
-    // Replace all messages for this session using the snapshot.
-    // Use a transaction for the delete+insert to keep the replace atomic even
-    // if other writers (cloud sync, external tools) touch the DB concurrently.
-    await _db.transaction(() async {
-      await _db.deleteMessagesForSession(sessionId);
-      final messageBatch = <MessagesCompanion>[];
-      for (int i = 0; i < snapshot.length; i++) {
-        final m = snapshot[i];
-        messageBatch.add(
-          MessagesCompanion(
-            sessionId: drift.Value(sessionId),
-            position: drift.Value(i),
-            sender: drift.Value(m.sender),
-            isUser: drift.Value(m.isUser),
-            characterId: drift.Value(m.characterId),
-            swipes: drift.Value(jsonEncode(m.swipes)),
-            swipeIndex: drift.Value(m.swipeIndex),
-            swipeDurations: drift.Value(jsonEncode(m.swipeDurations)),
-            metadata: drift.Value(
-              m.metadata != null ? jsonEncode(m.metadata) : null,
-            ),
-            swipeMetadata: drift.Value(
-              m.swipeMetadata.any((e) => e != null)
-                  ? jsonEncode(m.swipeMetadata)
-                  : null,
-            ),
-          ),
-        );
-      }
-      if (messageBatch.isNotEmpty) {
-        await _db.insertMessages(messageBatch);
-      }
-    });
+    await _replaceSessionMessages(
+      sessionId,
+      snapshot,
+      replaceAll: replaceAll,
+    );
   }
 
+  /// Persist [snapshot]. Default upsert cannot shrink a longer on-disk
+  /// transcript. [replaceAll] is delete+insert for delete/regen-pop.
+  Future<void> _replaceSessionMessages(
+    String sessionId,
+    List<ChatMessage> snapshot, {
+    bool replaceAll = false,
+  }) async {
+    final messageBatch = <MessagesCompanion>[];
+    for (int i = 0; i < snapshot.length; i++) {
+      final m = snapshot[i];
+      messageBatch.add(
+        MessagesCompanion(
+          sessionId: drift.Value(sessionId),
+          position: drift.Value(i),
+          sender: drift.Value(m.sender),
+          isUser: drift.Value(m.isUser),
+          characterId: drift.Value(m.characterId),
+          swipes: drift.Value(jsonEncode(m.swipes)),
+          swipeIndex: drift.Value(m.swipeIndex),
+          swipeDurations: drift.Value(jsonEncode(m.swipeDurations)),
+          metadata: drift.Value(
+            m.metadata != null ? jsonEncode(m.metadata) : null,
+          ),
+          swipeMetadata: drift.Value(
+            m.swipeMetadata.any((e) => e != null)
+                ? jsonEncode(m.swipeMetadata)
+                : null,
+          ),
+        ),
+      );
+    }
+    if (replaceAll) {
+      await _db.transaction(() async {
+        await _db.deleteMessagesForSession(sessionId);
+        if (messageBatch.isNotEmpty) {
+          await _db.insertMessages(messageBatch);
+        }
+      });
+    } else if (messageBatch.isNotEmpty) {
+      await _db.upsertMessagesPreservingTail(sessionId, messageBatch);
+    }
+  }
 
   /// Evaluates emotion + relationship baseline from the greeting message only.
 

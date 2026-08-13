@@ -70,6 +70,12 @@ extension ChatServiceChatEntry on ChatService {
     while (_isTurnBusy && DateTime.now().isBefore(deadline)) {
       await Future.delayed(const Duration(milliseconds: 50));
     }
+    // Persist is not `_isTurnBusy`: `_isPostGenerating` drops in
+    // `_generateResponse`'s finally, and fire-and-forget `_saveChat()`
+    // calls can still be on `_saveChain`. A reload that does not wait
+    // here hydrates the pre-turn row and a later write can then persist
+    // that shorter list.
+    await _saveChain;
   }
 
   Future<void> setActiveCharacter(CharacterCard? character) async {
@@ -79,16 +85,31 @@ extension ChatServiceChatEntry on ChatService {
     await _waitForTurnToSettle();
     _generationEpoch++;
 
-    // If same character is already active and has messages, just refresh
-    // the character reference (in case fields were edited) but skip the
-    // expensive full re-initialization (message clearing, session reload).
-    if (_activeCharacter?.name == character?.name &&
-        _activeCharacter?.dbId == character?.dbId &&
-        _messages.isNotEmpty) {
-      _activeCharacter = character;
+    // Same library card: match by dbId when both sides have one (renames
+    // stay light). A grid card with a missing dbId used to fail
+    // `dbId == dbId` (uuid != null), take the slow path, assign the
+    // dbId-less card, skip `_loadLastSession`, and seed a NEW greeting
+    // session — the last exchange (and sometimes the whole chat) vanished.
+    final sameCharacter = character != null &&
+        _activeCharacter != null &&
+        ((character.dbId != null &&
+                _activeCharacter!.dbId != null &&
+                character.dbId == _activeCharacter!.dbId) ||
+            (character.name == _activeCharacter!.name &&
+                (character.dbId == null || _activeCharacter!.dbId == null)));
+    if (sameCharacter && _messages.isNotEmpty) {
+      // Keep the dbId-bearing instance when the grid card is missing one
+      // so a later save still stamps sessions.character_id.
+      if (character.dbId != null) {
+        _activeCharacter = character;
+      }
       notifyListeners();
       return;
     }
+
+    // About to throw the live list away. Write it first so a slow-path
+    // reload cannot hydrate a row that is still missing this turn.
+    await flushPendingSaves();
 
     // Reset AFK idle state when switching to a different chat
     _cancelIdleTimer();

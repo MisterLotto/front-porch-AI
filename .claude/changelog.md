@@ -29,6 +29,48 @@
   mid-prompt where models read it as background description. The blocks
   that reliably drive a reply (Chance Time, Porch Night) sit after the
   suffix as bracketed directives; the intro now does too.
+## 2026-08-13 — fix(ui): Likes & Dislikes copy no longer assumes a female character
+- **Files:** `identity_chip_lists.dart`, `web_ui/.../RealismFormSection.tsx`
+  (Drawn to / Put off by helpers + Ambitions hint).
+- **Why:** maintainer screenshot — "how she reacts" / "moves her" on the
+  Drawn To helper. Same form also said "makes her bristle" and
+  "open her own bakery". Neutral on desktop and web.
+- **Commit:** (this commit)
+
+## 2026-08-13 — fix(chat): every finished turn is written to SQLite (no exception)
+- **Files:** `chat_service_send.dart` (user line awaited persist before
+  generate), `chat_service_generation_postgen.dart` (reply persist moved
+  to the instant the body is written, before lorebook/evals),
+  `chat_service_session_state.dart` (3 retries; default persist is
+  upsert-by-position and cannot shrink a longer transcript),
+  `database.queries.chat.dart` (`upsertMessagesPreservingTail`),
+  `chat_service_message_ops.dart` / `chat_service_reprocess.dart`
+  (`replaceAll: true` on genuine deletes/pops),
+  `leave_reenter_persist_test.dart` (+3 guards, proven red then green).
+- **Why:** maintainer law — after each chat turn is taken it is in the
+  DB, no exception. Leave/re-enter flush is a belt, not the write.
+  Delete-all+insert let a shorter snapshot erase a landed turn; upsert
+  keeps the tail. Delete/regen-pop still replace-all.
+- **Commit:** (this commit)
+
+## 2026-08-13 — fix(chat): last exchange vanished after Back → Home → re-enter
+- **Files:** `chat_service_session_state.dart` (`_saveChat` snapshots
+  sessionId+messages at enqueue; switched-away writes are messages-only),
+  `chat_service_chat_entry.dart` (same-character match by dbId or name
+  when one dbId is missing; `flushPendingSaves` before slow-path clear;
+  `_waitForTurnToSettle` drains `_saveChain`),
+  `chat_service_group_entry.dart` / `chat_service_session_load.dart` /
+  `chat_service_session_manage.dart` (flush before every other clear),
+  `test/services/chat/leave_reenter_persist_test.dart` (3 guards,
+  proven red then green).
+- **Why:** maintainer report — Victoria reply visible, Back, Home locked
+  several seconds, re-enter, last user+character messages gone. Terminal
+  silent. Live DB still had 17 rows (last write 2026-08-12); the vanished
+  turn never landed. Two holes: a grid card missing dbId failed
+  `uuid == null` and seeded a NEW greeting session; the slow path
+  (and group re-enter / Start New Chat) cleared `_messages` before the
+  queued delete+insert, then reloaded the pre-turn row. Home lockup is
+  the 1.3GB DB last-activity scan racing that write, not the wipe itself.
 - **Commit:** (this commit)
 
 ## 2026-08-13 — fix(image-studio): Remote API stops looking free (no-key honesty)

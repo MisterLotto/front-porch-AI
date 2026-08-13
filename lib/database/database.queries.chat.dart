@@ -271,6 +271,34 @@ extension AppDatabaseChatQueries on AppDatabase {
     await bumpSyncVersion();
   }
 
+  /// Write [rows] by (session, position). Existing rows are updated in
+  /// place; new positions are inserted. Positions past [rows.length] are
+  /// left alone — a shorter snapshot must not erase a turn that already
+  /// landed. Callers that genuinely shrink the transcript (delete / regen
+  /// pop) use delete+insert instead.
+  Future<void> upsertMessagesPreservingTail(
+    String sessionId,
+    List<MessagesCompanion> rows,
+  ) async {
+    if (rows.isEmpty) return;
+    final existing = await getMessagesForSession(sessionId);
+    final byPos = <int, Message>{for (final m in existing) m.position: m};
+    final toInsert = <MessagesCompanion>[];
+    await transaction(() async {
+      for (final row in rows) {
+        final pos = row.position.value;
+        final was = byPos[pos];
+        if (was != null) {
+          await (update(messages)..where((t) => t.id.equals(was.id)))
+              .write(row);
+        } else {
+          toInsert.add(row);
+        }
+      }
+      if (toInsert.isNotEmpty) await insertMessages(toInsert);
+    });
+  }
+
   Future<int> deleteMessagesForSession(String sessionId) async {
     final count = await (delete(
       messages,

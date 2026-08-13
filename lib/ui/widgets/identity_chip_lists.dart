@@ -178,7 +178,7 @@ class IdentityChipLists extends StatelessWidget {
               accent: true,
               values: ambitions!,
               onChanged: onAmbitionsChanged!,
-              hintText: 'e.g. open her own bakery',
+              hintText: 'e.g. open a bakery',
               helper:
                   'What this character is working toward across the whole '
                   'story. They colour how the character steers a scene, and '
@@ -209,9 +209,9 @@ class IdentityChipLists extends StatelessWidget {
                   hintText: 'e.g. thunderstorms',
                   helper:
                       'Small, specific things this character warms to. They '
-                      'colour how she reacts to what is already happening — '
-                      'and, with the Realism Engine on, how much a moment '
-                      'moves her.',
+                      'colour how the character reacts to what is already '
+                      'happening — and, with the Realism Engine on, how much '
+                      'a moment moves them.',
                 ),
                 const SizedBox(height: 16),
                 ChipListEditor(
@@ -220,8 +220,8 @@ class IdentityChipLists extends StatelessWidget {
                   onChanged: onDislikesChanged!,
                   hintText: 'e.g. being interrupted',
                   helper:
-                      'What makes her bristle. Phrases, not paragraphs — one '
-                      'thing per chip reads best in a scene.',
+                      'What makes this character bristle. Phrases, not '
+                      'paragraphs — one thing per chip reads best in a scene.',
                 ),
               ],
             ),

@@ -318,6 +318,8 @@ extension ChatServiceSessionManage on ChatService {
     debugPrint(
       '[ChatService] 🟡 startNewChat: clearing messages (had ${_messages.length})',
     );
+    // The open session's last exchange may still be memory-only.
+    await flushPendingSaves();
     _messages.clear();
     _greetingIndex = 0;
     // A fresh chat starts with no Scene Guests (they don't carry across sessions).

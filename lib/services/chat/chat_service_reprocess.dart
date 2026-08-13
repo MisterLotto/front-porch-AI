@@ -89,7 +89,7 @@ extension ChatServiceReprocess on ChatService {
     // Remove the now-stale trailing guest replies from UI + context, then regen
     // the (now last) host message and re-run the chime gate on the new reply.
     _messages.removeRange(hostIndex + 1, _messages.length);
-    await _saveChat();
+    await _saveChat(replaceAll: true);
     notifyListeners();
     await regenerateLastMessage();
     await _maybeRunSceneGuestChimeIns(userText: userText);
@@ -139,7 +139,7 @@ extension ChatServiceReprocess on ChatService {
         _messages.last.sender == 'System' &&
         _messages[_messages.length - 2].isUser) {
       _messages.removeLast();
-      await _saveChat();
+      await _saveChat(replaceAll: true);
     }
 
     // Check if the last message is from the character. Narration banners

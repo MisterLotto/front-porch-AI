@@ -29,6 +29,10 @@ extension ChatServiceGroupEntry on ChatService {
     // Cancel any in-flight generation before switching context AND reset author note for new session context
     await _cancelAndWaitForGeneration();
     await _waitForTurnToSettle();
+    // Groups have no same-cast fast path — every re-enter clears
+    // `_messages`. Persist first or the last exchange dies the same
+    // way as the 1:1 slow path.
+    await flushPendingSaves();
     _generationEpoch++;
 
     // Reset AFK idle state when switching to a different group

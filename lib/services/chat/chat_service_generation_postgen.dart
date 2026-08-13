@@ -128,6 +128,9 @@ extension ChatServiceGenerationPostGen on ChatService {
         t.streamTarget.text = finalResponse;
       }
 
+      // Turn taken = durable, before lorebook/evals.
+      await _saveChat();
+
       // Snapshot which entries were already triggered before scanning the AI response.
       // We will only decrement those — newly AI-triggered entries must keep their
       // full depth budget so they are visible on the next user turn.
@@ -150,9 +153,6 @@ extension ChatServiceGenerationPostGen on ChatService {
       // This preserves full depth for lore discovered in the AI's own words.
       // Thin delegation (preAi set computed in god for snapshot; scanner owns decrement).
       _lorebookScanner.decrementLoreDepthForEntries(preAiTriggered);
-
-      // Save session after AI message is complete
-      await _saveChat();
 
       // ── Scene Guest (Lite NPC) parity guard ──────────────────────────
       // A guest turn must NOT touch the active character's Realism Engine,

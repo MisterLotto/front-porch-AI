@@ -249,7 +249,7 @@ extension ChatServiceMessageOps on ChatService {
         _restorePocketsFromStamp(deleted, after: false);
       }
 
-      await _saveChat();
+      await _saveChat(replaceAll: true);
       notifyListeners();
     }
   }

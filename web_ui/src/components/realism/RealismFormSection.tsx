@@ -181,7 +181,7 @@ export function RealismFormSection({
             accent
             values={v.ambitions}
             onChange={(a) => set({ ambitions: a })}
-            placeholder="e.g. open her own bakery"
+            placeholder="e.g. open a bakery"
             helper="What this character is working toward across the whole story. They colour how the character steers a scene, and they inch forward when objectives complete. Not a to-do list — quests live in the chat sidebar."
           />
           {/* ── Likes & Dislikes ── mirrors identity_chip_lists.dart. Two
@@ -191,14 +191,14 @@ export function RealismFormSection({
             values={v.likes}
             onChange={(a) => set({ likes: a })}
             placeholder="e.g. thunderstorms"
-            helper="Small, specific things this character warms to. They colour how she reacts to what is already happening — and, with the Realism Engine on, how much a moment moves her."
+            helper="Small, specific things this character warms to. They colour how the character reacts to what is already happening — and, with the Realism Engine on, how much a moment moves them."
           />
           <ChipList
             label="Put off by"
             values={v.dislikes}
             onChange={(a) => set({ dislikes: a })}
             placeholder="e.g. being interrupted"
-            helper="What makes her bristle. Phrases, not paragraphs — one thing per chip reads best in a scene."
+            helper="What makes this character bristle. Phrases, not paragraphs — one thing per chip reads best in a scene."
           />
 
           {/* ── Pockets & Wardrobe ── mirrors identity_chip_lists.dart. What
