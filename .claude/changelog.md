@@ -3,6 +3,19 @@
 
 # Changelog
 
+## 2026-08-13 — fix(golden): pocketsFeatureEnabled moves to the shell (fake dispatch)
+- **Files:** `chat_service.dart` (getter beside pocketsFor, class member),
+  `chat_service_pockets.dart` (extension copy removed),
+  `test/golden/support/fakes.dart` (override false — panel stays absent in
+  every golden scene, same contract as the null pocketsFor above it).
+- **Why:** bcea783's Widget Golden job went red on the 1:1 sidebar scene:
+  the new UI gate lived on an EXTENSION, whose body reaches the private
+  storage field the golden FakeChatService (implements, not extends) does
+  not have. The shell's convention: fake-pinned members stay class members
+  precisely so fakes can override them. No goldens regenerated — the
+  pixels match again.
+- **Commit:** 0c5982c
+
 ## 2026-08-13 — fix(pockets): hostile-review findings — session-scoped reactions + web guest-focus guard
 - **Files:** `chat_service_pockets.dart` (`_PendingItemIntro.session` stamp;
   stale seed comment updated), `chat_service_wiring_injection.dart` (intro
