@@ -191,4 +191,16 @@ void main() {
       0,
     );
   });
+
+  test('the same character on both sides is refused — it would re-import '
+      'every chat onto its own owner', () async {
+    final base = await seedCard('Solo');
+    await seedSession(base, '1700000000009', 'ONLY-CHAT');
+    await expectLater(
+      chat.copyChatsForEnhance(from: base, to: base),
+      throwsArgumentError,
+    );
+    // Nothing was duplicated by the refusal.
+    expect(await chat.getSessionsForId(base.stableGroupId), hasLength(1));
+  });
 }

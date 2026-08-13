@@ -3,6 +3,19 @@
 
 # Changelog
 
+## 2026-08-13 — fix(enhance): hostile-review hardening of the wizard + chat-copy surfaces
+- **Files:** chat_service_enhance_chats.dart (same-character copy refused —
+  ArgumentError; would have re-imported every chat onto its own owner via the
+  web endpoint's arbitrary ids), chargen_facade.dart (fromId==toId → friendly
+  400), chargen_routes.dart (generic catch → friendly 500, matching the chat
+  import route's posture), enhance_wizard_page.dart (AnimatedSwitcher child
+  keyed per step — several steps share a runtimeType, so transitions were
+  silently skipped and scroll offset bled between steps),
+  enhance_chat_copy_test.dart (+1 guard test, proven red by removing the
+  guard).
+- **Why:** maintainer-directed full hostile review of b738535/94ca01c.
+- **Commit:** (this commit)
+
 ## 2026-08-13 — fix(chat): same-session reload stamped the live persona onto the row it was restoring
 - **Files:** chat_service_session_load.dart (loadSession's flushPendingSaves
   gated on `_currentSessionId != sessionId`); NEW

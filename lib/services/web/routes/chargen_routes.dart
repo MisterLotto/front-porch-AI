@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'package:flutter/foundation.dart';
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf_router/shelf_router.dart';
 
@@ -101,6 +102,14 @@ class WebChargenRoutes {
       return JsonResponse.ok({'copied': result['copied']});
     } on ChatImportBusy catch (e) {
       return JsonResponse.error(409, e.toString());
+    } catch (e) {
+      // Same posture as the chat import route: a mid-copy failure surfaces
+      // as a friendly 500, never a raw shelf error page.
+      debugPrint('[enhance-chats] $e');
+      return JsonResponse.error(
+        500,
+        'Could not copy the chats. Try again, or copy on desktop.',
+      );
     }
   }
 

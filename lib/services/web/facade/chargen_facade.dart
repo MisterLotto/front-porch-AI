@@ -192,6 +192,9 @@ class ChargenFacade {
   ) async {
     final chat = _chat;
     if (chat == null) return {'ok': false, 'error': 'chat is not available'};
+    if (fromId == toId) {
+      return {'ok': false, 'error': 'from and to must be different characters'};
+    }
     final from = _characters.cardByDbId(fromId);
     final to = _characters.cardByDbId(toId);
     if (from == null || to == null) {

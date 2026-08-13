@@ -375,19 +375,26 @@ class _EnhanceWizardPageState extends State<EnhanceWizardPage> {
           Expanded(
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 300),
-              child: switch (_currentStep) {
-                0 => _buildAboutStep(context),
-                1 => _buildModelStep(context),
-                2 => _buildChatStep(context),
-                3 => _buildInterviewStep(context),
-                4 => EnhanceReviewBody(
-                  key: _reviewKey,
-                  original: widget.character,
-                  enhanced: _enhanced!,
-                  selection: _ranSelection!,
-                ),
-                _ => _buildChatsStep(context),
-              },
+              // Keyed per step: several steps share a runtimeType
+              // (_stepScroll's SingleChildScrollView), and an unkeyed
+              // switcher would update them in place — no transition, and
+              // one step's scroll offset bleeding into the next.
+              child: KeyedSubtree(
+                key: ValueKey<int>(_currentStep),
+                child: switch (_currentStep) {
+                  0 => _buildAboutStep(context),
+                  1 => _buildModelStep(context),
+                  2 => _buildChatStep(context),
+                  3 => _buildInterviewStep(context),
+                  4 => EnhanceReviewBody(
+                    key: _reviewKey,
+                    original: widget.character,
+                    enhanced: _enhanced!,
+                    selection: _ranSelection!,
+                  ),
+                  _ => _buildChatsStep(context),
+                },
+              ),
             ),
           ),
           _buildNavButtons(context, backendReady),
