@@ -152,46 +152,37 @@ class GenerationPanel extends StatelessWidget {
     }
 
     if (error.isNotEmpty) {
+      // Tinted card + accent border + NORMAL ink — the same shape the
+      // connection status card next door uses. The previous version (a
+      // mangled color-sweep leftover, its resolve() calls nested two deep
+      // with identical branches) painted the background, the icon AND the
+      // text all logError in dark mode: a solid red bar whose message was
+      // literally invisible — the one thing an error surface must never be.
+      // Selectable on purpose: the message is what a user pastes into a
+      // report.
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppColors.resolve(
-            context,
-            AppColors.resolve(
-              context,
-              AppColors.logError,
-              AppColors.lightBorder,
-            ),
-            AppColors.resolve(
-              context,
-              AppColors.logError,
-              AppColors.lightBorder,
-            ),
-          ),
+          color: AppColors.logError.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: AppColors.logError.withValues(alpha: 0.55),
+          ),
         ),
         child: Row(
           children: [
-            Icon(
+            const Icon(
               Icons.error_outline,
-              color: AppColors.resolve(
-                context,
-                AppColors.logError,
-                AppColors.logError,
-              ),
+              color: AppColors.logError,
               size: 20,
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
+              child: SelectableText(
                 error,
                 style: TextStyle(
-                  color: AppColors.resolve(
-                    context,
-                    AppColors.logError,
-                    AppColors.logError,
-                  ),
+                  color: AppColors.textPrimary(context),
                   fontSize: 12,
                 ),
               ),

@@ -3,6 +3,19 @@
 
 # Changelog
 
+## 2026-08-13 — fix(image-studio): error banner was red-on-red (unreadable)
+- **Files:** `lib/ui/image_studio/generation_panel.dart` (tinted card +
+  border + textPrimary ink + SelectableText; mangled double-nested
+  resolve() removed), `test/ui/image_studio/generation_panel_error_test.dart`
+  (new legibility guard: ink != fill and ink != logError; proven red with
+  the shipped logError ink restored).
+- **Why:** maintainer screenshot — a generation failure showed as a solid
+  red bar: background, icon AND message all AppColors.logError in dark
+  mode, a color-sweep leftover. The underlying error (craft failure /
+  backend unreachable / "generation returned no image") was undiagnosable
+  because the text was invisible.
+- **Commit:** (this commit)
+
 ## 2026-08-13 — fix(golden): pocketsFeatureEnabled moves to the shell (fake dispatch)
 - **Files:** `chat_service.dart` (getter beside pocketsFor, class member),
   `chat_service_pockets.dart` (extension copy removed),
