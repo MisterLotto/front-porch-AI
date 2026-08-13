@@ -512,9 +512,21 @@ extension ChatServiceSessionLoad on ChatService {
     // (chip attach's _saveChat can land AFTER getMessagesForSession below),
     // and that turn's finalization would then write onto the replaced list.
     await _waitForTurnToSettle();
-    // Persist the chat we are leaving (or this same session's live list)
-    // before replacing `_messages` from rows.
-    await flushPendingSaves();
+    // Persist the chat we are LEAVING before replacing `_messages` from rows
+    // — only when this load actually switches sessions. A SAME-session
+    // reload must NOT flush: flushPendingSaves is a full save, so it would
+    // stamp the live scalars — the active persona above all — onto the very
+    // row this load exists to read back, and the restore below would then
+    // "restore" whatever was already live. That broke "reopening a chat
+    // restores its persona" everywhere (Rawhide E2E red since 6192ddc:
+    // persona_default_test + persona_folder_test; the picker flow after
+    // setActiveCharacter hits it because _loadLastSession sets
+    // _currentSessionId without activating the persona — by design). The
+    // same-session transcript needs no flush here: turns persist when
+    // taken, and _waitForTurnToSettle has already drained the save chain.
+    if (_currentSessionId != sessionId) {
+      await flushPendingSaves();
+    }
 
     // Reset AFK idle state when loading a new session
     _cancelIdleTimer();

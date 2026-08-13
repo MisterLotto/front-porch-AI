@@ -3,6 +3,22 @@
 
 # Changelog
 
+## 2026-08-13 — fix(chat): same-session reload stamped the live persona onto the row it was restoring
+- **Files:** chat_service_session_load.dart (loadSession's flushPendingSaves
+  gated on `_currentSessionId != sessionId`); NEW
+  test/services/chat/session_reload_persona_test.dart (red with the
+  unconditional flush, green with the gate; leave_reenter_persist_test's six
+  6192ddc guards still green).
+- **Why:** Rawhide E2E red on every platform since 6192ddc
+  (persona_default_test + persona_folder_test, shards 1+2). flushPendingSaves
+  is a FULL save, so reloading the already-open session wrote the live
+  scalars — the active persona above all — onto the row before the restore
+  read it, durably rewriting the chat's persona binding. The picker flow
+  after setActiveCharacter always hits it (_loadLastSession sets
+  _currentSessionId without activating the persona, by design). Leaving a
+  DIFFERENT session still flushes — 6192ddc's drop-a-turn protection intact.
+- **Commit:** (this commit)
+
 ## 2026-08-13 — feat(enhance): explainer-first wizard + "bring your chats along" (desktop + web)
 - **Files:** NEW enhance_wizard_page.dart (+.chrome/.steps parts, creator-pattern
   stepper: About → Model → Chat → Interview → Review → Chats),
