@@ -137,6 +137,9 @@ class ChatService extends ChangeNotifier {
   LLMService? testLlmServiceOverride;
   @visibleForTesting
   bool testIsLocalOverride = false;
+  /// Test hook: import awaits this before mutating so a Send can race it.
+  @visibleForTesting
+  Completer<void>? testImportHold;
 
   // Action suggestions
   List<String> _suggestedActions = [];
@@ -271,6 +274,7 @@ class ChatService extends ChangeNotifier {
   /// can run indefinitely; blocking input until they finish would trade a race
   /// for a wedged UI, which is the worse bug.
   bool _isPostGenerating = false;
+  bool _isImporting = false;
 
   // (_isTurnBusy — "this turn is still in motion" predicate for mutation
   // guards, NOT for stopGeneration/_cancelAndWaitForGeneration which must
@@ -795,6 +799,7 @@ class ChatService extends ChangeNotifier {
   /// [sendMessage], or it clears the field for a send the service refuses.
   /// See [isSettlingTurn] and the mirror in `_sendCurrentMessage`.
   bool get isGenerating => _isGenerating;
+  bool get isImporting => _isImporting;
 
   // (isSettlingTurn moved to chat_service_generation_stream.dart;
   // isLoadingSession / selectedLookFor / setLookForCharacter moved to

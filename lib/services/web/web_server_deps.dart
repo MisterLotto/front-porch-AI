@@ -45,6 +45,7 @@ class WebServerDeps {
     this.characterLibraryFacade,
     this.chargenFacade,
     this.chatFacade,
+    this.chatPackageFacade,
     this.chatToolsFacade,
     this.groupFacade,
     this.settingsFacade,
@@ -84,6 +85,10 @@ class WebServerDeps {
   final ChargenFacade? chargenFacade;
 
   final ChatFacade? chatFacade;
+
+  /// Import/export `.fpchat` + SillyTavern JSONL — null until ChatService
+  /// is injected. Same I/O the desktop folder menu already uses.
+  final ChatPackageFacade? chatPackageFacade;
 
   /// Chat sidebar tools adapter (memory/summary/chaos/NSFW/scene-time/
   /// objectives) — null until a ChatService is injected.

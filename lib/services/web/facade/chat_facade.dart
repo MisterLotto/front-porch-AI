@@ -165,7 +165,7 @@ class ChatFacade {
       'sessionId': _chat.currentSessionId,
       'sessionName': _chat.sessionName,
       'messages': messages,
-      'isGenerating': _chat.isGenerating,
+      'isGenerating': _chat.isGenerating || _chat.isImporting,
       // Additive (mixed-fleet safe): older web clients ignore it; newer ones
       // can distinguish "streaming tokens" from "still settling".
       'isSettlingTurn': _chat.isSettlingTurn,

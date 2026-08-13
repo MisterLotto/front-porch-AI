@@ -27,6 +27,7 @@ interface ChatState {
   sessionId: string | null;
   messages: Message[];
   isGenerating: boolean;
+  isSettlingTurn?: boolean;
   isEvaluatingRealism?: boolean;
   isCheckingCompletion?: boolean;
   isProcessingGreeting?: boolean;
@@ -90,6 +91,7 @@ export function ChatPage() {
     return Number.isFinite(n) ? Math.min(560, Math.max(260, n)) : 320;
   });
   const [showSessions, setShowSessions] = useState(false);
+  const [importNotice, setImportNotice] = useState('');
   const [showStats, setShowStats] = useState(false);
   const [showTheme, setShowTheme] = useState(false);
   const [showPersona, setShowPersona] = useState(false);
@@ -576,6 +578,19 @@ export function ChatPage() {
           onCommand={sendMessage}
         />
 
+        {importNotice && (
+          <div className="chat-import-notice">
+            <p>{importNotice}</p>
+            <button
+              type="button"
+              className="link-btn"
+              aria-label="Dismiss"
+              onClick={() => setImportNotice('')}
+            >
+              ✕
+            </button>
+          </div>
+        )}
         {state.absencePhrase && state.sessionId && !absenceDismissed.has(state.sessionId) && (
           <div className="absence-banner">
             <span className="absence-banner-icon">🕰️</span>
@@ -725,6 +740,14 @@ export function ChatPage() {
           onLoad={loadSession}
           onNew={newChat}
           onClose={() => setShowSessions(false)}
+          exportTitle={title}
+          canExport={state.messages.length > 0}
+          canImport={!state.isGenerating && !state.isSettlingTurn}
+          onImported={(message) => {
+            setShowSessions(false);
+            setImportNotice(message);
+            void refresh();
+          }}
         />
       )}
 

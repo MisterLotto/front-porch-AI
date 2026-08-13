@@ -40,7 +40,13 @@ extension _ChatPageInputActions on _ChatPageState {
         } else if (value == 'history') {
           _showHistoryDialog(context);
         } else if (value == 'import') {
-          _importChat();
+          // itemBuilder runs once when the menu opens. A turn can start
+          // while the menu is still up, leaving a stale-enabled item.
+          if (!chatService.isGenerating &&
+              !chatService.isSettlingTurn &&
+              !chatService.isImporting) {
+            _importChat();
+          }
         } else if (value == 'export') {
           _exportChat();
         } else if (value == 'context') {
@@ -77,14 +83,22 @@ extension _ChatPageInputActions on _ChatPageState {
             ],
           ),
         ),
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'import',
-          child: Row(
-            children: [
-              Icon(Icons.file_upload, size: 20),
-              SizedBox(width: 12),
-              Text('Import Chat'),
-            ],
+          enabled: !chatService.isGenerating &&
+              !chatService.isSettlingTurn &&
+              !chatService.isImporting,
+          child: Tooltip(
+            message: (!chatService.isGenerating && !chatService.isSettlingTurn)
+                ? 'Import a chat file'
+                : 'Wait until the current reply finishes, then import',
+            child: const Row(
+              children: [
+                Icon(Icons.file_upload, size: 20),
+                SizedBox(width: 12),
+                Text('Import Chat'),
+              ],
+            ),
           ),
         ),
         const PopupMenuItem(

@@ -44,6 +44,9 @@ extension ChatServiceSend on ChatService {
     // A photo turn's captioning windows run while _isGenerating is false; this
     // guard stops a second send from interleaving them (see isPhotoTurnInFlight).
     if (_photoTurnInFlight) return;
+    // Import clears `_messages` and remints the session. A Send during that
+    // window appends into a list the import is about to throw away.
+    if (_isImporting) return;
     // No new user turn while a generation is live (streaming, draining, or
     // finalizing). A send mid-turn interleaves this method's own message
     // inserts (dream block) with the active turn's writes on one shared

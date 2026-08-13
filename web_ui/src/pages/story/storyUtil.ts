@@ -41,7 +41,13 @@ export function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-const safe = (name: string) => (name || 'story').replace(/[^\w.-]+/g, '_');
+/** One sanitiser for every `<a download>` name (chat export + story files). */
+export function safeDownloadStem(name: string, fallback: string): string {
+  const cleaned = (name || fallback).replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
+  return cleaned.length === 0 ? fallback : cleaned;
+}
+
+const safe = (name: string) => safeDownloadStem(name, 'story');
 
 /** Download the assembled prose as plain text or markdown. */
 export async function exportText(id: string, format: 'text' | 'markdown', title: string) {

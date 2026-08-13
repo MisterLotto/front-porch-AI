@@ -474,6 +474,18 @@ button.ghost.small, .ghost.small { font-size: 0.72rem; padding: 4px 8px; backgro
 }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
+/* Chat import/export (Conversations drawer — desktop folder-menu twin). */
+.chat-package-bar { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 4px; }
+.chat-package-actions { display: flex; gap: 8px; }
+.chat-package-actions .ghost { flex: 1; }
+.chat-import-notice {
+  display: flex; align-items: flex-start; gap: 8px;
+  margin: 8px 12px 0; padding: 8px 10px;
+  border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text);
+}
+.chat-import-notice p { margin: 0; flex: 1; font-size: 0.9rem; }
+
 /* Reprocess-scope chips: which needs a Director redo is allowed to move. */
 .reprocess-scope-title { font-size: 0.8rem; font-weight: 600; margin: 12px 0 2px; }
 .reprocess-needs { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }

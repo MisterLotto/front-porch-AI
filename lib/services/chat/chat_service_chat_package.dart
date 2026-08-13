@@ -145,7 +145,21 @@ extension ChatServiceChatPackage on ChatService {
     if (_activeCharacter == null && _activeGroup == null) {
       throw Exception('No active character or group');
     }
+    if (_isTurnBusy) throw ChatImportBusy();
+    _isImporting = true;
+    try {
+      if (testImportHold != null) await testImportHold!.future;
+      return await _importChatPackageBody(bytes, onCharacterMismatch);
+    } finally {
+      _isImporting = false;
+    }
+  }
 
+  Future<({bool fullRestore, String? warning})> _importChatPackageBody(
+    Uint8List bytes,
+    Future<bool> Function(String packageName, String activeName)?
+        onCharacterMismatch,
+  ) async {
     // Preserve the currently open chat before replacing in-memory messages.
     if (_currentSessionId != null && _messages.isNotEmpty) {
       await _saveChat();
@@ -311,8 +325,8 @@ extension ChatServiceChatPackage on ChatService {
       final bytes = Uint8List.fromList(raw);
       seq++;
       // Strip prior fpchat_ prefixes; cap stem + keep extension (Windows MAX_PATH).
-      final cleanBase = _stripFpchatImagePrefixes(base);
-      final preferred = _cappedFpchatImageName(sid, seq, cleanBase);
+      final cleanBase = stripFpchatImagePrefixes(base);
+      final preferred = cappedFpchatImageName(sid, seq, cleanBase);
       String? dest;
       if (igs != null) {
         dest = await igs.saveImageToDisk(bytes, preferred);
@@ -325,7 +339,7 @@ extension ChatServiceChatPackage on ChatService {
         while (await File(dest!).exists()) {
           dest = path.join(
             dir.path,
-            _cappedFpchatImageName(sid, seq, cleanBase, collision: n),
+            cappedFpchatImageName(sid, seq, cleanBase, collision: n),
           );
           n++;
         }
@@ -452,42 +466,6 @@ extension ChatServiceChatPackage on ChatService {
       // ~one frame — enough yield without starving the event loop.
       await Future<void>.delayed(const Duration(milliseconds: 16));
     }
-  }
-
-  /// Strip stacked `fpchat_<sid>_<seq>_` prefixes (sid may be digits or `import`).
-  static final RegExp _fpchatImagePrefixRe =
-      RegExp(r'^fpchat_[A-Za-z0-9]+_\d+_');
-
-  String _stripFpchatImagePrefixes(String base) {
-    var b = path.basename(base);
-    for (var i = 0; i < 32 && _fpchatImagePrefixRe.hasMatch(b); i++) {
-      b = b.replaceFirst(_fpchatImagePrefixRe, '');
-    }
-    if (b.isEmpty) b = 'image.png';
-    return b;
-  }
-
-  /// `fpchat_<sid>_<seq>[_n]_<stem><ext>` with stem capped so total ≤ 120.
-  String _cappedFpchatImageName(
-    String sid,
-    int seq,
-    String cleanBase, {
-    int? collision,
-  }) {
-    var ext = path.extension(cleanBase);
-    if (ext.length > 12) ext = '.png';
-    var stem = path.basenameWithoutExtension(cleanBase);
-    if (stem.isEmpty) stem = 'image';
-    final mid = collision == null ? '${seq}_' : '${seq}_${collision}_';
-    // Keep sid so two imports cannot collide on fpchat_3_0.png.
-    final safeSid = sid.length > 24 ? sid.substring(sid.length - 24) : sid;
-    final prefix = 'fpchat_${safeSid}_$mid';
-    final budget = 120 - prefix.length - ext.length;
-    if (budget < 4) {
-      return 'fpchat_${safeSid}_${seq}_${collision ?? 0}$ext';
-    }
-    if (stem.length > budget) stem = stem.substring(0, budget);
-    return '$prefix$stem$ext';
   }
 
   /// Test hook: live `_captureRealismState` key set for stamp-contract guards.

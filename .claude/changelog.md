@@ -3,6 +3,38 @@
 
 # Changelog
 
+## 2026-08-13 — fix(web): second-review import/export (notice, send race, CI)
+- **Files:** ChatPage import notice outlives the drawer; `_isImporting`
+  blocks Send + second import; gzip ndjson test split to a new file;
+  decode inflate cap 512 MB; friendly ArchiveException copy;
+  parseApiErrorBody object guard; ChatImportBusy extracted;
+  desktop Import tooltip.
+- **Why:** second Opus review of the web import/export pass.
+- **Commit:** (this commit)
+
+## 2026-08-13 — feat(web): chat import/export review fixes (cap, errors, tests)
+- **Files:** package routes (256 MB cap + BodyTooLarge + mapped errors +
+  mismatch validation), request_body.dart, gzip ndjson, routes barrel,
+  client.ts parseApiErrorBody, drawer hoist + close-after-import,
+  facade filename removed (client names the file), extra tests,
+  storyUtil.safeDownloadStem shared with chat export, 413 oversize pin.
+- **Why:** Opus review of the first web import/export pass.
+- **Commit:** (this commit)
+
+## 2026-08-13 — feat(web): chat import/export (.fpchat + JSONL) on the PWA
+- **Files:** `chat_package_facade.dart`, `chat_package_routes.dart`,
+  `chat_service_chat_package.dart` (`ChatImportBusy` — import refused
+  while a turn is streaming/settling; desktop menu + web Import disabled),
+  `web_server_deps/host/bootstrap`, `ChatPackageBar.tsx`,
+  `chatPackage.ts` + test, `ConversationsDrawer.tsx`, `ChatPage.tsx`,
+  `styles.css`, `chat_package_facade_test.dart`.
+- **Why:** desktop folder-menu Import/Export (dual-lane .fpchat + ST
+  JSONL) was confirmed working in Dart and missing on web. Same
+  ChatService I/O; browser only downloads/uploads bytes. 409
+  character_mismatch + mismatch=full|dialogue matches the desktop
+  dialog. Empty export is 404 (proven red).
+- **Commit:** (this commit)
+
 ## 2026-08-13 — fix(tests): reverse the no-key catalog pin CI caught (d3b7cba/e95587c red)
 - **Files:** `test/services/image_gen_generate_test.dart` (the "no key ->
   curated catalog, zero network" pin now asserts "no key -> NOTHING, zero

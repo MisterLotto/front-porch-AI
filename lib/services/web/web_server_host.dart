@@ -605,6 +605,8 @@ class WebServerHost extends ChangeNotifier {
       characterLibraryFacade: characterLibraryFacade,
       chargenFacade: chargenFacade,
       chatFacade: chatFacade,
+      chatPackageFacade:
+          chatService != null ? ChatPackageFacade(chatService) : null,
       chatToolsFacade: chatToolsFacade,
       groupFacade: groupFacade,
       settingsFacade: settingsFacade,

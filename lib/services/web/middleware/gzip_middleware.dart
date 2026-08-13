@@ -77,6 +77,7 @@ class GzipMiddleware {
   static bool _isCompressible(String? mime) {
     if (mime == null) return false;
     return mime == 'application/json' ||
+        mime == 'application/x-ndjson' ||
         mime.startsWith('text/') ||
         mime == 'application/javascript' ||
         mime == 'application/manifest+json' ||
