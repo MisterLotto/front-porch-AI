@@ -522,9 +522,18 @@ void main() {
 
   group('ImageGenService.fetchImageModels — remote catalog', () {
     test(
-      'returns the curated catalog with zero network calls when no API key '
-      'is configured',
+      'lists NOTHING (and makes zero network calls) when no API key is '
+      'configured',
       () => _withRealHttp(() async {
+        // CONTRACT REVERSED 2026-08-13 (maintainer-directed). This test
+        // used to pin "no key -> the curated catalog", and that behavior is
+        // exactly how a user with no account saw a real-looking model menu,
+        // concluded Remote API images were free, and hit "No API key
+        // configured." on Generate. No account = no models now (the studio
+        // panel explains where the key lives); the catalog is reserved for
+        // CONFIGURED providers without a listing endpoint — the test below
+        // this one, which is unchanged. The zero-network half of the old
+        // assertion still stands: an unconfigured install must never probe.
         final fake = await _FakeLocalImageServer.start();
         final storage = _FakeStorageForGenerate('/does/not/matter');
         // remoteApiKey stays '' (the BackendSettings default).
@@ -533,9 +542,7 @@ void main() {
         );
         final service = ImageGenService(storage);
         final models = await service.fetchImageModels();
-        expect(models, hasLength(45));
-        expect(models.any((m) => m.id == 'hidream'), isTrue);
-        expect(models.any((m) => m.id == 'custom-civitai'), isTrue);
+        expect(models, isEmpty);
         expect(fake.requestLog, isEmpty);
         await fake.close();
       }),

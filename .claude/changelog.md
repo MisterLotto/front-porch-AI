@@ -3,6 +3,19 @@
 
 # Changelog
 
+## 2026-08-13 — fix(tests): reverse the no-key catalog pin CI caught (d3b7cba/e95587c red)
+- **Files:** `test/services/image_gen_generate_test.dart` (the "no key ->
+  curated catalog, zero network" pin now asserts "no key -> NOTHING, zero
+  network", with the dated contract-reversal rationale in-file),
+  `test/services/image_models_honesty_test.dart` DELETED (added two
+  commits ago; strictly subsumed by the updated pin, which also asserts
+  zero network on the same states — no parallel guards).
+- **Why:** d3b7cba changed fetchImageModels behavior by maintainer
+  directive but missed this pre-existing sibling pin (test/services was
+  not swept; only image_gen_service_test was checked). CI caught it on
+  both runs. The zero-network half of the old assertion still stands.
+- **Commit:** (this commit)
+
 ## 2026-08-13 — fix(pockets): the surprise Easter egg was being ignored — moved to the plan tail
 - **Files:** `inventory_injection.dart` (intros split into
   buildItemIntroInjection — bracketed imperative directives; record
