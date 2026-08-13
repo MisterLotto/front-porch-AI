@@ -43,7 +43,7 @@ extension _CreatorCore on CreatorState {
     progress = 0.0;
     notify();
 
-    final llmService = _resolveLlmService(llmProvider, storage);
+    final llmService = llmProvider.serviceForModel(selectedModelId);
     if (llmService == null) {
       generationStatus = llmProvider.hasManagedProcess
           ? 'Error: The backend is not running. Start it first.'
@@ -96,27 +96,6 @@ extension _CreatorCore on CreatorState {
       setStep(4); // → Realism step (shows the error/Try-Again state)
       notify();
     }
-  }
-
-  /// Resolve the LLM service for the active backend, or null if none is ready.
-  LLMService? _resolveLlmService(
-    LLMProvider llmProvider,
-    StorageService storage,
-  ) {
-    if (llmProvider.hasManagedProcess) {
-      final svc = llmProvider.activeService;
-      return svc.isReady ? svc : null;
-    }
-    if (selectedModelId.isNotEmpty &&
-        selectedModelId != llmProvider.openRouterService.modelName) {
-      return OpenRouterService(
-        apiUrl: storage.remoteApiUrl,
-        apiKey: storage.remoteApiKey,
-        modelName: selectedModelId,
-      );
-    }
-    final active = llmProvider.activeService;
-    return active.isReady ? active : null;
   }
 
   String _personaContext(UserPersonaService personaService) {

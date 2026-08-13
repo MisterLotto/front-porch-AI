@@ -2485,3 +2485,34 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
   border-radius: 8px; border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
 }
 .chiplist-count { font-size: 0.72rem; color: var(--muted); margin-left: auto; }
+
+/* ── AI Enhance (library menu → chat-grounded rewrite) ─────────────────── */
+.enh-modal { max-width: 720px; width: min(720px, 94vw); max-height: 86vh; overflow-y: auto; }
+.enh-warn { color: var(--accent-amber); font-style: italic; }
+.enh-sessions { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.enh-session {
+  all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 2px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 8px 12px;
+}
+.enh-session.on { border-color: var(--accent); }
+.enh-session-preview { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.enh-session-meta { font-size: 0.72rem; color: var(--muted); }
+.enh-steps { font-size: 0.8rem; display: flex; flex-direction: column; gap: 3px; margin: 8px 0; }
+.enh-sections { display: flex; flex-direction: column; gap: 12px; }
+.enh-section { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
+.enh-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.enh-use { margin: 0; }
+.enh-compare { display: grid; gap: 8px; }
+.enh-compare.wide { grid-template-columns: 1fr 1fr; }
+.enh-old {
+  font-size: 0.8rem; color: var(--muted); white-space: pre-wrap;
+  background: var(--surface-2); border-radius: 8px; padding: 8px;
+  max-height: 180px; overflow-y: auto;
+}
+.enh-new {
+  width: 100%; min-height: 120px; font-size: 0.8rem; resize: vertical;
+  background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px;
+}
+.enh-new:focus { border-color: var(--accent); outline: none; }

@@ -35,6 +35,7 @@ import 'package:front_porch_ai/ui/widgets/widgets.dart';
 // Specific pages, dialogs, and internal services not in barrels
 import 'package:front_porch_ai/ui/pages/chat_page.dart';
 import 'package:front_porch_ai/ui/pages/home/dialogs/session_picker_dialog.dart';
+import 'package:front_porch_ai/ui/pages/home/enhance/enhance_flow.dart';
 import 'package:front_porch_ai/ui/pages/edit_character_page.dart';
 import 'package:front_porch_ai/ui/pages/edit_group_page.dart';
 import 'package:front_porch_ai/services/group_card_importer.dart';

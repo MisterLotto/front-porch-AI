@@ -504,6 +504,7 @@ class WebServerHost extends ChangeNotifier {
             characterFacade,
             streamHub,
             _imageGenService,
+            _storage,
           )
         : null;
 

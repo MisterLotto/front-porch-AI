@@ -15471,3 +15471,117 @@ unasserted). Proven red under pre-anchor behavior; first-draft test
 itself was proven decorative twice and tightened (wobble direction,
 inline author-note splice) before being trusted. Full chat dir 1417;
 analyze clean.
+
+## 2026-08-13 — AI Enhance: grow a character from a real chat (desktop + web)
+
+**Files:** NEW `lib/services/chargen/chat_grounding.dart` (EnhanceSelection,
+shared groundedConceptFor moved byte-identical from SceneGuestFactory,
+buildChatExcerptBlock, enhanceGroundingCharBudget), NEW
+`lib/services/chargen/enhance_context.dart` (DB → transcript/recap/journal
+cards, think-strip via ChatMessage.displayText, journal keyed by
+stableGroupId), NEW `lib/services/chargen/character_gen_enhance.dart`
+(`enhanceCharacter` part: interview + selected-stage reuse, unselected fields
+carried byte-verbatim), `character_gen_steps.dart` (optional `chatGrounding`
+seam on interview/enrichment/dialogue), DELETED
+`chargen/character_gen_editors.dart` (4 orphaned editor passes, zero call
+sites; `_isGreetingTruncated`/`_cleanEditorOutput` orphans removed from
+parsing), `character_repository.import.dart` (`newNameOverride` on
+duplicateCharacter), `scene_guest_factory.dart` (uses shared grounding fn),
+`home_card_menu.dart` (menu list EXTRACTED from character_grid_card — was 529
+lines, over cap — + new AI Enhance entry), `home_page_chrome.dart` (case),
+`session_picker_dialog.dart` (`allowNew`/`title` params), NEW
+`lib/ui/pages/home/enhance/` (flow + options dialog + review page), web:
+`chat_facade.dart` + `chat_routes.dart` (`?characterId=` sessions param),
+`chargen_facade.dart` + `chargen_routes.dart` (POST /api/chargen/enhance →
+`chargen_enhance_done` proposal event; storage dep for the token budget),
+`character_library_facade.dart` + `character_routes.dart` (duplicate
+`newName`), `character_facade.dart` (cardByDbId made public),
+`web_server_host.dart` (wiring), web_ui: CharactersPage menu entry +
+EnhanceDialog/EnhanceReviewModal + enhanceForm.ts (+ vitest) + ws.ts event
+fields + styles.css `.enh-*` block; `npm run build` shipped to
+assets/web_app. Tests: NEW chat_grounding_test, enhance_context_test,
+character_gen_enhance_test (call-site pin proven red),
+character_repository_duplicate_name_test, enhance_ui_test.
+
+**Why:** maintainer feature request — right-click a character → "AI Enhance":
+re-run the AI creator pipeline grounded in a real chat so the card captures
+the character as actually played (voice, history, real dialogue). Output is a
+"<Name> (Enhanced)" DUPLICATE (change order 2026-08-13): original card,
+chats, avatars, realism state are never written. Review-before-save with
+per-field accept; per-run checklist of which fields to rewrite; Journal recap
++ memory cards ride along when present; 1:1 chats only in v1.
+
+**How:** the Scene Guest chat-grounding precedent generalized: transcript
+block (recap → memory cards → newest-first turns, capped at min(context−3k,
+3k tokens) since the interview repeats it up to 9x) injected into the
+interview seed + enrichment + example dialogue via one optional param each;
+greetings ride the existing characterContext seam, lorebook rides worldLore —
+base-card/recovery/image stages skipped. Save = duplicateCharacter(newName:)
++ folder inheritance + updateCharacter of accepted fields only. Web rides the
+same Dart pipeline through the chargen facade; apply uses the EXISTING
+duplicate + partial-update endpoints (additive API only).
+
+**Verification:** analyze clean, dart fix clean, 54 chargen tests + 5 UI
+widget tests green, grounding call-site pin proven red-then-green, vitest 82
+green, npm build shipped. Full suite + ci-local goldens: see conversation.
+
+## 2026-08-13 — AI Enhance: per-run model picker (maintainer: "no model picker, not shippable")
+
+**Files:** `lib/services/llm_provider.dart` (NEW public `serviceForModel` —
+the creator's private `_resolveLlmService` promoted verbatim; the private
+method DELETED, its 4 call sites in creator_state_engine.{core,tools}.dart
+converted), `enhance_options_dialog.dart` (model row on remote backends via
+the shared `showGenericModelSearchDialog`; selection is per-run only — never
+`storage.setRemoteModel`), `enhance_flow.dart` (resolves via
+`serviceForModel(options.modelId)`), web: `backend_facade.dart` (additive
+`remoteModel` status field — `loadedModel` is the local gguf name),
+`chargen_facade.dart` (`modelId` in the enhance body → same resolver),
+web_ui `EnhanceDialog.tsx` (model `<select>` when backend is remote, fed by
+the existing `/api/backend/remote-models`), `enhanceForm.ts` (+ vitest).
+Tests: NEW `llm_provider_service_for_model_test.dart` (ad-hoc service for a
+picked model, active model untouched, local ignores the pick) + a remote-
+picker widget test in enhance_ui_test.dart.
+
+**Why:** Enhance silently ran on whatever backend/model was active. The
+creator wizard already had per-run model choice; Enhance now has the same,
+desktop + web, through ONE shared resolver (no parallel implementation).
+Local backends deliberately show no picker — the loaded model IS the model,
+the same rule the creator's Setup step follows.
+
+**Verification:** analyze clean; 68 tests across resolver/enhance/chargen/
+creator suites green (creator suites pin the refactor); vitest 83 green;
+npm build shipped; full suite re-run in conversation.
+
+## 2026-08-13 — AI Enhance: FULL Backend & Model step (maintainer: "why not the full picker, kobold/oMLX etc")
+
+**Files:** NEW `lib/ui/pages/home/enhance/enhance_setup_page.dart` — hosts the
+creator wizard's REAL `SetupStep` widget (KoboldCpp local with .gguf
+pick/launch/presets, Remote API, oMLX) as Enhance's model step; Continue gates
+live on `serviceForModel(...) != null` and pops the picked model id.
+`character_creator/character_creator.dart` barrel now exports
+`steps/setup_step.dart` (cross-domain reuse); redundant direct import removed
+from character_creator_page.dart. `enhance_flow.dart` runs chat pick → setup
+page → options dialog. The interim remote-only model row was DELETED from
+`enhance_options_dialog.dart` (superseded; record back to {selection, nsfw}).
+Web unchanged this round (its model select from the previous round stands —
+the web creator has no backend step either; flag below). Tests: NEW
+`enhance_setup_page_test.dart` (hosts real SetupStep, Continue pops, route
+pops — bounded pumps + tester.runAsync); enhance_ui_test reverted to the
+2-field record.
+
+**Why:** the maintainer rejected the remote-only row — Enhance must offer the
+creator's complete backend+model surface, including switching to local
+Kobold/oMLX. Hosting the creator's actual widget (not a copy) keeps ONE
+implementation and identical semantics — backend choices behave exactly as in
+the creator's Setup step, shared prefs included.
+
+**Test-harness lesson (cost ~40 min):** constructing StorageService/
+LLMProvider INSIDE a testWidgets body hangs the suite — their init awaits
+real I/O the fake-async zone never drives, and `flutter test | tail` buffers
+all output so the hang looked like silence. Fix: `tester.runAsync` for
+service setup (repo convention, folder_character_picker_test) + bounded
+pumps instead of pumpAndSettle (SetupStep has a repeating blink animation).
+
+**Verification:** analyze clean, dart fix clean, 68 affected tests green,
+full suite green (same pre-existing gitignored .local_poke failure only),
+goldens re-run in conversation.

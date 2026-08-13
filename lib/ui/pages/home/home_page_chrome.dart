@@ -275,6 +275,9 @@ extension _HomePageChrome on _HomePageState {
       case 'edit':
         _editCharacter(context, character);
         break;
+      case 'ai_enhance':
+        runAiEnhanceFlow(context, character);
+        break;
       case 'avatar_gallery':
         // Replace-portrait / star both call repository.updateCharacter, which
         // notifyListeners() → the home grid rebuilds on its own (same as edit).

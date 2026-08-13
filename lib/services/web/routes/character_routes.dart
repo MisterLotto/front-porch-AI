@@ -235,10 +235,18 @@ class WebCharacterRoutes {
   }
 
   /// Duplicate a character (deep-copies extensions + fresh stable id).
+  /// Optional JSON body `{newName}` overrides the "(duplicate)" suffix
+  /// (web AI Enhance's "(Enhanced)" copies). Additive — no body, old behavior.
   Future<shelf.Response> _duplicate(shelf.Request request, String id) async {
     final lib = _library;
     if (lib == null) return JsonResponse.error(503, 'Unavailable');
-    final result = await lib.duplicate(id);
+    String? newName;
+    try {
+      final body = await RequestBody.readJsonMap(request);
+      final raw = body['newName']?.toString().trim();
+      if (raw != null && raw.isNotEmpty) newName = raw;
+    } catch (_) {}
+    final result = await lib.duplicate(id, newName: newName);
     if (result == null) return JsonResponse.error(404, 'Character not found');
     return JsonResponse.ok(result);
   }

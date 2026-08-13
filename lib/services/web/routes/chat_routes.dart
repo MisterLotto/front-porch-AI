@@ -110,7 +110,11 @@ class WebChatRoutes {
   /// List the active character's saved conversations (newest first) so the web
   /// UI can show the Conversations drawer and resume any of them.
   Future<shelf.Response> _sessions(shelf.Request request) async =>
-      JsonResponse.ok({'sessions': await _facade.sessions()});
+      JsonResponse.ok({
+        'sessions': await _facade.sessions(
+          characterId: request.url.queryParameters['characterId'],
+        ),
+      });
 
   shelf.Response _personas(shelf.Request request) =>
       JsonResponse.ok({'personas': _facade.personas()});

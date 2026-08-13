@@ -268,11 +268,14 @@ extension CharacterRepositoryImport on CharacterRepository {
     String? targetDirOverride,
     String? forcedBasename,
     bool skipLibraryInsert = false,
+    // AI Enhance passes '<Name> (Enhanced)'; default keeps the menu action's
+    // behavior byte-for-byte.
+    String? newNameOverride,
   }) async {
     _isLoading = true;
     _notify();
     try {
-      final newName = '${card.name} (duplicate)';
+      final newName = newNameOverride ?? '${card.name} (duplicate)';
 
       // Clone the card model
       final clonedCard = CharacterCard(

@@ -29,6 +29,7 @@ class WebChargenRoutes {
   WebChargenRoutes(this._facade, Router router) {
     router.get('/api/chargen/status', _status);
     router.post('/api/chargen/create', _create);
+    router.post('/api/chargen/enhance', _enhance);
     router.post('/api/chargen/lore/urls', _loreUrls);
     router.post('/api/chargen/lore/file', _loreFile);
   }
@@ -48,6 +49,25 @@ class WebChargenRoutes {
     final result = _facade.startCreate(body);
     if (result['ok'] != true) {
       return JsonResponse.error(400, result['error']?.toString() ?? 'Bad request');
+    }
+    return JsonResponse.ok({'status': 'started'});
+  }
+
+  /// Start an AI Enhance run (see [ChargenFacade.startEnhance]); the result
+  /// arrives over the hub as `chargen_enhance_done` and saves nothing itself.
+  Future<shelf.Response> _enhance(shelf.Request r) async {
+    Map<String, dynamic> body;
+    try {
+      body = await RequestBody.readJsonMap(r);
+    } catch (_) {
+      body = const {};
+    }
+    final result = _facade.startEnhance(body);
+    if (result['ok'] != true) {
+      return JsonResponse.error(
+        400,
+        result['error']?.toString() ?? 'Bad request',
+      );
     }
     return JsonResponse.ok({'status': 'started'});
   }

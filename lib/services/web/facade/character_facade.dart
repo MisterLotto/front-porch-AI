@@ -209,7 +209,7 @@ class CharacterFacade {
   Future<bool> update(String id, Map<String, dynamic> fields) async {
     final repo = _repo;
     if (repo == null) return false;
-    final card = _cardByDbId(id);
+    final card = cardByDbId(id);
     if (card == null) return false;
 
     String pick(String key, String current) => fields.containsKey(key)
@@ -265,8 +265,9 @@ class CharacterFacade {
   /// The in-memory [CharacterCard] matching library [id] (its dbId), or null.
   /// Used by [update] and [detail] so both source realism/world state from the
   /// same place the desktop edits (the PNG-backed card, not the realism-less DB
-  /// row).
-  CharacterCard? _cardByDbId(String id) {
+  /// row). Public so [ChargenFacade] can resolve the enhance target without a
+  /// second lookup implementation.
+  CharacterCard? cardByDbId(String id) {
     final repo = _repo;
     if (repo == null) return null;
     for (final c in repo.characters) {
@@ -506,7 +507,7 @@ class CharacterFacade {
       // realism columns), so source them from the in-memory card. Flattened via
       // the shared helper so the edit page's Realism/Needs form sections can
       // round-trip them losslessly.
-      final ext = _cardByDbId(id)?.frontPorchExtensions;
+      final ext = cardByDbId(id)?.frontPorchExtensions;
       return {
         'id': c.id,
         'name': c.name,

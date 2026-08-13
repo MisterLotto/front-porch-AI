@@ -21,7 +21,10 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 
+import 'package:front_porch_ai/database/database.dart' hide World;
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/services/chargen/chargen.dart';
 import 'package:front_porch_ai/services/lore_extraction_service.dart';
 import 'package:front_porch_ai/services/web/facade/character_facade.dart';
 import 'package:front_porch_ai/services/web/streaming/stream_hub.dart';
@@ -33,12 +36,19 @@ import 'package:front_porch_ai/services/web/streaming/stream_hub.dart';
 /// WebSocket hub, and persist the result through the shared [CharacterFacade]
 /// save path. No desktop code is reimplemented.
 class ChargenFacade {
-  ChargenFacade(this._llm, this._characters, this._hub, [this._imageGen]);
+  ChargenFacade(
+    this._llm,
+    this._characters,
+    this._hub, [
+    this._imageGen,
+    this._storage,
+  ]);
 
   final LLMProvider _llm;
   final CharacterFacade _characters;
   final StreamHub? _hub;
   final ImageGenService? _imageGen;
+  final StorageService? _storage;
 
   /// Whether an LLM backend is ready to generate.
   bool get available => _llm.activeService.isReady;
@@ -57,6 +67,114 @@ class ChargenFacade {
     }
     unawaited(_run(name, fields, svc));
     return {'ok': true};
+  }
+
+  /// Begin an AI Enhance run (grow an existing character from one of its
+  /// chats) and return immediately. Progress rides the shared
+  /// `chargen_status` events; the result arrives as **`chargen_enhance_done`**
+  /// — a distinct event, because `chargen_done` means "a card was saved" and
+  /// the create page navigates on it. Enhance saves NOTHING server-side: the
+  /// payload is a proposal `{characterId, proposal: {field: newValue, ...}}`
+  /// the client reviews and applies through the existing duplicate + update
+  /// endpoints.
+  ///
+  /// Body: `{characterId, sessionId, fields: EnhanceSelection JSON,
+  /// nsfwEnabled, modelId?}` — `modelId` (remote backends only) runs the
+  /// enhance on that model via the same ad-hoc resolver the creator wizard
+  /// uses, without switching the app's active model.
+  Map<String, dynamic> startEnhance(Map<String, dynamic> body) {
+    final id = body['characterId']?.toString().trim() ?? '';
+    final sessionId = body['sessionId']?.toString().trim() ?? '';
+    if (id.isEmpty || sessionId.isEmpty) {
+      return {'ok': false, 'error': 'characterId and sessionId are required'};
+    }
+    final card = _characters.cardByDbId(id);
+    if (card == null) return {'ok': false, 'error': 'character not found'};
+    final svc = _llm.serviceForModel(body['modelId']?.toString().trim() ?? '');
+    if (svc == null) {
+      return {'ok': false, 'error': 'the LLM backend is not ready'};
+    }
+    final db = AppDatabase.current;
+    if (db == null) return {'ok': false, 'error': 'database not ready'};
+    final rawFields = body['fields'];
+    final selection = EnhanceSelection.fromJson(
+      rawFields is Map ? Map<String, dynamic>.from(rawFields) : const {},
+    );
+    if (!selection.anySelected) {
+      return {'ok': false, 'error': 'no fields selected'};
+    }
+    unawaited(_runEnhance(
+      card,
+      sessionId,
+      selection,
+      body['nsfwEnabled'] == true,
+      svc,
+      db,
+    ));
+    return {'ok': true};
+  }
+
+  Future<void> _runEnhance(
+    CharacterCard card,
+    String sessionId,
+    EnhanceSelection selection,
+    bool nsfwEnabled,
+    LLMService svc,
+    AppDatabase db,
+  ) async {
+    try {
+      final ctx = await buildEnhanceContext(
+        db: db,
+        card: card,
+        sessionId: sessionId,
+      );
+      final grounding = buildChatExcerptBlock(
+        turns: ctx.turns,
+        recap: ctx.recap,
+        memoryCards: ctx.memoryCards,
+        maxChars: enhanceGroundingCharBudget(
+          isLocalKobold: _llm.activeBackend == BackendType.kobold &&
+              _llm.koboldService.isReady,
+          contextSize: _storage?.contextSize ?? 8192,
+        ),
+      );
+      final gen = CharacterGenService(svc);
+      final result = await gen.enhanceCharacter(
+        source: card,
+        selection: selection,
+        chatGrounding: grounding,
+        nsfwEnabled: nsfwEnabled,
+        // Same rule as the desktop flow and the Scene Guest mint: never kill
+        // evals a live chat may have in flight on the shared backend.
+        abortInFlight: false,
+        onStatus: (s) =>
+            _hub?.broadcast({'event': 'chargen_status', 'data': s}),
+      );
+      if (result == null) {
+        _hub?.broadcast({
+          'event': 'chargen_error',
+          'error': 'enhance produced no result',
+        });
+        return;
+      }
+      _hub?.broadcast({
+        'event': 'chargen_enhance_done',
+        'characterId': card.dbId,
+        'proposal': {
+          if (selection.description) 'description': result.description,
+          if (selection.personality) 'personality': result.personality,
+          if (selection.exampleDialogue) 'mesExample': result.mesExample,
+          if (selection.scenario) 'scenario': result.scenario,
+          if (selection.greetings) 'firstMessage': result.firstMessage,
+          if (selection.greetings)
+            'alternateGreetings': result.alternateGreetings,
+          if (selection.lorebook && result.lorebook != null)
+            'lorebook': result.lorebook!.toJson(),
+        },
+      });
+    } catch (e) {
+      _hub?.broadcast({'event': 'chargen_error', 'error': '$e'});
+    }
   }
 
   /// Scrape + clean one or more wiki/lore URLs into plain text (the web mirror of

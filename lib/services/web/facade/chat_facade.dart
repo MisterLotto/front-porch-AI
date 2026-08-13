@@ -23,6 +23,7 @@ import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/web/facade/chat_realism_read.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 import 'package:front_porch_ai/services/web/streaming/stream_hub.dart';
 import 'package:front_porch_ai/services/web/util/lorebook_json.dart';
 
@@ -641,8 +642,24 @@ class ChatFacade {
   /// first — so the web UI can list past chats and let the user resume any of
   /// them via [session]. Reuses ChatService's own session lister; only adapts
   /// the `date` field to a JSON-safe ISO string.
-  Future<List<Map<String, dynamic>>> sessions() async {
-    final raw = await _chat.getSessions();
+  ///
+  /// With [characterId] (a library dbId), lists that character's 1:1 chats
+  /// WITHOUT touching the active chat — the web AI Enhance flow's "which
+  /// chat?" picker. Additive: absent, behavior is unchanged.
+  Future<List<Map<String, dynamic>>> sessions({String? characterId}) async {
+    List<Map<String, dynamic>> raw;
+    if (characterId != null && characterId.isNotEmpty) {
+      final card = _characters.characters
+          .where((c) => c.dbId == characterId)
+          .firstOrNull;
+      // getSessionsForId keys by imagePath basename (stableGroupId) — a UUID
+      // silently returns [] (the documented fall-through).
+      raw = card == null
+          ? const []
+          : await _chat.getSessionsForId(card.stableGroupId);
+    } else {
+      raw = await _chat.getSessions();
+    }
     return raw.map((s) {
       final date = s['date'];
       return {...s, 'date': date is DateTime ? date.toIso8601String() : date};

@@ -34,7 +34,7 @@ extension CreatorEngineTools on CreatorState {
     isExpandingNarrative = true;
     notify();
     try {
-      final llmService = _resolveLlmService(llmProvider, storage);
+      final llmService = llmProvider.serviceForModel(selectedModelId);
       if (llmService == null) {
         engineError = 'No LLM available — configure a model first';
         return null;
@@ -118,7 +118,7 @@ extension CreatorEngineTools on CreatorState {
     isRandomizing = true;
     notify();
     try {
-      final llmService = _resolveLlmService(llmProvider, storage);
+      final llmService = llmProvider.serviceForModel(selectedModelId);
       if (llmService == null) {
         engineError = 'No LLM available — configure a model first';
         return;
@@ -163,7 +163,7 @@ extension CreatorEngineTools on CreatorState {
     conceptGenProgress = 0.0;
     notify();
     try {
-      final llmService = _resolveLlmService(llmProvider, storage);
+      final llmService = llmProvider.serviceForModel(selectedModelId);
       if (llmService == null) {
         engineError = 'No LLM available — configure a model first';
         return;

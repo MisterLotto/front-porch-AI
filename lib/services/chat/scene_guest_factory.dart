@@ -21,6 +21,7 @@ import 'package:path/path.dart' as p;
 
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/services/chargen/chargen.dart';
 import 'package:front_porch_ai/services/chat/chat_command_handler.dart';
 
 /// Mints Scene Guests (Lite NPCs): generates a character from a name + concept,
@@ -59,7 +60,7 @@ class SceneGuestFactory {
     try {
       card = await CharacterGenService(llm).generateCharacter(
         name: name,
-        concept: _buildGroundedConcept(name, concept, sceneGrounding),
+        concept: groundedConceptFor(name, concept, sceneGrounding),
         // Surface generation sub-steps (profile → interview → dialogue → …) so
         // the chat banner can show progress instead of a single static spinner.
         onStatus: onStatus,
@@ -131,23 +132,5 @@ class SceneGuestFactory {
       return const GuestMintResult.failure('created card has no id');
     }
     return GuestMintResult.success(card);
-  }
-
-  /// Fold the in-chat portrayal of [name] into the build concept so the
-  /// generated card reflects how the character actually appeared in the scene,
-  /// not a generic invention from a bare name. The excerpts are dominated by
-  /// other characters (the narrator + the user) too, so the instruction is
-  /// explicit: build ONLY [name] from what describes them, ignore the rest.
-  String _buildGroundedConcept(String name, String concept, String grounding) {
-    final g = grounding.trim();
-    if (g.isEmpty) return concept;
-    final lead = concept.trim().isEmpty ? '' : '${concept.trim()}\n\n';
-    return '${lead}Build "$name" to match EXACTLY how they are portrayed in the '
-        'roleplay excerpts below — their appearance, manner, role, speech, and '
-        'relationships as actually shown. The excerpts also feature other '
-        'characters (the narrator and the user); use ONLY the details that '
-        'describe "$name" and ignore traits that clearly belong to someone '
-        'else. Do not invent a conflicting identity.\n\n'
-        'How "$name" has appeared in the scene so far:\n$g';
   }
 }

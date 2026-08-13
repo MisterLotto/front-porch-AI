@@ -141,6 +141,32 @@ class LLMProvider extends ChangeNotifier {
   /// Whether the active backend manages a local subprocess.
   bool get hasManagedProcess => _activeBackend == BackendType.kobold;
 
+  /// Resolve the service a model-pickable generation feature (the AI
+  /// character creator, AI Enhance) should run against, or null when nothing
+  /// is ready. A managed local backend generates with its loaded model (the
+  /// per-run "model choice" for local IS backend management, so there is
+  /// nothing to pick); on a remote backend, a [selectedModelId] different
+  /// from the active model gets an ad-hoc [OpenRouterService] against the
+  /// configured credentials — the app's active model is left untouched.
+  /// Extracted from the creator's `_resolveLlmService` so Enhance and the
+  /// wizard share one implementation.
+  LLMService? serviceForModel(String selectedModelId) {
+    if (hasManagedProcess) {
+      final svc = activeService;
+      return svc.isReady ? svc : null;
+    }
+    if (selectedModelId.isNotEmpty &&
+        selectedModelId != _openRouterService.modelName) {
+      return OpenRouterService(
+        apiUrl: _storageService.remoteApiUrl,
+        apiKey: _storageService.remoteApiKey,
+        modelName: selectedModelId,
+      );
+    }
+    final active = activeService;
+    return active.isReady ? active : null;
+  }
+
   /// True when the managed process is currently running.
   bool get hasAnyManagedProcessRunning => _koboldService.isRunning;
 

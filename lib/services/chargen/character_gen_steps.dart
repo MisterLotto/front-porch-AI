@@ -99,6 +99,7 @@ Respond with ONLY the JSON:''';
     void Function(String)? onStatus,
     void Function(String)? onProgress,
     String? worldLore,
+    String chatGrounding = '',
   }) async {
     final transcript = StringBuffer();
     // Seed the LLM with who this character is so the first answer is grounded
@@ -107,6 +108,9 @@ Respond with ONLY the JSON:''';
         'Your personality: ${card.personality.length > 400 ? card.personality.substring(0, 400) : card.personality}\n'
         'Your scenario: ${card.scenario.length > 200 ? card.scenario.substring(0, 200) : card.scenario}\n\n'
         '${worldLore != null && worldLore.trim().isNotEmpty ? "You exist in the following established world. Use its terminology, locations, and facts:\n$worldLore\n\n" : ""}'
+        // AI Enhance: the character already LIVED a chat — the transcript is
+        // the source of truth for voice and history, stronger than any field.
+        '${chatGrounding.trim().isNotEmpty ? "How you have ACTUALLY been played in a real chat with {{user}} — this is the source of truth for your voice, manner, and history. Every answer must stay true to it:\n$chatGrounding\n\n" : ""}'
         'Answer each question in first person, fully in-character. Be specific, '
         'vivid, and emotionally honest — but keep each answer TIGHT: a few sharp '
         'sentences, under ~150 words. Depth over length; do not ramble. Respond '
@@ -193,7 +197,15 @@ Respond with ONLY the JSON:''';
     required String interviewTranscript,
     bool preserveUserScenario = false,
     void Function(String)? onProgress,
+    String chatGrounding = '',
   }) async {
+    // AI Enhance: real chat excerpts outrank invented detail — the rewrite
+    // must sound like the character as PLAYED, not as originally sketched.
+    final groundingSection = chatGrounding.trim().isNotEmpty
+        ? '\nREAL CHAT EXCERPTS ($name as actually played with {{user}} — equally '
+            'authoritative as the interview; match this voice, history, and '
+            'relationship exactly):\n$chatGrounding\n'
+        : '';
     final prompt =
         '''
 You have just completed an in-character interview with $name.
@@ -203,7 +215,7 @@ No markdown. No explanation. Just raw JSON.
 
 INTERVIEW TRANSCRIPT:
 $interviewTranscript
-
+$groundingSection
 CURRENT DESCRIPTION (physical appearance only):
 ${card.description}
 
@@ -293,14 +305,23 @@ Respond with ONLY the JSON:''';
     required String name,
     required String interviewTranscript,
     void Function(String)? onProgress,
+    String chatGrounding = '',
   }) async {
+    // AI Enhance: real chat lines are the strongest possible voice reference —
+    // invite the model to adapt the best genuine exchanges instead of
+    // inventing synthetic ones.
+    final groundingSection = chatGrounding.trim().isNotEmpty
+        ? '\nREAL CHAT LINES ($name speaking in an actual roleplay — the '
+            'strongest reference for voice; prefer adapting the best genuine '
+            'exchanges over inventing new ones):\n$chatGrounding\n'
+        : '';
     final prompt =
         '''Write example dialogue exchanges for a roleplay character named $name.
 These examples teach the AI how $name speaks — their vocabulary, sentence structure, emotional reactions, and mannerisms.
 
 SOURCE MATERIAL — $name's own words from an in-character interview:
 $interviewTranscript
-
+$groundingSection
 CHARACTER PERSONALITY:
 ${card.personality}
 

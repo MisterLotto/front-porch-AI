@@ -44,6 +44,10 @@ class BackendFacade {
       'modelReady': k.modelReady,
       'statusMessage': k.modelLoadingStatus,
       'loadedModel': _loadedModelName(),
+      // The active REMOTE model id (additive; '' on local). loadedModel above
+      // is the local .gguf name — the web AI Enhance model picker needs the
+      // remote one to label its "current model" default.
+      'remoteModel': _storage.backendSettings.remoteModelName,
       // True when the desktop host can only run local models on the CPU, slowly
       // (no AVX2 + no NVIDIA GPU → KoboldCpp's oldpc build, which has no ROCm/
       // Vulkan). Mirrors the desktop warning so the web Models page warns too.
