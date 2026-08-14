@@ -116,17 +116,17 @@ extension ChatServiceImportWalk on ChatService {
     for (final c in _groupCharacters) {
       final sid = _getCharacterIdFromCard(c);
       if (sid.isEmpty) continue;
-      final nameUnique =
-          _groupCharacters.where((x) => x.name == c.name).length == 1;
       ChatMessage? stamp;
-      if (nameUnique) {
-        for (var i = start; i >= 0 && i < _messages.length; i--) {
-          final m = _messages[i];
-          if (m.isUser || m.sender != c.name) continue;
-          if (m.activeMetadata?['realism_state'] is Map) {
-            stamp = m;
-            break;
-          }
+      for (var i = start; i >= 0 && i < _messages.length; i--) {
+        final m = _messages[i];
+        if (m.isUser) continue;
+        final speaker = _resolveGroupSpeakerForMessage(m);
+        if (speaker == null || _getCharacterIdFromCard(speaker) != sid) {
+          continue;
+        }
+        if (m.activeMetadata?['realism_state'] is Map) {
+          stamp = m;
+          break;
         }
       }
       if (stamp != null) {
@@ -139,6 +139,20 @@ extension ChatServiceImportWalk on ChatService {
             ? GroupMemberRealism.fromJson(Map<String, dynamic>.from(seed))
             : GroupMemberRealism();
         if (keptPockets != null) _groupRealism[sid]!.pockets = keptPockets;
+      }
+    }
+
+    // Gifts live on the giver's stamp as pockets_before.others. Recipients
+    // who never spoke after the handoff have no own stamp of the item —
+    // apply the newest shared pockets snapshot so fork/import cannot vanish
+    // a gift.
+    if (pocketsOn) {
+      for (var i = start; i >= 0 && i < _messages.length; i--) {
+        final m = _messages[i];
+        if (m.metadata?['pockets_before'] is Map) {
+          _restorePocketsFromStamp(m, after: true);
+          break;
+        }
       }
     }
 
@@ -209,6 +223,9 @@ extension ChatServiceImportWalk on ChatService {
       final m = _messages[i];
       if (m.activeMetadata?['realism_state'] is Map) {
         _restoreRealismStateForSpeaker(m);
+        if (m.metadata?['pockets_before'] is Map) {
+          _restorePocketsFromStamp(m, after: true);
+        }
         return;
       }
     }

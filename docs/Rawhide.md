@@ -7,6 +7,17 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 *Since nightly `20260811` (`aa66f57` — web eraser).*
 
+- 🧹 **Scan & Clean no longer wipes group memory or your “remember these characters” lists** — group chat archives and those checkboxes were being treated as leftovers. They stay.
+- ▶️ **Continue no longer eats Chance Time / night-porch / “she picked up the keys” / a Needs crash** — those still fire on the next real Send. And if you Stop mid-thought then Continue, the new words show up as spoken text, not a blank bubble.
+- 🌙 **A dream cannot land in the wrong chat** if you switch conversations while it is still writing.
+- 🎁 **Group gifts survive a fork, and swipe will not duplicate them.** Picking an item up also forgets the old “I set it down” diary note. Forking keeps the diary cards; the “Where we are” recap starts a new chapter until enough new turns land.
+- 💾 **Group Settings → General actually saves** (name, scenario, first message, turn rules). Light mode no longer paints those fields — or Create Character’s later headings — as white-on-cream.
+
+- 🖼️ **Web chat asks before loading pictures from the internet** — a `![alt](https://…)` in a message no longer fetches on its own. You get a **Load external image?** button first (same idea as desktop's External Image Detected). Only real `http`/`https` links count; other schemes stay as text.
+- 🎯 **Web Objectives stay off when you turn them off** — the sidebar hides the quest details, and Generate tasks / Set a goal are refused until Objectives is on again.
+- 📓 **Web Journal edits stay in that character's diary** — pin / edit / retire only touch cards for the focused speaker in this chat.
+- 🛡️ **Lore-from-URL and web backend "test connection" ignore private addresses** — localhost, LAN, and cloud-metadata URLs are refused so a logged-in web session cannot poke the host's network.
+
 - 🪟 **Home library no longer bursts the toolbar when you shrink the window** — sort, card-size, and the action buttons step down (and fold into ⋮ when it's really tight) instead of painting the yellow-and-black overflow stripe. Same idea on the web library bar: it wraps instead of assuming a wide desktop.
 - 🧠 **Memory chips no longer spill when you squeeze the chat sidebar** — Settings / Sources / Data Bank wrap onto the next line instead of painting the yellow overflow stripe. Journal's Open / Plant a memory buttons do the same.
 
@@ -51,4 +62,6 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 - 🌍 **Stoop on web shows Living Worlds** — Browse / mine / downloads / creator lists include places, matching desktop.
 - 🧠 **Memory receipts tell the truth** — When the engine is down or errors after older messages scrolled out, the sidebar no longer pretends “no lookup needed.”
 - 🗑️ **Deleting a chat cleans everything** — RAG embeddings, quests, Living Worlds links, and biome spans leave with the chat; Database Cleanup also sweeps growth rings and dead-chat quests.
+- 💾 **Group Settings → General actually saves** — changing the group name, scenario, greeting, or turn rules and pressing Save writes them. It used to keep the old values and pretend it saved.
+- ☀️ **Light mode: Create Character headings and Group Settings fields are readable** — Personality, Dialogue, Lorebook titles and group name/scenario fields use theme ink instead of white-on-cream.
 - ☀️ **Light mode: Main Settings is readable again** — Menu items and the button label use theme ink (not pure white on paper). Chat Settings dialog matches the warm light surfaces of UI / Model / TTS settings.

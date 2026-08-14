@@ -171,6 +171,7 @@ extension ChatServiceSend on ChatService {
     if (parkedDream != null) {
       try {
         final dream = await parkedDream.dream;
+        if (_sceneChanged(sessionToken)) return;
         if (dream != null) {
           _messages.insert(
             _messages.length - 1,
@@ -184,7 +185,7 @@ extension ChatServiceSend on ChatService {
           );
           notifyListeners();
           await _journalStore.addCard(
-            sessionId: _currentSessionId!,
+            sessionId: sessionToken!,
             characterId: parkedDream.ownerId,
             content: dream,
             category: 'moment',

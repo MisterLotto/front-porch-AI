@@ -3,6 +3,90 @@
 
 # Changelog
 
+## 2026-08-14 — fix(audit): Opus NO-GO B1–B3 + M1
+- **B1 RAG:** do not gate retrieve on lazy `isOperational`; stamp
+  not_operational only after retrieve returns empty.
+- **B2 clock:** removed TimeService `_clockMovedThisUserTurn` latch.
+  Next Character and `/speak` pass `skipClockAdvance: true` into the
+  dance; Send / regen / Director auto-play / TimeService unit tests
+  keep default advance. Deleted `beginUserTurnClock` /
+  `beginDirectorReplyClock`.
+- **B3 analyze:** unused `Variable` + `dart:convert` dropped from new tests.
+- **M1 fork:** `_summaryLastIndex = _messages.length` so the next Journal
+  pass does not re-digest copied cards.
+- **Commit:** (this commit)
+
+## 2026-08-14 — fix(audit): Fable mediums — light-mode leftovers, fork embeddings, cross-owner pickup, call-site pins
+- **Files:** general_tab + cards (remaining Color(0xFF111827)/white54/purpleAccent
+  → AppColors); journal_store.copySessionTo now copies embedding/dimensions/
+  accessCount/lastAccessedAt; NEW retireItemCardsInSession (pickup retires
+  every owner's placement card); chat_service_pockets pickup uses it.
+- **Tests:** NEW journal_fork_and_pickup_test; NEW audit_fix_callsite_test
+  (Continue skipOneShots, closeOpenThink wiring, judge windows).
+- **Why:** Fable review residual Mediums on the audit-fix batch.
+- **Commit:** (this commit)
+
+## 2026-08-14 — fix(audit): Cleanup wipe, Continue one-shots/think, dreams, clock, pockets, Growth/Journal twins
+- **Cleanup/repair:** live group RAG `group_<id>` + memory_sources basenames
+  survive Scan & Clean; repair lists story_clock / story_start_date /
+  worlds_initialized / groups.stable_id / Living Worlds columns.
+- **Continue:** one-shots (Chance Time / item-intro / porch-night /
+  catastrophe) are not consumed on Continue; closeOpenThink on cancel +
+  Continue prefix so new words stay outside an unclosed `<think>`.
+- **Dreams:** abort insert + journal card if the chat switched during await
+  (same stillHere token as photo caption).
+- **Clock:** one advance per user Send (Next Character skips); Director
+  auto-play resets and ticks timeOnly.
+- **Judges:** pre-gen window cuts at last user so group follow-up speakers
+  do not score the previous NPC.
+- **Pockets:** pickup emits an event and retires the placement card; regen
+  copies pockets_before onto the surviving message; fork/import applies the
+  newest shared pockets snapshot (gifts in `others`).
+- **Growth/Journal:** review-first abandon on rewrite; Growth cache refresh
+  after invalidate; fork copy trims future-citing rings and copies Journal
+  cards with the same cursor rule.
+- **Group restore:** swipe/delete/walk-back/regen use
+  resolveGroupSpeakerForMessage; trust-repair is per-member; Needs
+  reprocess stamps the live scalar vector.
+- **RAG:** retrieve only when isOperational — otherwise stamp not_operational.
+- **Tests:** cleanup group+sources, repair trio, closeOpenThink,
+  recentExchangeThroughLastUser.
+- **Why:** full-codebase audit NO-GO Highs (data loss / prompt poison /
+  sibling paths).
+- **Commit:** (this commit)
+
+## 2026-08-14 — fix(audit): web image consent, outbound URL SSRF, objectives/journal scope
+- **Files:** MessageContent.tsx + styles.css (https-only markdown images;
+  session consent + "Load external image?" before src); NEW
+  safe_outbound_url.dart (+ utils barrel) used by lore_extraction_service
+  _scrapeUrl and backend_facade remote models / reasoning / test-connection;
+  chat_tools_facade (objectives.enabled + refuse generate/set when off);
+  ChatTools.tsx hides Objectives when disabled; journal_web_surface
+  edit/pin/retire require session + focused owner.
+- **Tests:** NEW safe_outbound_url_test, journal_web_surface_test,
+  objectives_off_facade_test.
+- **Why:** web auto-loaded any markdown image URL; authenticated lore-from-URL
+  and backend probe accepted private/loopback destinations; web Generate
+  Tasks / Set still worked with Objectives off; journal mutations were
+  id-only (any diary).
+- **Commit:** (this commit)
+
+## 2026-08-14 — fix(group-settings): General tab Save actually writes the live group
+- **Files:** group_settings_dialog.dart (Save calls apply before repo.save);
+  general_tab.dart (public applyToLiveGroup + keep-alive so off-tab Save
+  still sees the editors; cream-paper labels/fields → AppColors text);
+  general_tab.cards.dart (state rename); NEW group_settings.dart barrel;
+  create_character_page.steps_core/.step_lorebook (Personality / Dialogue /
+  Lorebook headings); prompt_engineering_tab.editors.dart (AppTextField
+  ink). Empty per-tab save bar deleted (dead after 2026 UX overhaul).
+- **Tests:** NEW group_general_save_test — type a new name, press Save,
+  activeGroup.name + repo.save get the typed value. Red-proven by skipping
+  applyToLiveGroup: name stayed "The Fellowship".
+- **Why:** Save persisted the untouched live GroupChat; name/scenario/
+  greeting/turn rules never left the controllers. Light mode painted those
+  labels and Create Character headings white on cream.
+- **Commit:** (this commit)
+
 ## 2026-08-14 — fix(sidebar): Memory Settings/Sources/Data Bank overflowed a squeezed chat sidebar
 - **Files:** memory_panel.dart (rigid Row → Wrap; three copy-pasted chips
   collapsed to `_link`); journal_panel.dart (Open / Plant a memory Wrap —

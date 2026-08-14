@@ -109,7 +109,7 @@ class JournalWebSurface {
         }
         break;
       case 'edit':
-        final card = await chat.journalStore.findCardById(cardId);
+        final card = await _ownedCard(cardId, sessionId, owner.id);
         if (card != null) {
           await chat.journalStore.reviseCard(
             card,
@@ -119,14 +119,15 @@ class JournalWebSurface {
         }
         break;
       case 'pin':
-        final card = await chat.journalStore.findCardById(cardId);
+        final card = await _ownedCard(cardId, sessionId, owner.id);
         if (card != null) {
           await chat.journalStore.setPinned(card.id, !card.pinned);
         }
         break;
       case 'retire':
-        if (cardId.isNotEmpty) {
-          await chat.journalStore.retireCard(cardId);
+        final card = await _ownedCard(cardId, sessionId, owner.id);
+        if (card != null) {
+          await chat.journalStore.retireCard(card.id);
         }
         break;
       case 'check':
@@ -190,6 +191,21 @@ class JournalWebSurface {
     }
     notify();
     return reviewBatch();
+  }
+
+  /// Same owner-scope Growth uses via [ChatService.growthRingsForOwner]:
+  /// a card from another chat or diary is a no-op, not a cross-owner write.
+  Future<JournalMemoryData?> _ownedCard(
+    String cardId,
+    String sessionId,
+    String ownerId,
+  ) async {
+    final card = await chat.journalStore.findCardById(cardId);
+    if (card == null) return null;
+    if (card.sessionId != sessionId || card.characterId != ownerId) {
+      return null;
+    }
+    return card;
   }
 
   static List<int> _receiptsOf(JournalMemoryData card) {

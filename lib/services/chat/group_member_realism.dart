@@ -68,6 +68,7 @@ abstract final class GroupRealismKeys {
   static const turnsSinceLongTermCheck = 'turnsSinceLongTermCheck';
   static const shortTermDeltasSummary = 'shortTermDeltasSummary';
   static const turnsSinceDecayCheck = 'turnsSinceDecayCheck';
+  static const trustRepairPending = 'trustRepairPending';
   static const arousal = 'arousal'; // historical: snapshots say arousalLevel
   static const nsfwCooldownEnabled = 'nsfwCooldownEnabled';
   static const cooldownTurnsRemaining = 'cooldownTurnsRemaining';
@@ -99,6 +100,7 @@ abstract final class GroupRealismKeys {
     turnsSinceLongTermCheck,
     shortTermDeltasSummary,
     turnsSinceDecayCheck,
+    trustRepairPending,
     arousal,
     nsfwCooldownEnabled,
     cooldownTurnsRemaining,
@@ -174,6 +176,10 @@ class GroupMemberRealism {
       _data[GroupRealismKeys.relationshipTier] = v;
   int? get longTermTier => _int(GroupRealismKeys.longTermTier);
   set longTermTier(int? v) => _data[GroupRealismKeys.longTermTier] = v;
+  bool? get trustRepairPending =>
+      _bool(GroupRealismKeys.trustRepairPending);
+  set trustRepairPending(bool? v) =>
+      _data[GroupRealismKeys.trustRepairPending] = v;
 
   // ── NSFW scalars (see the historical 'arousal' key note above) ───────
   int? get arousal => _int(GroupRealismKeys.arousal);

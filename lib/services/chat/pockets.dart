@@ -760,6 +760,7 @@ List<String> applyPocketOps(
         p.carrying.add(op.state.isEmpty ? got : got.withState(op.state));
         capTo(p.carrying, kMaxCarrying);
         receipts.add('picked up: ${op.item}');
+        events?.add(PocketEvent(kind: PocketOpKind.pickup, item: got.name));
 
       // `give` used to be half a transfer: the item left the giver and reached
       // nobody, so Alice handing Bob the keys left Bob's record untouched. The

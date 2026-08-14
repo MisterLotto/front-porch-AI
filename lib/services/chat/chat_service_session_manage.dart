@@ -150,7 +150,10 @@ extension ChatServiceSessionManage on ChatService {
     _sessionGenSettings = _sessionGenSettings
         .copy(); // inherit parent's overrides
     _summary = '';
-    _summaryLastIndex = 0;
+    // Cards were copied for the kept prefix; start the cursor at the
+    // fork tip so the next pass does not re-digest those same messages
+    // (import uses the same rule).
+    _summaryLastIndex = _messages.length;
     _selectedLooks
         .clear(); // fork starts with no per-chat look selection (keep reset blocks in sync)
     _summaryPaused =
@@ -173,6 +176,11 @@ extension ChatServiceSessionManage on ChatService {
     // history (the old evolved text carried the same way). Runs after
     // _saveChat so the new session row exists for the legacy-blob copy.
     await _growthStore.copySessionTo(
+      oldSessionId,
+      _currentSessionId!,
+      cursor: _messages.length,
+    );
+    await _journalStore.copySessionTo(
       oldSessionId,
       _currentSessionId!,
       cursor: _messages.length,

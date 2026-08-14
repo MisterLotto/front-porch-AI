@@ -76,16 +76,23 @@ extension ChatServiceRealismEvals on ChatService {
   Future<void> _evaluatePhysicalStateCall({
     void Function(String)? onChunk,
     bool postureOnly = false,
+    bool skipClockAdvance = false,
   }) => _realismEvals.evaluatePhysicalStateCall(
     onChunk: onChunk,
     postureOnly: postureOnly,
+    skipClockAdvance: skipClockAdvance,
   );
 
   Future<void> _evaluateNarrativeCall({void Function(String)? onChunk}) =>
       _realismEvals.evaluateNarrativeCall(onChunk: onChunk);
 
-  Future<void> _evaluateOneShotCall({void Function(String)? onChunk}) =>
-      _realismEvals.evaluateOneShotCall(onChunk: onChunk);
+  Future<void> _evaluateOneShotCall({
+    void Function(String)? onChunk,
+    bool skipClockAdvance = false,
+  }) => _realismEvals.evaluateOneShotCall(
+    onChunk: onChunk,
+    skipClockAdvance: skipClockAdvance,
+  );
 
   /// One-shot trust repair evaluator.
   ///
@@ -252,7 +259,10 @@ extension ChatServiceRealismEvals on ChatService {
   /// (`beginCollect`/`finalize`) — that wrapping currently differs between the
   /// two paths and is deliberately left to the caller until that divergence is
   /// reconciled.
-  Future<void> _fireStaggeredRealismEvals(void Function(String) onChunk) async {
+  Future<void> _fireStaggeredRealismEvals(
+    void Function(String) onChunk, {
+    bool skipClockAdvance = false,
+  }) async {
     // Dispatch order is a caching decision, not a semantics one (maintainer,
     // 2026-08-10: firing order is free to change; eval PHASE is not — all
     // four remain pre-generation). Relationship, emotional and narrative
@@ -275,7 +285,10 @@ extension ChatServiceRealismEvals on ChatService {
       ),
       Future.delayed(
         _kEvalDispatchStagger * 3,
-        () => _evaluatePhysicalStateCall(onChunk: onChunk),
+        () => _evaluatePhysicalStateCall(
+          onChunk: onChunk,
+          skipClockAdvance: skipClockAdvance,
+        ),
       ),
     ]);
   }
@@ -284,8 +297,9 @@ extension ChatServiceRealismEvals on ChatService {
   /// trust-repair relationship substitute (audit P1.11). Same stagger /
   /// scene-time-last order as [_fireStaggeredRealismEvals].
   Future<void> _fireTrustRepairRemainingEvals(
-    void Function(String) onChunk,
-  ) async {
+    void Function(String) onChunk, {
+    bool skipClockAdvance = false,
+  }) async {
     await Future.wait([
       _evaluateEmotionalStateCall(onChunk: onChunk),
       Future.delayed(
@@ -294,7 +308,10 @@ extension ChatServiceRealismEvals on ChatService {
       ),
       Future.delayed(
         _kEvalDispatchStagger * 2,
-        () => _evaluatePhysicalStateCall(onChunk: onChunk),
+        () => _evaluatePhysicalStateCall(
+          onChunk: onChunk,
+          skipClockAdvance: skipClockAdvance,
+        ),
       ),
     ]);
   }

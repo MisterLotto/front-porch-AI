@@ -109,7 +109,20 @@ extension ChatServiceGenerationRag on ChatService {
           );
         }
 
-        if (memories.isNotEmpty) {
+        // retrieve() awaits checkAvailability first. Only then is
+        // isOperational honest — gating on the flag *before* retrieve
+        // skipped a cold engine and stamped a fake empty search.
+        if (rawMemories.isEmpty && !_memoryService!.isOperational) {
+          t.ragReceipt = buildRagReceipt(
+            found: 0,
+            journalDeduped: 0,
+            budgetTrimmed: 0,
+            injected: const [],
+            days: const {},
+            currentSessionId: _currentSessionId ?? '',
+            status: kRagReceiptNotOperational,
+          );
+        } else if (memories.isNotEmpty) {
           // Cap memory injection to the group's (or global) memory budget % of context.
           // The summary carries the weight of context compression; RAG only
           // supplements with specific details the summary missed. Too much

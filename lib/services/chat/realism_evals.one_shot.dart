@@ -32,7 +32,10 @@ extension RealismEvalOneShot on RealismEvals {
   ///
   /// Enable via Settings → Realism → "One-Shot Eval (Experimental)".
   /// Not default because some models struggle with the combined prompt length.
-  Future<void> evaluateOneShotCall({void Function(String)? onChunk}) async {
+  Future<void> evaluateOneShotCall({
+    void Function(String)? onChunk,
+    bool skipClockAdvance = false,
+  }) async {
     if (!getRealismEnabled()) return;
     if (getActiveCharacter() == null && getActiveGroup() == null) return;
     if (getActiveGroup() != null && getIsObserverMode()) return;
@@ -41,9 +44,12 @@ extension RealismEvalOneShot on RealismEvals {
 
     // Keep the eval prompt lean for local models — use fewer messages and a
     // shorter personality snippet to reduce prefill time on large models.
-    // 6-message window through the one builder + clamp (strict parity: the
-    // four-call path's scene-time window uses the identical call).
-    final recent = recentExchange(getMessages(), take: 6);
+    // Bond/emotion/narrative score the USER (through last user). Scene-time
+    // apply is skipped on follow-up speakers via skipClockAdvance (Next
+    // Character only), so this window cannot diverge live minutes from the
+    // four-call path (that path still builds a full recentExchange for the
+    // unused follow-up time call).
+    final recent = recentExchangeThroughLastUser(getMessages(), take: 6);
 
     if (getActiveCharacter() == null) {
       // Group chat or other mode — relationship evals not supported in this path yet
@@ -126,6 +132,7 @@ extension RealismEvalOneShot on RealismEvals {
           getEmotionIntensity: getEmotionIntensity,
           oneShotMode: true,
           oneShotText: '',
+          skipClockAdvance: skipClockAdvance,
         );
         return;
       }
@@ -268,6 +275,7 @@ extension RealismEvalOneShot on RealismEvals {
         getEmotionIntensity: getEmotionIntensity,
         oneShotMode: true,
         oneShotText: textForOneShot,
+        skipClockAdvance: skipClockAdvance,
       );
 
       final reasonMatch = RegExp(

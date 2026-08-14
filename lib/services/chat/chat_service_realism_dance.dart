@@ -59,8 +59,9 @@ extension ChatServiceRealismDance on ChatService {
   /// — not the engine being lifelike. See restoreFromMessageState +
   /// captureCadenceAndFeelings for the pair that keeps the rewind honest.
   Future<void> _evaluateRealismForUpcomingSpeaker(
-    CharacterCard speaker,
-  ) async {
+    CharacterCard speaker, {
+    bool skipClockAdvance = false,
+  }) async {
     // Unified gate: runs for the 1:1 host AND each group speaker (one at a time);
     // skips group observer mode and realism-off. This is the single realism eval
     // path — the former centralized 1:1 block was removed in favour of this.
@@ -268,13 +269,19 @@ extension ChatServiceRealismDance on ChatService {
         await _evaluateTrustRepairCall(userText, onChunk: handleChunk);
         if (_realismEvalCancelled) return;
         await _runBatchedRealismVerification(
-          () => _fireTrustRepairRemainingEvals(handleChunk),
+          () => _fireTrustRepairRemainingEvals(
+            handleChunk,
+            skipClockAdvance: skipClockAdvance,
+          ),
         );
       } else if (_oneShotActive) {
         debugPrint(
           '[Realism:Unified] One-shot eval for ${speaker.name} ($charId)',
         );
-        await _evaluateOneShotCall(onChunk: handleChunk);
+        await _evaluateOneShotCall(
+          onChunk: handleChunk,
+          skipClockAdvance: skipClockAdvance,
+        );
       } else {
         // Run the four evals AND the batched verifier pass — identical to the
         // (former) centralized 1:1 path, so EVERY speaker (host or group member)
@@ -283,7 +290,10 @@ extension ChatServiceRealismDance on ChatService {
           '[Realism:Unified] 4-call eval + verifier for ${speaker.name} ($charId)',
         );
         await _runBatchedRealismVerification(
-          () => _fireStaggeredRealismEvals(handleChunk),
+          () => _fireStaggeredRealismEvals(
+            handleChunk,
+            skipClockAdvance: skipClockAdvance,
+          ),
           logSpeakerName: speaker.name,
         );
       }
@@ -341,6 +351,8 @@ extension ChatServiceRealismDance on ChatService {
   void _loadGroupRealismIntoScalars(String charId) {
     // Relationship (affection/trust/fix/tiers etc) now via service load helper (uses the same _getGroup* internally via cbs).
     _relationshipService.loadRelationshipScalarsForSpeaker(charId);
+    _relationshipService.pendingTrustRepair =
+        _groupRealism[charId]?.trustRepairPending ?? false;
     // Nsfw (arousal + cooldown + nsfwEnabled per char) via service (extends prior arousal-only for full group parity).
     // Note: group uses 'arousal' key (historical) vs snapshot 'arousalLevel' for compat.
     _nsfwService.loadNsfwScalarsForSpeaker(charId);
@@ -361,6 +373,8 @@ extension ChatServiceRealismDance on ChatService {
   void _saveScalarsIntoGroupRealism(String charId) {
     // Relationship scalars (affection/long/trust/fix/tiers/spatial) now via service.
     _relationshipService.saveRelationshipScalarsToGroup(charId);
+    _memberForWrite(charId).trustRepairPending =
+        _relationshipService.pendingTrustRepair;
     // Nsfw scalars (arousal + cooldown + enabled) now via service (for group per-char persistence parity).
     // Note: group uses 'arousal' key (historical) vs snapshot 'arousalLevel' for compat.
     _nsfwService.saveNsfwScalarsToGroup(charId);

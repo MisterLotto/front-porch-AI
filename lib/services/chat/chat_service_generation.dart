@@ -155,6 +155,7 @@ extension ChatServiceGeneration on ChatService {
   Future<void> _generateResponse(
     GenerationMode mode, {
     CharacterCard? guestSpeaker,
+    bool skipClockAdvance = false,
   }) async {
     if (await _abortIfBackendDown()) return;
     // regenerateLastMessage holds the settling flag; the finally restores it.
@@ -236,7 +237,10 @@ extension ChatServiceGeneration on ChatService {
       } else if (guestSpeaker == null &&
           _activeGroup != null &&
           _realismActiveThisMode) {
-        await _evaluateRealismForUpcomingSpeaker(speakingCharacter);
+        await _evaluateRealismForUpcomingSpeaker(
+          speakingCharacter,
+          skipClockAdvance: skipClockAdvance,
+        );
         // Cancel-aborts-generation, group edition: the dance leaves the
         // cancel flag set for its caller (1:1's sendMessage has the twin
         // check). Consume it and abort the turn before any prompt is built.

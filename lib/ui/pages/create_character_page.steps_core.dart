@@ -152,20 +152,20 @@ extension _CreateCharacterCoreSteps on _CreateCharacterPageState {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Personality & World',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: AppColors.textPrimary(context),
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Define who your character is and the world they inhabit.',
                 style: TextStyle(
                   fontSize: 14,
-                  color: Colors.white54,
+                  color: AppColors.textSecondary(context),
                   height: 1.5,
                 ),
               ),
@@ -259,20 +259,20 @@ extension _CreateCharacterCoreSteps on _CreateCharacterPageState {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Dialogue & Greetings',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
-                  color: Colors.white,
+                  color: AppColors.textPrimary(context),
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Configure the character\'s opening message and example dialogue.',
                 style: TextStyle(
                   fontSize: 14,
-                  color: Colors.white54,
+                  color: AppColors.textSecondary(context),
                   height: 1.5,
                 ),
               ),

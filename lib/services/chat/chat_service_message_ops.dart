@@ -165,15 +165,11 @@ extension ChatServiceMessageOps on ChatService {
       // tail, so deleting anything older left its needs cost applied forever.
       // Capture the deleted speaker's needs BEFORE the restore runs; the
       // refund is settled from this baseline afterwards.
-      final String? deletedSid =
-          (_activeGroup != null &&
-              !deleted.isUser &&
-              deleted.sender != 'System' &&
-              _groupCharacters.where((c) => c.name == deleted.sender).length ==
-                  1)
-          ? _getCharacterIdFromCard(
-              _groupCharacters.firstWhere((c) => c.name == deleted.sender),
-            )
+      final deletedSpeaker = (!deleted.isUser && deleted.sender != 'System')
+          ? _resolveGroupSpeakerForMessage(deleted)
+          : null;
+      final String? deletedSid = (_activeGroup != null && deletedSpeaker != null)
+          ? _getCharacterIdFromCard(deletedSpeaker)
           : null;
       // In a group, refund ONLY when the speaker resolved unambiguously —
       // falling back to the live scalars there would credit whichever member
@@ -222,11 +218,15 @@ extension ChatServiceMessageOps on ChatService {
           !deleted.isUser &&
           deleted.sender != 'System' &&
           deleted.activeMetadata?['realism_state'] is Map &&
-          _groupCharacters.where((c) => c.name == deleted.sender).length == 1 &&
-          (_messages.isEmpty || _messages.last.sender != deleted.sender)) {
+          deletedSid != null &&
+          (_messages.isEmpty ||
+              _resolveGroupSpeakerForMessage(_messages.last) !=
+                  deletedSpeaker)) {
         for (int i = _messages.length - 1; i >= 0; i--) {
           final m = _messages[i];
-          if (m.sender == deleted.sender &&
+          final speaker = _resolveGroupSpeakerForMessage(m);
+          if (speaker != null &&
+              _getCharacterIdFromCard(speaker) == deletedSid &&
               m.activeMetadata?['realism_state'] is Map) {
             _restoreRealismStateForSpeaker(m);
             break;
@@ -293,6 +293,8 @@ extension ChatServiceMessageOps on ChatService {
   void _invalidateJournalFrom(int position) {
     final sessionId = _currentSessionId;
     if (sessionId == null) return;
+    _journalReview.abandon();
+    _growthReview.abandon();
     if (position < _summaryLastIndex) {
       _summaryLastIndex = position;
     }
@@ -375,7 +377,21 @@ extension ChatServiceMessageOps on ChatService {
           '[Growth] Timeline rewrite at $position — removed $removed '
           'ring(s) citing the discarded region',
         );
-        // Let the next due pass re-score; do not force mid-generation.
+        // Rebuild cache — a bare invalidate() left injection empty until
+        // reload. Journal twin re-reads the DB; Growth cannot.
+        final ids = [
+          if (_activeCharacter != null)
+            _getCharacterIdFromCard(_activeCharacter!),
+          for (final c in _groupCharacters) _getCharacterIdFromCard(c),
+        ];
+        await _growthStore.refresh(
+          sessionId,
+          charIds: ids,
+          activeCharId: _activeCharacter != null
+              ? _getCharacterIdFromCard(_activeCharacter!)
+              : null,
+          isGroup: _activeGroup != null,
+        );
         notifyListeners();
       }
     } catch (e) {

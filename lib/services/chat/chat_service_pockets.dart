@@ -610,6 +610,18 @@ extension ChatServicePockets on ChatService {
   /// enrolls them in the existing timeline-integrity invalidation: a
   /// regenerated or deleted reply takes its phantom placement cards with it.
   Future<void> _writeItemCards(String ownerId, List<PocketEvent> events) async {
+    // Pickup writes no diary line but must retire the old placement card
+    // ("I set my keys down") or "where are my keys?" stays wrong.
+    for (final e in events) {
+      if (e.kind == PocketOpKind.pickup) {
+        final sid = _currentSessionId;
+        if (sid != null) {
+          await _journalStore.retireItemCardsInSession(sid, e.item);
+        } else {
+          await _retireItemCardsFor(ownerId, e.item);
+        }
+      }
+    }
     final drafts = itemCardsFrom(events);
     if (drafts.isEmpty) return;
     final sid = _currentSessionId!;

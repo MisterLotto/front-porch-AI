@@ -208,6 +208,16 @@ class DatabaseCleanup {
       final id = row.data['id'] as String?;
       if (id != null && id.isNotEmpty) ids.add(id);
     }
+    // Group RAG / Data Bank rows are keyed `group_<groups.id>` (see
+    // ChatService._getCharacterId). Missing this is the 68/68 wipe class
+    // for every group corpus — one click in Settings.
+    final groups = await db
+        .customSelect('SELECT id FROM groups WHERE deleted_at IS NULL')
+        .get();
+    for (final row in groups) {
+      final id = row.data['id'] as String?;
+      if (id != null && id.isNotEmpty) ids.add('group_$id');
+    }
     ids.remove('');
     return ids;
   }
@@ -668,12 +678,12 @@ class DatabaseCleanup {
 
   // ── Valid ID sets ───────────────────────────────────────────────────
 
-  static Future<Set<String>> _getValidCharacterIds(AppDatabase db) async {
-    final rows = await db.customSelect('''
-      SELECT id FROM characters WHERE deleted_at IS NULL
-    ''').get();
-    return rows.map((r) => r.data['id'] as String).toSet();
-  }
+  /// Live identities for JSON cross-refs (`memory_sources`, group
+  /// `character_ids`). Must include stableGroupId / embedding basenames —
+  /// the Memory picker stores those, not `characters.id` UUIDs. Reuses
+  /// [_liveCharacterIdentities] so the two scanners cannot drift.
+  static Future<Set<String>> _getValidCharacterIds(AppDatabase db) =>
+      _liveCharacterIdentities(db);
 
   static Future<({Set<String> ids, Map<String, String> nameToId})>
       _getValidWorldRefs(AppDatabase db) async {

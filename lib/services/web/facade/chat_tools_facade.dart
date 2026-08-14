@@ -283,6 +283,7 @@ class ChatToolsFacade {
         'primary': null,
         'secondary': const [],
         'isChecking': _chat.isCheckingCompletion,
+        'enabled': _chat.objectivesActive,
       };
     }
     Objective? primary;
@@ -295,6 +296,7 @@ class ChatToolsFacade {
       }
     }
     return {
+      'enabled': _chat.objectivesActive,
       'primary': _objJson(primary),
       'secondary': secondary.map(_objJson).whereType<Map>().toList(),
       'isChecking': _chat.isCheckingCompletion,
@@ -876,6 +878,7 @@ class ChatToolsFacade {
     bool isPrimary = true,
     String? participantId,
   }) async {
+    if (!_chat.objectivesActive) return;
     await _chat.setObjective(
       goal,
       isPrimary: isPrimary,
@@ -890,6 +893,7 @@ class ChatToolsFacade {
     int taskCount = 5,
     bool nsfw = false,
   }) {
+    if (!_chat.objectivesActive) return Future.value(false);
     return _withObjective(id, (o) async {
       await _chat.generateObjectiveTasks(o, taskCount: taskCount, nsfw: nsfw);
     });

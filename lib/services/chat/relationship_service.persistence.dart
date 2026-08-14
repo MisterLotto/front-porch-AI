@@ -33,7 +33,7 @@ extension RelationshipServicePersistence on RelationshipService {
     _activeFixation = '';
     _fixationLifespan = 0;
     _spatialStance = '';
-    _pendingTrustRepair = false;
+    pendingTrustRepair = false;
   }
 
   /// Card V2/Ext seed path: plain clamp (current ±300 scale authored by V2.5 cards

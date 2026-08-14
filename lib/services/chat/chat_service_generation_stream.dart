@@ -70,7 +70,7 @@ extension ChatServiceGenerationStream on ChatService {
       t.streamTarget = _messages.last;
       // Capture before any tokens arrive — postgen re-merges this with
       // accumulatedResponse (new tokens only) after strip/sanitize.
-      t.continuePrefix = t.streamTarget.text;
+      t.continuePrefix = closeOpenThink(t.streamTarget.text);
       originalText = t.continuePrefix;
       targetSender = t.streamTarget.sender;
       isUserTarget = t.streamTarget.isUser;
@@ -436,6 +436,11 @@ extension ChatServiceGenerationStream on ChatService {
         _llmProvider!.openRouterService.configure(
           modelName: t.originalModelName,
         );
+      }
+      if (_messages.isNotEmpty) {
+        final last = _messages.last;
+        final closed = closeOpenThink(last.text);
+        if (closed != last.text) last.text = closed;
       }
       await _saveChat();
       notifyListeners();

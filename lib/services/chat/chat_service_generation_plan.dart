@@ -214,14 +214,23 @@ extension ChatServiceGenerationPlan on ChatService {
           ? ''
           : _macroResolver.resolve(rawWorld, macroCtx, section: 'world');
 
+      // Continue must not consume one-shots: it strips them from the wire
+      // after this block, so taking them here burned Chance Time / item
+      // intro / porch-night / catastrophe forever. Leave them armed for
+      // the next real Send.
+      final skipOneShots = t.mode == GenerationMode.continue_;
+
       // Chance Time injection — independent of realism mode
-      final chanceTimeBlock = _getChanceTimeInjection();
+      final chanceTimeBlock =
+          skipOneShots ? '' : _getChanceTimeInjection();
 
       // Hand-added item one-shots (gift / the surprise Easter egg) — same
       // register as Chance Time: a bracketed directive at maximum recency.
       // Inside the realism-state block it was read as background and ignored
       // (maintainer report, 2026-08-13).
-      final itemIntroBlock = _inventoryInjection.buildItemIntroInjection();
+      final itemIntroBlock = skipOneShots
+          ? ''
+          : _inventoryInjection.buildItemIntroInjection();
 
       // LLMerta Mafia-night force-ack (Chance Time register). Re-arms from
       // diary if needed; stays armed through regen of this AI message until
@@ -234,9 +243,9 @@ extension ChatServiceGenerationPlan on ChatService {
           diaryCharacterId: porchDiaryId,
         );
       }
-      final porchNightRaw = _porchMemoryImport.takeInjectionForDiary(
-        porchDiaryId,
-      );
+      final porchNightRaw = skipOneShots
+          ? ''
+          : _porchMemoryImport.takeInjectionForDiary(porchDiaryId);
       final porchNightBlock = porchNightRaw.isEmpty
           ? ''
           : _macroResolver.resolve(
@@ -256,7 +265,8 @@ extension ChatServiceGenerationPlan on ChatService {
       // wrapper stays generic: firm but short (heavy "YOU MUST" walls read as
       // jailbreak-fight energy and can backfire), and it never puppets {{user}}.
       String needsCatastropheBlock = '';
-      if (_needsSimulation.pendingCatastrophe != null) {
+      if (!skipOneShots &&
+          _needsSimulation.pendingCatastrophe != null) {
         // Macro-resolved (spec §5a): previously the {{user}}/{{char}}
         // placeholders in this wrapper reached the model literally.
         needsCatastropheBlock = _macroResolver.resolve(

@@ -170,6 +170,18 @@ const double kScalarEvalRepeatPenalty = 1.0;
 /// Three turns is the window the needs eval has always used: enough to carry
 /// the user's message and the reply it prompted, short enough that an eval
 /// prompt stays an eval prompt.
+/// Pre-gen judges score the USER. After Next Character the live list ends
+/// on another NPC's reply — cut there so bond/mood/arousal cannot move off
+/// that speech. Trust was already prompt-gated to the user; this is the
+/// same rule in code. Post-gen (climax/pockets/posture) keep [recentExchange].
+List<ChatMessage> messagesThroughLastUser(List<ChatMessage> msgs) {
+  final i = msgs.lastIndexWhere((m) => m.isUser);
+  return i < 0 ? msgs : msgs.sublist(0, i + 1);
+}
+
+String recentExchangeThroughLastUser(List<ChatMessage> msgs, {int take = 3}) =>
+    recentExchange(messagesThroughLastUser(msgs), take: take);
+
 String recentExchange(List<ChatMessage> msgs, {int take = 3}) {
   final n = msgs.length < take ? msgs.length : take;
   return msgs.reversed

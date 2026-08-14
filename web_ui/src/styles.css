@@ -1266,10 +1266,23 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 .dl-sub { display: flex; justify-content: space-between; gap: 8px; }
 .dl-err { color: var(--danger); }
 
-/* Inline images embedded in chat messages (![alt](url)). */
+/* Inline images embedded in chat messages (![alt](https://...)). */
 .chat-image {
   display: block; max-width: 100%; margin-top: 8px;
   border-radius: var(--radius); border: 1px solid var(--border);
+}
+.chat-image-consent {
+  display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  margin-top: 8px; padding: 8px 12px;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--text); font-size: 0.82rem;
+}
+.chat-image-consent button {
+  background: var(--accent); color: var(--accent-ink);
+  border: none; font-weight: 600; cursor: pointer;
+  padding: 4px 10px; border-radius: 8px;
 }
 
 /* Porch Stories */

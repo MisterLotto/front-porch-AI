@@ -350,7 +350,9 @@ extension ChatServiceWiringMemory on ChatService {
         // + generate path the goodbye narration uses, minus the removal/directive.
         if (_activeGroup == null || _isTurnBusy) return;
         _groupManager?.setNextSpeaker(member);
-        await _generateResponse(GenerationMode.normal);
+        // Same follow-up-speaker rule as Next Character: Send already
+        // advanced the chat-scoped clock for this user turn.
+        await _generateResponse(GenerationMode.normal, skipClockAdvance: true);
       },
       isGroupTurnOrderRandom: () => isGroupTurnOrderRandom,
       setGroupTurnOrder: (random, customOrder) =>

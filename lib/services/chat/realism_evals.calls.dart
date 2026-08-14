@@ -44,7 +44,7 @@ extension RealismEvalCalls on RealismEvals {
     // through the ONE window builder (recentExchange — same sender:promptText
     // shape this inline copy had), which also applies the per-message clamp;
     // the inline copies predated it and had already drifted once.
-    final recent = recentExchange(getMessages(), take: 4);
+    final recent = recentExchangeThroughLastUser(getMessages(), take: 4);
 
     if (getActiveCharacter() == null) {
       // Group chat or other mode — relationship evals not supported in this path yet
@@ -143,7 +143,7 @@ extension RealismEvalCalls on RealismEvals {
     if (getActiveCharacter() == null && getActiveGroup() == null) return;
     if (getActiveGroup() != null && getIsObserverMode()) return;
     // Same 4-message window as the other judges, same one builder + clamp.
-    final recent = recentExchange(getMessages(), take: 4);
+    final recent = recentExchangeThroughLastUser(getMessages(), take: 4);
     if (getActiveCharacter() == null) {
       // Group chat or other mode — relationship evals not supported in this path yet
       return;
@@ -265,6 +265,7 @@ extension RealismEvalCalls on RealismEvals {
     void Function(String)? onChunk,
     bool timeOnly = false,
     bool postureOnly = false,
+    bool skipClockAdvance = false,
   }) async {
     if (!timeOnly) {
       if (!getRealismEnabled()) return;
@@ -306,6 +307,7 @@ extension RealismEvalCalls on RealismEvals {
       getEmotionIntensity: getEmotionIntensity,
       timeOnly: timeOnly,
       postureOnly: postureOnly,
+      skipClockAdvance: skipClockAdvance,
     );
   }
 
@@ -314,7 +316,7 @@ extension RealismEvalCalls on RealismEvals {
     if (getActiveCharacter() == null && getActiveGroup() == null) return;
     if (getActiveGroup() != null && getIsObserverMode()) return;
     // Same 4-message window as the other judges, same one builder + clamp.
-    final recent = recentExchange(getMessages(), take: 4);
+    final recent = recentExchangeThroughLastUser(getMessages(), take: 4);
     if (getActiveCharacter() == null) {
       // This path requires an active character (the group per-speaker path
       // temporarily sets _activeCharacter before calling us for parity).

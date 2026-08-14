@@ -201,11 +201,8 @@ extension ChatServiceReprocess on ChatService {
       CharacterCard? regenSpeakerCard;
       String regenSpeakerSid = '';
       if (_activeGroup != null && regenGuest == null) {
-        final idx = _groupCharacters.indexWhere(
-          (c) => c.name == lastMsg.sender,
-        );
-        if (idx >= 0) {
-          regenSpeakerCard = _groupCharacters[idx];
+        regenSpeakerCard = _resolveGroupSpeakerForMessage(lastMsg);
+        if (regenSpeakerCard != null) {
           regenSpeakerSid = _getCharacterIdFromCard(regenSpeakerCard);
         }
       }
@@ -446,6 +443,9 @@ extension ChatServiceReprocess on ChatService {
             wasNudged: wasNudged,
           );
         }
+        // Clock suppression is an argument on Next Character only. Regen
+        // rewinds above and then re-runs the scene-time eval with the
+        // default (advance), so time does not walk backward.
 
         // ── Where she was BEFORE the reply being discarded ────────────────
         //
@@ -628,7 +628,12 @@ extension ChatServiceReprocess on ChatService {
         final newMetadata = _messages.last.activeMetadata != null
             ? Map<String, dynamic>.from(_messages.last.activeMetadata!)
             : null;
+        final tempBefore = _messages.last.metadata?['pockets_before'];
         _messages.removeLast();
+        if (tempBefore is Map) {
+          lastMsg.metadata ??= {};
+          lastMsg.metadata!['pockets_before'] = tempBefore;
+        }
         lastMsg.swipes.add(newText);
         while (lastMsg.swipeDurations.length < lastMsg.swipes.length) {
           lastMsg.swipeDurations.add(0);

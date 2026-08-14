@@ -3,14 +3,9 @@
 
 
 import 'package:flutter/material.dart';
-import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/services/services.dart';
-import 'package:front_porch_ai/ui/dialogs/group_settings/prompt_engineering_tab.dart';
-import 'package:front_porch_ai/ui/dialogs/group_settings/memory_rag_tab.dart';
-import 'package:front_porch_ai/ui/dialogs/group_settings/realism_needs_tab.dart';
-import 'package:front_porch_ai/ui/dialogs/group_settings/needs_tab.dart';
-import 'package:front_porch_ai/ui/dialogs/group_settings/general_tab.dart';
-import 'package:front_porch_ai/ui/dialogs/group_settings/lorebook_worlds_tab.dart';
+import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/ui/dialogs/group_settings/group_settings.dart';
 
 /// Main settings dialog for a Group Chat.
 /// This is the central place for all per-group and per-character configuration.
@@ -31,6 +26,7 @@ class GroupSettingsDialog extends StatefulWidget {
 class _GroupSettingsDialogState extends State<GroupSettingsDialog>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final _generalTabKey = GlobalKey<GroupGeneralTabState>();
 
   @override
   void initState() {
@@ -124,6 +120,7 @@ class _GroupSettingsDialogState extends State<GroupSettingsDialog>
                     groupRepo: widget.groupRepo,
                   ),
                   GroupGeneralTab(
+                    key: _generalTabKey,
                     chatService: widget.chatService,
                     groupRepo: widget.groupRepo,
                   ),
@@ -163,6 +160,8 @@ class _GroupSettingsDialogState extends State<GroupSettingsDialog>
                   if (widget.groupRepo != null)
                     OutlinedButton(
                       onPressed: () {
+                        // General tab edits live in controllers until Save.
+                        _generalTabKey.currentState?.applyToLiveGroup();
                         final g = widget.chatService.activeGroup;
                         if (g != null) {
                           widget.groupRepo!.save(g);

@@ -455,6 +455,15 @@ class GrowthStore {
     final db = getDb();
     if (db == null) return;
     for (final ring in await db.getGrowthRingsForSession(fromSessionId)) {
+      final raw = ring.sourceMessageIds;
+      if (raw != null && raw.isNotEmpty) {
+        try {
+          final positions = jsonDecode(raw) as List<dynamic>;
+          if (positions.whereType<num>().any((p) => p.toInt() >= cursor)) {
+            continue;
+          }
+        } catch (_) {}
+      }
       await db.insertGrowthRing(
         GrowthRingsCompanion(
           sessionId: Value(toSessionId),

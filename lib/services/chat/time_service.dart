@@ -203,6 +203,8 @@ class TimeService {
   /// and closing it never froze the date, so those chats wandered indefinitely.
   bool get canonicalClockWasSynthesised => _canonicalClockWasSynthesised;
 
+
+
   /// "9:40 PM" / "Tue, Mar 3" / "Tuesday, March 3rd(, 1887)" for the UI.
   String get displayClock => StoryClock.formatClock(_clock);
   String get displayShortDate => StoryClock.formatShortDate(_clock);
@@ -709,6 +711,7 @@ class TimeService {
     String? oneShotText,
     bool timeOnly = false,
     bool postureOnly = false,
+    bool skipClockAdvance = false,
   }) async {
     // Realism context, and therefore skipped entirely in timeOnly mode.
     final emotionCtx = !timeOnly && getCharacterEmotion().isNotEmpty
@@ -752,6 +755,10 @@ class TimeService {
     // its own post-generation pass above — so a frozen clock now costs the
     // user nothing at all rather than one posture request per turn.
     if (!_passageOfTimeEnabled) return;
+    if (skipClockAdvance) {
+      debugPrint('[Realism:Time] follow-up speaker — clock already moved');
+      return;
+    }
 
     final newDayCorroborated = _newDayCorroboration.hasMatch(recent);
     void logSuppressedNewDay() => debugPrint(
@@ -853,7 +860,9 @@ class TimeService {
     } catch (e) {
       // Eval failed — deterministic drift so time never freezes (unless the
       // OOC skip already moved this turn's clock).
-      if (!skipOwnsClock) _applyElapsed(minutes: null, newDay: false);
+      if (!skipOwnsClock) {
+        _applyElapsed(minutes: null, newDay: false);
+      }
       debugPrint('[Realism:Time] Eval error, drifted to $displayClock: $e');
     }
 

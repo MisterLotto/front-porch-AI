@@ -1,10 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as html_parser;
 import 'package:syncfusion_flutter_pdf/pdf.dart';
+
+import 'package:front_porch_ai/utils/utils.dart';
 
 class LoreExtractionService {
   /// Extracts text from a list of URLs and a list of local files.
@@ -61,7 +62,7 @@ class LoreExtractionService {
   static Future<String?> _scrapeUrl(String urlString) async {
     try {
       final uri = Uri.tryParse(urlString);
-      if (uri == null) return null;
+      if (uri == null || !isSafeOutboundUrl(uri)) return null;
 
       final response = await http.get(uri).timeout(const Duration(seconds: 15));
       if (response.statusCode != 200) return null;

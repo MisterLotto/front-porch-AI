@@ -93,6 +93,8 @@ extension AppDatabaseMaintenance on AppDatabase {
         'character_system_prompts TEXT NOT NULL DEFAULT "{}"',
         // v42 — groups foldering (nullable; null = home top level)
         'folder_id TEXT',
+        // v34 — portable group stable id (Stoop update-in-place)
+        'stable_id TEXT',
       ],
       'sessions': [
         // v30 — the live per-group-member realism state (clean replacement for hidden checkpoint msgs)
@@ -123,6 +125,23 @@ extension AppDatabaseMaintenance on AppDatabase {
         // default. NULL means nothing was recorded, which is true for every
         // chat older than the column.
         'pockets TEXT',
+        // v38 Story Calendar — nullable; NULL = legacy row, synthesized on load
+        'story_clock TEXT',
+        'story_start_date TEXT',
+        // v43 — 0 = world attachments not yet decided (lets back-fill run)
+        'worlds_initialized INTEGER NOT NULL DEFAULT 0',
+      ],
+      'worlds': [
+        // v40 Living Worlds (must match _migrateLivingWorldsV40)
+        'cover_image TEXT',
+        'format_version INTEGER NOT NULL DEFAULT 1',
+        'source_id TEXT',
+        'linked_character_id TEXT',
+        'biome_id TEXT',
+        'biome_json TEXT',
+        'inject_description INTEGER NOT NULL DEFAULT 1',
+        // v41
+        'place_traits TEXT',
       ],
       'group_members': [
         // Per current GroupMembers Dart definition + created_at (to match the repair-path CREATE TABLE).

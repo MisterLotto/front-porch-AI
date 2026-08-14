@@ -175,7 +175,7 @@ class RelationshipService {
 
   // Armed on each severe trust drop (≥ -20 delta). Consumed on the very next user
   // message, then resets so future drops each get one shot.
-  bool _pendingTrustRepair = false;
+  bool pendingTrustRepair = false;
 
   RelationshipService({
     required this.onNotify,
@@ -222,7 +222,7 @@ class RelationshipService {
   int get longTermTier => _longTermTier;
   int get trustLevel => _trustLevel;
   int get trustTier => _calculateTier(_trustLevel);
-  bool get pendingTrustRepair => _pendingTrustRepair;
+
   String get activeFixation => _activeFixation;
   int get fixationLifespan => _fixationLifespan;
   String get spatialStance => _spatialStance;
@@ -356,7 +356,7 @@ class RelationshipService {
     _activeFixation = activeFixation;
     _fixationLifespan = fixationLifespan;
     _spatialStance = spatialStance;
-    _pendingTrustRepair = trustRepairPending;
+    pendingTrustRepair = trustRepairPending;
     _turnsSinceLongTermCheck = turnsSinceLongTermCheck;
     _shortTermDeltasSummary = shortTermDeltasSummary;
     _turnsSinceDecayCheck = turnsSinceDecayCheck;

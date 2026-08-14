@@ -238,4 +238,12 @@ class JournalReview {
     onNotify();
     debugPrint('[Journal] ✗ Review discarded');
   }
+
+  /// Drop a parked batch without advancing the cursor — timeline rewrite
+  /// made the proposals cite discarded plot. Next pass re-reads the new tip.
+  void abandon() {
+    if (_pending == null) return;
+    _pending = null;
+    onNotify();
+  }
 }

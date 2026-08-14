@@ -139,7 +139,13 @@ interface ToolsState {
     storyClock?: string;
     storyStartDate?: string;
   };
-  objectives: { primary: ObjectiveView | null; secondary: ObjectiveView[]; isChecking: boolean };
+  objectives: {
+    primary: ObjectiveView | null;
+    secondary: ObjectiveView[];
+    isChecking: boolean;
+    // Additive: absent on older hosts — treat missing as on (legacy always-on).
+    enabled?: boolean;
+  };
   focusedId?: string | null;
   group?: GroupBlock | null;
 }
@@ -680,7 +686,7 @@ export function ChatTools({
         </div>
       </details>
 
-      <details className="tool-section" open={checking}>
+      {t.objectives.enabled !== false && <details className="tool-section" open={checking}>
         <summary>
           Objectives{obj || t.objectives.secondary.length > 0 ? '' : ' (none)'}
           {checking && <span className="obj-checking-tag"> · checking…</span>}
@@ -787,7 +793,7 @@ export function ChatTools({
             </>
           )}
         </div>
-      </details>
+      </details>}
 
       <details className="tool-section">
         <summary>Where we are</summary>

@@ -79,7 +79,7 @@ extension RelationshipServiceDynamics on RelationshipService {
     onNotify(); // notify on any trust shift (bond/long/short already do on change) so sidebar live-updates from realism eval results / chips
     // Arm the repair window on any severe single-turn drop
     if (delta <= -20) {
-      _pendingTrustRepair = true;
+      pendingTrustRepair = true;
       debugPrint('[Realism:Trust] Severe drop — repair window armed');
     }
     if (recordMilestone && oldTier != newTier && onTierCrossing != null) {
@@ -283,6 +283,6 @@ extension RelationshipServiceDynamics on RelationshipService {
 
   /// Consume the one-shot repair window (called on next user turn after armed severe drop).
   void consumePendingTrustRepair() {
-    _pendingTrustRepair = false;
+    pendingTrustRepair = false;
   }
 }

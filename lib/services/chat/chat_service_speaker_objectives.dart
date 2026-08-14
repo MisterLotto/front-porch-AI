@@ -248,9 +248,9 @@ extension ChatServiceSpeakerObjectives on ChatService {
       _restoreRealismStateFromMessage(msg);
       return;
     }
-    final idx = _groupCharacters.indexWhere((c) => c.name == msg.sender);
-    if (idx < 0) return;
-    final sid = _getCharacterIdFromCard(_groupCharacters[idx]);
+    final speaker = _resolveGroupSpeakerForMessage(msg);
+    if (speaker == null) return;
+    final sid = _getCharacterIdFromCard(speaker);
     if (sid.isEmpty) return;
     final hadStoredNeeds = _getGroupNeeds(sid).isNotEmpty;
     final state = msg.activeMetadata?['realism_state'];

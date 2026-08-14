@@ -85,20 +85,18 @@ extension ChatServiceGenerationPostGen on ChatService {
         newPart = _stripThinkBlocks(newPart);
       }
 
+      // Close an open think on the PREFIX before glue — closing after
+      // concat put Continue's new words inside the thought (empty bubble).
+      final prefix = t.mode == GenerationMode.continue_
+          ? closeOpenThink(t.continuePrefix)
+          : '';
       String finalResponse = t.mode == GenerationMode.continue_
-          ? '${t.continuePrefix}$newPart'.trimRight()
+          ? '$prefix$newPart'.trimRight()
           : newPart.trim();
 
-      // Salvage a reply stranded inside an unclosed <think> block (the
-      // BACKEND's own stop sequences can cut inside one even with the
-      // client-side scan think-aware): close it, so the thoughts survive
-      // as the collapsible instead of displayText stripping the whole
-      // message to an empty bubble that persists across refreshes.
-      final lowerFinal = finalResponse.toLowerCase();
-      if (lowerFinal.lastIndexOf('<think>') >
-          lowerFinal.lastIndexOf('</think>')) {
-        finalResponse = '$finalResponse\n</think>';
-      }
+      // Salvage a reply stranded inside an unclosed <think> in the NEW
+      // portion only (backend stop sequences can still cut mid-think).
+      finalResponse = closeOpenThink(finalResponse);
 
       // ── Output Sanitizer ──────────────────────────────────────────────
       // NOTE: This runs BEFORE _lorebookScanner.scanLatest() below, so

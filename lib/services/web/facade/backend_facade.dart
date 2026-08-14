@@ -19,6 +19,7 @@
 import 'dart:async';
 
 import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Web adapter for local-backend lifecycle, local-model switching, and the
 /// HuggingFace model browser/downloader. Reuses [LLMProvider]'s managed-backend
@@ -181,12 +182,18 @@ class BackendFacade {
   // supply an as-yet-unsaved [apiUrl]/[apiKey] (so the Settings page can preview
   // a provider before the user saves), otherwise we fall back to the stored
   // remote settings. Local servers (oMLX / vLLM at localhost) need no key.
-  ({String url, String key}) _remoteCreds(String? apiUrl, String? apiKey) {
+  /// Caller-supplied [apiUrl] is the SSRF vector (unsaved Settings preview).
+  /// The stored remote URL is whatever the desktop user configured — including
+  /// localhost / LAN oMLX — and must stay usable from web.
+  ({String url, String key})? _remoteCreds(String? apiUrl, String? apiKey) {
     final b = _storage.backendSettings;
-    final url = (apiUrl != null && apiUrl.trim().isNotEmpty)
-        ? apiUrl.trim()
-        : b.remoteApiUrl;
+    final override = apiUrl != null && apiUrl.trim().isNotEmpty;
+    final url = override ? apiUrl.trim() : b.remoteApiUrl;
     final key = (apiKey != null && apiKey.isNotEmpty) ? apiKey : b.remoteApiKey;
+    if (override) {
+      final uri = Uri.tryParse(url);
+      if (uri == null || !isSafeOutboundUrl(uri)) return null;
+    }
     return (url: url, key: key);
   }
 
@@ -199,6 +206,7 @@ class BackendFacade {
     String? apiKey,
   }) async {
     final c = _remoteCreds(apiUrl, apiKey);
+    if (c == null) return [];
     final svc = OpenRouterService(apiUrl: c.url, apiKey: c.key);
     final models = await svc.fetchAvailableModels();
     return models
@@ -219,6 +227,12 @@ class BackendFacade {
     String? apiKey,
   }) async {
     final c = _remoteCreds(apiUrl, apiKey);
+    if (c == null) {
+      return {
+        'efforts': reasoningEffortChipsFor(model),
+        'mandatory': reasoningEffortIsMandatory(model),
+      };
+    }
     await probeReasoningEfforts(
       model: model,
       apiUrl: c.url,
@@ -234,6 +248,9 @@ class BackendFacade {
   /// [remoteModels]). Returns the human-readable status from the service.
   Future<String> testRemoteConnection({String? apiUrl, String? apiKey}) async {
     final c = _remoteCreds(apiUrl, apiKey);
+    if (c == null) {
+      return 'Connection refused: URL is not a public http(s) address.';
+    }
     final svc = OpenRouterService(apiUrl: c.url, apiKey: c.key);
     return svc.testConnection();
   }

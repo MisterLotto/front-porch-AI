@@ -37,7 +37,7 @@ extension _CreateCharacterLorebookStep on _CreateCharacterPageState {
             children: [
               Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -46,15 +46,15 @@ extension _CreateCharacterLorebookStep on _CreateCharacterPageState {
                           style: TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            color: AppColors.textPrimary(context),
                           ),
                         ),
-                        SizedBox(height: 8),
+                        const SizedBox(height: 8),
                         Text(
                           'Add world lore entries that inject context into conversations when keywords are detected.',
                           style: TextStyle(
                             fontSize: 14,
-                            color: Colors.white54,
+                            color: AppColors.textSecondary(context),
                             height: 1.5,
                           ),
                         ),
