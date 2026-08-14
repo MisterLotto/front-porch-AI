@@ -3,6 +3,17 @@
 
 # Changelog
 
+## 2026-08-14 — fix(sidebar): Memory Settings/Sources/Data Bank overflowed a squeezed chat sidebar
+- **Files:** memory_panel.dart (rigid Row → Wrap; three copy-pasted chips
+  collapsed to `_link`); journal_panel.dart (Open / Plant a memory Wrap —
+  same squeeze, Journal twin).
+- **Tests:** NEW memory_panel_overflow_test (3 widths). Red-proven by
+  restoring the Row: 2px overflow at 200px (same class as the field's
+  0.2–8px reports at ~225).
+- **Why:** dragging the chat sidebar to ~225px overflowed the Memory
+  controls Row. No fixed sidebar width.
+- **Commit:** (this commit)
+
 ## 2026-08-14 — fix(home): library toolbar no longer overflows a resized window
 - **Files:** home_grid_toolbar.dart (LayoutBuilder sheds slider → sort
   labels → inline actions as the content strip shrinks; ConstrainedBox on

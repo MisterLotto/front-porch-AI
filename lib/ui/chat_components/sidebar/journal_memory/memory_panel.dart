@@ -182,82 +182,44 @@ class _MemoryPanelState extends State<MemoryPanel> {
             accent: accent,
           ),
           const SizedBox(height: 6),
-          // Controls row
-          Row(
+          // Sidebar width is whatever the user dragged it to — wrap rather
+          // than assume the three chips fit on one line (225px overflowed).
+          Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              // Settings gear toggle
-              InkWell(
+              _link(
+                icon: Icons.tune,
+                label: 'Settings',
+                color: _showSettings
+                    ? accent
+                    : AppColors.textTertiary(context),
+                iconColor: _showSettings
+                    ? accent
+                    : AppColors.iconSecondary(context),
                 onTap: () => setState(() => _showSettings = !_showSettings),
-                borderRadius: BorderRadius.circular(4),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 2,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.tune,
-                        size: 14,
-                        color: _showSettings
-                            ? accent
-                            : AppColors.iconSecondary(context),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Settings',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: _showSettings
-                              ? accent
-                              : AppColors.textTertiary(context),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               ),
-              const SizedBox(width: 12),
-              // Sources toggle
-              InkWell(
+              _link(
+                icon: Icons.people,
+                label:
+                    'Sources${_selectedSources.isNotEmpty ? ' (${_selectedSources.length})' : ''}',
+                color: _showSources
+                    ? accent
+                    : AppColors.textTertiary(context),
+                iconColor: _showSources
+                    ? accent
+                    : AppColors.iconSecondary(context),
                 onTap: () {
                   setState(() => _showSources = !_showSources);
                   if (_showSources && !_sourcesLoaded) _loadSources();
                 },
-                borderRadius: BorderRadius.circular(4),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 2,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.people,
-                        size: 14,
-                        color: _showSources
-                            ? accent
-                            : AppColors.iconSecondary(context),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Sources${_selectedSources.isNotEmpty ? ' (${_selectedSources.length})' : ''}',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: _showSources
-                              ? accent
-                              : AppColors.textTertiary(context),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               ),
-              const SizedBox(width: 12),
-              // Data Bank button
-              InkWell(
+              _link(
+                icon: Icons.library_books,
+                label: 'Data Bank',
+                color: AppColors.textTertiary(context),
+                iconColor: AppColors.iconSecondary(context),
                 onTap: () {
                   final activeChar = widget.chatService.activeCharacter;
                   if (activeChar == null) return;
@@ -269,31 +231,6 @@ class _MemoryPanelState extends State<MemoryPanel> {
                     ),
                   );
                 },
-                borderRadius: BorderRadius.circular(4),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 2,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.library_books,
-                        size: 14,
-                        color: AppColors.iconSecondary(context),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Data Bank',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: AppColors.textTertiary(context),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               ),
             ],
           ),
@@ -344,6 +281,30 @@ class _MemoryPanelState extends State<MemoryPanel> {
           ],
         ],
       ],
+    );
+  }
+
+  Widget _link({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required Color iconColor,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: iconColor),
+            const SizedBox(width: 4),
+            Text(label, style: TextStyle(fontSize: 10, color: color)),
+          ],
+        ),
+      ),
     );
   }
 }
