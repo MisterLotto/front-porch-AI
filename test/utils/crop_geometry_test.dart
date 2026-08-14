@@ -122,6 +122,37 @@ void main() {
       expect(r.right, 100, reason: 'the right edge must not move');
     });
 
+    test('a tiny image (world smaller than minSize) cannot crash the drag '
+        'math — pixel-art avatars are real', () {
+      // An 8×8 image scaled up ~50× to fit the stage: the world is ~10
+      // source px across while the dialog's minSize floor is 16. Before the
+      // 2026-08-14 guard, the clamp bounds inverted (hi < lo) and
+      // num.clamp THREW mid-drag.
+      final tinyWorld = const Rect.fromLTRB(-1.2, -1.0, 9.2, 9.0);
+      final tinyRect = const Offset(0, 0) & const Size(8, 8);
+      final r = applyCropDrag(
+        tinyRect,
+        CropHandle.left,
+        const Offset(5, 0),
+        world: tinyWorld,
+        minSize: 16,
+      );
+      expect(r.width, greaterThan(0));
+      expect(r.left, lessThan(r.right));
+
+      // Rect hugging the world edge with an unreachable minSize: the edge
+      // freezes instead of throwing.
+      final hugging = const Offset(-1.2, -1.0) & const Size(4, 4);
+      final r2 = applyCropDrag(
+        hugging,
+        CropHandle.right,
+        const Offset(-500, 0),
+        world: tinyWorld,
+        minSize: 16,
+      );
+      expect(r2.left, lessThan(r2.right));
+    });
+
     test('resize clamps to the world bounds', () {
       final r = applyCropDrag(
         rect,

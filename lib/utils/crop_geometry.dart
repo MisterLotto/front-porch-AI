@@ -97,6 +97,13 @@ CropHandle? hitTestCropHandle(Offset p, Rect cropVp, double grabRadius) {
 /// Apply a source-space [delta] to [rect] for [handle]. The result always
 /// stays inside [world] and keeps at least [minSize] on both axes; edges
 /// can never cross each other (no inversion).
+///
+/// [minSize] is capped to the world's dimensions, and an edge whose clamp
+/// range comes out inverted (a rect hugging the world edge with the minimum
+/// unreachable) FREEZES instead of throwing — with a tiny pixel-art image
+/// the world in source pixels can be smaller than the dialog's minimum, and
+/// `num.clamp` throws on inverted bounds (found in the 2026-08-14 hostile
+/// review; a drag on an 8×8 avatar crashed).
 Rect applyCropDrag(
   Rect rect,
   CropHandle handle,
@@ -123,11 +130,15 @@ Rect applyCropDrag(
       handle == CropHandle.bottom ||
       handle == CropHandle.bottomRight;
 
+  final min = math.min(minSize, math.min(world.width, world.height));
+  double edge(double current, double next, double lo, double hi) =>
+      hi < lo ? current : next.clamp(lo, hi);
+
   var l = rect.left, t = rect.top, r = rect.right, b = rect.bottom;
-  if (movesLeft) l = (l + delta.dx).clamp(world.left, r - minSize);
-  if (movesRight) r = (r + delta.dx).clamp(l + minSize, world.right);
-  if (movesTop) t = (t + delta.dy).clamp(world.top, b - minSize);
-  if (movesBottom) b = (b + delta.dy).clamp(t + minSize, world.bottom);
+  if (movesLeft) l = edge(l, l + delta.dx, world.left, r - min);
+  if (movesRight) r = edge(r, r + delta.dx, l + min, world.right);
+  if (movesTop) t = edge(t, t + delta.dy, world.top, b - min);
+  if (movesBottom) b = edge(b, b + delta.dy, t + min, world.bottom);
   return Rect.fromLTRB(l, t, r, b);
 }
 

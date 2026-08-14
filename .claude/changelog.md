@@ -3,6 +3,16 @@
 
 # Changelog
 
+## 2026-08-14 — fix(crop): tiny-image drag crash (clamp inversion) found in feature-completeness review
+- **Files:** crop_geometry.dart (applyCropDrag: minSize capped to the world,
+  edges freeze instead of throwing when the minimum is unreachable);
+  crop_geometry_test.dart (+1 regression test, red before the guard —
+  Invalid argument(s) out of num.clamp).
+- **Why:** an 8×8 pixel-art avatar scaled ~50× makes the world in source px
+  smaller than the 16 px minSize floor; dragging an edge inverted the clamp
+  bounds and threw mid-gesture.
+- **Commit:** (this commit)
+
 ## 2026-08-14 — feat(crop): blank-slate crop rewrite (desktop + web) + concrete portrait-delete confirm
 - **Files:** NEW lib/utils/crop_geometry.dart (pure containFit/hitTest/drag
   math + compute()-friendly compositor; crop rect may overhang the image,
