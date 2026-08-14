@@ -62,6 +62,10 @@ class TtsService extends ChangeNotifier {
   bool _isSpeaking = false;
   bool _isGenerating = false;
   String? _currentMessageId;
+  // The exact sentence the streaming (call-mode) playback is voicing right
+  // now — the call overlay's live caption. Null outside streaming playback,
+  // so captions can never show a line the character is not saying.
+  String? _nowSpeaking;
   double _generationProgress = 0.0;
   double _modelDownloadProgress = 0.0;
   bool _isDownloadingModel = false;
@@ -82,6 +86,7 @@ class TtsService extends ChangeNotifier {
   bool get isSpeaking => _isSpeaking;
   bool get isGenerating => _isGenerating;
   String? get currentMessageId => _currentMessageId;
+  String? get nowSpeaking => _nowSpeaking;
   double get generationProgress => _generationProgress;
   double get modelDownloadProgress => _modelDownloadProgress;
   bool get isDownloadingModel => _isDownloadingModel;
@@ -228,6 +233,7 @@ class TtsService extends ChangeNotifier {
     _isGenerating = false;
     _generationProgress = 0.0;
     _currentMessageId = null;
+    _nowSpeaking = null;
 
     _afplayProcess?.kill();
     _afplayProcess = null;

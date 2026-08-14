@@ -6511,37 +6511,37 @@ Part of the full-app UI regression golden suite (plan Phase 4). `MessageBubble` 
 - Files: lib/services/chat/chat_service_group_entry.dart (new private `_inheritGroupExpressionAvatars` + call in setActiveGroup), lib/services/chat/chat_service_group_membership.dart (call in addCharacterToGroup + _reloadGroupRoster), docs/Rawhide.md (user-facing note).
 - Reason: Footgun reported by maintainer — the Expression Images option offers no per-character setup in group chats, so members never showed expressions. By design a group member is a single-avatar COPY of a library character (database.dart:443 "exactly one primary avatar PNG per member; no multi-avatar/expressions"). User chose "inherit from the library character" over per-member setup. Fix: at every group-roster resolution seam (enter group, add member, remove/undo reload) we borrow the origin LIBRARY character's `avatarImages` onto the member card, matched by NAME. Name-matching is not just convenient — it is REQUIRED for the display to find the files: the expression renderer resolves avatar paths via `storage.characterAvatarDir(character.name)`, and the member shares the library character's name, so the inherited filenames land on the library character's existing avatar folder. Members with no library match keep their single avatar (graceful). Defensive `List.from` copy so a member card can never mutate the shared library list. No realism/needs simulation touched; this strictly IMPROVES 1:1↔group parity (groups now render expressions exactly as 1:1 does). Verified the whole chain: `hasAvatars` reads the member card's `avatarImages` → activates the expression path; `resolveExpressionAvatar` filters that list by emotion label with no DB lookup by the member's fresh UUID.
 - Hygiene: 1 new private method (within the 2-method cap), called from 3 resolution points (no parallel paths). No dead code; no duplicate inheritance logic (only other `.avatarImages =` writer is the unrelated avatar-editor dialog). `flutter analyze` clean on touched leaves + library root; `dart fix --dry-run` "Nothing to fix!".
-- Commit: (pending)
+- Commit: 1ecd639
 
 ## 2026-06-23 — Expression Images editor in groups now targets the real library character
 - Files: lib/services/chat/chat_service_group_entry.dart (new public `originLibraryCardFor`; refactored `_inheritGroupExpressionAvatars` to reuse it), lib/ui/pages/chat_page.dart ('expressions' settings case), lib/ui/dialogs/character_avatars_dialog.dart (header shows character name, Flexible+ellipsis), docs/Rawhide.md.
 - Reason: Follow-up to the display-inheritance commit. User opened Settings → Expression Images inside a 2-character group and the dialog said only "Expression Images 0/30" with no indication of WHICH character — and editing there was a dead-end: the menu binds to `focused.card`, which in a group is a single-avatar member COPY (throwaway UUID, no expression rows), so saves wrote orphan rows under the member id and were overwritten by inheritance on the next reload. Fix: in a group, the editor now routes at the member's origin LIBRARY character (resolved by name via the new `originLibraryCardFor`, the single home where expressions persist); the dialog reloads `_avatars` from and writes to that real dbId, and files land in `characterAvatarDir(name)` which the member shares. After a successful save we force-copy the freshly edited list onto the live member card (inheritance otherwise skips already-populated members) so the group shows the new faces immediately. The dialog header now reads "Expression Images — <Name>" (wrapped in Flexible + ellipsis so long names can't RenderFlex-overflow) — fixes the ambiguity in every context. 1:1 is byte-for-byte unchanged (target == character → no force-copy), so parity holds (both modes now edit the library character). No-library-match members (rare imported-only) fall back to the prior behaviour, no crash/regression.
 - Hygiene: 2 new methods this session total (`_inheritGroupExpressionAvatars` + `originLibraryCardFor`) — within the cap; the resolver CONSOLIDATED the name-match (inheritance + UI share it, no duplicate logic). Header kept the existing white-on-gradient branded style (not converted to AppColors) to match the adjacent icon/badge in this pre-existing modal — a content-only change, not a color-system refactor. `flutter analyze` clean (full project); `dart fix --dry-run` "Nothing to fix!".
-- Commit: (pending)
+- Commit: 1ecd639
 
 ## 2026-06-23 — Needs chips now show for EVERY group speaker (not just the first responder)
 - Files: lib/services/chat_service.dart (removed the sendMessage-only needs-chip block + dead groupSpeakerPreDecayNeeds capture/decl), lib/services/chat/chat_service_group_realism_helpers.dart (new `_attachNeedsDeltaChipToLastMessage`), lib/services/chat/chat_service_generation.dart (call it in _generateResponse post-gen, mode==normal).
 - Reason: User: in a group, per-message needs-delta chips appeared only for the primary/first character; others showed none — yet the logs proved the needs impact eval WAS running for them (e.g. "Vanessa empties her bladder" → bladder +85). So needs were simulated correctly; only the CHIPS were missing. Root cause: the chip compute+attach block lived solely in `sendMessage`, which only handles the FIRST speaker after a user message. Every subsequent group speaker reaches generation by another door — `triggerNextCharacter` (auto-advance / "Next"), `speakGroupMember` (/speak), cast chime-ins — all of which call `_generateResponse` directly and never ran the chip block. Fix: moved the chip computation into `_generateResponse`'s post-gen finalization (the single chokepoint every speaker passes through), so 1:1 host, group first responder, group auto-advance and /speak all get chips identically. The new helper keys off the message's own `needs_pre_turn_vector` baseline — already stamped per-speaker (1:1 in sendMessage pre-tick at chat_service.dart:3161; group in the realism dance pre-decay at chat_service_realism_dance.dart:73) and copied onto the message at chat_service_generation.dart:832 before the post-gen call — with the realism_state snapshot's needs vector as fallback. Gated on mode==normal (regen/continue manage their own chips, matching the old behaviour). Deleted the now-dead `groupSpeakerPreDecayNeeds` local + its pre-tick capture (the helper uses the per-speaker message stash, which is also correct for random turn order where that local was always null).
 - Parity/Hygiene: strictly IMPROVES 1:1↔group parity (both modes now attach chips via one shared method off the same needs_pre_turn_vector mechanism — no parallel chip logic). 1 new private method; net god-file SHRINK (removed ~60-line block, added a ~25-line helper in a leaf). flutter analyze clean (full project); 17/17 needs_simulation + realism_parity tests green (verified 1:1/first-speaker not regressed). Separate latent bug found during the trace (NOT fixed here, reported to user): `_getCurrentSpeakerIdForRealism()` returns the *upcoming* speaker (null→primary for random turn order), mis-keying tickDecay/affection-decay/regen — distinct from this chip bug, which the new helper sidesteps by using the per-message baseline.
-- Commit: (pending)
+- Commit: 1ecd639
 
 ## 2026-06-23 — Remove duplicated Director/Verifier block from the Needs tab (group settings)
 - Files: lib/ui/dialogs/group_settings_dialog.dart (Needs-tab `_NeedsTabState`: deleted the per-member Director/Verifier UI block + its 4 orphaned maps, their load lines, and 3 update methods).
 - Reason: User saw Director/Verifier settings on only the FIRST character in the Needs tab. Root cause: the Needs tab rendered a SECOND copy of the per-member Director/Verifier block, fully gated `if (_verificationEnabled[id] ?? false)` with NO enable control in that tab — so members whose verification wasn't already enabled (set in the Realism tab) showed nothing, and there was no way to enable it there. The block was a redundant duplicate of the Realism tab's per-member Director/Verifier, which already has an always-visible enable checkbox + Max/Strict + "Director authority (needs)" for EVERY member and works correctly. Per the project's mandatory anti-duplication policy, and with the user's explicit choice ("Remove the Needs-tab copy"), deleted the Needs-tab block and its now-dead supporting state (`_verificationEnabled`/`_verificationMaxReprocesses`/`_verificationStrictness`/`_needsDirectorAuthority` maps, their ext loads, and `_updateMemberVerificationMaxReprocesses`/`_updateMemberVerificationStrictness`/`_updateMemberNeedsDirectorAuthority`). Director/Verifier is now configured in one place — the Realism tab. Kept `_persistMemberVerificationPref` (still used by the enjoys-low-hygiene save).
 - Hygiene: pure deletion of a redundant surface (~170 lines: block + 4 maps + loads + 3 methods). No new methods. The Realism-tab Director/Verifier (separate `_RealismNeedsTabState`) is untouched and remains the single config surface. flutter analyze clean; no dangling references in the Needs class.
-- Commit: (pending)
+- Commit: 1ecd639
 
 ## 2026-06-23 — Group sidebar: rename "Settings" → "Main Settings" + move Group Settings under it
 - Files: lib/ui/pages/chat_page.dart (_buildRightSidebar header text + relocated Group Settings button; removed it from _buildDirectorControls).
 - Reason: UX niggle reported by user — in a group the right sidebar read "Settings" → cast of characters → "Group Settings" button → Director Mode, which buried the whole-group entry point below the per-character roster and made the top "Settings" (actually the per-character settings popup) ambiguous. Renamed the header to "Main Settings" (it opens per-character settings: Edit Character, Expression Images, UI/Chat/Model/TTS) and moved the "Group Settings" button to sit directly beneath it, above the cast roster — so group-wide controls come before per-character ones. The button is a MOVE, not a copy (still gated `if (isGroup)`, still the only `_showGroupSettingsDialog` caller); removed from `_buildDirectorControls`, which now leads with the Director Mode row. AppColors-compliant (borderOf/textSecondary).
 - Hygiene: no new methods; net-zero widget duplication (relocation). flutter analyze clean; dart fix nothing to fix.
-- Commit: (pending)
+- Commit: 1ecd639
 
 ## 2026-06-23 — Fix the per-turn realism speaker resolver (pin the actual speaker)
 - Files: lib/services/chat_service.dart (new `_turnSpeakerIdForRealism` field), lib/services/chat/chat_service_generation.dart (set pin after speaker pick + clear in a new finally on _generateResponse's outer try), lib/services/chat/chat_service_group_realism_helpers.dart (`_getCurrentSpeakerIdForRealism` prefers the pin), test/services/chat/turn_speaker_resolver_test.dart (NEW, 6 tests).
 - Reason: `_getCurrentSpeakerIdForRealism()` derived "who's speaking now" from `GroupTurnManager.nextSpeaker` — but that's the UPCOMING speaker: after a round-robin pick the turn pointer has already advanced (so during the current speaker's turn it points at the NEXT member), and for random turn order it's null (speaker chosen at pick time) so the resolver fell back to `_groupCharacters.first` (always the primary). This resolver feeds ALL prompt-injection builders (needs/relationship/emotion/nsfw/realism_state), realism_verification, affection decay (relationship_service:683), tickDecay (needs_simulation:279), the needs-impact evaluator, and reprocess. Net effect: in round-robin each character's PROMPT was injected with the OTHER member's needs/relationship/mood, and in random turn order decay/affection always hit the primary. Fix: pin the speaker the moment they're picked in `_generateResponse` (`_turnSpeakerIdForRealism = (_activeGroup != null && guestSpeaker == null) ? id : null`) and clear it in a `finally` on the method's outer try so it can't leak into the pre-pick window (`_applyMoodDecay`, which runs in sendMessage BEFORE _generateResponse and must keep its prior nextCharacter behaviour). The resolver prefers the pin when set + still in roster, else the old nextCharacter→first fallback. Regen already pins via `_groupManager.setNextSpeaker(originalSpeaker)` (reprocess:425) before _generateResponse, so the pin follows the regenerated member. 1:1 unaffected (resolver early-returns before the group branch).
 - Safeguards (user opted into "do it properly"): the new chip helper from the prior fix uses the per-message baseline so it was already immune; this fix corrects the prompt-injection + decay keying. Verified: flutter analyze clean (full project); 377/377 chat tests + 6 new resolver tests green; ADVERSARIAL multi-agent review (4 lenses: pin lifecycle/leaks, regen, prompt-injection behavior correctness, 1:1 parity/set-condition; each finding independently refuted) returned 0 confirmed issues. No re-entrancy (the `_isGenerating` guard prevents nested _generateResponse, so the inner finally can't clear an outer turn's pin).
-- Commit: (pending)
+- Commit: 1ecd639
 
 ## 2026-06-23 — Native KoboldCpp: ban EOS on structured instruction calls (fixes empty char-gen + silent eval failures)
 - Files: lib/services/chargen/character_gen_llm.dart (banEosToken now also true when `_llmService is KoboldService && isJsonMode`), lib/services/chat/fact_extraction.dart (banEosToken `isThinkingModel && getIsLocal()` → `getIsLocal()`; doc-comment updated), lib/services/chat/expression_classifier.dart (banEosToken `isThinkingModel` → `isThinkingModel || llmService is KoboldService`; added `kobold_service.dart` import).
@@ -6581,7 +6581,7 @@ Part of the full-app UI regression golden suite (plan Phase 4). `MessageBubble` 
 - Reason: Console spammed with "Failed to parse GGUF architecture info: RangeError (byteOffset): ... 4194307" while using the (now working) Kobold chat backend. Two pre-existing bugs: (1) getModelArchitectureInfo reads only the first 4 MB of the GGUF then walks the metadata, but its value-read switch has NO per-value bounds checks (unlike the sibling getKvCacheBytesPerToken, despite a comment claiming they're "kept in sync") — the big tokenizer.ggml.tokens array on large-vocab models (Skyfall-31B) runs past 4 MB and throws RangeError; (2) model_manager only cached SUCCESSFUL parses, so every failed parse re-ran. My chat-door fix made generation stream tokens → frequent notifyListeners → settings/UI rebuilds re-calling the parser → the failure repeated on a loop. Exposed by, not caused by, the refactor.
 - Fix: (1) wrap the value switch in try/catch and break the metadata loop on overflow — the architecture keys (block_count/head_count/embedding_length) appear before the tokenizer data, so `meta` already holds them and the post-loop code returns valid GGUFModelInfo instead of throwing (so parsing now SUCCEEDS for these models, improving VRAM/layer estimates too); (2) negative-cache files that yield null in model_manager so they're parsed once, not every frame.
 - Verification: flutter analyze clean; dart format clean; test/utils green (no dedicated gguf test exists). Isolated to gguf_parser + model_manager (untouched by the unify refactor) — separately committable.
-- Commit: (pending)
+- Commit: 1ecd639
 
 ## 2026-06-23 — Creator: allow avatar generation on the KoboldCpp LLM backend (cherry-picked from main 5816782)
 - Files: lib/ui/character_creator/widgets/review_avatar_panel.dart, lib/ui/character_creator/creator_state_engine.dart, docs/Rawhide.md.
@@ -15724,3 +15724,56 @@ pumps instead of pumpAndSettle (SetupStep has a repeating blink animation).
 **Verification:** analyze clean, dart fix clean, 68 affected tests green,
 full suite green (same pre-existing gitignored .local_poke failure only),
 goldens re-run in conversation.
+
+## 2026-08-14 — Voice call overhaul: lifecycle owner, warm-porch UI, live captions, fast+visible realism
+
+Files: lib/ui/widgets/call_overlay.dart (rewritten; NEW part
+call_overlay.visuals.dart), lib/services/chat_service.dart,
+lib/services/chat/{pass_support,chat_service_accessors,
+chat_service_generation_request,chat_service_generation_stream,
+chat_service_send}.dart, lib/services/tts_service.dart +
+tts_service.streaming.dart, lib/ui/pages/chat_page.dart +
+chat_page.input_actions.dart, lib/ui/settings/tabs/
+voice_media_tab.voice_call.dart + voice_media_tab.stt.dart, docs/Rawhide.md.
+NEW tests: test/ui/widgets/call_overlay_lifecycle_test.dart,
+test/services/chat/call_mode_one_shot_test.dart.
+
+Maintainer-approved overhaul (pitch 2026-08-14; decisions: safe speed lane,
+no group calls, web deferred — tunnel latency, full UX beautify; interrupt
+amendment: local kobold/oMLX stay supported with a speed warning).
+
+1) LIFECYCLE: CallOverlay's presence in the tree IS the call. dispose() runs
+   the one idempotent teardown (onTranscription detached synchronously;
+   TTS stop + call end + callMode=false deferred one microtask past the
+   unmount tree lock). Fixes the headless-call leak: a TTS error (and any
+   other overlay removal) used to only hide the UI — mic kept listening and
+   auto-sending, callMode stayed latched on the text chat. Chat switch now
+   drops the call via the bubble-keys session prune in chat_page build.
+2) SPEED (safe lane): resolveOneShotMode gained `callMode` — a live call
+   upgrades Off to Auto's fuse-where-safe rule (parity law makes it pure
+   latency). Pre-turn call-model swap: sendMessage parks the main model in
+   ChatService._callEvalModelOriginal and configures the call model BEFORE
+   the objective check + realism judges + standalone clock; the request
+   phase ADOPTS the park into t.originalModelName (existing restore sites
+   unchanged); eval-cancel return and the callMode setter release an
+   orphaned park. Gate unchanged (!isLocal = every model-as-request-param
+   backend incl. oMLX; managed Kobold excepted).
+3) VISIBLE REALISM + CAPTIONS: TtsService.nowSpeaking (set by the streaming
+   consumer per played sentence, cleared in finally/stop) drives live
+   captions synced to audio; realism strip shows characterEmotion + last
+   reply's bond/trust deltas (same metadata the bubbles read). Warm-porch
+   re-skin end to end (AppColors only; end-call red = AppColors.bondNegOf).
+   Avatar scales to viewport height (600px window used to overflow 19px).
+4) HONEST SETTINGS: call-model picker works on remote + oMLX (badge says
+   which); managed Kobold gets "fully supported, local is slower than remote
+   hosted, pick a smaller model in Model Manager" instead of the decorative
+   GGUF dropdown whose selection did nothing. modelManager param dropped.
+5) callMode getter/setter pinned onto the ChatService class shell (fakes
+   must override it; shell at 995 lines, ratchet safe).
+
+Red-proofs run: Off-arm revert → 'a live call upgrades Off' red; callMode
+term dropped → 'Off stays plain Off outside a call' red; dispose teardown
+removed → unmount test red (+ leaked timer). All restored, all green.
+Goldens: full linux golden suite green (no golden covers the call surfaces).
+
+Commit: 1ecd639

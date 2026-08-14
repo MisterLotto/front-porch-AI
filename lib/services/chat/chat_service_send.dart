@@ -289,6 +289,15 @@ extension ChatServiceSend on ChatService {
     // Note: depth decrement happens after AI response completes (see _generateResponse finalization).
     // This ensures lore triggered by the user message is visible in the current turn's prompt.
 
+    // Voice call safe speed lane: swap to the fast call model BEFORE the
+    // pre-generation work below, so the objective check, the realism judges
+    // and the standalone clock all answer on it — not just the reply. The
+    // helper self-gates (call mode + remote + a call model picked); guests
+    // are excluded because a routed guest turn skips the host prep entirely.
+    // The request phase adopts the swap into the turn's restore machinery;
+    // the cancel return below and the callMode setter release an orphaned one.
+    if (addressedGuest == null) _enterCallEvalModelSwap();
+
     // Check objective task completion BEFORE generating response
     // so the AI gets the updated task in its prompt
     await _maybeCheckTaskCompletionSync();
@@ -385,6 +394,9 @@ extension ChatServiceSend on ChatService {
 
     // If cancellation was requested during realism evaluation, abort generation
     if (_realismEvalCancelled) {
+      // The turn dies before the request phase can adopt the call-model
+      // swap — put the main model back ourselves.
+      _exitCallEvalModelSwap();
       await _saveChat();
       _realismEvalCancelled = false;
       notifyListeners();

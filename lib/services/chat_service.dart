@@ -322,11 +322,10 @@ class ChatService extends ChangeNotifier {
   DateTime _lastStreamNotify = DateTime.fromMillisecondsSinceEpoch(0);
   Timer? _streamNotifyTimer;
   // (_kStreamNotifyInterval moved to chat_service_defaults.dart;
-  // _notifyStreamListeners / _cancelStreamNotifyThrottle moved to
-  // chat_service_generation_stream.dart)
+  // _notifyStreamListeners / _cancelStreamNotifyThrottle / tokenStream /
+  // sentenceStream live in chat_service_generation_stream.dart)
 
-  // ── Web token broadcast ──
-  // External consumers (the web server's StreamHub) listen to this for real-time token streaming.
+  // ── Web token broadcast (the web StreamHub's real-time token feed) ──
   final StreamController<String> _tokenBroadcast =
       StreamController<String>.broadcast();
 
@@ -338,8 +337,19 @@ class ChatService extends ChangeNotifier {
 
   /// Whether the app is in voice call mode (auto-disables reasoning for lower latency).
   bool _callMode = false;
-  // (tokenStream / sentenceStream / callMode moved to
-  // chat_service_generation_stream.dart)
+
+  /// Main model parked by the pre-turn call-model swap (sendMessage enters,
+  /// the request phase adopts into the turn carrier — see the request part).
+  String? _callEvalModelOriginal;
+
+  /// Fake-pinned (widget fakes override; extension members can't be).
+  /// Ending a call also releases any parked call-model swap.
+  bool get callMode => _callMode;
+  set callMode(bool value) {
+    _callMode = value;
+    if (!value) _exitCallEvalModelSwap();
+    notifyListeners();
+  }
 
   // ── Group chat state (owned by GroupTurnManager) ──
   GroupTurnManager? _groupManager;

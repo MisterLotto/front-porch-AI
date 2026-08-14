@@ -351,12 +351,7 @@ extension _VoiceMediaSttSection on VoiceMediaTab {
                   },
                 ),
                 const SizedBox(height: 12),
-                ..._buildVoiceCallSection(
-                  context,
-                  storageService,
-                  modelManager,
-                  llmProvider,
-                ),
+                ..._buildVoiceCallSection(context, storageService, llmProvider),
               ],
             ],
           ),

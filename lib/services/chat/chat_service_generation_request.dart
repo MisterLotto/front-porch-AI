@@ -115,8 +115,15 @@ extension ChatServiceGenerationRequest on ChatService {
         _llmProvider?.activeService ??
         _koboldService;
 
-    // For call mode with a dedicated call model, temporarily swap the model
-    if (_callMode &&
+    // For call mode with a dedicated call model, temporarily swap the model.
+    // When sendMessage already swapped for the pre-generation evals (the
+    // safe speed lane), ADOPT that swap into the turn carrier instead of
+    // re-capturing: reading modelName now would record the CALL model as the
+    // "original" and every restore site would restore to the wrong model.
+    if (_callEvalModelOriginal != null) {
+      t.originalModelName = _callEvalModelOriginal;
+      _callEvalModelOriginal = null;
+    } else if (_callMode &&
         _storageService.sttSettings.callModelName.isNotEmpty &&
         _llmProvider != null &&
         !_llmProvider!.isLocal) {
@@ -215,5 +222,41 @@ extension ChatServiceGenerationRequest on ChatService {
         }
       });
     }
+  }
+
+  /// Pre-turn half of the call-model swap (voice call safe speed lane): the
+  /// old swap fired only in the request phase, so every pre-generation LLM
+  /// call of a voice turn — the realism judges, the standalone clock, the
+  /// objective check — still waited on the full-size main model, which is
+  /// where the "Thinking…" silence actually lived. sendMessage enters the
+  /// swap before that work; the request phase above adopts it into
+  /// [_GenTurn.originalModelName], whose existing restore sites (postgen,
+  /// stream-cancel, catch) put the main model back. Same gate as the
+  /// in-request swap — every backend that carries the model as a request
+  /// parameter (remote APIs AND oMLX, which rides openRouterService;
+  /// isLocal is true only for managed KoboldCpp, where a swap would mean a
+  /// process restart per turn).
+  void _enterCallEvalModelSwap() {
+    if (_callEvalModelOriginal != null) return; // already parked this turn
+    if (!_callMode ||
+        _storageService.sttSettings.callModelName.isEmpty ||
+        _llmProvider == null ||
+        _llmProvider!.isLocal) {
+      return;
+    }
+    _callEvalModelOriginal = _llmProvider!.openRouterService.modelName;
+    _llmProvider!.openRouterService.configure(
+      modelName: _storageService.sttSettings.callModelName,
+    );
+  }
+
+  /// Abandon half: restores the main model when a swapped turn never reaches
+  /// the request phase (eval cancelled) or the call ends with a swap parked
+  /// (the callMode setter calls this on every call end, belt and braces).
+  void _exitCallEvalModelSwap() {
+    final original = _callEvalModelOriginal;
+    if (original == null || _llmProvider == null) return;
+    _callEvalModelOriginal = null;
+    _llmProvider!.openRouterService.configure(modelName: original);
   }
 }

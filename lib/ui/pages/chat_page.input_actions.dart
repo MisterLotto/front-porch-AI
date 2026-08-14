@@ -341,7 +341,7 @@ extension _ChatPageInputActions on _ChatPageState {
           return Tooltip(
             message: 'Start voice call',
             child: IconButton(
-              icon: const Icon(Icons.call, color: Colors.greenAccent),
+              icon: Icon(Icons.call, color: AppColors.porchAmberOf(context)),
               onPressed: chatService.isGenerating || sttService.isBusy
                   ? null
                   : () async {

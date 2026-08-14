@@ -485,14 +485,8 @@ extension ChatServiceGenerationStream on ChatService {
   /// Emits complete sentences as they're detected during LLM token streaming.
   /// Used by call mode to start TTS on the first sentence immediately.
   Stream<String> get sentenceStream => _sentenceBroadcast.stream;
-
-  /// Whether the app is in voice call mode (auto-disables reasoning for
-  /// lower latency).
-  bool get callMode => _callMode;
-  set callMode(bool value) {
-    _callMode = value;
-    notifyListeners();
-  }
+  // (callMode moved onto the class shell — fake-pinned for the call overlay
+  // widget tests, and its setter now owns the call-model swap release.)
 
   /// True while the turn's awaited post-generation work is still settling.
   /// Exposed so tests can assert the window opens and — more importantly —

@@ -18,11 +18,11 @@
 
 part of 'voice_media_tab.dart';
 
-/// Voice Call settings sub-block of the Voice & Media tab: the
-/// backend-aware Voice Call Model selector, Voice Buffer slider, Call
-/// System Prompt editor, and Auto-send-transcription toggle. Lifted
-/// verbatim from inside the STT card's `sttEnabled` conditional in the
-/// pre-split god file.
+/// Voice Call settings sub-block of the Voice & Media tab: the Voice Call
+/// Model selector (remote APIs only — local backends get an explanatory
+/// line, since the per-turn swap is remote-only), Voice Buffer slider, Call
+/// System Prompt editor, and Auto-send-transcription toggle. Lifted from
+/// inside the STT card's `sttEnabled` conditional in the pre-split god file.
 ///
 /// [_buildVoiceCallSection] returns a flat `List<Widget>` (not a single
 /// Widget) so [_VoiceMediaSttSection._buildSttSection] can splice it back
@@ -34,29 +34,54 @@ extension _VoiceMediaCallSection on VoiceMediaTab {
   List<Widget> _buildVoiceCallSection(
     BuildContext context,
     StorageService storageService,
-    ModelManager modelManager,
     LLMProvider llmProvider,
   ) {
     return [
-      // Voice call model selector — backend-aware
+      // Voice call model selector. Local backends are fully supported for
+      // calls (maintainer direction 2026-08-14: "support Local kobold and
+      // oMLX etc with just a warning that speed will be slower than with
+      // using a remote hosted model") — the split is about who can SWAP:
+      // • oMLX (and every OpenAI-compatible server, local or remote)
+      //   carries the model as a request parameter, so the picker works
+      //   there exactly as on a remote API — plus the speed warning.
+      // • Managed KoboldCpp answers with the .gguf it has loaded; a per-
+      //   call swap would restart the backend, so instead of the old
+      //   decorative GGUF dropdown (picking one silently did nothing —
+      //   chat_service_generation_request gates the swap on !isLocal) it
+      //   gets the supportive warning + the Model Manager pointer.
       Builder(
         builder: (context) {
-          final isLocal = llmProvider.activeBackend == BackendType.kobold;
-          final List<Map<String, dynamic>> callModels;
-          if (isLocal) {
-            callModels = modelManager.models.map((f) {
-              final basename = f.path.split('/').last.split('\\').last;
-              final displayName = basename.replaceAll(
-                RegExp(r'\.gguf$', caseSensitive: false),
-                '',
-              );
-              return {'id': f.path, 'name': displayName};
-            }).toList();
-          } else {
-            callModels = availableModels
-                .map((m) => {'id': m.id, 'name': m.name})
-                .toList();
+          final backend = llmProvider.activeBackend;
+          if (backend == BackendType.kobold) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Voice Call Model',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary(context),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Voice calls are fully supported on your local backend — '
+                  'they answer with the model you have loaded.\n'
+                  '⚠ A local model will be slower than a remote hosted '
+                  'model. For snappier calls, load a smaller model in '
+                  'Model Manager (KoboldCpp cannot swap models mid-call '
+                  'without restarting).',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textTertiary(context),
+                  ),
+                ),
+              ],
+            );
           }
+          final callModels = availableModels
+              .map((m) => <String, dynamic>{'id': m.id, 'name': m.name})
+              .toList();
 
           final recommended = callModels
               .where((m) {
@@ -93,28 +118,16 @@ extension _VoiceMediaCallSection on VoiceMediaTab {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      // Warm-porch: API was AppColors.userBubble (cool-blue
-                      // chrome misuse). Warming it straight to porch amber
-                      // would collide with the Local badge's warn-yellow, so
-                      // this 2-state legend resolves as: API -> porch amber,
-                      // Local -> neutral textSecondary (no cool-blue, no
-                      // amber-vs-yellow ambiguity).
-                      color: isLocal
-                          ? AppColors.textSecondary(
-                              context,
-                            ).withValues(alpha: 0.15)
-                          : AppColors.porchAmberOf(
-                              context,
-                            ).withValues(alpha: 0.15),
+                      color: AppColors.porchAmberOf(
+                        context,
+                      ).withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
-                      isLocal ? 'Local' : 'API',
+                      backend == BackendType.omlx ? 'oMLX' : 'API',
                       style: TextStyle(
                         fontSize: 9,
-                        color: isLocal
-                            ? AppColors.textSecondary(context)
-                            : AppColors.porchAmberOf(context),
+                        color: AppColors.porchAmberOf(context),
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -202,9 +215,7 @@ extension _VoiceMediaCallSection on VoiceMediaTab {
                       horizontal: 12,
                       vertical: 10,
                     ),
-                    hintText: isLocal
-                        ? 'No local models found — add models in Model Manager'
-                        : 'Enter model ID or configure API first',
+                    hintText: 'Enter model ID or configure API first',
                     hintStyle: TextStyle(
                       color: AppColors.textTertiary(context),
                       fontSize: 13,
@@ -216,8 +227,15 @@ extension _VoiceMediaCallSection on VoiceMediaTab {
                 ),
               const SizedBox(height: 4),
               Text(
-                '💡 Use a smaller, faster model for voice calls.\n'
-                'Reasoning/thinking models add latency — not recommended.',
+                backend == BackendType.omlx
+                    ? '💡 Use a smaller, faster model for voice calls.\n'
+                          'Reasoning/thinking models add latency — not '
+                          'recommended.\n'
+                          '⚠ oMLX runs on this machine — calls will be '
+                          'slower than a remote hosted model.'
+                    : '💡 Use a smaller, faster model for voice calls.\n'
+                          'Reasoning/thinking models add latency — not '
+                          'recommended.',
                 style: TextStyle(
                   fontSize: 11,
                   color: AppColors.textTertiary(context),

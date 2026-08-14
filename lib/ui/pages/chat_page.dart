@@ -329,7 +329,10 @@ class _ChatPageState extends State<ChatPage> {
     if (tts != null && tts.lastError != null && mounted) {
       final error = tts.lastError!;
       tts.clearError();
-      // If a call is active, end it
+      // A TTS error mid-call ends the call. Unmounting CallOverlay runs its
+      // dispose teardown — mic released, call session ended, callMode
+      // cleared. (Before the overlay owned teardown, this line only HID the
+      // overlay: the mic kept listening and auto-sending, headless.)
       if (_isCallActive) {
         setState(() => _isCallActive = false);
       }
@@ -435,6 +438,11 @@ class _ChatPageState extends State<ChatPage> {
         if (_bubbleKeysSessionId != chatService.currentSessionId) {
           _bubbleKeys.clear();
           _bubbleKeysSessionId = chatService.currentSessionId;
+          // A live call is bound to the chat it started in — left up, the
+          // mic would keep feeding the NEW chat. Dropping the flag unmounts
+          // CallOverlay, whose dispose is the one call teardown (mic, TTS,
+          // callMode). No setState: we are already inside this build.
+          _isCallActive = false;
         }
 
         if (character == null && !isGroup) {

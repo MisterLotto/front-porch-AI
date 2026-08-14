@@ -138,6 +138,9 @@ extension ChatServiceAccessors on ChatService {
         ? testIsLocalOverride
         : (_llmProvider?.isLocal ?? true),
     toolSupport: _toolProbe.supportFor(_evalBackendIdentity),
+    // A live voice call upgrades Off to Auto's fuse-where-safe rule — one
+    // eval call instead of three before the character can speak.
+    callMode: _callMode,
   );
 
   /// The story clock advances on its OWN eval this turn: the engine is off and

@@ -103,8 +103,11 @@ extension TtsServiceStreamingAndHeadless on TtsService {
     final speed = _storageService.ttsSpeechRate;
     final tempFiles = <File>[];
 
-    // Shared queue between producer and consumer
-    final audioQueue = <File>[];
+    // Shared queue between producer and consumer. Each entry carries the
+    // sentence text alongside its audio so the consumer can publish
+    // [nowSpeaking] in sync with what is actually coming out of the speaker
+    // (the call overlay's live caption).
+    final audioQueue = <(File, String)>[];
     bool producerDone = false;
     int bufferTarget = _storageService.callBufferSentences.clamp(1, 10);
 
@@ -117,6 +120,7 @@ extension TtsServiceStreamingAndHeadless on TtsService {
 
       // ── Producer: fire off concurrent generation futures ──
       final orderedFutures = <Future<File?>>[];
+      final sentenceTexts = <String>[]; // index-aligned with orderedFutures
       final completedFiles = <int, File?>{};
       int nextToQueue = 0;
       Completer<void>? futureReady; // signals when a new future completes
@@ -130,6 +134,7 @@ extension TtsServiceStreamingAndHeadless on TtsService {
           if (sanitized.trim().isEmpty) continue;
 
           final idx = orderedFutures.length;
+          sentenceTexts.add(sanitized);
           debugPrint('TTS streaming[$idx]: launching "$sanitized"');
 
           // Fire off generation without awaiting — runs concurrently
@@ -175,7 +180,9 @@ extension TtsServiceStreamingAndHeadless on TtsService {
           final file = completedFiles[nextToQueue];
           // A failed generation stores null — skip that sentence instead
           // of aborting the whole streaming session.
-          if (file != null) audioQueue.add(file);
+          if (file != null) {
+            audioQueue.add((file, sentenceTexts[nextToQueue]));
+          }
           nextToQueue++;
         }
       }
@@ -194,7 +201,9 @@ extension TtsServiceStreamingAndHeadless on TtsService {
       while (_isSpeaking) {
         collectReady(); // gather any newly completed results
         if (audioQueue.isNotEmpty) {
-          final toPlay = audioQueue.removeAt(0);
+          final (toPlay, line) = audioQueue.removeAt(0);
+          _nowSpeaking = line;
+          _notify();
           await _playWavFile(toPlay);
         } else if (producerDone && !completedFiles.containsKey(nextToQueue)) {
           break; // nothing left to play or generate
@@ -217,6 +226,7 @@ extension TtsServiceStreamingAndHeadless on TtsService {
       _isGenerating = false;
       _generationProgress = 0.0;
       _currentMessageId = null;
+      _nowSpeaking = null;
       _notify();
 
       // Clean up temp files

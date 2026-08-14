@@ -92,13 +92,23 @@ enum ToolCallSupport { untested, supported, unsupported }
 /// resolves multi-call: the first eval of the run probes, and Auto converges
 /// from the next turn (usually sooner — ToolSupportTester pings on backend
 /// change). The explicit modes always win in both directions.
+///
+/// [callMode] (2026-08-14, voice call overhaul, safe lane): on a live voice
+/// call latency IS the product, so Off is upgraded to Auto's rule — the
+/// fused single call — exactly where fusing is proven safe (remote + tools
+/// verdict). The one-shot parity law guarantees 1:1 equivalent outputs, so
+/// the only observable difference in a call is speed. On stays On, Auto
+/// stays Auto, and local backends still never fuse (small models struggle
+/// with the fused prompt length, call or no call).
 bool resolveOneShotMode({
   required OneShotMode mode,
   required bool isLocal,
   required ToolCallSupport toolSupport,
+  bool callMode = false,
 }) => switch (mode) {
   OneShotMode.on => true,
-  OneShotMode.off => false,
+  OneShotMode.off =>
+    callMode && !isLocal && toolSupport == ToolCallSupport.supported,
   OneShotMode.auto => !isLocal && toolSupport == ToolCallSupport.supported,
 };
 
