@@ -41,7 +41,12 @@ extension TtsServiceSpeak on TtsService {
         ? voiceKey
         : _storageService.ttsVoiceModel;
     if (voice.isEmpty) {
+      // Reachable right after an engine switch (the old engine's voice id
+      // cannot carry over, so it is cleared). Returning in silence made TTS
+      // look broken; lastError is surfaced by chat_page.
       print('TTS: no voice configured');
+      _lastError = 'Pick a voice in Settings → Text-to-Speech first.';
+      _notify();
       return;
     }
     if (voiceKey != null &&

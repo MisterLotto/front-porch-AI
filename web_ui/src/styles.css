@@ -1800,6 +1800,7 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 .crop-fill.on { border: 2px solid var(--accent); }
 .crop-size { font-size: 11px; font-variant-numeric: tabular-nums; }
 .swap-preview { display: flex; gap: 12px; align-items: flex-start; margin: 8px 0; }
+.voice-select { width: 100%; max-width: 420px; }
 .swap-preview img {
   width: 72px; height: 72px; object-fit: cover; border-radius: 8px;
   border: 1px solid var(--border); flex: none;

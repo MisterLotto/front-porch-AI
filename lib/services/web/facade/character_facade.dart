@@ -226,6 +226,16 @@ class CharacterFacade {
       'postHistoryInstructions',
       card.postHistoryInstructions,
     );
+    // Per-character TTS voice (2026-08-14). Only touched when the key is
+    // present so a partial edit can't clear it; an explicit empty string
+    // means "follow the global voice" and stores null, matching desktop.
+    // Per-character TTS voice (2026-08-14). Only touched when the key is
+    // present so a partial edit can't clear it; an explicit empty string
+    // means "follow the global voice" and stores null, matching desktop.
+    if (fields.containsKey('ttsVoice')) {
+      final v = fields['ttsVoice']?.toString().trim() ?? '';
+      card.ttsVoice = v.isEmpty ? null : v;
+    }
     final tags = fields['tags'];
     if (tags is List) card.tags = tags.map((e) => e.toString()).toList();
     final greetings = fields['alternateGreetings'];

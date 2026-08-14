@@ -114,6 +114,10 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   List<String> _initialWorldNames = const [];
   List<StyledTextController> _altGreetingControllers = [];
   List<String> _tags = [];
+
+  /// The character's own TTS voice id; '' means "follow the global
+  /// Settings voice". Editable in the Details tab's Voice card.
+  String _ttsVoice = '';
   final _tagController = TextEditingController();
 
   /// Long-term ambitions (Living Time §6), one per line. Identity — travels
@@ -237,6 +241,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
         .toList();
 
     _tags = List.from(widget.character.tags);
+    _ttsVoice = widget.character.ttsVoice ?? '';
 
     // Seed realism state from existing extensions (or keep defaults)
     final ext = widget.character.frontPorchExtensions;
@@ -414,6 +419,10 @@ class _EditCharacterPageState extends State<EditCharacterPage>
         .where((t) => t.isNotEmpty)
         .toList();
     widget.character.tags = List.from(_tags);
+    // Empty clears the per-character override so the character
+    // follows the global Settings voice again (null, not '', so
+    // the card round-trip omits the field entirely).
+    widget.character.ttsVoice = _ttsVoice.isEmpty ? null : _ttsVoice;
     widget.character.worldNames = _selectedWorldNames;
 
     // Always persist extensions — even when realism is disabled — so that

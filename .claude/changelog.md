@@ -3,6 +3,32 @@
 
 # Changelog
 
+## 2026-08-14 — feat(tts): per-character voice is visible and clearable (desktop + web)
+- **Files:** NEW lib/ui/widgets/character_voice_picker.dart (the ONE picker;
+  names the global voice on the clear option, keeps a cross-engine voice
+  visible+labelled, degrades to a muted line when TTS/Storage are absent from
+  the tree) + widgets barrel; edit_character_page(.dart/.tabs_core) Voice card
+  + _ttsVoice state + save ('' → null); create_group_chat_page.steps_cast
+  DEDUPED onto the shared picker (its private _voiceDropdown deleted);
+  tts_settings_dialog(.dart/.engine) override notice naming the open
+  character (ChatService optional — Settings can open without one);
+  tts_service.speak/.streaming set lastError on "no voice configured" (was a
+  silent return; chat_page already surfaces lastError);
+  character_facade.update applies ttsVoice ('' → null, absent = untouched);
+  voice_facade.status additively exposes globalVoice + voices;
+  CharacterEditPage.tsx Voice section + styles.css; bundle rebuilt.
+- **Tests:** NEW character_voice_override_test (5, facade clear/round-trip/
+  partial-edit — red-proven by removing the applier), NEW
+  character_voice_picker_test (5 — cross-engine visibility red-proven), NEW
+  edit_character_voice_save_test (4 — desktop save red-proven by removing the
+  assignment); edit_character golden regenerated (the Details tab legitimately
+  gained a Voice card).
+- **Why:** residual cause of the 2026-07-31 Discord Kokoro report. ad6b435
+  fixed the catalog drift + the silent af_heart fallback but could only
+  DOCUMENT the per-character override; an imported card's `tts_voice` was
+  still invisible and unclearable in 1:1.
+- **Commit:** (this commit)
+
 ## 2026-08-14 — feat(crop): A–E batch — swap-not-destroy, unlimited padding, presets, fills, polish
 - **Files:** crop_geometry.dart (CropFill enum, cropWorldRect w/ 8192 output
   cap, aspect-locked corner drag via normalized dominance, aspectFitRect,

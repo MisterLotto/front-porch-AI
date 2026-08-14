@@ -18,10 +18,12 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/elevenlabs_tts_engine.dart';
 import 'package:front_porch_ai/ui/dialogs/voice_browser_dialog.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 // The per-engine settings blocks live in these `part of` files (extensions
 // on _TtsSettingsDialogState) to keep every file under the 500-LOC cap —
@@ -182,6 +184,12 @@ class _TtsSettingsDialogState extends State<TtsSettingsDialog> {
                           ..._buildElevenLabsSettings(storage, tts, voices),
                         if (engineId == 'piper')
                           ..._buildPiperSettings(storage, tts),
+
+                        // The open character's own voice beats everything
+                        // picked above — say so HERE, where the user is
+                        // choosing, instead of leaving them to wonder why
+                        // nothing changed (Discord, 2026-07-31).
+                        _buildCharacterOverrideNotice(context, voices),
 
                         const SizedBox(height: 20),
 

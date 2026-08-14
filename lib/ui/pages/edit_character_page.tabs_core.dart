@@ -180,6 +180,42 @@ extension _EditCharacterCoreTabs on _EditCharacterPageState {
               ),
               const SizedBox(height: 20),
 
+              // ── Voice ──
+              // A character voice OVERRIDES the global Settings voice, and
+              // one can arrive without the user picking it (an imported card
+              // carries `tts_voice`). It was invisible here until 2026-08-14,
+              // which is how "I picked Adam and she still sounds female"
+              // happened with nothing to click.
+              _sectionCard(
+                icon: Icons.record_voice_over_outlined,
+                title: 'Voice',
+                color: AppColors.porchAmberOf(context),
+                children: [
+                  _fieldLabel('Text-to-speech voice'),
+                  const SizedBox(height: 8),
+                  CharacterVoicePicker(
+                    value: _ttsVoice,
+                    onChanged: (v) => rebuildState(() => _ttsVoice = v),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _ttsVoice.isEmpty
+                        ? 'Following the voice set in Settings → '
+                              'Text-to-Speech. Pick one here to give '
+                              '${_nameController.text.trim().isEmpty ? 'this character' : _nameController.text.trim()} '
+                              'their own voice instead.'
+                        : 'This character speaks in their own voice — the '
+                              'Settings voice does not apply to them. Choose '
+                              '"Use the global voice" to follow Settings again.',
+                    style: TextStyle(
+                      color: AppColors.textTertiary(context),
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+
               // ── Personality & World ──
               _sectionCard(
                 icon: Icons.psychology_outlined,

@@ -53,6 +53,8 @@ extension TtsServiceStreamingAndHeadless on TtsService {
         : _storageService.ttsVoiceModel;
     if (voice.isEmpty) {
       print('TTS streaming: no voice configured');
+      _lastError = 'Pick a voice in Settings → Text-to-Speech first.';
+      _notify();
       bail();
       return;
     }

@@ -23,6 +23,59 @@ part of 'tts_settings_dialog.dart';
 /// the dialog's inline builders during the god-file split (was over the
 /// 500-line cap); direct state access via the extension preserves behavior.
 extension _TtsEngineSection on _TtsSettingsDialogState {
+  /// Amber notice naming the open character when THEIR voice overrides the
+  /// global one, with a jump to where it can be changed. Renders nothing
+  /// when no character is open or the character follows the global voice —
+  /// the common case must stay quiet.
+  Widget _buildCharacterOverrideNotice(
+    BuildContext context,
+    List<TtsVoiceInfo> voices,
+  ) {
+    // Chat is optional in the tree — Settings can open without one, and then
+    // there is no "open character" to warn about, so the notice is simply
+    // absent rather than an exception that takes the dialog down with it.
+    CharacterCard? character;
+    try {
+      character = Provider.of<ChatService>(context, listen: false)
+          .activeCharacter;
+    } on ProviderNotFoundException {
+      character = null;
+    }
+    final assigned = character?.ttsVoice ?? '';
+    if (character == null || assigned.isEmpty) return const SizedBox.shrink();
+
+    final amber = AppColors.porchAmberOf(context);
+    return Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: amber.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: amber.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.record_voice_over, size: 16, color: amber),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '${character.name} has their own voice '
+              '(${CharacterVoicePicker.labelFor(assigned, voices)}), so the '
+              'voice above will not be used for them. Change it in Edit '
+              'Character → Details → Voice.',
+              style: TextStyle(
+                color: AppColors.textPrimary(context),
+                fontSize: 11,
+                height: 1.35,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Engine selector — segmented control style.
   Widget _buildEngineSelector(StorageService storage) {
     return Container(
@@ -52,7 +105,11 @@ extension _TtsEngineSection on _TtsSettingsDialogState {
       child: GestureDetector(
         onTap: () {
           storage.setTtsEngine(id);
-          // Clear voice model when switching engines
+          // The old voice id belongs to the old engine and cannot carry
+          // over, so it is cleared. speak() then reports "no voice
+          // configured" through lastError (chat_page surfaces it) instead
+          // of returning in silence — which is what made a post-switch TTS
+          // look simply dead.
           storage.setTtsVoiceModel('');
         },
         child: Container(

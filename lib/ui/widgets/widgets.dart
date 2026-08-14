@@ -63,3 +63,4 @@ export 'group_member_chips.dart';
 export 'banned_phrases_editor.dart';
 export 'output_sanitizer_rule_editor.dart';
 export 'vision_projector_field.dart';
+export 'character_voice_picker.dart';

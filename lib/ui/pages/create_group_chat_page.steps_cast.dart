@@ -120,7 +120,14 @@ extension _GroupWizardCastSteps on _CreateGroupChatPageState {
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _voiceDropdown(c, voice, (v) => _setVoice(id, v)),
+                        SizedBox(
+                          width: 200,
+                          child: CharacterVoicePicker(
+                            value: voice,
+                            dense: true,
+                            onChanged: (v) => _setVoice(id, v),
+                          ),
+                        ),
                         IconButton(
                           icon: const Icon(Icons.close),
                           onPressed: () => _removeMember(id),
@@ -156,29 +163,6 @@ extension _GroupWizardCastSteps on _CreateGroupChatPageState {
     );
   }
 
-  Widget _voiceDropdown(
-    CharacterCard c,
-    String current,
-    ValueChanged<String?> onChanged,
-  ) {
-    final tts = Provider.of<TtsService>(context, listen: false);
-    final voices = tts.activeVoices;
-    return DropdownButton<String>(
-      value: current.isNotEmpty ? current : null,
-      hint: const Text('Voice'),
-      isDense: true,
-      items: [
-        const DropdownMenuItem(value: '', child: Text('Default')),
-        ...voices.map(
-          (v) => DropdownMenuItem(
-            value: v.id,
-            child: Text(v.name, overflow: TextOverflow.ellipsis),
-          ),
-        ),
-      ],
-      onChanged: onChanged,
-    );
-  }
 
   Widget _avatar(CharacterCard c, {double radius = 20}) {
     return CircleAvatar(
