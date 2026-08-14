@@ -15887,3 +15887,37 @@ removed → unmount test red (+ leaked timer). All restored, all green.
 Goldens: full linux golden suite green (no golden covers the call surfaces).
 
 Commit: 1ecd639
+
+## 2026-08-14 — Regenerate 4 creator-step goldens after the light-mode heading fix (CI red on 557f66a)
+
+Files: test/golden/widget/_goldens/manual_creator/step_{1_personality,2_dialogue,
+3_lorebook,4_realism}.{dark,light}.png (8 files).
+
+557f66a converted the Create Character step headings from hardcoded
+Colors.white / Colors.white54 to AppColors.textPrimary/textSecondary(context)
+(the white-on-cream light-mode fix in its own notes) but did not regenerate
+the pixel baselines, so the Widget Golden Tests job — the ONLY red job of 22
+in run 31787621570 — failed on steps 1-4.
+
+Verified intended before regenerating, not just re-baselined: the old master
+for step_3/step_4 light shows the "Lorebook" heading in near-white on the
+cream surface (the reported bug); the new render shows it in readable dark
+ink. Diffs are 0.16%-0.82%, text pixels only, no layout shift (the removed
+`const` on Expanded/Text is a compile-time detail).
+
+Step 4 realism failed even though step_realism.dart was untouched and already
+used AppColors: that golden legitimately captures a mid-cross-fade frame where
+the OUTGOING lorebook layer is still painted, so the lorebook color change
+lands in it. The overlap is present in the old master too — pre-existing and
+deterministic under the test clock, not new instability.
+
+Regenerated locally on Flutter 3.44.8 (CI's exact pin) on linux/amd64; full
+94-golden suite green afterwards. No test file or assertion touched.
+
+RECOMMENDATION (not actioned — changing an existing test needs maintainer
+input): manual_creator_steps_golden_test's _navigateTo pumps a fixed 350ms per
+step and captures steps 3-5 mid-transition, so those baselines encode a
+half-faded frame. Settling the switcher (or pumping until stable) would make
+them read as real screens and stop unrelated step edits from moving them.
+
+Commit: 9b38b6d
