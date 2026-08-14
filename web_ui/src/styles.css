@@ -291,10 +291,9 @@ button.ghost { background: transparent; border-color: var(--border); }
 
 /* ── Library toolbar ──────────────────────────────────────────── */
 .search { margin-bottom: 16px; }
-/* Desktop-first: the toolbar stays on one line. Phones wrap it (scoped so it
-   can't affect desktop) — see the layout rule at the top of this file. */
-.search-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; margin-bottom: 16px; }
-[data-layout="phone"] .search-row { flex-wrap: wrap; }
+/* Wraps at whatever width the window (or phone) actually is — there is no
+   fixed desktop toolbar width. */
+.search-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
 .search-row .search { flex: 1 1 220px; min-width: 0; margin-bottom: 0; }
 .sort-select { width: auto; flex: 0 0 auto; }
 .import-btn { flex: 0 0 auto; white-space: nowrap; }

@@ -25,79 +25,27 @@ part of '../home_page.dart';
 extension _HomePageChrome on _HomePageState {
 
   Widget _buildModeToggle() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerOf(context),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.borderOf(context)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _modeButton(
-            'Chats',
-            Icons.chat_bubble_outline,
-            !_showStories,
-            () => applyState(() => _showStories = false),
-          ),
-          _modeButton(
-            'Porch Stories',
-            Icons.auto_stories,
-            _showStories,
-            () => applyState(() => _showStories = true),
-          ),
-        ],
-      ),
+    return HomeModeToggle(
+      showStories: _showStories,
+      onShowChats: () => applyState(() => _showStories = false),
+      onShowStories: () => applyState(() => _showStories = true),
     );
   }
 
-  Widget _modeButton(
-    String label,
-    IconData icon,
-    bool isActive,
-    VoidCallback onTap,
-  ) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive
-              ? AppColors.porchAmberOf(context).withValues(alpha: 0.15)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-          border: isActive
-              ? Border.all(
-                  color: AppColors.porchAmberOf(
-                    context,
-                  ).withValues(alpha: 0.45),
-                )
-              : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 18,
-              color: isActive
-                  ? AppColors.porchAmberOf(context)
-                  : AppColors.iconSecondary(context),
+  /// Toggle row that shrinks instead of overflowing when the window is
+  /// squeezed. Used on the empty-library and Stories chrome.
+  Widget _modeToggleBar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+      child: Row(
+        children: [
+          Flexible(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _buildModeToggle(),
             ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: isActive
-                    ? AppColors.textPrimary(context)
-                    : AppColors.textSecondary(context),
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

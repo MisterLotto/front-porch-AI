@@ -7,6 +7,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 *Since nightly `20260811` (`aa66f57` — web eraser).*
 
+- 🪟 **Home library no longer bursts the toolbar when you shrink the window** — sort, card-size, and the action buttons step down (and fold into ⋮ when it's really tight) instead of painting the yellow-and-black overflow stripe. Same idea on the web library bar: it wraps instead of assuming a wide desktop.
+
 - 📞 **Voice calls got the full overhaul** — the call screen finally wears the app's warm-porch look, and it stopped being a black box: **live captions show exactly what she's saying, synced to her voice as each sentence plays**, with what the mic heard from you shown while she listens. And the Realism Engine — which has quietly been running during calls all along — is finally **visible on the call**: her current mood sits under her name, and bond/trust movement appears after every exchange. The screen also adapts to short windows now instead of clipping the End button.
 - ⚡ **Less "Thinking…" silence on calls** — during a call the pre-reply Realism checks automatically collapse into a single evaluation wherever the backend safely supports it (identical results, fewer round-trips). And on remote APIs and oMLX, the fast Voice Call Model you picked now answers those Realism checks too — not just the reply itself.
 - 🔇 **Hanging up really hangs up now** — a text-to-speech error mid-call used to close the call screen but leave the call running headless: the mic kept listening and kept auto-sending whatever it heard into your chat, and "phone call style" stayed stuck on your text chat afterwards. Every way a call can end — End button, an error, switching chats — now releases the mic and fully clears call mode.

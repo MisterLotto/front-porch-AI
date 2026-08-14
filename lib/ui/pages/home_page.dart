@@ -36,6 +36,7 @@ import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'package:front_porch_ai/ui/pages/chat_page.dart';
 import 'package:front_porch_ai/ui/pages/home/dialogs/session_picker_dialog.dart';
 import 'package:front_porch_ai/ui/pages/home/enhance/enhance_wizard_page.dart';
+import 'package:front_porch_ai/ui/pages/home/widgets/home_mode_toggle.dart';
 import 'package:front_porch_ai/ui/pages/edit_character_page.dart';
 import 'package:front_porch_ai/ui/pages/edit_group_page.dart';
 import 'package:front_porch_ai/services/group_card_importer.dart';
@@ -373,13 +374,7 @@ class _HomePageState extends State<HomePage> {
             Column(
               children: [
                 // Radio toggle
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24.0,
-                    vertical: 16.0,
-                  ),
-                  child: Row(children: [_buildModeToggle(), const Spacer()]),
-                ),
+                _modeToggleBar(),
                 const Expanded(child: StoryHomeView()),
               ],
             ),
@@ -393,77 +388,79 @@ class _HomePageState extends State<HomePage> {
           // install and Stories was unreachable (found by the E2E suite).
           return Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24.0,
-                  vertical: 16.0,
-                ),
-                child: Row(children: [_buildModeToggle(), const Spacer()]),
-              ),
+              _modeToggleBar(),
               Expanded(
                 child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Get started by creating a new character!',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: Theme.of(
-                            context,
-                          ).textTheme.titleLarge?.color?.withValues(alpha: 0.7),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Get started by creating a new character!',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(
+                                color: Theme.of(context)
+                                    .textTheme
+                                    .titleLarge
+                                    ?.color
+                                    ?.withValues(alpha: 0.7),
+                              ),
                         ),
-                      ),
-                      const SizedBox(height: 24),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          ElevatedButton.icon(
-                            onPressed: () => Provider.of<AppState>(
-                              context,
-                              listen: false,
-                            ).setIndex(1),
-                            icon: const Icon(Icons.add_circle_outline),
-                            label: const Text('Create New'),
-                            style: _buttonStyle(),
-                          ),
-                          const SizedBox(width: 16),
-                          ElevatedButton.icon(
-                            onPressed: () => _importCharacter(context),
-                            icon: const Icon(Icons.download),
-                            label: const Text('Import Card'),
-                            style: _buttonStyle(),
-                          ),
-                          const SizedBox(width: 16),
-                          ElevatedButton.icon(
-                            onPressed: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const CharacterCreatorPage(),
+                        const SizedBox(height: 24),
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 16,
+                          runSpacing: 12,
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: () => Provider.of<AppState>(
+                                context,
+                                listen: false,
+                              ).setIndex(1),
+                              icon: const Icon(Icons.add_circle_outline),
+                              label: const Text('Create New'),
+                              style: _buttonStyle(),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: () => _importCharacter(context),
+                              icon: const Icon(Icons.download),
+                              label: const Text('Import Card'),
+                              style: _buttonStyle(),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const CharacterCreatorPage(),
+                                ),
+                              ),
+                              icon: const Icon(Icons.auto_awesome),
+                              label: const Text('AI Create'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.porchAmberOf(
+                                  context,
+                                ),
+                                foregroundColor: AppColors.onChaosAccent,
                               ),
                             ),
-                            icon: const Icon(Icons.auto_awesome),
-                            label: const Text('AI Create'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.porchAmberOf(context),
-                              foregroundColor: Colors.white,
+                            ElevatedButton.icon(
+                              onPressed: () =>
+                                  _folderImportCharacters(context),
+                              icon: const Icon(Icons.library_add),
+                              label: const Text('Bulk Import'),
+                              style: _buttonStyle(),
                             ),
-                          ),
-                          const SizedBox(width: 16),
-                          ElevatedButton.icon(
-                            onPressed: () => _folderImportCharacters(context),
-                            icon: const Icon(Icons.library_add),
-                            label: const Text('Bulk Import'),
-                            style: _buttonStyle(),
-                          ),
-                          const SizedBox(width: 16),
-                          ElevatedButton.icon(
-                            onPressed: () => _importByaf(context),
-                            icon: const Icon(Icons.archive_outlined),
-                            label: const Text('Import BYAF'),
-                            style: _buttonStyle(),
-                          ),
-                        ],
-                      ),
-                    ],
+                            ElevatedButton.icon(
+                              onPressed: () => _importByaf(context),
+                              icon: const Icon(Icons.archive_outlined),
+                              label: const Text('Import BYAF'),
+                              style: _buttonStyle(),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

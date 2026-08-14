@@ -3,6 +3,21 @@
 
 # Changelog
 
+## 2026-08-14 — fix(home): library toolbar no longer overflows a resized window
+- **Files:** home_grid_toolbar.dart (LayoutBuilder sheds slider → sort
+  labels → inline actions as the content strip shrinks; ConstrainedBox on
+  the mode toggle so sort stays next to it); NEW home_mode_toggle.dart
+  (Chats/Stories drops labels when given <260px); home_page + chrome
+  (empty-library buttons Wrap; toggle bar is Flexible); web_ui styles.css
+  (.search-row always wraps).
+- **Tests:** NEW home_grid_toolbar_overflow_test (7) — 1000 / reported 651
+  / 360 content widths, slider+refresh at wide, overflow menu at narrow,
+  folder breadcrumb. Red-proven by forcing the old always-inline chrome
+  (overflowed 208px at 651).
+- **Why:** Row at home_grid_toolbar.dart:155 overflowed 73px at 603px
+  (sidebar still open). There is no fixed window size.
+- **Commit:** (this commit)
+
 ## 2026-08-14 — feat(tts): per-character voice is visible and clearable (desktop + web)
 - **Files:** NEW lib/ui/widgets/character_voice_picker.dart (the ONE picker;
   names the global voice on the clear option, keeps a cross-engine voice
