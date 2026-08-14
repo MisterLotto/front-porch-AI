@@ -3,6 +3,29 @@
 
 # Changelog
 
+## 2026-08-14 — feat(crop): blank-slate crop rewrite (desktop + web) + concrete portrait-delete confirm
+- **Files:** NEW lib/utils/crop_geometry.dart (pure containFit/hitTest/drag
+  math + compute()-friendly compositor; crop rect may overhang the image,
+  overhang fills with the legacy pad color) + utils barrel export;
+  image_crop_dialog.dart REWRITTEN (no zoom, whole image always visible,
+  drag past edges replaces Pad Canvas; AppColors chrome — the old file was
+  hardcoded hex; keyed crop_stage for tests); crop_your_image REMOVED from
+  pubspec + dependency_floors.json (removal per the floor file's own
+  procedure — the dep no longer exists); portrait_promotion.dart gains
+  promotionCandidate (the ONE selection rule) reused by
+  avatar_gallery_dialog's reworked delete-portrait confirm (shows the actual
+  promoted image + star/first wording); web ImageCropModal.tsx same rework
+  (INSET stage, pad() deleted, Reset added) + styles.css crop-wrap padding;
+  AvatarManager.tsx confirm names the candidate; bundle rebuilt.
+- **Tests:** NEW crop_geometry_test (10, min-size clamp red-proven), NEW
+  image_crop_dialog_test (4 gesture→pixels tests incl. the overhang-fill
+  save), image_crop goldens REGENERATED (subject rewritten; harness waits
+  out the async decode so the capture is the loaded stage).
+- **Why:** Discord report 8/4 (zoom-out ignored on crop; delete-portrait
+  "deleted" the just-added image; default zoom-in confusion). Maintainer
+  chose blank-slate over patching the package.
+- **Commit:** (this commit)
+
 ## 2026-08-13 — fix(enhance): hostile-review hardening of the wizard + chat-copy surfaces
 - **Files:** chat_service_enhance_chats.dart (same-character copy refused —
   ArgumentError; would have re-imported every chat onto its own owner via the

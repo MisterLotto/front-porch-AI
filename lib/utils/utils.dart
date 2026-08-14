@@ -46,6 +46,7 @@ export 'think_tags.dart';
 export 'world_cover.dart';
 export 'world_ref_resolver.dart';
 export 'character_linked_world.dart';
+export 'crop_geometry.dart';
 export 'vram_estimator.dart';
 export 'wav_utils.dart';
 export 'world_colors.dart';

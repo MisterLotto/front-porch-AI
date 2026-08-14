@@ -76,7 +76,6 @@ dependencies:
   web_socket_channel: ^3.0.1 # WS channel abstraction (server + client/tests)
   hashlib: ^1.21.0
   otp: ^3.1.4 # RFC 6238 TOTP for optional web-login 2FA
-  crop_your_image: ^2.0.0
   page_flip: ^0.2.5+1
   html: ^0.15.6
   syncfusion_flutter_pdf: ^33.1.46

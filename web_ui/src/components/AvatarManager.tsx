@@ -78,21 +78,27 @@ export function AvatarManager({ characterId }: { characterId: string }) {
   const toggleFavorite = (a: AvatarItem) =>
     run(api.post(`${base}/favorite?avatarId=${a.isFavorite ? '' : a.id}`));
 
+  const looks = avatars.filter((a) => a.isLook);
+  const expressions = avatars.filter((a) => !a.isLook);
+
   // Desktop parity: delete the portrait — the ★ (else first) look is
   // promoted in its place. Only offered when a look exists to take over.
+  // Name WHICH look concretely (same 2026-08-14 clarification as desktop):
+  // the surprise in the Discord report was not knowing which image moves.
   const deletePortrait = () => {
+    const candidate = looks.find((l) => l.isFavorite) ?? looks[0];
+    if (!candidate) return;
+    const which = candidate.isFavorite ? 'Your ★ starred look' : 'Your first gallery look';
     if (
       !window.confirm(
-        'Delete the portrait? A gallery look becomes the new portrait — ' +
-          'the ★ one when a look is starred, otherwise the first.',
+        `Delete the portrait? ${which} becomes the new portrait — it moves ` +
+          'out of the gallery (it lives on as the portrait), and the old ' +
+          'portrait image is overwritten.',
       )
     )
       return;
     run(api.post(`${base}/portrait/delete`));
   };
-
-  const looks = avatars.filter((a) => a.isLook);
-  const expressions = avatars.filter((a) => !a.isLook);
 
   const tile = (a: AvatarItem, withPrime: boolean) => (
     <div

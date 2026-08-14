@@ -1,0 +1,192 @@
+// Copyright (C) 2026 Front Porch AI
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//
+// This file is part of Front Porch AI.
+//
+// Front Porch AI is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// Front Porch AI is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
+
+import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui' show Offset, Rect, Size;
+
+import 'package:image/image.dart' as img;
+
+/// Pure math + compositor behind [ImageCropDialog] (the blank-slate crop,
+/// 2026-08-14, replacing the crop_your_image dependency).
+///
+/// The model that makes both Discord-reported crop bugs impossible by
+/// construction: THERE IS NO ZOOM. The image is always shown whole
+/// (contain-fit), and "capture a larger area" is the crop rect simply being
+/// allowed to extend past the image edges — the overhang is filled with
+/// [cropFillColor] on save, exactly as previewed. The crop rect lives in
+/// SOURCE-pixel space at all times; the widget only maps it to viewport
+/// coordinates for painting and gestures, so there is no zoom level to get
+/// out of sync with the saved result.
+
+/// Where an image of [imageSize] is painted inside [viewport]: contain-fit,
+/// centered. Scales up small images too (standard crop-surface behavior).
+Rect containFitRect(Size imageSize, Rect viewport) {
+  final scale = math.min(
+    viewport.width / imageSize.width,
+    viewport.height / imageSize.height,
+  );
+  final w = imageSize.width * scale;
+  final h = imageSize.height * scale;
+  return Rect.fromLTWH(
+    viewport.left + (viewport.width - w) / 2,
+    viewport.top + (viewport.height - h) / 2,
+    w,
+    h,
+  );
+}
+
+/// The nine ways a drag can grab the crop rect.
+enum CropHandle {
+  topLeft,
+  topRight,
+  bottomLeft,
+  bottomRight,
+  top,
+  bottom,
+  left,
+  right,
+  move,
+}
+
+/// Which handle a pointer at [p] grabs on a crop rect painted at [cropVp]
+/// (viewport space). Corners win over edges, edges over the interior; a
+/// pointer outside everything returns null. [grabRadius] is the tolerance
+/// around corners and edge lines.
+CropHandle? hitTestCropHandle(Offset p, Rect cropVp, double grabRadius) {
+  bool near(Offset corner) => (p - corner).distance <= grabRadius;
+  if (near(cropVp.topLeft)) return CropHandle.topLeft;
+  if (near(cropVp.topRight)) return CropHandle.topRight;
+  if (near(cropVp.bottomLeft)) return CropHandle.bottomLeft;
+  if (near(cropVp.bottomRight)) return CropHandle.bottomRight;
+
+  final withinX =
+      p.dx >= cropVp.left - grabRadius && p.dx <= cropVp.right + grabRadius;
+  final withinY =
+      p.dy >= cropVp.top - grabRadius && p.dy <= cropVp.bottom + grabRadius;
+  if (withinX && (p.dy - cropVp.top).abs() <= grabRadius) {
+    return CropHandle.top;
+  }
+  if (withinX && (p.dy - cropVp.bottom).abs() <= grabRadius) {
+    return CropHandle.bottom;
+  }
+  if (withinY && (p.dx - cropVp.left).abs() <= grabRadius) {
+    return CropHandle.left;
+  }
+  if (withinY && (p.dx - cropVp.right).abs() <= grabRadius) {
+    return CropHandle.right;
+  }
+  return cropVp.contains(p) ? CropHandle.move : null;
+}
+
+/// Apply a source-space [delta] to [rect] for [handle]. The result always
+/// stays inside [world] and keeps at least [minSize] on both axes; edges
+/// can never cross each other (no inversion).
+Rect applyCropDrag(
+  Rect rect,
+  CropHandle handle,
+  Offset delta, {
+  required Rect world,
+  required double minSize,
+}) {
+  if (handle == CropHandle.move) {
+    final dx = delta.dx.clamp(world.left - rect.left, world.right - rect.right);
+    final dy = delta.dy.clamp(world.top - rect.top, world.bottom - rect.bottom);
+    return rect.shift(Offset(dx, dy));
+  }
+
+  final movesLeft = handle == CropHandle.topLeft ||
+      handle == CropHandle.left ||
+      handle == CropHandle.bottomLeft;
+  final movesRight = handle == CropHandle.topRight ||
+      handle == CropHandle.right ||
+      handle == CropHandle.bottomRight;
+  final movesTop = handle == CropHandle.topLeft ||
+      handle == CropHandle.top ||
+      handle == CropHandle.topRight;
+  final movesBottom = handle == CropHandle.bottomLeft ||
+      handle == CropHandle.bottom ||
+      handle == CropHandle.bottomRight;
+
+  var l = rect.left, t = rect.top, r = rect.right, b = rect.bottom;
+  if (movesLeft) l = (l + delta.dx).clamp(world.left, r - minSize);
+  if (movesRight) r = (r + delta.dx).clamp(l + minSize, world.right);
+  if (movesTop) t = (t + delta.dy).clamp(world.top, b - minSize);
+  if (movesBottom) b = (b + delta.dy).clamp(t + minSize, world.bottom);
+  return Rect.fromLTRB(l, t, r, b);
+}
+
+/// The composited-output background for crop pixels beyond the image bounds
+/// — image DATA baked into the saved PNG, not theme chrome (the dialog's own
+/// chrome uses AppColors). Kept as the same dark the old Pad Canvas hack
+/// filled with, so existing users' padded avatars keep their look.
+const int cropFillR = 26, cropFillG = 26, cropFillB = 46;
+
+/// compute()-friendly crop + composite. [args] is
+/// `[Uint8List bytes, int left, int top, int width, int height]` — the crop
+/// rect in source pixels, which MAY extend beyond the image on any side;
+/// the overhang is filled with the crop fill color. Throws [FormatException]
+/// on undecodable bytes.
+Uint8List cropCompositeSync(List<Object> args) {
+  final bytes = args[0] as Uint8List;
+  final left = args[1] as int;
+  final top = args[2] as int;
+  final width = args[3] as int;
+  final height = args[4] as int;
+  if (width < 1 || height < 1) {
+    throw const FormatException('Crop area is empty');
+  }
+
+  // decodeImage returns null for unknown formats but can also throw from a
+  // format probe fed truncated garbage (e.g. the PSD prober range-errors on
+  // 3 bytes) — normalize both to the documented FormatException.
+  img.Image? src;
+  try {
+    src = img.decodeImage(bytes);
+  } catch (_) {
+    src = null;
+  }
+  if (src == null) {
+    throw const FormatException('Could not decode the image');
+  }
+
+  final out = img.Image(width: width, height: height);
+  img.fill(out, color: img.ColorRgb8(cropFillR, cropFillG, cropFillB));
+
+  // Explicit source∩crop intersection — no reliance on the image package
+  // clipping negative destination offsets.
+  final sx0 = math.max(0, left);
+  final sy0 = math.max(0, top);
+  final sx1 = math.min(src.width, left + width);
+  final sy1 = math.min(src.height, top + height);
+  if (sx1 > sx0 && sy1 > sy0) {
+    img.compositeImage(
+      out,
+      src,
+      srcX: sx0,
+      srcY: sy0,
+      srcW: sx1 - sx0,
+      srcH: sy1 - sy0,
+      dstX: sx0 - left,
+      dstY: sy0 - top,
+      dstW: sx1 - sx0,
+      dstH: sy1 - sy0,
+    );
+  }
+  return img.encodePng(out);
+}

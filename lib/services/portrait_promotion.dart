@@ -44,6 +44,22 @@ import 'package:front_porch_ai/services/storage_service.dart';
 /// look's id so callers can clean their own cascades (per-chat selection).
 /// Throws [StateError] when the card has no looks — callers hide the delete
 /// affordance in that case.
+/// The look [promoteLookOverPortrait] will consume: the ★ starred one when
+/// the star points at a look, else the first. Null with no looks.
+///
+/// The ONE selection rule — the gallery's delete-portrait confirmation shows
+/// this exact image (2026-08-14, after the Discord "it deleted the image I
+/// just added" report: the promotion was working as designed, but nothing
+/// told the user WHICH image would move into the portrait slot), so the
+/// preview and the action can never diverge.
+AvatarImage? promotionCandidate(List<AvatarImage> looks, String? favoriteId) {
+  if (looks.isEmpty) return null;
+  for (final l in looks) {
+    if (l.id == favoriteId) return l;
+  }
+  return looks.first;
+}
+
 Future<String> promoteLookOverPortrait({
   required CharacterCard card,
   required StorageService storage,
@@ -59,10 +75,7 @@ Future<String> promoteLookOverPortrait({
     throw StateError('Cannot delete the portrait with no gallery avatars');
   }
   final favId = card.frontPorchExtensions?.favoriteAvatarId;
-  final promoted = looks.firstWhere(
-    (l) => l.id == favId,
-    orElse: () => looks.first,
-  );
+  final promoted = promotionCandidate(looks, favId)!;
   final bytes = await promoted
       .resolveFile(storage.characterBaseDir(card.name).path)
       .readAsBytes();

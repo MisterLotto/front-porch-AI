@@ -1767,7 +1767,13 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
   background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
   padding: 10px; display: grid; place-items: center; overflow: hidden;
 }
-.crop-wrap { position: relative; display: inline-block; line-height: 0; }
+.crop-wrap {
+  position: relative; display: inline-block; line-height: 0;
+  /* Fill margin the crop box can extend into (keep in sync with INSET
+     in ImageCropModal.tsx); the background is what an overhanging
+     crop saves as fill. */
+  padding: 44px; background: var(--bg);
+}
 .crop-img {
   display: block; max-width: 100%; max-height: 56vh;
   user-select: none; -webkit-user-drag: none;
