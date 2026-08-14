@@ -3,6 +3,32 @@
 
 # Changelog
 
+## 2026-08-14 — feat(crop): A–E batch — swap-not-destroy, unlimited padding, presets, fills, polish
+- **Files:** crop_geometry.dart (CropFill enum, cropWorldRect w/ 8192 output
+  cap, aspect-locked corner drag via normalized dominance, aspectFitRect,
+  compositor takes fill rgba + always-RGBA output), image_crop_dialog.dart
+  (auto-refit layout over image∪crop — pull past the edge and the view zooms
+  out, room never runs out up to the cap; presets row + Face circle chip +
+  fill swatches in NEW image_crop_dialog.chrome.dart part; size readout;
+  Escape closes; NEW image_crop_overlay.dart painters w/ checkerboard
+  transparent preview + circle guide + edge-dots hidden under aspect lock),
+  portrait_promotion.dart (SWAP: old portrait demotes into the gallery via
+  new addLook callback; unreadable old portrait skips) + repo wiring +
+  gallery confirm copy/title/tooltip ("Swap portrait", non-destructive) +
+  controller/route doc sync; web ImageCropModal.tsx full parity (edge
+  handles, presets, circle guide, fill choice incl. transparent, size
+  readout, "More room" inset growth) + AvatarManager.tsx custom swap-confirm
+  modal with the candidate's thumbnail + styles.css; bundle rebuilt.
+- **Tests:** crop_geometry_test +9 (aspect ratio preservation red-proven by
+  skewing h; world caps; fill pixels incl. alpha-0), image_crop_dialog_test
+  +3 (Escape, 1:1 preset → square output, white fill → white overhang
+  pixels), NEW portrait_swap_test (demotion byte-for-byte, red-proven by
+  removing the addLook call; missing-portrait skip), image_crop goldens
+  regenerated (presets/swatches/readout in frame).
+- **Why:** maintainer approved the full A–E improvement menu from the
+  feature-completeness review.
+- **Commit:** (this commit)
+
 ## 2026-08-14 — fix(crop): tiny-image drag crash (clamp inversion) found in feature-completeness review
 - **Files:** crop_geometry.dart (applyCropDrag: minSize capped to the world,
   edges freeze instead of throwing when the minimum is unreachable);

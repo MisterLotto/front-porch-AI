@@ -371,7 +371,8 @@ class WebCharacterRoutes {
     return JsonResponse.ok({'avatars': await auth.avatars(id)});
   }
 
-  /// Delete the portrait — a gallery look is promoted in its place
+  /// Swap the portrait — a gallery look is promoted in its place and the
+  /// old portrait demotes into the gallery (2026-08-14, nothing destroyed)
   /// (desktop parity; shared promotion logic).
   Future<shelf.Response> _deletePortrait(
     shelf.Request request,

@@ -6,9 +6,9 @@
 // and the save producing another — is only catchable end-to-end, so these
 // drive the dialog with pointer drags and decode what pops out.
 
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 
@@ -98,7 +98,7 @@ void main() {
       // The image is contain-fit and centered; its top-left corner in the
       // stage is where the crop box's top-left handle sits. Compute it the
       // same way the dialog does.
-      final inset = 0.15 * rect.size.shortestSide;
+      final inset = 0.06 * rect.size.shortestSide;
       final imageVp = containFitRect(
         const Size(64, 64),
         (Offset.zero & rect.size).deflate(inset),
@@ -125,7 +125,7 @@ void main() {
     final out = await run(tester, _png(64, 64), () async {
       final stage = find.byKey(const ValueKey('crop_stage'));
       final rect = tester.getRect(stage);
-      final inset = 0.15 * rect.size.shortestSide;
+      final inset = 0.06 * rect.size.shortestSide;
       final imageVp = containFitRect(
         const Size(64, 64),
         (Offset.zero & rect.size).deflate(inset),
@@ -159,4 +159,69 @@ void main() {
     });
     expect(out, isNull);
   });
+
+  testWidgets('Escape pops null (desktop close affordance)', (tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final out = await run(tester, _png(32, 32), () async {
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    });
+    expect(out, isNull);
+  });
+
+  testWidgets('the 1:1 preset reshapes the box and the save honors it',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    // A 90×160 portrait: Free starts full-image, 1:1 must produce a square.
+    final out = await run(tester, _png2(90, 160), () async {
+      await tester.tap(find.text('1:1'));
+      await tester.pump();
+      await tester.tap(find.text('Crop & Save'));
+    });
+    final decoded = img.decodePng(out!)!;
+    expect(decoded.width, decoded.height,
+        reason: 'the preset locked the saved output to a square');
+  });
+
+  testWidgets('the white fill swatch changes the saved overhang pixels',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final out = await run(tester, _png(64, 64), () async {
+      // Second swatch = white (dark, white, transparent).
+      final swatches = find.byTooltip('Fill past the edges with white');
+      await tester.tap(swatches);
+      await tester.pump();
+      final stage = find.byKey(const ValueKey('crop_stage'));
+      final rect = tester.getRect(stage);
+      final inset = 0.06 * rect.size.shortestSide;
+      final imageVp = containFitRect(
+        const Size(64, 64),
+        (Offset.zero & rect.size).deflate(inset),
+      );
+      final gesture = await tester.startGesture(rect.topLeft + imageVp.topLeft);
+      await gesture.moveBy(Offset(-inset / 2, -inset / 2));
+      await gesture.up();
+      await tester.pump();
+      await tester.tap(find.text('Crop & Save'));
+    });
+    final decoded = img.decodePng(out!)!;
+    expect(decoded.width, greaterThan(64));
+    final corner = decoded.getPixel(0, 0);
+    expect([corner.r, corner.g, corner.b], [255, 255, 255],
+        reason: 'the chosen fill is what lands in the file');
+  });
+}
+
+Uint8List _png2(int w, int h) {
+  final im = img.Image(width: w, height: h);
+  img.fill(im, color: img.ColorRgb8(30, 120, 200));
+  return img.encodePng(im);
 }

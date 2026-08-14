@@ -211,7 +211,7 @@ class _AvatarGalleryDialogState extends State<_AvatarGalleryDialog> {
     final starred = candidate.id == _c.favoriteId;
     final ok = await showWarmDialog<bool>(
       context,
-      title: 'Delete the portrait?',
+      title: 'Swap the portrait?',
       content: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -233,9 +233,9 @@ class _AvatarGalleryDialogState extends State<_AvatarGalleryDialog> {
           Expanded(
             child: WarmDialogText(
               'This image — ${starred ? 'your ★ starred look' : 'your first '
-                  'gallery look'} — becomes the new portrait. It moves out '
-              'of the gallery (it lives on as the portrait), and the old '
-              'portrait image is overwritten.',
+                  'gallery look'} — becomes the new portrait, and the old '
+              'portrait moves into the gallery as a look. Nothing is '
+              'deleted; swap back any time.',
             ),
           ),
         ],
@@ -244,8 +244,7 @@ class _AvatarGalleryDialogState extends State<_AvatarGalleryDialog> {
         warmDialogCancel(context),
         warmDialogConfirm(
           context,
-          label: 'Delete portrait',
-          destructive: true,
+          label: 'Swap portrait',
           onPressed: () => Navigator.pop(context, true),
         ),
       ],

@@ -165,6 +165,94 @@ void main() {
     });
   });
 
+  group('aspect-locked drag', () {
+    final world = const Offset(-100, -100) & const Size(400, 400);
+    final rect = const Offset(0, 0) & const Size(100, 100);
+
+    test('corner drag preserves the ratio exactly (dominant axis drives)', () {
+      final r = applyCropDrag(
+        rect,
+        CropHandle.bottomRight,
+        const Offset(60, 10),
+        world: world,
+        minSize: 16,
+        aspect: 2.0, // twice as wide as tall
+      );
+      expect(r.topLeft, Offset.zero, reason: 'the anchor corner is fixed');
+      expect(r.width / r.height, closeTo(2.0, 1e-9));
+      expect(r.width, closeTo(160, 1e-9), reason: 'the x-delta dominates');
+    });
+
+    test('aspect drag clamps to the world without breaking the ratio', () {
+      final r = applyCropDrag(
+        rect,
+        CropHandle.bottomRight,
+        const Offset(5000, 5000),
+        world: world,
+        minSize: 16,
+        aspect: 1.0,
+      );
+      expect(r.width / r.height, closeTo(1.0, 1e-9));
+      expect(r.right, lessThanOrEqualTo(world.right + 1e-9));
+      expect(r.bottom, lessThanOrEqualTo(world.bottom + 1e-9));
+    });
+
+    test('edge handles freeze under a locked aspect', () {
+      final r = applyCropDrag(
+        rect,
+        CropHandle.right,
+        const Offset(50, 0),
+        world: world,
+        minSize: 16,
+        aspect: 1.0,
+      );
+      expect(r, rect);
+    });
+  });
+
+  group('aspectFitRect', () {
+    final world = const Offset(-100, -100) & const Size(400, 400);
+
+    test('keeps the center, hits the ratio, stays in the world', () {
+      final r = aspectFitRect(
+        const Offset(10, 10) & const Size(120, 30),
+        1.0,
+        world: world,
+        minSize: 16,
+      );
+      expect(r.width / r.height, closeTo(1.0, 1e-9));
+      expect(r.center.dx, closeTo(70, 1e-6));
+      expect(r.center.dy, closeTo(25, 1e-6));
+      expect(world.left <= r.left && r.right <= world.right, isTrue);
+    });
+
+    test('a rect hugging the world edge shifts inside instead of leaking', () {
+      final r = aspectFitRect(
+        const Offset(-100, -100) & const Size(20, 200),
+        1.0,
+        world: world,
+        minSize: 16,
+      );
+      expect(r.left, greaterThanOrEqualTo(world.left - 1e-9));
+      expect(r.top, greaterThanOrEqualTo(world.top - 1e-9));
+    });
+  });
+
+  group('cropWorldRect', () {
+    test('triples a normal image and stays centered on it', () {
+      final w = cropWorldRect(const Size(1000, 500));
+      expect(w.width, 3000);
+      expect(w.height, 1500);
+      expect(w.center, const Offset(500, 250));
+    });
+
+    test('caps the world so the output cannot become a memory bomb', () {
+      final w = cropWorldRect(const Size(6000, 6000));
+      expect(w.width, kMaxCropOutputSide);
+      expect(w.height, kMaxCropOutputSide);
+    });
+  });
+
   group('cropCompositeSync', () {
     Uint8List redSquarePng(int size) {
       final im = img.Image(width: size, height: size);
@@ -174,7 +262,7 @@ void main() {
 
     test('an inside crop returns exactly those pixels', () {
       final out = img.decodePng(
-        cropCompositeSync(<Object>[redSquarePng(8), 2, 2, 4, 4]),
+        cropCompositeSync(<Object>[redSquarePng(8), 2, 2, 4, 4, 26, 26, 46, 255]),
       )!;
       expect(out.width, 4);
       expect(out.height, 4);
@@ -187,7 +275,7 @@ void main() {
       // Crop from (-4,-4) to (12,12) over an 8×8 red image: a 16×16 output
       // whose corner is fill and whose center 8×8 is the red image.
       final out = img.decodePng(
-        cropCompositeSync(<Object>[redSquarePng(8), -4, -4, 16, 16]),
+        cropCompositeSync(<Object>[redSquarePng(8), -4, -4, 16, 16, 26, 26, 46, 255]),
       )!;
       expect(out.width, 16);
       expect(out.height, 16);
@@ -212,13 +300,34 @@ void main() {
       );
     });
 
+    test('white and transparent fills land in the saved pixels', () {
+      final white = img.decodePng(
+        cropCompositeSync(
+          <Object>[redSquarePng(8), -4, -4, 16, 16, 255, 255, 255, 255],
+        ),
+      )!;
+      final wc = white.getPixel(0, 0);
+      expect([wc.r, wc.g, wc.b, wc.a], [255, 255, 255, 255]);
+
+      final clear = img.decodePng(
+        cropCompositeSync(
+          <Object>[redSquarePng(8), -4, -4, 16, 16, 0, 0, 0, 0],
+        ),
+      )!;
+      final cc = clear.getPixel(0, 0);
+      expect(cc.a, 0, reason: 'the overhang is fully transparent');
+      final center = clear.getPixel(8, 8);
+      expect([center.r, center.g, center.b, center.a], [200, 10, 10, 255],
+          reason: 'the image itself stays opaque');
+    });
+
     test('undecodable bytes throw a FormatException, empty rect too', () {
       expect(
-        () => cropCompositeSync(<Object>[Uint8List.fromList([1, 2, 3]), 0, 0, 4, 4]),
+        () => cropCompositeSync(<Object>[Uint8List.fromList([1, 2, 3]), 0, 0, 4, 4, 26, 26, 46, 255]),
         throwsFormatException,
       );
       expect(
-        () => cropCompositeSync(<Object>[redSquarePng(4), 0, 0, 0, 4]),
+        () => cropCompositeSync(<Object>[redSquarePng(4), 0, 0, 0, 4, 26, 26, 46, 255]),
         throwsFormatException,
       );
     });

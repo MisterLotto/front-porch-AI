@@ -60,12 +60,25 @@ AvatarImage? promotionCandidate(List<AvatarImage> looks, String? favoriteId) {
   return looks.first;
 }
 
+/// SWAP, not destroy (2026-08-14, maintainer-approved): the old portrait's
+/// pixels DEMOTE into the gallery as a new look while the chosen look
+/// promotes out, so the action is fully reversible — nothing is ever lost.
+/// [addLook] is called LAST (after the new portrait is on disk) so its
+/// bootstrap-a-missing-portrait branch can never trigger. An unreadable old
+/// portrait (external import whose file vanished) skips the demotion — there
+/// is nothing to preserve.
 Future<String> promoteLookOverPortrait({
   required CharacterCard card,
   required StorageService storage,
   required Future<void> Function(CharacterCard card) updateCharacter,
   required Future<void> Function(String characterId, String avatarId)
   removeAvatar,
+  required Future<String> Function(
+    String characterId,
+    String characterName,
+    Uint8List bytes,
+  )
+  addLook,
 }) async {
   final looks = [
     for (final a in card.avatarImages ?? const <AvatarImage>[])
@@ -80,6 +93,21 @@ Future<String> promoteLookOverPortrait({
       .resolveFile(storage.characterBaseDir(card.name).path)
       .readAsBytes();
 
+  // Capture the OLD portrait before it is overwritten, so it can demote
+  // into the gallery below.
+  Uint8List? oldPortraitBytes;
+  final oldPath = card.imagePath;
+  if (oldPath != null && oldPath.isNotEmpty) {
+    try {
+      final oldFile = storage.resolveCharacterImage(oldPath);
+      if (await oldFile.exists()) {
+        oldPortraitBytes = await oldFile.readAsBytes();
+      }
+    } catch (_) {
+      oldPortraitBytes = null; // unreadable → nothing to preserve
+    }
+  }
+
   final target = portraitWriteTarget(card: card, storage: storage);
   await target.writeAsBytes(bytes);
   // Same path, new bytes — evict so Image.file doesn't serve stale pixels.
@@ -91,6 +119,9 @@ Future<String> promoteLookOverPortrait({
   }
   await updateCharacter(card);
   await removeAvatar(card.dbId!, promoted.id);
+  if (oldPortraitBytes != null) {
+    await addLook(card.dbId!, card.name, oldPortraitBytes);
+  }
   return promoted.id;
 }
 

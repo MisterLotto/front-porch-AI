@@ -104,17 +104,31 @@ CropHandle? hitTestCropHandle(Offset p, Rect cropVp, double grabRadius) {
 /// the world in source pixels can be smaller than the dialog's minimum, and
 /// `num.clamp` throws on inverted bounds (found in the 2026-08-14 hostile
 /// review; a drag on an 8×8 avatar crashed).
+/// With [aspect] set (width / height), corner drags keep that ratio (the
+/// opposite corner anchors, the dominant delta axis drives the size) and
+/// edge drags freeze — the dialog hides edge handles under a locked aspect.
 Rect applyCropDrag(
   Rect rect,
   CropHandle handle,
   Offset delta, {
   required Rect world,
   required double minSize,
+  double? aspect,
 }) {
   if (handle == CropHandle.move) {
     final dx = delta.dx.clamp(world.left - rect.left, world.right - rect.right);
     final dy = delta.dy.clamp(world.top - rect.top, world.bottom - rect.bottom);
     return rect.shift(Offset(dx, dy));
+  }
+  if (aspect != null) {
+    return _applyAspectCornerDrag(
+      rect,
+      handle,
+      delta,
+      world: world,
+      minSize: minSize,
+      aspect: aspect,
+    );
   }
 
   final movesLeft = handle == CropHandle.topLeft ||
@@ -142,23 +156,143 @@ Rect applyCropDrag(
   return Rect.fromLTRB(l, t, r, b);
 }
 
+/// Aspect-locked corner resize: the opposite corner is the fixed anchor, the
+/// dominant delta axis drives the new size, and the result is clamped to
+/// [world] on both axes and to [minSize] on both axes. Non-corner handles
+/// freeze (the dialog hides them under a locked aspect anyway).
+Rect _applyAspectCornerDrag(
+  Rect rect,
+  CropHandle handle,
+  Offset delta, {
+  required Rect world,
+  required double minSize,
+  required double aspect,
+}) {
+  final (Offset anchor, int dirX, int dirY) = switch (handle) {
+    CropHandle.topLeft => (rect.bottomRight, -1, -1),
+    CropHandle.topRight => (rect.bottomLeft, 1, -1),
+    CropHandle.bottomLeft => (rect.topRight, -1, 1),
+    CropHandle.bottomRight => (rect.topLeft, 1, 1),
+    _ => (Offset.zero, 0, 0),
+  };
+  if (dirX == 0) return rect;
+
+  // Candidate width from each axis's drag; the axis with the larger motion
+  // (normalized into width units, so a wide aspect can't let a tiny
+  // vertical wiggle overpower a big horizontal pull) drives the size.
+  final wFromX = rect.width + delta.dx * dirX;
+  final wFromY = (rect.height + delta.dy * dirY) * aspect;
+  var w = delta.dx.abs() >= delta.dy.abs() * aspect ? wFromX : wFromY;
+
+  // Room from the anchor to the world edge, on both axes.
+  final roomX = dirX > 0 ? world.right - anchor.dx : anchor.dx - world.left;
+  final roomY = dirY > 0 ? world.bottom - anchor.dy : anchor.dy - world.top;
+  final wMax = math.min(roomX, roomY * aspect);
+  final wMin = math.max(minSize, minSize * aspect);
+  if (wMax < wMin) return rect; // no legal aspect rect from this anchor
+  w = w.clamp(wMin, wMax);
+  final h = w / aspect;
+
+  return Rect.fromLTRB(
+    dirX > 0 ? anchor.dx : anchor.dx - w,
+    dirY > 0 ? anchor.dy : anchor.dy - h,
+    dirX > 0 ? anchor.dx + w : anchor.dx,
+    dirY > 0 ? anchor.dy + h : anchor.dy,
+  );
+}
+
+/// Re-shape [current] to [aspect] (width / height) for a preset switch:
+/// keeps the center and roughly the area, clamps into [world] (shrinking to
+/// fit, then shifting inside), and respects [minSize] where the world
+/// allows it.
+Rect aspectFitRect(
+  Rect current,
+  double aspect, {
+  required Rect world,
+  required double minSize,
+}) {
+  var w = math.sqrt(math.max(1e-6, current.width * current.height * aspect));
+  var h = w / aspect;
+  if (w > world.width) {
+    w = world.width;
+    h = w / aspect;
+  }
+  if (h > world.height) {
+    h = world.height;
+    w = h * aspect;
+  }
+  final wMin = math.max(minSize, minSize * aspect);
+  if (w < wMin && wMin <= world.width && wMin / aspect <= world.height) {
+    w = wMin;
+    h = w / aspect;
+  }
+  var r = Rect.fromCenter(center: current.center, width: w, height: h);
+  final dx = r.left < world.left
+      ? world.left - r.left
+      : (r.right > world.right ? world.right - r.right : 0.0);
+  final dy = r.top < world.top
+      ? world.top - r.top
+      : (r.bottom > world.bottom ? world.bottom - r.bottom : 0.0);
+  return r.shift(Offset(dx, dy));
+}
+
 /// The composited-output background for crop pixels beyond the image bounds
 /// — image DATA baked into the saved PNG, not theme chrome (the dialog's own
-/// chrome uses AppColors). Kept as the same dark the old Pad Canvas hack
-/// filled with, so existing users' padded avatars keep their look.
+/// chrome uses AppColors). [CropFill.dark] is the same dark the old Pad
+/// Canvas hack filled with, so existing users' padded avatars keep their
+/// look; white and transparent were added 2026-08-14 (light artwork was
+/// getting a hard dark frame with no say in the matter).
+enum CropFill {
+  dark(26, 26, 46, 255),
+  white(255, 255, 255, 255),
+  transparent(0, 0, 0, 0);
+
+  const CropFill(this.r, this.g, this.b, this.a);
+  final int r, g, b, a;
+}
+
+/// Back-compat aliases for the legacy dark fill (tests pin exact pixels).
 const int cropFillR = 26, cropFillG = 26, cropFillB = 46;
 
+/// The roaming range for the crop rect around an image of [imageSize]: a
+/// full image dimension of padding on every side (so the subject can shrink
+/// to 1/9th of the frame), capped so the OUTPUT canvas cannot become a
+/// memory bomb — no side of the world exceeds
+/// max(image side, [kMaxCropOutputSide]).
+const double kMaxCropOutputSide = 8192;
+
+Rect cropWorldRect(Size imageSize) {
+  final w = math.min(
+    imageSize.width * 3,
+    math.max(imageSize.width, kMaxCropOutputSide),
+  );
+  final h = math.min(
+    imageSize.height * 3,
+    math.max(imageSize.height, kMaxCropOutputSide),
+  );
+  return Rect.fromCenter(
+    center: Offset(imageSize.width / 2, imageSize.height / 2),
+    width: w,
+    height: h,
+  );
+}
+
 /// compute()-friendly crop + composite. [args] is
-/// `[Uint8List bytes, int left, int top, int width, int height]` — the crop
-/// rect in source pixels, which MAY extend beyond the image on any side;
-/// the overhang is filled with the crop fill color. Throws [FormatException]
-/// on undecodable bytes.
+/// `[Uint8List bytes, int left, int top, int width, int height,
+/// int fillR, int fillG, int fillB, int fillA]` — the crop rect in source
+/// pixels, which MAY extend beyond the image on any side; the overhang is
+/// filled with the given color (alpha 0 = transparent). Output is always
+/// RGBA PNG. Throws [FormatException] on undecodable bytes.
 Uint8List cropCompositeSync(List<Object> args) {
   final bytes = args[0] as Uint8List;
   final left = args[1] as int;
   final top = args[2] as int;
   final width = args[3] as int;
   final height = args[4] as int;
+  final fillR = args[5] as int;
+  final fillG = args[6] as int;
+  final fillB = args[7] as int;
+  final fillA = args[8] as int;
   if (width < 1 || height < 1) {
     throw const FormatException('Crop area is empty');
   }
@@ -176,8 +310,8 @@ Uint8List cropCompositeSync(List<Object> args) {
     throw const FormatException('Could not decode the image');
   }
 
-  final out = img.Image(width: width, height: height);
-  img.fill(out, color: img.ColorRgb8(cropFillR, cropFillG, cropFillB));
+  final out = img.Image(width: width, height: height, numChannels: 4);
+  img.fill(out, color: img.ColorRgba8(fillR, fillG, fillB, fillA));
 
   // Explicit source∩crop intersection — no reliance on the image package
   // clipping negative destination offsets.

@@ -300,5 +300,6 @@ extension CharacterRepositoryMedia on CharacterRepository {
         storage: _storage,
         updateCharacter: updateCharacter,
         removeAvatar: removeAvatar,
+        addLook: addLook,
       );
 }
