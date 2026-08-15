@@ -333,12 +333,15 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
 
   List<String> _greetings(StoopCardDetail d) {
     final first = _s(d, 'first_mes');
-    final alts =
-        (d.card['alternate_greetings'] as List?)
-            ?.map((e) => stoopResolveMacros(e.toString(), d.name))
-            .where((s) => s.isNotEmpty)
-            .toList() ??
-        const [];
+    // `is List`, never `as List?`: this card came off the wire from a
+    // stranger's upload, and the `as` form THROWS on a present-but-wrong-typed
+    // value, taking down the whole detail panel instead of omitting one
+    // section (same rule as stoop_identity_sections.dart).
+    final raw = d.card['alternate_greetings'];
+    final alts = (raw is List ? raw : const [])
+        .map((e) => stoopResolveMacros(e.toString(), d.name))
+        .where((s) => s.isNotEmpty)
+        .toList();
     return [if (first.isNotEmpty) first, ...alts];
   }
 
@@ -758,10 +761,13 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
   // pre-seeded dynamics, group lorebook, system prompt), then a "Members"
   // divider and a 1/N carousel where each member reads like a solo character.
   List<Widget> _groupSections(StoopCardDetail d) {
-    final members =
-        (d.card['raw_member_data'] as List?) ??
-        (d.card['members'] as List?) ??
-        const [];
+    // Wrong-typed member lists must degrade to "no members", not throw — see
+    // the note in _greetings.
+    final rawMembers = d.card['raw_member_data'];
+    final plainMembers = d.card['members'];
+    final List<dynamic> members = rawMembers is List
+        ? rawMembers
+        : (plainMembers is List ? plainMembers : const []);
     return [
       ...stoopGroupOverview(context, d.card, d.name),
       if (members.isNotEmpty) ...[

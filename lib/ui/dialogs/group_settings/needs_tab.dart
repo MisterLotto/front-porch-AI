@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 import 'package:front_porch_ai/ui/dialogs/group_settings/group_settings_support.dart';
 
 part 'needs_tab.member.dart';
@@ -105,9 +106,12 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
     }
   }
 
-  String _getCharId(CharacterCard c) => c.imagePath != null
-      ? c.imagePath!.split('/').last.split('.').first
-      : c.name;
+  // The engine keys every per-member store by CharacterCard.stableGroupId
+  // (ChatService._getCharacterIdFromCard). Deriving it by hand here split on
+  // '/' only and cut at the FIRST dot, so a Windows path or a filename with a
+  // dot in it produced an id no service call could match — the decay persist
+  // (setGroupNeedsDecayRate(memberId:)) matches members by that exact id.
+  String _getCharId(CharacterCard c) => c.stableGroupId;
 
   CharacterCard? _findCharById(String id) {
     for (final c in _chars) {
@@ -162,42 +166,45 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
   }
 
 
-  void _resetAllNeedsStates() {
+  Future<void> _resetAllNeedsStates() async {
     for (final c in _chars) {
-      final id = _getCharId(c);
-      setState(() {
-        _needsBaselines[id] = {
-          _kHunger: 80,
-          _kBladder: 80,
-          _kEnergy: 80,
-          _kSocial: 80,
-          _kFun: 80,
-          _kHygiene: 80,
-          _kComfort: 80,
-        };
-        _decayRates[id] = Map<String, int>.from(_defaultDecayRates);
-        _enjoysLowHygiene[id] = false;
-      });
-      widget.chatService.resetRealismForGroupCharacter(c);
+      await _resetCharacterNeeds(c);
     }
   }
 
-  void _resetCharacterNeeds(CharacterCard character) {
+  /// Put one member back on the engine defaults.
+  ///
+  /// Every value goes out through the SAME setters the sliders use. Resetting
+  /// only the three local maps repainted the dialog while the member kept its
+  /// old decay rates and baselines — the card ext is what the runtime reads
+  /// (`_activeDecayRates()`), and `resetRealismForGroupCharacter` only drops
+  /// the live `_groupRealism` slot, it never touches the card.
+  Future<void> _resetCharacterNeeds(CharacterCard character) async {
     final id = _getCharId(character);
-    setState(() {
-      _needsBaselines[id] = {
-        _kHunger: 80,
-        _kBladder: 80,
-        _kEnergy: 80,
-        _kSocial: 80,
-        _kFun: 80,
-        _kHygiene: 80,
-        _kComfort: 80,
-      };
-      _decayRates[id] = Map<String, int>.from(_defaultDecayRates);
-      _enjoysLowHygiene[id] = false;
-    });
+    final previousDecay = Map<String, int>.from(
+      _decayRates[id] ?? _defaultDecayRates,
+    );
+
+    // _defaultDecayRates is keyed by the same seven need names as the baselines.
+    for (final field in _defaultDecayRates.keys) {
+      _updateNeedsBaseline(id, field, 80);
+      _updateMemberDecay(id, field, _defaultDecayRates[field]!);
+    }
+    _updateMemberEnjoysLowHygiene(character, false);
     widget.chatService.resetRealismForGroupCharacter(character);
+
+    // The decay persist (member card ext + PNG + GroupMembers row) is the
+    // expensive one: only the needs that actually changed are written, and
+    // strictly one at a time — two concurrent saves would race on the same PNG.
+    for (final entry in _defaultDecayRates.entries) {
+      if (previousDecay[entry.key] != entry.value) {
+        await widget.chatService.setGroupNeedsDecayRate(
+          entry.key,
+          entry.value,
+          memberId: id,
+        );
+      }
+    }
   }
 
   @override

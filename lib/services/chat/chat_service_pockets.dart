@@ -463,17 +463,14 @@ extension ChatServicePockets on ChatService {
     //    `others` = each transfer recipient's pre-turn kit).
     //  * pockets_after rides THIS SWIPE: post-turn speaker kit (+
     //    `pockets_after_others` for recipients).
+    //  * pocket_changes (the receipt chips) rides THIS SWIPE too — they
+    //    describe the words in front of the reader, and each swipe moved its
+    //    own things. It used to be written to the base map, which the bubble
+    //    never reads once a swipe map exists (activeMetadata prefers
+    //    swipeMetadata[i]) — so every user with Realism or Needs on, i.e.
+    //    most of them, silently lost the chip (release audit 2026-08-15).
     final msg = _messages.isNotEmpty ? _messages.last : null;
     if (msg != null && !msg.isUser) {
-      if (receipts.isNotEmpty) {
-        final prior = asContinuation
-            ? (msg.metadata?['pocket_changes'] as List?)?.whereType<String>()
-            : null;
-        msg.metadata = {
-          ...?msg.metadata,
-          'pocket_changes': [...?prior, ...receipts],
-        };
-      }
       final existingBefore = msg.metadata?['pockets_before'];
       if (asContinuation &&
           existingBefore is Map &&
@@ -516,6 +513,15 @@ extension ChatServicePockets on ChatService {
         ...?msg.activeMetadata,
         'pockets_after': record.toJson(),
       };
+      if (receipts.isNotEmpty) {
+        // Continue appends to this swipe's own receipts (the first half's
+        // chips describe the same swipe and must survive the extension).
+        final prior = asContinuation
+            ? (msg.activeMetadata?['pocket_changes'] as List?)
+                  ?.whereType<String>()
+            : null;
+        afterMeta['pocket_changes'] = [...?prior, ...receipts];
+      }
       // After-stamps carry each recipient's CURRENT kit: this pass's
       // recipients replace their old entry; first-half recipients this pass
       // did not touch keep theirs (their kit has not changed since).

@@ -159,7 +159,16 @@ extension ChatServiceGeneration on ChatService {
     CharacterCard? guestSpeaker,
     bool skipClockAdvance = false,
   }) async {
-    if (await _abortIfBackendDown()) return;
+    if (await _abortIfBackendDown()) {
+      // No turn will run — terminate BOTH live streams. The sentence stream
+      // has no error sentinel: `call_overlay` closes its controller on
+      // '__DONE__' alone, and `TtsService.speakStreaming` blocks in
+      // `await for` until that close, so a silent bail freezes a voice call
+      // on "Thinking…" with the mic never re-armed.
+      _tokenBroadcast.add('__ERROR__');
+      _sentenceBroadcast.add('__DONE__');
+      return;
+    }
     // regenerateLastMessage holds the settling flag; the finally restores it.
     final callerHeldSettling = _isPostGenerating;
     final epoch = ++_generationEpoch;
@@ -320,6 +329,15 @@ extension ChatServiceGeneration on ChatService {
 
       // Signal error to SSE listeners
       _tokenBroadcast.add('__ERROR__');
+      // '__ERROR__' is a TOKEN-stream sentinel only. The sentence stream must
+      // still be told the turn is over — its consumer (call_overlay →
+      // TtsService.speakStreaming) closes on '__DONE__' and on nothing else,
+      // so without this a non-socket failure (OpenRouter 429/402/5xx, a
+      // malformed reply) leaves the voice call stuck on "Thinking…" forever.
+      // The buffered fragment is dropped, not spoken: the reply the user gets
+      // is the error banner, not a half sentence.
+      _sentenceBuffer = '';
+      _sentenceBroadcast.add('__DONE__');
 
       // Restore original model if swapped for call mode
       if (t.originalModelName != null && _llmProvider != null) {

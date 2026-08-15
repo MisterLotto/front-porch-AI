@@ -72,7 +72,14 @@ class OpenRouterService extends LLMService {
   String _apiKey;
   String _modelName;
   bool _isReady = false;
-  http.Client? _activeClient;
+
+  /// Every client with a call in flight, so [abortGeneration] can close all of
+  /// them. A SET rather than one slot because this is a single shared instance
+  /// and the app deliberately overlaps remote calls on it (the staggered
+  /// realism judges, post-gen needs + reply-facts): with one slot the first
+  /// call to finish cleared the field, and Cancel then closed nothing while
+  /// the rest kept streaming (and billing).
+  final Set<http.Client> _activeClients = {};
 
   String get apiUrl => _apiUrl;
   String get apiKey => _apiKey;
@@ -250,12 +257,16 @@ class OpenRouterService extends LLMService {
         if (m is Map) {
           rememberReasoningProfileFromCatalog(id, m['reasoning']);
         }
-        final pricing = m['pricing'] as Map<String, dynamic>?;
+        // `m` is dynamic, so indexing a plain-String entry dispatches to
+        // String.operator[](int) and THROWS — which aborted the whole loop and
+        // emptied the picker for any backend answering {"models":["llama-3"]},
+        // the very shape the `m is String` branch above exists to support.
+        final pricing = m is Map ? m['pricing'] : null;
 
         // API returns USD per token; convert to per 1M tokens for readability
         double? promptCost;
         double? completionCost;
-        if (pricing != null) {
+        if (pricing is Map) {
           final promptRaw = double.tryParse(
             pricing['prompt']?.toString() ?? '',
           );
@@ -448,7 +459,7 @@ class OpenRouterService extends LLMService {
       ..['tool_choice'] = 'auto';
 
     final client = http.Client();
-    _activeClient = client;
+    _activeClients.add(client);
     try {
       // No wall-clock timeout: a tool/eval call (incl. local oMLX via this same
       // client) can legitimately run long on a slow model or reasoning pass. A
@@ -500,7 +511,7 @@ class OpenRouterService extends LLMService {
       debugPrint('[RemoteAPI] Tool call transport failure: $e');
       rethrow;
     } finally {
-      if (identical(_activeClient, client)) _activeClient = null;
+      _activeClients.remove(client);
       client.close();
     }
   }
@@ -521,7 +532,7 @@ class OpenRouterService extends LLMService {
     request.body = jsonEncode(_chatPayload(params, stream: true));
 
     final client = http.Client();
-    _activeClient = client;
+    _activeClients.add(client);
     // Only wrap reasoning in <think> tags when the app explicitly requested it.
     // Some models (e.g. Qwen on LM Studio) send the entire response as
     // reasoning_content even when reasoning wasn't requested — wrapping those
@@ -706,14 +717,18 @@ class OpenRouterService extends LLMService {
       final tail = wrapper.finish();
       if (tail.isNotEmpty) yield tail;
     } finally {
-      _activeClient = null;
+      _activeClients.remove(client);
       client.close();
     }
   }
 
   @override
   void abortGeneration() {
-    _activeClient?.close();
-    _activeClient = null;
+    // Iterate a copy: each close() lets its call's finally run, which mutates
+    // the set.
+    for (final client in _activeClients.toList()) {
+      client.close();
+    }
+    _activeClients.clear();
   }
 }

@@ -131,15 +131,29 @@ extension TtsServiceSupport on TtsService {
       }
     } else {
       final completer = Completer<void>();
-
-      late StreamSubscription sub;
-      sub = _audioPlayer.onPlayerComplete.listen((_) {
-        sub.cancel();
+      void finish() {
         if (!completer.isCompleted) completer.complete();
+      }
+
+      final sub = _audioPlayer.onPlayerComplete.listen((_) => finish());
+      // Manual stop() emits PlayerState.stopped, NOT onPlayerComplete — so
+      // without this second listener, hanging up (or pressing Stop) mid-
+      // sentence leaves this await hanging forever on Windows/Linux: the
+      // caller's loop never returns, its temp WAVs are never cleaned up, and
+      // the orphaned subscription fires into the NEXT session. macOS never
+      // sees it because that platform plays through afplay above. Same guard
+      // as the read-along player in story_reader_page.readalong.dart.
+      final stopSub = _audioPlayer.onPlayerStateChanged.listen((state) {
+        if (state == PlayerState.stopped) finish();
       });
 
-      await _audioPlayer.play(DeviceFileSource(wavFile.path));
-      await completer.future;
+      try {
+        await _audioPlayer.play(DeviceFileSource(wavFile.path));
+        await completer.future;
+      } finally {
+        await sub.cancel();
+        await stopSub.cancel();
+      }
     }
   }
 

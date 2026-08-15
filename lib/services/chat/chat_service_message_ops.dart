@@ -349,6 +349,10 @@ extension ChatServiceMessageOps on ChatService {
     // as personality, or a stuck cursor that never re-scores the tip.
     unawaited(_invalidateGrowthFrom(sessionId, position));
 
+    // RAG twin (release audit 2026-08-15): the embedded message-window corpus
+    // cites the same positions and had NO invalidation at all.
+    unawaited(_invalidateEmbeddingsFrom(sessionId, position));
+
     // Recap clear is sync — notify even if the card future is still pending
     // so the sidebar "Where we are" empties immediately.
     if (recapCleared) {
@@ -396,6 +400,41 @@ extension ChatServiceMessageOps on ChatService {
       }
     } catch (e) {
       debugPrint('[Growth] ⚠ ring invalidation at $position skipped: $e');
+    }
+  }
+
+  /// RAG half of timeline integrity (Journal/Growth twin). Drops every stored
+  /// message-window embedding whose window reaches [position] or later.
+  ///
+  /// Two failures, one delete. The window's stored `content` is the text as it
+  /// was BEFORE the rewrite, and [MemoryService]'s dedupe is purely positional
+  /// — a window whose range already exists is skipped forever — so the
+  /// discarded/edited reply stayed retrievable and got injected 20+ turns
+  /// later under "Exact earlier lines from this chat … already happened". And
+  /// after a DELETE every later window's (start,end) addresses different
+  /// messages, which mis-stamps story days and mis-aligns the journal de-dupe.
+  /// Removing the rows is what lets `_maybeEmbedMessages` rebuild them from
+  /// the live timeline on the next turn.
+  ///
+  /// Runs regardless of the RAG switch: rows written while it was on must not
+  /// survive a rewrite just because it is off today. Same fire-and-forget,
+  /// error-contained contract as the Journal/Growth invalidators.
+  Future<void> _invalidateEmbeddingsFrom(String sessionId, int position) async {
+    try {
+      final removed = await _db.customUpdate(
+        'DELETE FROM message_embeddings '
+        'WHERE session_id = ? AND position_end >= ?',
+        variables: [drift.Variable(sessionId), drift.Variable(position)],
+        updates: {_db.messageEmbeddings},
+      );
+      if (removed > 0) {
+        debugPrint(
+          '[RAG] Timeline rewrite at $position — removed $removed embedded '
+          'window(s) citing the discarded region',
+        );
+      }
+    } catch (e) {
+      debugPrint('[RAG] ⚠ embedding invalidation at $position skipped: $e');
     }
   }
 

@@ -216,6 +216,13 @@ class JournalMaintenance {
       }
       final window = messages.sublist(start);
       if (window.isEmpty) return;
+      // The cursor target is the SNAPSHOT's end, never the live list's.
+      // `messages` IS the god's `_messages`, mutated in place, and the user is
+      // free to send while this pass awaits its LLM call (sendMessage guards
+      // only on _isGenerating). Reading messages.length after the awaits below
+      // would park the cursor past turns this pass never read, and nothing
+      // ever rewinds it — those exchanges would be silently un-journaled.
+      final cursorTarget = start + window.length;
 
       // Shared owner loop (pass_support). No guests passed — scene guests
       // never journal (the guest parity guard).
@@ -306,13 +313,13 @@ class JournalMaintenance {
           review.park(
             JournalReviewBatch(
               sessionId: sessionToken,
-              cursorTarget: messages.length,
+              cursorTarget: cursorTarget,
               owners: parked,
               recap: parkedRecap,
             ),
           );
         } else {
-          setCursor(messages.length);
+          setCursor(cursorTarget);
           await onSaveChat();
         }
       }

@@ -592,6 +592,34 @@ extension ChatServiceSessionManage on ChatService {
           _groupRealism = parseGroupRealismSeeds(
             _activeGroup!.defaultMemberRealismState,
           ).map((k, v) => MapEntry(k, GroupMemberRealism.fromJson(v)));
+          // Re-derive Needs from those seeds, exactly as FRESH GROUP ENTRY
+          // does (chat_service_group_entry.dart — presence-inference: the
+          // creator omits the per-member 'needs' sub-map when Needs was off
+          // in the wizard). The zeroing above is the right starting point for
+          // the no-group path, but for a group it was the FINAL word: "New
+          // Chat" inside a group hard-disabled Needs, saved false onto the new
+          // session row, and every reload read it back — blank needs grids and
+          // no decay for the rest of that conversation, while first entry into
+          // the same group worked. The 1:1 branch re-seeds from the card for
+          // the same reason.
+          _needsSimEnabled = _groupRealism.values.any((state) {
+            final n = state.needs;
+            return n != null && n.isNotEmpty;
+          });
+          if (_needsSimEnabled) {
+            // Placeholder vector only — the first per-speaker
+            // _loadGroupRealismIntoScalars replaces it with that member's own
+            // needs. Same flat baseline the group-entry twin uses.
+            _needsSimulation.initializeFreshWithDefaults(const {
+              'hunger': 80,
+              'bladder': 80,
+              'energy': 80,
+              'social': 80,
+              'fun': 80,
+              'hygiene': 80,
+              'comfort': 80,
+            });
+          }
           // The group's twin of the 1:1 chaos seed above, which this branch
           // never had. A fresh chat inside a group simply inherited whatever
           // setActiveGroup had left in the service — usually the right answer,

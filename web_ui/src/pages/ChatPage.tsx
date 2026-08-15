@@ -20,6 +20,7 @@ import { ImagePromptReviewModal } from '../components/ImagePromptReviewModal';
 import { MessageEditModal } from '../components/MessageEditModal';
 import { type Message, type Realism, type LoreEntry, type ChatThemeOverrides } from '../components/chatTypes';
 import { ChatThemeSettings, resolveThemeColors } from '../components/ChatThemeSettings';
+import { postChatSend } from './chatSend';
 
 interface ChatState {
   character: { name: string; id: string } | null;
@@ -73,6 +74,11 @@ export function ChatPage() {
   const [absenceDismissed, setAbsenceDismissed] = useState<Set<string>>(new Set());
   // Composer draft mirror — powers the lorebook "would trigger next" preview.
   const [draft, setDraft] = useState('');
+  // A send that never reached the desktop: the exact text the user typed (the
+  // composer already threw its copy away) plus a plain-English reason.
+  const [sendError, setSendError] = useState<
+    { text: string; message: string; retrying: boolean } | null
+  >(null);
   // Chaos "Chance Time" reveal modal. Opened by the `chance_time` WS event (or a
   // reconnect that finds the engine still parked); `revealed` is the pure-UI
   // flip from the teaser to the event card. Null = no modal.
@@ -153,13 +159,33 @@ export function ChatPage() {
   }, [refresh]);
 
   // Cast actions and the composer share one send path (both route through
-  // ChatService server-side, so behavior matches the desktop).
+  // ChatService server-side, so behavior matches the desktop). The composer has
+  // already emptied its box by the time we're called, so a failed POST must
+  // hand the typed text back to the user (sendError) instead of dropping it —
+  // on a phone over Tailscale a blipped uplink used to eat the message with no
+  // trace at all. Never rethrows, so the `void sendMessage(...)` call sites
+  // (CastBar commands, the /join picker) can't strand a rejected promise.
   const sendMessage = useCallback(async (text: string) => {
     const t = text.trim();
     if (!t) return;
-    await api.post('/api/chat/send', { text: t });
-    await refresh();
+    const outcome = await postChatSend(t);
+    if (!outcome.ok) {
+      setSendError({ text: outcome.text, message: outcome.message, retrying: false });
+      return;
+    }
+    setSendError(null);
+    // The line is in ChatService now — a failed refresh loses nothing (the WS
+    // `chat_updated` burst re-renders anyway), so it must NOT offer a resend.
+    await refresh().catch((e) => console.warn('[chat] refresh after send failed', e));
   }, [refresh]);
+
+  // Resend the message the last failure handed back (one tap, no retyping).
+  const retrySend = async () => {
+    const failed = sendError;
+    if (!failed || failed.retrying) return;
+    setSendError({ ...failed, retrying: true });
+    await sendMessage(failed.text);
+  };
 
   // Scope the sidebar to a cast participant. Host (and lite guests) use the main
   // realism snapshot; other members fetch their own.
@@ -593,6 +619,31 @@ export function ChatPage() {
               className="link-btn"
               aria-label="Dismiss"
               onClick={() => setImportNotice('')}
+            >
+              ✕
+            </button>
+          </div>
+        )}
+        {sendError && (
+          <div className="chat-import-notice" role="alert">
+            <p>
+              ⚠️ {sendError.message}
+              <br />
+              <span className="muted">Still here, not sent: “{sendError.text}”</span>
+            </p>
+            <button
+              type="button"
+              className="link-btn"
+              disabled={sendError.retrying}
+              onClick={() => void retrySend()}
+            >
+              {sendError.retrying ? 'Sending…' : 'Try again'}
+            </button>
+            <button
+              type="button"
+              className="link-btn"
+              aria-label="Dismiss"
+              onClick={() => setSendError(null)}
             >
               ✕
             </button>

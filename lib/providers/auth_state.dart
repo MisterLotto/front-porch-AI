@@ -101,8 +101,18 @@ class AuthState extends ChangeNotifier {
     // Access token missing or expired → try the refresh token.
     try {
       await _applyAuth(await _api.refresh(_refreshToken!));
+    } on BackporchApiException catch (e) {
+      // Only a genuine auth rejection (same 401 rule as the /auth/me branch
+      // above) means the saved refresh token is dead. A 5xx, a rate limit or a
+      // proxy's 403 is a hiccup: keep the tokens so the next launch can restore
+      // the session instead of forcing a full re-login.
+      if (e.statusCode == 401) {
+        await _store.clear();
+      }
+      _clearSession();
     } catch (_) {
-      await _store.clear();
+      // Timeout / socket failure — the server never answered, so the token is
+      // not known to be bad. Same rule as the /auth/me branch above: keep it.
       _clearSession();
     }
   }

@@ -93,9 +93,16 @@ final _bareDawn = RegExp(
   caseSensitive: false,
 );
 
+/// Leads that mean the named hour is an appointment, a plan or a memory —
+/// NOT the present moment. "at" is the one that mattered: "I'll pick you up
+/// at 5 p.m." / "she remembered the call at 9 a.m." were read as clock claims
+/// and teleported the story clock up to ±6h off one line of ordinary
+/// dialogue. The `(?:^|\W)` boundary is load-bearing, not tidiness: without
+/// it "footpath " ends in "at " and would reject the very Senjumaru
+/// "at six in the morning" claim this file was written for.
 final _notPresent = RegExp(
-  r'(until|by|before|after|past|around|about|tomorrow|tonight|'
-  r'another|for|in)\s+$',
+  r'(?:^|\W)(until|by|before|after|past|around|about|tomorrow|tonight|'
+  r'another|for|in|at|till|til|since|from|toward|towards)\s+$',
   caseSensitive: false,
 );
 

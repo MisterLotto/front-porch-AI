@@ -148,7 +148,23 @@ class KoboldService extends ChangeNotifier
           await _syncVersionFromResponse(response);
         } else {
           // Orphaned zombie from a previous app instance (e.g. after update).
-          // Kill it so we can start fresh on the same port.
+          // Kill it so we can start fresh on the same port — but ONLY when the
+          // managed local backend is the selected one. killOrphanedKobold-
+          // Processes sweeps the whole MACHINE by image name, and this probe
+          // runs from the constructor on every launch, so on Remote API / oMLX
+          // (pointing at 127.0.0.1:5001 without an API key is a supported
+          // setup) it would SIGKILL a server the app neither started nor is
+          // about to replace. Same gate the other backend-owning paths use
+          // (backend_manager.dart, setup_service.dart).
+          await _storageService.initialized;
+          final backendType = _storageService.backendType;
+          if (backendType == 'openRouter' || backendType == 'omlx') {
+            debugPrint(
+              '[KoboldService] KoboldCPP is answering on $_baseUrl but the '
+              'selected backend is $backendType — leaving it alone.',
+            );
+            return;
+          }
           debugPrint(
             '[KoboldService] Found orphaned KoboldCPP on $_baseUrl — killing it.',
           );

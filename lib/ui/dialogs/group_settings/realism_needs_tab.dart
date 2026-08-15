@@ -8,8 +8,10 @@ import 'package:flutter/material.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 import 'package:front_porch_ai/ui/widgets/story_begins_row.dart';
 import 'package:front_porch_ai/ui/dialogs/group_settings/group_settings_support.dart';
+import 'package:front_porch_ai/ui/dialogs/group_settings/member_baseline_seed.dart';
 
 part 'realism_needs_tab.view.dart';
 part 'realism_needs_tab.controls.dart';
@@ -86,7 +88,9 @@ class _GroupRealismNeedsTabState extends State<GroupRealismNeedsTab> {
     // volatile in groups); the write side propagates to every member.
     _nsfwEnhancementsEnabled = cs.isGroupNsfwEnabled;
 
-    // Group-wide Time & Day.
+    // Group-wide Time & Day, plus the per-member seed blob the ENGINE reads on
+    // a fresh chat (parseGroupRealismSeeds → GroupMemberRealism).
+    Map<String, dynamic> perCharSeeds = const {};
     final group = cs.activeGroup;
     if (group != null) {
       final gs = group.defaultMemberRealismState;
@@ -96,6 +100,8 @@ class _GroupRealismNeedsTabState extends State<GroupRealismNeedsTab> {
         _groupDayCount = (map['dayCount'] as num?)?.toInt() ?? 1;
         _groupStoryStartDate = map['storyStartDate'] as String?;
         _groupStoryStartTime = map['storyStartTime'] as String?;
+        perCharSeeds =
+            (map['perChar'] as Map?)?.cast<String, dynamic>() ?? const {};
       }
     }
     _groupDayCountController = TextEditingController(
@@ -105,10 +111,10 @@ class _GroupRealismNeedsTabState extends State<GroupRealismNeedsTab> {
     // Load immutable creation baseline seeds (only the allowed fields)
     _baselineSeeds.clear();
     for (final c in _chars) {
-      _baselineSeeds[_getCharId(c)] = Map<String, dynamic>.from(
+      final id = _getCharId(c);
+      _baselineSeeds[id] = Map<String, dynamic>.from(
         cs.getBaselineSeedForGroupCharacter(c),
       );
-      final id = _getCharId(c);
 
       // Load per-member Director/Verifier settings (if present on the member's card ext)
       _verificationEnabled[id] =
@@ -120,38 +126,17 @@ class _GroupRealismNeedsTabState extends State<GroupRealismNeedsTab> {
       _needsDirectorAuthority[id] =
           c.frontPorchExtensions?.realismNeedsDirectorAuthority ?? false;
 
-      // Load editable realism baselines from baseline seed + card extensions.
+      // Load the three relationship sliders. Their key mapping, the legacy
+      // repair and the clamps all live in the shared leaf (and are tested
+      // there) — this is a bug-prone corner, not a two-liner.
       final seed = _baselineSeeds[id]!;
-      // These three must map to the three keys the engine actually reads:
-      // affection / longTermScore / trust. Long-Term Bond used to LOAD from
-      // 'trust' and, worse, SAVE into it — so dragging a ±300 bond slider
-      // overwrote the ±100 trust baseline, while Trust Level never persisted
-      // at all. longTermScore falls back to affection, matching what
-      // RelationshipService does when seeding a member that predates the key.
-      final rawTrust = (seed['trust'] as num?)?.toInt();
-      final rawLongTerm = (seed['longTermScore'] as num?)?.toInt();
-
-      // Repair for groups edited under the old code. Back then this editor
-      // SAVED the Long-Term Bond slider into 'trust', so a group that was ever
-      // edited has a ±300 bond number sitting in a ±100 trust field. Left
-      // alone, that value now reaches a Slider declared min -100 / max 100,
-      // which asserts and takes the whole Group Settings dialog down.
-      //
-      // |trust| > 100 is impossible for a real trust value, so when there is
-      // also no 'longTermScore' the number can only have come from that slider.
-      // Move it back where it was meant to go and give trust its default —
-      // the old code never stored a real trust value, so there is none to
-      // recover, and inventing one from a bond score would be worse.
-      final poisoned = rawLongTerm == null && rawTrust != null && rawTrust.abs() > 100;
-
-      _editShortTermBond[id] = ((seed['affection'] as num?)?.toInt() ?? 50)
-          .clamp(-300, 300);
-      _editLongTermBond[id] =
-          (poisoned
-                  ? rawTrust
-                  : rawLongTerm ?? (seed['affection'] as num?)?.toInt() ?? 50)
-              .clamp(-300, 300);
-      _editTrustLevel[id] = (poisoned ? 50 : rawTrust ?? 50).clamp(-100, 100);
+      final bond = bondBaselineFromSeeds(
+        baselineSeed: seed,
+        perCharSeed: (perCharSeeds[id] as Map?)?.cast<String, dynamic>(),
+      );
+      _editShortTermBond[id] = bond.shortTerm;
+      _editLongTermBond[id] = bond.longTerm;
+      _editTrustLevel[id] = bond.trust;
       _editEmotion[id] = (seed['emotion'] as String?) ?? 'neutral';
       _editEmotionIntensity[id] =
           (seed['emotionIntensity'] as String?) ?? 'moderate';
@@ -303,11 +288,18 @@ class _GroupRealismNeedsTabState extends State<GroupRealismNeedsTab> {
             .cast<String, dynamic>();
         final current = (perChar[id] as Map<String, dynamic>? ?? {})
             .cast<String, dynamic>();
-        current['shortTermBond'] = _editShortTermBond[id] ?? 50;
-        current['longTermBond'] = _editLongTermBond[id] ?? 50;
-        current['trustLevel'] = _editTrustLevel[id] ?? 50;
-        current['characterEmotion'] = _editEmotion[id] ?? 'neutral';
-        current['emotionIntensity'] = _editEmotionIntensity[id] ?? 'moderate';
+        // ENGINE key names — the card-ext names written here before made four
+        // of the five sliders a no-op (GroupMemberRealism reads only
+        // affection/longTermScore/trust/emotion/emotionIntensity and passes
+        // everything else through untouched).
+        applyBaselineToMemberSeed(
+          current,
+          affection: _editShortTermBond[id] ?? 50,
+          longTermScore: _editLongTermBond[id] ?? 50,
+          trust: _editTrustLevel[id] ?? 50,
+          emotion: _editEmotion[id] ?? 'neutral',
+          emotionIntensity: _editEmotionIntensity[id] ?? 'moderate',
+        );
         perChar[id] = current;
         map['perChar'] = perChar;
         group.defaultMemberRealismState = jsonEncode(map);
@@ -317,9 +309,11 @@ class _GroupRealismNeedsTabState extends State<GroupRealismNeedsTab> {
     }
   }
 
-  String _getCharId(CharacterCard c) => c.imagePath != null
-      ? c.imagePath!.split('/').last.split('.').first
-      : c.name;
+  // Must be byte-identical to the id every service stores a member under
+  // (ChatService._getCharacterIdFromCard). The hand-rolled version answered ''
+  // for a member with no avatar file and truncated at the first dot otherwise,
+  // so the perChar seed landed under a key the engine never looks up.
+  String _getCharId(CharacterCard c) => c.stableGroupId;
 
   @override
   void dispose() {

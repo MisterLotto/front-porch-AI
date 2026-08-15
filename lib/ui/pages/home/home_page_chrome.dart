@@ -111,7 +111,10 @@ extension _HomePageChrome on _HomePageState {
     _openingChat = true;
     try {
       final chatService = Provider.of<ChatService>(context, listen: false);
-      final charId = character.dbId ?? _getCharacterIdFromCard(character);
+      // getSessionsForId resolves 1:1 ids by imagePath basename (stableGroupId)
+      // — the dbId UUID silently returns [] and kills the session picker
+      // (documented identity gotcha; same warning at enhance_wizard_page.dart).
+      final charId = _getCharacterIdFromCard(character);
       final sessions = await chatService.getSessionsForId(charId);
 
       if (!mounted) return;

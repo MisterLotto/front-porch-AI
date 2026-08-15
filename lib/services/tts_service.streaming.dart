@@ -317,10 +317,13 @@ extension TtsServiceStreamingAndHeadless on TtsService {
 
       if (wavFiles.isEmpty) return null;
 
-      // ElevenLabs returns a single MP3 — skip WAV concatenation.
-      if (_storageService.ttsEngine == 'elevenlabs' && wavFiles.length == 1) {
-        return wavFiles.first;
-      }
+      // A lone part IS the result — nothing to concatenate (and ElevenLabs
+      // returns a single MP3, which must not be run through WAV stitching
+      // anyway). Returning early is what keeps _cleanupFiles from deleting it:
+      // concatenateWavFiles hands back wavFiles.first by identity for a
+      // one-element list, so cleaning up here would delete the very file we
+      // return. Same guard the buffered speak() path already carries.
+      if (wavFiles.length == 1) return wavFiles.first;
 
       final combinedWav = await WavUtils.concatenateWavFiles(wavFiles);
       _cleanupFiles(wavFiles);

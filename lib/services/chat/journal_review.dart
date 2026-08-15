@@ -217,10 +217,18 @@ class JournalReview {
     for (final owner in batch.owners) {
       await applyOwnerProposals(batch.sessionId, owner);
     }
-    if (batch.recap != null && batch.recapAccepted) setRecap(batch.recap!);
-    setCursor(batch.cursorTarget);
     _pending = null;
-    await onSaveChat();
+    // Re-check the session AFTER those awaits (embedMissing alone vectors one
+    // card at a time and can run for seconds). The card writes above are
+    // session-addressed and safe either way, but setRecap/setCursor are the
+    // god's LIVE scalars and onSaveChat stamps them onto whatever chat is open
+    // now — so a switch mid-apply would write this chat's "Where we are" into
+    // another one. Leaving the cursor put simply re-proposes the window later.
+    if (getSessionId() == batch.sessionId) {
+      if (batch.recap != null && batch.recapAccepted) setRecap(batch.recap!);
+      setCursor(batch.cursorTarget);
+      await onSaveChat();
+    }
     onNotify();
     debugPrint('[Journal] ✓ Review applied (${batch.totalProposals} proposal(s))');
   }

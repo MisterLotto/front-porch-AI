@@ -95,6 +95,21 @@ class GeneralTab extends StatelessWidget {
     );
   }
 
+  /// A built-in system-prompt preset. It MUST move the visible field as well as
+  /// storage: the controller belongs to the settings page, so a notify-driven
+  /// rebuild never touches its text — writing storage alone left the old prompt
+  /// on screen and the next keystroke saved that stale text back over the
+  /// preset. (The saved-prompt dropdown above does the same two-step.)
+  Widget _presetChip(String label, String prompt, StorageService storage) {
+    return ActionChip(
+      label: Text(label),
+      onPressed: () {
+        storage.setSystemPrompt(prompt);
+        systemPromptController.text = prompt;
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final storageService = Provider.of<StorageService>(context);
@@ -392,23 +407,20 @@ class GeneralTab extends StatelessWidget {
             spacing: 8,
             runSpacing: 4,
             children: [
-              ActionChip(
-                label: const Text('📡 API Default'),
-                onPressed: () => storageService.setSystemPrompt(
-                  defaultApiSystemPrompt,
-                ),
+              _presetChip(
+                '📡 API Default',
+                defaultApiSystemPrompt,
+                storageService,
               ),
-              ActionChip(
-                label: const Text('🖥️ KoboldCPP'),
-                onPressed: () => storageService.setSystemPrompt(
-                  defaultKoboldSystemPrompt,
-                ),
+              _presetChip(
+                '🖥️ KoboldCPP',
+                defaultKoboldSystemPrompt,
+                storageService,
               ),
-              ActionChip(
-                label: const Text('👥 Group Chat'),
-                onPressed: () => storageService.setSystemPrompt(
-                  defaultGroupSystemPrompt,
-                ),
+              _presetChip(
+                '👥 Group Chat',
+                defaultGroupSystemPrompt,
+                storageService,
               ),
             ],
           ),

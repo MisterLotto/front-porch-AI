@@ -27,6 +27,7 @@ import 'package:front_porch_ai/models/models.dart';
 
 // Stage 7: storage decomposition (directories + domain settings; final cleanup complete - shims excised; corrective COMPAT FLAT ACCESSORS bridge re-inserted at ~113 after incomplete 29bbf59d; see block comments + refactoring-guide.md "old API preserved via shim" for current state; long-term pure-dir + *Settings wiring intended). NOTE: file >500 LOC due to bridge (documented exception; do not grow per rule).
 import 'storage/directories.dart';
+import 'storage/root_relocation.dart';
 import 'storage/settings/generation_settings.dart';
 import 'storage/settings/backend_settings.dart';
 import 'storage/settings/ui_settings.dart';
@@ -900,44 +901,30 @@ class StorageService extends ChangeNotifier {
   }
 
   /// Change the root installation directory and relocate all data files.
-  /// Moves KoboldManager/ (DB + characters), chats/, worlds/, and models/
+  /// Moves KoboldManager/ (DB + characters), chats/, worlds/, models/,
+  /// koboldcpp_bin/, groups/ (group member portraits) and custom_backgrounds/
   /// from the old root to the new one. Closes and reopens the database.
-  Future<void> setRootPath(String pathStr) async {
+  ///
+  /// ALL OR NOTHING, and it reports. Every copy runs BEFORE any source is
+  /// deleted, and the root (plus its persisted key) is committed only once all
+  /// of them have landed. A half-move the app then points at is
+  /// indistinguishable from "my whole library vanished": the DB path is
+  /// `<root>/KoboldManager/front_porch.db`, so committing a root whose data
+  /// never arrived opens an empty database while the real one sits under a
+  /// folder the app no longer names.
+  ///
+  /// Returns null on success, or a human-readable reason on refusal — nothing
+  /// was moved and the old root still stands in that case.
+  Future<String?> setRootPath(String pathStr) async {
     final oldRoot = _rootPath;
-    if (oldRoot == pathStr) return; // No-op if same path
+    if (oldRoot == pathStr) return null; // No-op if same path
 
-    // Directories to move from old root to new root
-    final dirsToMove = [
-      'KoboldManager',
-      'chats',
-      'worlds',
-      'models',
-      'koboldcpp_bin',
-    ];
-
-    for (final dirName in dirsToMove) {
-      final oldDir = Directory(path.join(oldRoot ?? '', dirName));
-      final newDir = Directory(path.join(pathStr, dirName));
-      if (await oldDir.exists() && !await newDir.exists()) {
-        try {
-          await newDir.create(recursive: true);
-          await for (final entity in oldDir.list(recursive: false)) {
-            final baseName = path.basename(entity.path);
-            final newPath = path.join(newDir.path, baseName);
-            if (entity is File) {
-              await entity.copy(newPath);
-            } else if (entity is Directory) {
-              await _copyDirectory(entity, Directory(newPath));
-            }
-          }
-          // Clean up old directory after successful copy
-          await oldDir.delete(recursive: true);
-          debugPrint('Relocated $dirName to $pathStr (old deleted)');
-        } catch (e) {
-          debugPrint('Error relocating $dirName: $e');
-        }
-      }
-    }
+    // The move half is a pure leaf (storage/root_relocation.dart): refuse
+    // when the destination already holds data, copy everything BEFORE any
+    // source is deleted, roll back a partial copy. A refusal reason means
+    // nothing moved and the old root still stands.
+    final refusal = await relocateRootDirectories(oldRoot, pathStr);
+    if (refusal != null) return refusal;
 
     _rootPath = pathStr;
     _binDir = Directory(path.join(_rootPath!, 'koboldcpp_bin'));
@@ -949,23 +936,40 @@ class StorageService extends ChangeNotifier {
     await worldsDir.create(recursive: true);
     await charactersDir.create(recursive: true);
     await groupsDir.create(recursive: true);
+    await customBackgroundDir.create(recursive: true);
 
-    notifyListeners();
-  }
-
-  /// Recursively copy a directory and its contents.
-  Future<void> _copyDirectory(Directory source, Directory destination) async {
-    await destination.create(recursive: true);
-    await for (final entity in source.list(recursive: false)) {
-      final baseName = path.basename(entity.path);
-      final newPath = path.join(destination.path, baseName);
-      if (entity is File) {
-        await entity.copy(newPath);
-      } else if (entity is Directory) {
-        await _copyDirectory(entity, Directory(newPath));
+    // Custom chat backgrounds are the one thing under the root that remembers
+    // an ABSOLUTE path (prefs, not the DB), so the files moving is only half
+    // the job — repoint them or every one of them dangles. Rebuilt in place so
+    // the picker keeps its order.
+    if (oldRoot != null) {
+      final backgrounds = customBackgrounds;
+      final moved = backgrounds
+          .where((bg) => path.isWithin(oldRoot, bg['filePath'] ?? ''))
+          .isNotEmpty;
+      if (moved) {
+        for (final bg in backgrounds) {
+          await removeCustomBackground(bg['id'] ?? '');
+        }
+        for (final bg in backgrounds) {
+          final filePath = bg['filePath'] ?? '';
+          await addCustomBackground(
+            bg['id'] ?? '',
+            bg['name'] ?? '',
+            path.isWithin(oldRoot, filePath)
+                ? path.join(pathStr, path.relative(filePath, from: oldRoot))
+                : filePath,
+          );
+        }
       }
     }
+
+    notifyListeners();
+    return null;
   }
+
+  // (Recursive directory copy moved to storage/root_relocation.dart —
+  // copyDirectoryRecursive — with the rest of the move half.)
 
   // (final shim migration cleanup complete IMPL_ID=29bbf59d; all @Deprecated + flat shims excised for tts/stt/image/expression/web/cloud/realism/memory/preset + all flats. Storage is pure directory management (rootPath, dirs, resolveCharacterImage, setRootPath, _copyDirectory, init for dirs + beta/dev override, _initCompleter, _prefs for dir keys only) + public *Settings wiring (late finals for init/single-notifier/beta isolation) only. No _prefs for settings, no notify for settings changes, no flat settings API. Deletion part complete; live post-edit dead grep for old shim symbols in *_service.dart exec =0 outside comments/MD. Corrective COMPAT FLAT ACCESSORS bridge re-inserted post-excision at the COMPAT block; see its header for details + keep in sync with refactoring-guide Stage 7 precedent.)
 }

@@ -18,6 +18,17 @@
 
 part of 'tts_service.dart';
 
+/// Per-instance supersede tickets for [TtsServiceSpeak.speak].
+///
+/// A second Speak while the first is still generating must make the first one
+/// silent — but the shared `_isSpeaking` flag cannot say that, because the
+/// newcomer sets it straight back to true, and the suspended first call then
+/// resumes, plays its own audio over the newcomer's and resets the newcomer's
+/// state on the way out. Ownership therefore needs a monotonic ticket.
+/// Extensions cannot add instance fields, so it lives here, keyed on the
+/// service instance (an [Expando] keeps it per-instance and GC-safe).
+final Expando<int> _speakTickets = Expando<int>('ttsSpeakTicket');
+
 /// Buffered "speak the whole message" pipeline (extracted verbatim from
 /// tts_service.dart, zero behaviour change).
 extension TtsServiceSpeak on TtsService {
@@ -33,6 +44,15 @@ extension TtsServiceSpeak on TtsService {
 
     _lastError = null;
     await stop();
+
+    // Take this utterance's ticket (see [_speakTickets]). `mine()` is the
+    // ownership test every step after an await must use instead of a bare
+    // `_isSpeaking`: false means either the user stopped playback or a newer
+    // Speak took over, and in both cases this call must go quietly.
+    final myTicket = (_speakTickets[this] ?? 0) + 1;
+    _speakTickets[this] = myTicket;
+    bool stillMine() => _speakTickets[this] == myTicket;
+    bool mine() => _isSpeaking && stillMine();
 
     // Resolve voice. A character's own voice deliberately wins over the
     // global one — say so in the log, because "I changed the voice in
@@ -99,9 +119,11 @@ extension TtsServiceSpeak on TtsService {
       } catch (e) {
         print('TTS cache playback error: $e');
       } finally {
-        _isSpeaking = false;
-        _currentMessageId = null;
-        _notify();
+        if (stillMine()) {
+          _isSpeaking = false;
+          _currentMessageId = null;
+          _notify();
+        }
       }
       return;
     }
@@ -131,7 +153,7 @@ extension TtsServiceSpeak on TtsService {
           },
         );
         _isDownloadingModel = false;
-        if (!ready || !_isSpeaking) {
+        if (!ready || !mine()) {
           print('TTS: Kokoro model not ready');
           return;
         }
@@ -204,7 +226,7 @@ extension TtsServiceSpeak on TtsService {
 
           final total = chunks.length;
           for (int i = 0; i < total; i++) {
-            if (!_isSpeaking) break;
+            if (!mine()) break;
 
             final wav = await _piperGenerateWav(voice, chunks[i].text, i, speed);
             if (wav != null) {
@@ -231,10 +253,17 @@ extension TtsServiceSpeak on TtsService {
           }
         }
 
+        // Superseded (or stopped) while generating: leave every shared field
+        // to whoever owns it now, and don't leave the temp audio behind.
+        if (!mine()) {
+          _cleanupFiles(generatedWavs);
+          return;
+        }
+
         _isGenerating = false;
         _notify();
 
-        if (generatedWavs.isNotEmpty && _isSpeaking) {
+        if (generatedWavs.isNotEmpty) {
           File? finalAudio;
 
           if (generatedWavs.length == 1) {
@@ -245,6 +274,12 @@ extension TtsServiceSpeak on TtsService {
           }
 
           if (finalAudio != null) {
+            // Concatenation is awaited — re-check ownership before touching
+            // the shared cache or starting a second player.
+            if (!mine()) {
+              _cleanupFiles([finalAudio]);
+              return;
+            }
             _cachedWav = finalAudio;
             _cachedMessageId = messageId;
             _cachedTextHash = sanitized.hashCode;
@@ -275,7 +310,13 @@ extension TtsServiceSpeak on TtsService {
         _generationProgress = 0.5;
         _notify();
         final wav = await engine.generateAudio(sanitized, voice, speed);
-        if (wav != null && _isSpeaking) {
+        if (!mine()) {
+          // Superseded (or stopped) while the request was out — the progress
+          // bar and every other shared field belong to someone else now.
+          if (wav != null) _cleanupFiles([wav]);
+          return;
+        }
+        if (wav != null) {
           wavFiles.add(wav);
         }
         _generationProgress = 1.0;
@@ -300,7 +341,7 @@ extension TtsServiceSpeak on TtsService {
           batchStart < sentences.length;
           batchStart += maxConcurrency
         ) {
-          if (!_isSpeaking) break;
+          if (!mine()) break;
 
           final batchEnd = (batchStart + maxConcurrency).clamp(
             0,
@@ -314,12 +355,20 @@ extension TtsServiceSpeak on TtsService {
 
           final results = await Future.wait(futures);
 
+          // Superseded (or stopped) while this batch was generating: these
+          // files belong to nobody now, and the collector below is already
+          // the NEW utterance's — submitting into it would corrupt its order.
+          if (!mine()) {
+            _cleanupFiles(results.whereType<File>().toList());
+            break;
+          }
+
           bool failed = false;
           for (int j = 0; j < results.length; j++) {
             final sentenceIndex = batchStart + j;
             final file = results[j];
 
-            if (file == null || !_isSpeaking) {
+            if (file == null) {
               failed = true;
               break;
             }
@@ -340,7 +389,7 @@ extension TtsServiceSpeak on TtsService {
       // wavFiles should be in correct order thanks to OrderedAudioCollector
       final validWavFiles = wavFiles.whereType<File>().toList();
 
-      if (!_isSpeaking || validWavFiles.isEmpty) {
+      if (!mine() || validWavFiles.isEmpty) {
         _cleanupFiles(validWavFiles);
         return;
       }
@@ -350,16 +399,19 @@ extension TtsServiceSpeak on TtsService {
       _notify();
 
       File? audioFile;
-      if (_storageService.ttsEngine == 'elevenlabs' &&
-          validWavFiles.length == 1) {
-        // ElevenLabs returns a single MP3 — play directly, no WAV concat needed.
+      if (validWavFiles.length == 1) {
+        // One file is all there is to play: concatenateWavFiles hands back
+        // that very File for a single-element list, so the cleanup in the
+        // other branch would delete the audio we are about to play (and the
+        // one we are about to cache). ElevenLabs also lands here — its single
+        // response is an MP3 that must never go through WAV concatenation.
         audioFile = validWavFiles.first;
       } else {
         audioFile = await WavUtils.concatenateWavFiles(validWavFiles);
         _cleanupFiles(validWavFiles);
       }
 
-      if (audioFile != null && _isSpeaking) {
+      if (audioFile != null && mine()) {
         // Cache the audio for instant replay
         _cachedWav = audioFile;
         _cachedMessageId = messageId;
@@ -372,21 +424,22 @@ extension TtsServiceSpeak on TtsService {
       }
     } on ElevenLabsApiException catch (e) {
       print('TTS ElevenLabs error: $e');
+      // The state reset + notify live in the `finally` below, which runs on
+      // this return too — a second copy here only risked the two drifting.
       _lastError = e.message;
-      _isSpeaking = false;
-      _isGenerating = false;
-      _generationProgress = 0.0;
-      _currentMessageId = null;
-      _notify();
       return;
     } catch (e) {
       print('TTS error: $e');
     } finally {
-      _isSpeaking = false;
-      _isGenerating = false;
-      _generationProgress = 0.0;
-      _currentMessageId = null;
-      _notify();
+      // Only the owner may clear the shared state: a superseded call reaching
+      // here must not switch off the Speak that replaced it.
+      if (stillMine()) {
+        _isSpeaking = false;
+        _isGenerating = false;
+        _generationProgress = 0.0;
+        _currentMessageId = null;
+        _notify();
+      }
     }
   }
 }

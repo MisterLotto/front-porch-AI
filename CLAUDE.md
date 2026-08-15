@@ -377,7 +377,7 @@ When you touch any of the above you **must**: keep 1:1 and group producing equiv
 
 ### Story Pipeline (Porch Stories)
 
-`StoryPipelineService` is created via `ChangeNotifierProxyProvider2` in `main.dart`. The `update` function must NOT return the previous instance early — it must recreate the service with `llmProvider.activeService` each time so backend switches (Kobold ↔ OpenRouter/Nano-GPT) take effect.
+`StoryPipelineService` is created via `ChangeNotifierProxyProvider2` in `main.dart`. The `update` function recreates the service **when — and only when — a binding it froze at construction actually changed**: `llmProvider.activeService` identity (a real Kobold ↔ OpenRouter/Nano-GPT switch) or the live `AppDatabase` (backup restore / storage move). AMENDED 2026-08-15 (1.3 sweep): the old rule ("must NOT return previous early — recreate each time") made every KoboldService stdout line mint a new pipeline and dispose the one a story run was streaming into (overlay vanished, Generate re-enabled, orphan kept writing). oMLX ↔ Remote deliberately does NOT recreate — that switch reconfigures the SAME OpenRouterService in place and the running pipeline picks it up. The WebServerHost proxy re-points its pipeline reference whenever the story proxy mints a new one.
 
 ## The Stoop (Community Character Hub) & Its Backend
 

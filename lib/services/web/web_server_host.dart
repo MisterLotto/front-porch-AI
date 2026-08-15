@@ -176,8 +176,44 @@ class WebServerHost extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Injected from main.dart (mirrors the legacy setX wiring style).
-  void setDatabase(AppDatabase db) => _db = db;
+  /// Injected from main.dart (mirrors the legacy setX wiring style), and again
+  /// by `reopenAndRebindDatabase` after a database SWAP (backup restore,
+  /// storage-root move, beta stable-DB import) — which CLOSES the old instance.
+  ///
+  /// Swapping the field alone was not enough: `start()` copies the handle into
+  /// the shelf handler, every facade and the memoized [AuthService], so a live
+  /// server kept querying the closed database and 500'd on every request —
+  /// including login, because the memoized auth survived even a manual
+  /// stop/start, leaving a full app restart as the only cure. So drop the
+  /// memoized auth and bounce a running server onto the new handle.
+  void setDatabase(AppDatabase db) {
+    if (identical(_db, db)) return;
+    _db = db;
+    _auth = null;
+    if (!isRunning) return;
+    final port = _server!.port;
+    // The rebind callers are synchronous, so the bounce runs detached. A
+    // failure is reported the same way a failed Settings start is, rather than
+    // swallowed: the server ends up stopped with lastStartError set.
+    unawaited(() async {
+      try {
+        await stop();
+        await start(port);
+        _lastStartError = null;
+        _lastStartPortConflict = false;
+      } catch (e) {
+        _lastStartError = describeStartFailure(e, port);
+        _lastStartPortConflict = e is SocketException;
+        debugPrint(
+          '[WebServerHost] Restart after the database was swapped failed: $e',
+        );
+        try {
+          await stop();
+        } catch (_) {}
+        notifyListeners();
+      }
+    }());
+  }
 
   /// Chat service for live token streaming over the WebSocket hub.
   void setChatService(ChatService chatService) => _chatService = chatService;
@@ -728,7 +764,25 @@ class WebServerHost extends ChangeNotifier {
 
   Future<void> stop() async {
     final server = _server;
-    if (server == null) return;
+    // `start()` attaches every listener, the 1s heartbeat timer, the StreamHub
+    // (which subscribes to the token stream in its constructor) and the
+    // TunnelManager BEFORE it binds — so a failed bind (EADDRINUSE, the
+    // stable+nightly case describeStartFailure is written for) leaves all of
+    // that attached with `_server` still null. `startSafely`'s catch calls
+    // stop() to tear the half-started state down, so returning early on a null
+    // server leaked one full set of listeners/timer/hub per failed attempt,
+    // permanently (the next attempt overwrites the fields without detaching).
+    // Bail only when there is genuinely nothing left to release.
+    final wired =
+        _streamHub != null ||
+        _tunnelManager != null ||
+        _realismListener != null ||
+        _genStatusListener != null ||
+        _imageProgressListener != null ||
+        _libraryListener != null ||
+        _genStatusTicker != null ||
+        _libraryDebounce != null;
+    if (server == null && !wired) return;
     _server = null;
     if (_realismListener != null) {
       _chatService?.removeListener(_realismListener!);
@@ -760,7 +814,7 @@ class WebServerHost extends ChangeNotifier {
     _streamHub = null;
     await _tunnelManager?.dispose();
     _tunnelManager = null;
-    await server.close(force: true);
+    await server?.close(force: true);
     _lanIp = null;
     _hasActiveClient = false;
     _connectedClientIp = null;

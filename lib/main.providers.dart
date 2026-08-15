@@ -22,6 +22,101 @@ part of 'main.dart';
 /// create/update only resolves providers ABOVE it in this list. [db] and
 /// [needsMigration] arrive from _openDatabaseGuarded in main().
 Widget _buildRootWidget(AppDatabase db, bool needsMigration) {
+  // ── Re-entry guards for the two proxies whose `update` is NOT idempotent ──
+  //
+  // A ProxyProvider's `update` runs on EVERY notification from any dependency,
+  // not just when that dependency changes identity. KoboldService alone
+  // notifies per stdout line while the managed backend generates (and again
+  // every 150ms of live progress), and LLMProvider re-broadcasts all of it, so
+  // "once in a while" is really "up to once per frame, forever".
+  //
+  // These are function-local, so hot restart (a fresh _buildRootWidget call)
+  // starts clean.
+
+  // ChatService.setLLMProvider APPENDS a listener with no removeListener, so
+  // re-wiring the same pair leaks one callback per frame — and LLMProvider then
+  // dispatches all of them on every Kobold log line.
+  ChatService? wiredChat;
+  LLMProvider? wiredChatLlm;
+  void wireChatToLlmProvider(ChatService chat, LLMProvider llm) {
+    if (identical(wiredChat, chat) && identical(wiredChatLlm, llm)) return;
+    wiredChat = chat;
+    wiredChatLlm = llm;
+    chat.setLLMProvider(llm);
+    // Lets the live-status sources (oMLX poller) gate their polling on an
+    // actual generation being in flight.
+    llm.isGenerationActive = () => chat.isGenerating;
+  }
+
+  // StoryPipelineService binds its LLMService and AppDatabase at construction,
+  // so it has to be rebuilt when either changes — but ONLY then. Rebuilding on
+  // an unrelated notification disposes the instance a story run is streaming
+  // into: the pages' Consumer2 rebinds to a fresh instance whose isRunning is
+  // false, so the progress overlay vanishes and Generate re-enables while the
+  // orphan keeps writing.
+  LLMService? storyLlmService;
+  AppDatabase? storyDb;
+  StoryPipelineService buildStoryPipeline(
+    BuildContext context,
+    LLMProvider llmProvider,
+    StorageService storage,
+  ) {
+    // The live handle, never the startup snapshot this closure captured:
+    // reopenAndRebindDatabase closes that one (backup restore, storage move,
+    // stable-DB import) and every query against it then throws.
+    final liveDb = AppDatabase.current ?? db;
+    storyLlmService = llmProvider.activeService;
+    storyDb = liveDb;
+    return StoryPipelineService(
+      Provider.of<StoryRepository>(context, listen: false),
+      llmProvider.activeService,
+      MemoryService(EmbeddingService(storage), storage, liveDb),
+      liveDb,
+    );
+  }
+
+  // The web relay with every collaborator wired. A named function rather than
+  // an inline `create:` so the proxy's `update` can fall back to it instead of
+  // ever handing out a half-wired host.
+  WebServerHost createWebServerHost(BuildContext context) {
+    final host = WebServerHost(
+      Provider.of<StorageService>(context, listen: false),
+    );
+    host.setDatabase(db);
+    host.setChatService(Provider.of<ChatService>(context, listen: false));
+    host.setKoboldService(Provider.of<KoboldService>(context, listen: false));
+    host.setCharacterRepository(
+      Provider.of<CharacterRepository>(context, listen: false),
+    );
+    host.setGroupChatRepository(
+      Provider.of<GroupChatRepository>(context, listen: false),
+    );
+    host.setLlmProvider(Provider.of<LLMProvider>(context, listen: false));
+    host.setFolderService(Provider.of<FolderService>(context, listen: false));
+    host.setUserPersonaService(
+      Provider.of<UserPersonaService>(context, listen: false),
+    );
+    host.setWorldRepository(
+      Provider.of<WorldRepository>(context, listen: false),
+    );
+    host.setModelManager(Provider.of<ModelManager>(context, listen: false));
+    host.setHardwareService(
+      Provider.of<HardwareService>(context, listen: false),
+    );
+    host.setImageGenService(
+      Provider.of<ImageGenService>(context, listen: false),
+    );
+    host.setTtsService(Provider.of<TtsService>(context, listen: false));
+    host.setSttService(Provider.of<SttService>(context, listen: false));
+    host.setStoryRepository(
+      Provider.of<StoryRepository>(context, listen: false),
+    );
+    host.setStoryPipelineService(
+      Provider.of<StoryPipelineService>(context, listen: false),
+    );
+    return host;
+  }
+
   // ProviderScope: Riverpod root for new-code state (CLAUDE.md Riverpod
   // migration; first consumer: Living Time weather). Wraps the existing
   // Provider tree without touching service init order — legacy providers
@@ -179,15 +274,10 @@ Widget _buildRootWidget(AppDatabase db, bool needsMigration) {
             );
             // Wire LLMProvider and CharacterRepository immediately at creation time
             chatService.setDatabase(db);
-            final llmProviderForChat = Provider.of<LLMProvider>(
-              context,
-              listen: false,
+            wireChatToLlmProvider(
+              chatService,
+              Provider.of<LLMProvider>(context, listen: false),
             );
-            chatService.setLLMProvider(llmProviderForChat);
-            // Lets the live-status sources (oMLX poller) gate their polling
-            // on an actual generation being in flight.
-            llmProviderForChat.isGenerationActive = () =>
-                chatService.isGenerating;
             chatService.setCharacterRepository(
               Provider.of<CharacterRepository>(context, listen: false),
             );
@@ -212,13 +302,10 @@ Widget _buildRootWidget(AppDatabase db, bool needsMigration) {
           },
           update: (context, kobold, persona, storage, worldRepo, previous) {
             if (previous != null) {
-              final llmProviderForChat = Provider.of<LLMProvider>(
-                context,
-                listen: false,
+              wireChatToLlmProvider(
+                previous,
+                Provider.of<LLMProvider>(context, listen: false),
               );
-              previous.setLLMProvider(llmProviderForChat);
-              llmProviderForChat.isGenerationActive = () =>
-                  previous.isGenerating;
               previous.setCharacterRepository(
                 Provider.of<CharacterRepository>(context, listen: false),
               );
@@ -239,13 +326,10 @@ Widget _buildRootWidget(AppDatabase db, bool needsMigration) {
               worldRepo,
             );
             chatService.setDatabase(db);
-            final llmProviderLate = Provider.of<LLMProvider>(
-              context,
-              listen: false,
+            wireChatToLlmProvider(
+              chatService,
+              Provider.of<LLMProvider>(context, listen: false),
             );
-            chatService.setLLMProvider(llmProviderLate);
-            llmProviderLate.isGenerationActive = () =>
-                chatService.isGenerating;
             chatService.setCharacterRepository(
               Provider.of<CharacterRepository>(context, listen: false),
             );
@@ -338,97 +422,41 @@ Widget _buildRootWidget(AppDatabase db, bool needsMigration) {
           StorageService,
           StoryPipelineService
         >(
-          create: (context) {
-            final llmProvider = Provider.of<LLMProvider>(
-              context,
-              listen: false,
-            );
-            final storage = Provider.of<StorageService>(context, listen: false);
-            final memoryService = MemoryService(
-              EmbeddingService(storage),
-              storage,
-              db,
-            );
-            final repo = Provider.of<StoryRepository>(context, listen: false);
-            return StoryPipelineService(
-              repo,
-              llmProvider.activeService,
-              memoryService,
-              db,
-            );
-          },
+          create: (context) => buildStoryPipeline(
+            context,
+            Provider.of<LLMProvider>(context, listen: false),
+            Provider.of<StorageService>(context, listen: false),
+          ),
           update: (context, llmProvider, storage, previous) {
-            final memoryService = MemoryService(
-              EmbeddingService(storage),
-              storage,
-              db,
-            );
-            final repo = Provider.of<StoryRepository>(context, listen: false);
-            return StoryPipelineService(
-              repo,
-              llmProvider.activeService,
-              memoryService,
-              db,
-            );
+            // Rebuild ONLY when something the service froze at construction
+            // actually changed: the backend the user switched to, or the
+            // database a restore/storage-move swapped in. Any other
+            // notification must keep the running instance — replacing it
+            // mid-run leaves the story pages bound to a fresh service whose
+            // isRunning is false (overlay gone, Generate re-enabled) while the
+            // orphaned one keeps streaming into the project.
+            if (previous != null &&
+                identical(storyLlmService, llmProvider.activeService) &&
+                identical(storyDb, AppDatabase.current ?? db)) {
+              return previous;
+            }
+            return buildStoryPipeline(context, llmProvider, storage);
           },
         ),
         // Web server: the React PWA + Dart shelf rewrite (lib/services/web).
         // Started on launch (_autoStartWebServer) or via the Settings toggle.
         // Collaborators are wired via setX. ChatService's own ImageGenService
         // (Scene Guest portraits) is wired in the post-frame block below.
-        ChangeNotifierProvider<WebServerHost>(
-          create: (context) {
-            final host = WebServerHost(
-              Provider.of<StorageService>(context, listen: false),
-            );
-            host.setDatabase(db);
-            host.setChatService(
-              Provider.of<ChatService>(context, listen: false),
-            );
-            host.setKoboldService(
-              Provider.of<KoboldService>(context, listen: false),
-            );
-            host.setCharacterRepository(
-              Provider.of<CharacterRepository>(context, listen: false),
-            );
-            host.setGroupChatRepository(
-              Provider.of<GroupChatRepository>(context, listen: false),
-            );
-            host.setLlmProvider(
-              Provider.of<LLMProvider>(context, listen: false),
-            );
-            host.setFolderService(
-              Provider.of<FolderService>(context, listen: false),
-            );
-            host.setUserPersonaService(
-              Provider.of<UserPersonaService>(context, listen: false),
-            );
-            host.setWorldRepository(
-              Provider.of<WorldRepository>(context, listen: false),
-            );
-            host.setModelManager(
-              Provider.of<ModelManager>(context, listen: false),
-            );
-            host.setHardwareService(
-              Provider.of<HardwareService>(context, listen: false),
-            );
-            host.setImageGenService(
-              Provider.of<ImageGenService>(context, listen: false),
-            );
-            host.setTtsService(
-              Provider.of<TtsService>(context, listen: false),
-            );
-            host.setSttService(
-              Provider.of<SttService>(context, listen: false),
-            );
-            host.setStoryRepository(
-              Provider.of<StoryRepository>(context, listen: false),
-            );
-            host.setStoryPipelineService(
-              Provider.of<StoryPipelineService>(context, listen: false),
-            );
-            return host;
-          },
+        ChangeNotifierProxyProvider<StoryPipelineService, WebServerHost>(
+          create: createWebServerHost,
+          // The Story proxy above mints a NEW pipeline when the user switches
+          // backends, so the relay must be re-pointed or the PWA keeps
+          // generating stories on the backend the app happened to launch with
+          // (and on a disposed service). Every other collaborator here is a
+          // single instance for the app's lifetime; this one is not.
+          update: (context, storyPipeline, previous) =>
+              (previous ?? createWebServerHost(context))
+                ..setStoryPipelineService(storyPipeline),
         ),
       ],
       child: const MyApp(),

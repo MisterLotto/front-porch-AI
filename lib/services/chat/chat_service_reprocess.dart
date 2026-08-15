@@ -555,7 +555,20 @@ extension ChatServiceReprocess on ChatService {
           // every swipe it carried. It is the same hazard the backend gate
           // further up already guards ("aborting after removeLast would drop
           // the popped reply"); the cancel path just never learned it.
+          //
+          // Putting the TEXT back is only half of it. Everything above already
+          // un-applied the accepted turn — bond/trust/arousal reverted, needs
+          // restored from needs_pre_turn_vector, the baseline pulled from the
+          // PREVIOUS accepted message, the stance rewound, pockets rolled to
+          // the pre-turn record — and then charged a fresh decay tick. Bailing
+          // here without the same restore the two success paths run (see
+          // `if (regenGuest == null) _restoreRealismStateForSpeaker(lastMsg)`
+          // below) left the message displaying chips the sidebar and the
+          // session row no longer agreed with, and `_saveChat()` persisted the
+          // wrong scalars. 1:1-only branch, host-only (guests never get here).
           _messages.add(lastMsg);
+          _restoreRealismStateForSpeaker(lastMsg);
+          _restorePocketsFromStamp(lastMsg, after: true);
           _realismEvalCancelled = false;
           _evalChunkTimer?.cancel();
           _evalChunkTimer = null;
@@ -598,6 +611,10 @@ extension ChatServiceReprocess on ChatService {
         // this local is the only place the message still exists.
         if (_realismEvalCancelled) {
           _messages.add(lastMsg);
+          // Same put-back contract as the cancel point above: the message
+          // returns WITH the state it was accepted under.
+          _restoreRealismStateForSpeaker(lastMsg);
+          _restorePocketsFromStamp(lastMsg, after: true);
           _realismEvalCancelled = false;
           notifyListeners();
           await _saveChat();
@@ -645,7 +662,15 @@ extension ChatServiceReprocess on ChatService {
         );
         if (ghostIdx >= 0) _messages.removeAt(ghostIdx);
         _messages.insert(preGenLen, lastMsg);
-        if (regenGuest == null) _restoreRealismStateForSpeaker(lastMsg);
+        if (regenGuest == null) {
+          _restoreRealismStateForSpeaker(lastMsg);
+          // The pre-generation rewind above rolled pockets to the PRE-turn
+          // record; with no new reply the message returns showing its
+          // accepted text, so the pockets must return to the accepted
+          // (post-turn) record too — same put-back contract as the two
+          // realism-cancel points earlier in this method.
+          _restorePocketsFromStamp(lastMsg, after: true);
+        }
         notifyListeners();
         // Full rewrite: the abort inside _generateResponse already persisted
         // the shortened transcript, so an upsert alone cannot heal the row.

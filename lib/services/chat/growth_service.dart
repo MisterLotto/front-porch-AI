@@ -231,6 +231,11 @@ class GrowthService {
       }
       final window = messages.sublist(start);
       if (window.isEmpty) return;
+      // Snapshot-derived cursor target — Journal twin (journal_maintenance).
+      // `messages` is the god's live `_messages`; a turn taken while this pass
+      // awaits its LLM call would otherwise land BEHIND the advanced cursor
+      // and never be read for a ring, with no path that rewinds it.
+      final cursorTarget = start + window.length;
 
       final owners = resolvePassOwners(
         window: window,
@@ -333,12 +338,12 @@ class GrowthService {
           review.park(
             GrowthReviewBatch(
               sessionId: sessionToken,
-              cursorTarget: messages.length,
+              cursorTarget: cursorTarget,
               owners: parked,
             ),
           );
         } else {
-          await store.setCursor(sessionToken, messages.length);
+          await store.setCursor(sessionToken, cursorTarget);
         }
         await refreshCache();
       }

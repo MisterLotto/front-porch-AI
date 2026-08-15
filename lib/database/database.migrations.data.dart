@@ -12,14 +12,19 @@ extension _AppDatabaseDataMigrations on AppDatabase {
   /// table (phase 1).
   ///
   /// **Re-run policy:** schema pieces (ALTER + CREATE IF NOT EXISTS) are
-  /// tolerant of a second pass. **Data mutations are single-run** — they fire
-  /// only when [schemaVersion] advances past 39→40. Do not call this as a
-  /// generic repair: (1) `inject_description = 0` would clobber user toggles
-  /// on a second pass; (2) `groups.world_ids` is rewritten in place (original
-  /// name lists live only in the pre-migration backup — not preserved in the
-  /// live DB for re-run inspection); (3) chat_worlds inserts use
-  /// INSERT OR IGNORE so links are mostly idempotent, but the group rewrite
-  /// is not reversible without the backup.
+  /// tolerant of a second pass. The destructive **data mutations are gated on
+  /// `columnsAddedNow`** — i.e. they fire only on the pass that actually
+  /// introduced the v40 columns. The ladder's `if (from < 40)` is NOT enough
+  /// on its own: drift rewrites user_version even when an OLDER binary opens a
+  /// newer DB (rollback / dual-run — see the same note on the v37 step), so
+  /// this whole method can legally re-enter with `from = 39` against a
+  /// database that was migrated months ago. Without the gate: (1)
+  /// `inject_description = 0` clobbers every world's user toggle, silently
+  /// dropping place descriptions out of the prompt; (2) `groups.world_ids` is
+  /// rewritten in place and drops refs that no longer resolve (original name
+  /// lists live only in the pre-migration backup — not preserved in the live
+  /// DB for re-run inspection); (3) the chat_worlds seed resurrects world
+  /// links the user had since removed.
   Future<void> _migrateLivingWorldsV40() async {
     try {
       await _createPreRepairBackup();
@@ -27,7 +32,10 @@ extension _AppDatabaseDataMigrations on AppDatabase {
       debugPrint('[DB] v40: pre-migration backup skipped: $e');
     }
 
-    // worlds columns (re-runnable)
+    // worlds columns (re-runnable). A successful ALTER is the ONLY honest
+    // signal that this pass is the real 39→40 upgrade: once the column exists,
+    // its value is the user's, not the migration's, and must not be rewritten.
+    var columnsAddedNow = false;
     for (final def in [
       'cover_image TEXT',
       'format_version INTEGER NOT NULL DEFAULT 1',
@@ -41,6 +49,7 @@ extension _AppDatabaseDataMigrations on AppDatabase {
       try {
         await customStatement('ALTER TABLE worlds ADD COLUMN $def');
         debugPrint('[DB] v40: added worlds.$col');
+        if (col == 'inject_description') columnsAddedNow = true;
       } catch (_) {
         // already present (re-run / dual-version)
       }
@@ -74,13 +83,16 @@ extension _AppDatabaseDataMigrations on AppDatabase {
     );
 
     // Migrated library worlds: descriptions were labels → don't inject.
-    // Single UPDATE (one-shot with schema 39→40 only — not re-run safe).
-    try {
-      await customStatement(
-        'UPDATE worlds SET inject_description = 0, format_version = 1',
-      );
-    } catch (e) {
-      debugPrint('[DB] v40: inject_description defaulting failed: $e');
+    // Unconditional UPDATE, so it may ONLY run on the pass that created the
+    // column — on a re-entry these are the user's own toggles.
+    if (columnsAddedNow) {
+      try {
+        await customStatement(
+          'UPDATE worlds SET inject_description = 0, format_version = 1',
+        );
+      } catch (e) {
+        debugPrint('[DB] v40: inject_description defaulting failed: $e');
+      }
     }
 
     // Backfill linked_character_id from linked_character_name.
@@ -112,7 +124,16 @@ extension _AppDatabaseDataMigrations on AppDatabase {
 
     // Name→UUID for groups.world_ids + seed chat_worlds for existing sessions.
     // Rewrites groups.world_ids in place — pre-migration name lists survive
-    // only in the forced backup file, not as a re-runnable live snapshot.
+    // only in the forced backup file, not as a re-runnable live snapshot. On a
+    // re-entry the refs are already UUIDs, so a second pass can only drop the
+    // ones that stopped resolving and re-seed chat links the user removed.
+    if (!columnsAddedNow) {
+      debugPrint(
+        '[DB] v40: worlds columns already present — skipping the one-shot '
+        'data migration (re-run after a version rollback)',
+      );
+      return;
+    }
     try {
       final worldRows = await customSelect(
         'SELECT id, name FROM worlds WHERE deleted_at IS NULL',

@@ -179,6 +179,12 @@ extension ChatServiceChatPackage on ChatService {
 
     var full = kind == FpchatPayloadKind.fpaiTimeline && fpai != null;
     String? warning;
+    // Set when a 1:1 package is restored onto a DIFFERENT card and the user
+    // (or AI Enhance's copy-chats, which always answers "continue") takes the
+    // full restore: every owner-keyed row must move to the LIVE card's
+    // stableGroupId, or the diary, rings and quests land under an id no reader
+    // ever asks for. Guest-owned rows keep their own id.
+    String? ownerRemapFrom;
 
     if (full) {
       final stampV = (fpai['stamp_version'] as num?)?.toInt() ?? 0;
@@ -244,6 +250,9 @@ extension ChatServiceChatPackage on ChatService {
                 'Package was exported for "$pkgName" but active card is '
                 '"${_activeCharacter!.name}". Restoring stamps anyway.';
           }
+          if (full && pkgId.isNotEmpty && pkgId != activeId) {
+            ownerRemapFrom = pkgId;
+          }
         }
       }
     }
@@ -279,20 +288,31 @@ extension ChatServiceChatPackage on ChatService {
       } else if (_messages.isNotEmpty) {
         await _restoreRealismStateWalkingBack(fromIndex: _messages.length - 1);
       }
+      final remapTo = ownerRemapFrom == null
+          ? null
+          : _getCharacterIdFromCard(_activeCharacter!);
       // Journal cards (Phase 1)
       final journal = fpai['journal'] as List?;
       if (journal != null) {
-        await _importJournalCardsFromPackage(journal);
+        await _importJournalCardsFromPackage(
+          _rekeyPackageOwners(journal, ownerRemapFrom, remapTo),
+        );
       }
       // Growth rings + objectives (Phase 2)
       if (fpai['growth'] is Map) {
-        await _importGrowthFromPackage(
-          Map<String, dynamic>.from(fpai['growth'] as Map),
+        final growth = Map<String, dynamic>.from(fpai['growth'] as Map);
+        growth['rings'] = _rekeyPackageOwners(
+          growth['rings'] as List? ?? const [],
+          ownerRemapFrom,
+          remapTo,
         );
+        await _importGrowthFromPackage(growth);
       }
       final objectives = fpai['objectives'] as List?;
       if (objectives != null) {
-        await _importObjectivesFromPackage(objectives);
+        await _importObjectivesFromPackage(
+          _rekeyPackageOwners(objectives, ownerRemapFrom, remapTo),
+        );
       }
     } else {
       // Transcript-only: journal cursor caught up, blank memory (no thrash).
@@ -348,6 +368,26 @@ extension ChatServiceChatPackage on ChatService {
       md['image_path'] = dest;
       m.activeMetadata = md;
     }
+  }
+
+  /// Re-stamp `character_id` on package rows owned by [from] so they land under
+  /// the live card [to]. Returns [rows] untouched when there is nothing to
+  /// remap (same card — the common case — or a group package). Rows owned by
+  /// anyone else (scene guests) pass through verbatim.
+  List<dynamic> _rekeyPackageOwners(
+    List<dynamic> rows,
+    String? from,
+    String? to,
+  ) {
+    if (from == null || to == null || from == to) return rows;
+    return [
+      for (final r in rows)
+        if (r is Map &&
+            (r['character_id'] as String? ?? '').trim() == from)
+          {...Map<String, dynamic>.from(r), 'character_id': to}
+        else
+          r,
+    ];
   }
 
   Future<void> _importJournalCardsFromPackage(List<dynamic> journal) async {

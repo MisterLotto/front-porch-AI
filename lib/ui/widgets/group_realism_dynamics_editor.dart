@@ -12,6 +12,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'package:front_porch_ai/services/chat/chat.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/group_member_realism_editor.dart';
 import 'package:front_porch_ai/ui/widgets/relationship_scale.dart';
@@ -78,15 +79,12 @@ class _GroupRealismDynamicsEditorState
   String? _storyStartDate;
   String? _storyStartTime;
 
-  static const _timeOptions = [
-    'dawn',
-    'morning',
-    'noon',
-    'afternoon',
-    'evening',
-    'night',
-    'late night',
-  ];
+  // The offered periods ARE [StoryClock.periods] — the wire format the seed is
+  // stored in and the only list `representativeTime` knows. This picker used to
+  // offer 'noon' and 'late night', which both silently seeded 09:00 morning;
+  // old blobs still carry them, so map each onto the period it plainly meant
+  // rather than re-emitting a string the clock throws away.
+  static const _legacyPeriods = {'noon': 'late_morning', 'late night': 'night'};
 
   @override
   void initState() {
@@ -139,7 +137,9 @@ class _GroupRealismDynamicsEditorState
       widget.initialBaselineJson,
     );
     if (seed != null) {
-      _timeOfDay = seed.timeOfDay;
+      _timeOfDay = StoryClock.periods.contains(seed.timeOfDay)
+          ? seed.timeOfDay
+          : (_legacyPeriods[seed.timeOfDay] ?? 'morning');
       _dayCount = seed.dayCount;
       _storyStartDate = seed.storyStartDate;
       _storyStartTime = seed.storyStartTime;
@@ -270,13 +270,14 @@ class _GroupRealismDynamicsEditorState
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  initialValue: _timeOptions.contains(_timeOfDay)
+                  initialValue: StoryClock.periods.contains(_timeOfDay)
                       ? _timeOfDay
                       : 'morning',
                   decoration: const InputDecoration(labelText: 'Time of day'),
-                  items: _timeOptions
-                      .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                      .toList(),
+                  items: [
+                    for (final t in StoryClock.periods)
+                      DropdownMenuItem(value: t, child: Text(t.replaceAll('_', ' '))),
+                  ],
                   onChanged: (v) {
                     if (v == null) return;
                     setState(() => _timeOfDay = v);

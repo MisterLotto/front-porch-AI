@@ -88,14 +88,20 @@ ${nextBeat != null ? '## Next Beat Preview (end just before this)\n${nextBeat.de
 
 Write the prose now. Return ONLY the prose text, no commentary.''';
 
-      final draft = await _callLLM(
-        drafterPrompt,
-        maxLength: 1024,
-        stage: StoryStageParams.prose,
-      );
+      // Reasoning models leak <think> blocks into the content channel (the
+      // prompt only *asks* them not to), and this text is stored as the
+      // beat's prose — shown in the reader, exported, and fed back into the
+      // Editor prompt. Strip it here exactly like the whole-act writer does.
+      final draft = StoryJson.stripThinkTags(
+        await _callLLM(
+          drafterPrompt,
+          maxLength: 1024,
+          stage: StoryStageParams.prose,
+        ),
+      ).trim();
 
       // Store draft
-      project.prose[bId] = BeatProse(draft: draft.trim());
+      project.prose[bId] = BeatProse(draft: draft);
       _notify();
 
       // Editor pass
@@ -111,19 +117,18 @@ Previous beat text: ${prevBeatText.isNotEmpty ? prevBeatText.substring(0, (prevB
 ${nextBeat != null ? 'Next beat plan: ${nextBeat.description}' : 'This is the final beat.'}
 
 ## Draft to Polish:
-${draft.trim()}
+$draft
 
 Return ONLY the polished prose text.''';
 
-      final edited = await _callLLM(
-        editorPrompt,
-        maxLength: 1024,
-        stage: StoryStageParams.editing,
-      );
-      project.prose[bId] = BeatProse(
-        draft: draft.trim(),
-        final_: edited.trim(),
-      );
+      final edited = StoryJson.stripThinkTags(
+        await _callLLM(
+          editorPrompt,
+          maxLength: 1024,
+          stage: StoryStageParams.editing,
+        ),
+      ).trim();
+      project.prose[bId] = BeatProse(draft: draft, final_: edited);
 
       await _repository.saveProject(project);
       _setStatus('Editor', 'Beat ${beatIndex + 1} complete!');
@@ -289,6 +294,10 @@ Next Beat Plan: ${nextBeat.description}''';
       if (project.prose[bId]?.final_ != null) continue; // Skip already written
 
       await runDraftAndEdit(project, actIndex, sceneIndex, i);
+      // runDraftAndEdit clears _isRunning in its own `finally`, but the scene
+      // is not finished — re-arm so the validator/next-beat stretch still
+      // reads as busy in the UI (same reset as generateFullAct's stages).
+      _isRunning = true;
 
       // Run validator after each beat (except the last)
       if (i < beats.length - 1) {

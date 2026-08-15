@@ -185,7 +185,13 @@ extension RealismEvalOneShot on RealismEvals {
       final objectiveMatch = RegExp(
         r'"proposed_objective"\s*:\s*"([^"]+)"',
       ).firstMatch(textForOneShot);
-      if (objectiveMatch != null) {
+      // Objectives off ⇒ the character does not get to start new quests. Same
+      // gate, same source of truth as the four-call twin in
+      // realism_evals.support.dart — without it, one-shot (the DEFAULT fused
+      // mode on a tool-capable remote backend) kept growing quests behind the
+      // switch's back and fired an unrequested task-generation call.
+      final objectivesOn = getObjectivesEnabled?.call() ?? true;
+      if (objectivesOn && objectiveMatch != null) {
         final newObj = objectiveMatch.group(1)!.trim();
         if (newObj.toLowerCase() != 'none' && newObj.isNotEmpty) {
           // Avoid setting the exact same goal if it's already active

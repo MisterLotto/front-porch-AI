@@ -72,11 +72,6 @@ extension ChatServiceGroupEntry on ChatService {
     _sceneGuest.pendingDetection = null;
     _sceneGuest.offeredOrIgnoredNames.clear();
 
-    // Path B: Load per-character group system prompts from the clean model field
-    _groupCharacterSystemPrompts = Map<String, String>.from(
-      group.characterSystemPrompts,
-    );
-
     if (_characterRepository == null) return;
 
     // Clear 1:1 mode
@@ -226,6 +221,18 @@ extension ChatServiceGroupEntry on ChatService {
         );
       }
     }
+
+    // Path B: per-character group system prompts come from the group row's own
+    // v32 column, and this seed MUST come after the block above: on a fresh
+    // group `_loadGroupRealismStateFromSession(null)` zeroes every per-char
+    // config map and can only refill them from `defaultMemberRealismState`,
+    // which is perChar-only and never carries `characterSystemPrompts`. Seeding
+    // before it meant the wizard's prompts were wiped on entry and the first
+    // `_saveChat` below baked the empty map into the session blob — dead for
+    // the life of the chat. (startNewChat avoids the same trap by not calling
+    // that loader at all; see its group branch.) `addAll`, not assign, so a
+    // legacy blob that did carry entries keeps them.
+    _groupCharacterSystemPrompts.addAll(group.characterSystemPrompts);
 
     // Seed objectives that came from an imported Group Card (one-time)
     await _seedImportedMemberObjectivesIfPresent();

@@ -44,6 +44,11 @@ extension StoryPipelineActs on StoryPipelineService {
           'Generating scenes for "${act.title}"...',
         );
         await runSceneWeaver(project, actIndex);
+        // Every stage clears _isRunning in its own `finally`, but the act is
+        // far from done — the prose phase below is the long part. Without
+        // this re-arm the progress overlay vanishes and every Generate
+        // button re-enables while the act is still being written.
+        _isRunning = true;
       }
 
       final scenes = project.scenes[actIndex] ?? [];
@@ -60,6 +65,7 @@ extension StoryPipelineActs on StoryPipelineService {
             'Planning beats for scene ${sceneIdx + 1}/${scenes.length}...',
           );
           await runBeatDirector(project, actIndex, sceneIdx);
+          _isRunning = true; // same stage-finally reset as above
         }
       }
 

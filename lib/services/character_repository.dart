@@ -248,18 +248,26 @@ class CharacterRepository extends ChangeNotifier {
       final charDir = _storage.charactersDir;
       if (!await charDir.exists()) return 0;
 
-      // Collect all imagePaths currently referenced by loaded characters
-      final referencedPaths = <String>{};
+      // Collect the FILENAMES referenced by loaded characters. Comparing whole
+      // path strings cannot work: referenced paths are built with a literal '/'
+      // (`_resolveImagePath`) while `Directory.list()` returns the platform
+      // separator — on Windows that is '\', so no referenced path ever matched
+      // its own file and every live portrait was classified as an orphan.
+      // Case is folded because Windows/macOS filesystems match names that way;
+      // a near-miss must err toward KEEPING the file.
+      final referencedNames = <String>{};
       for (final c in _characters) {
         if (c.imagePath != null) {
-          referencedPaths.add(c.imagePath!);
+          referencedNames.add(_toBasename(c.imagePath!).toLowerCase());
         }
       }
 
       int deletedCount = 0;
       await for (final entity in charDir.list()) {
         if (entity is File && entity.path.toLowerCase().endsWith('.png')) {
-          if (!referencedPaths.contains(entity.path)) {
+          if (!referencedNames.contains(
+            _toBasename(entity.path).toLowerCase(),
+          )) {
             debugPrint(
               '[Cleanup] Deleting orphaned PNG: ${p.basename(entity.path)}',
             );

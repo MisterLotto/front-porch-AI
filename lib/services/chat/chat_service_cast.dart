@@ -140,6 +140,9 @@ extension ChatServiceCast on ChatService {
     // member instance id, so this never touches another character's rings).
     if (_currentSessionId != null) {
       await _growthStore.deleteAllFor(_currentSessionId!, charId);
+      // Same reasoning for the diary: the removed member's journal cards are
+      // keyed by this instance id, so nothing would ever read them again.
+      await _moveJournalCards(_currentSessionId!, charId, null);
       await _refreshGrowthCache();
     }
   }
@@ -293,6 +296,12 @@ extension ChatServiceCast on ChatService {
         originId,
         chatId: sessionId,
       );
+      // The diary re-keys with everything else. Journal cards (memories, item
+      // placements, promises) are stored under the MEMBER instance id, and the
+      // collapsed 1:1 reads them under originId — without this the survivor
+      // keeps her quests and rings but opens with an empty Journal while the
+      // rows sit unreachable in the very same session.
+      await _moveJournalCards(sessionId, soleId, originId);
       await _db.deleteDataBankEntriesForCharacter(soleId);
     } catch (e) {
       debugPrint('[Cast] state re-key (non-fatal): $e');
@@ -365,6 +374,33 @@ extension ChatServiceCast on ChatService {
     notifyListeners();
     debugPrint('[Cast] collapsed group "${group.name}" → 1:1 with ${origin.name}');
     return true;
+  }
+
+  /// Move one owner's journal cards inside a chat: re-key them to [toCharacterId]
+  /// (cast collapse — the diary follows its owner), or DELETE them when that is
+  /// null (hard member removal — mirrors the growth-ring/objective deletes, so a
+  /// removed member leaves no unreadable rows behind). Row-by-row on purpose:
+  /// a per-owner diary is capped at a few dozen cards, and this keeps the
+  /// re-key on the existing public store/db surface.
+  Future<void> _moveJournalCards(
+    String sessionId,
+    String fromCharacterId,
+    String? toCharacterId,
+  ) async {
+    final cards = await _journalStore.cardsFor(sessionId, fromCharacterId);
+    for (final card in cards) {
+      if (toCharacterId == null) {
+        await _db.deleteJournalCard(card.id);
+      } else {
+        await _db.updateJournalCard(
+          card.id,
+          JournalMemoriesCompanion(
+            characterId: drift.Value(toCharacterId),
+            updatedAt: drift.Value(DateTime.now()),
+          ),
+        );
+      }
+    }
   }
 
   /// Carry the host's full captured 1:1 [state] (taken before the fork switched

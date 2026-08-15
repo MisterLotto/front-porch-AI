@@ -151,7 +151,7 @@ extension _SettingsLaunchControls on _SettingsPageState {
         // Close the current database so the file can be moved.
         await AppDatabase.closeAndReset();
         if (!mounted) return;
-        await Provider.of<StorageService>(
+        final refusal = await Provider.of<StorageService>(
           context,
           listen: false,
         ).setRootPath(selectedDirectory);
@@ -160,9 +160,28 @@ extension _SettingsLaunchControls on _SettingsPageState {
         // DB reference. Shared with the stable-DB import and backup restore —
         // this used to be a hand-maintained second copy that silently missed
         // whatever the other one gained. No image cleanup: the move carries the
-        // same characters, so nothing here is orphaned.
+        // same characters, so nothing here is orphaned. On a REFUSAL the root
+        // is unchanged, but the rebind must still run — the database was
+        // closed above and needs reopening from the old location.
         await reopenAndRebindDatabase(context);
         if (!mounted) return;
+        if (refusal != null) {
+          // The move was refused (destination already has data, or a copy
+          // failed). Nothing moved; say so plainly instead of looking done.
+          await showWarmDialog<void>(
+            context,
+            title: 'Storage folder not changed',
+            icon: Icons.folder_off_outlined,
+            content: Text(refusal),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          );
+          return;
+        }
         // Backend/model discovery is path-dependent, so it is specific to a
         // storage move rather than part of the shared rebind.
         Provider.of<BackendManager>(
@@ -403,6 +422,17 @@ extension _SettingsLaunchControls on _SettingsPageState {
     storage.setUseRocm(_useRocm);
 
     final effectiveModel = presetOwnsModel ? '' : _selectedModelPath!;
+    // Record the GGUF we are actually launching. This scalar is the app's only
+    // memory of the running model — the system-role probe's cache key, the
+    // auto-restart path, "Restart Backend" and the web UI's "loaded" marker all
+    // read it. The Backend tab auto-picks the first model when nothing was
+    // chosen, so without this the user launches model A while every consumer
+    // still points at model B. (A preset that owns its model supplies the path
+    // itself, so that branch leaves the scalar alone — same as the twin in
+    // model_settings_dialog.local_actions.dart.)
+    if (!presetOwnsModel) {
+      await storage.setLastUsedModelPath(_selectedModelPath);
+    }
     await koboldService.startKobold(
       backendManager.backendPath!,
       effectiveModel,

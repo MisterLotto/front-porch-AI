@@ -134,15 +134,37 @@ extension AppDatabaseLibraryQueries on AppDatabase {
     await bumpSyncVersion();
   }
 
-  Future<int> deleteCharacterById(String id) async {
-    // Hard delete: also cascade to sessions and their messages
+  /// Delete everything that hangs off a character's chats, before the
+  /// character row itself goes away.
+  ///
+  /// Both delete paths used to remove only `sessions` + `messages`, which left
+  /// every per-chat derived table behind as a permanent orphan — journal
+  /// cards, growth rings/state, RAG embeddings, objectives, Living Worlds
+  /// links and biome spans. Orphaned embeddings are not inert: a character the
+  /// user lists as an explicit cross-character memory source is deliberately
+  /// NOT session-scoped in `MemoryService.retrieve`, and the embedding row
+  /// carries its own verbatim text — so deleting a character did not stop
+  /// their conversations being injected into someone else's prompt.
+  ///
+  /// [deleteSessionById] is the ONE audited per-chat cascade (audit P2.19);
+  /// routing through it is what keeps the two lists from drifting apart again.
+  Future<void> _cascadeCharacterChildRows(String id) async {
     final charSessions = await (select(
       sessions,
     )..where((s) => s.characterId.equals(id))).get();
     for (final s in charSessions) {
-      await (delete(messages)..where((m) => m.sessionId.equals(s.id))).go();
+      await deleteSessionById(s.id);
     }
-    await (delete(sessions)..where((s) => s.characterId.equals(id))).go();
+    // avatar_images keys on the characters.id UUID (NOT stableGroupId, which
+    // is what objectives/embeddings/data-bank rows use). The gallery files are
+    // deleted from disk by CharacterRepository, so these rows are dead weight
+    // pointing at images that no longer exist.
+    await (delete(avatarImages)..where((a) => a.characterId.equals(id))).go();
+  }
+
+  Future<int> deleteCharacterById(String id) async {
+    // Hard delete: also cascade to sessions and everything scoped to them.
+    await _cascadeCharacterChildRows(id);
     final count = await (delete(
       characters,
     )..where((c) => c.id.equals(id))).go();
@@ -151,8 +173,9 @@ extension AppDatabaseLibraryQueries on AppDatabase {
   }
 
   /// Soft-delete a character (sets deletedAt + updatedAt on the row) while
-  /// performing the same hard cascade delete of its dependent sessions and
-  /// messages. The soft-deleted row remains in the table (with the flag) so
+  /// performing the same hard cascade delete of its dependent chats and
+  /// everything scoped to them ([_cascadeCharacterChildRows]). The
+  /// soft-deleted row remains in the table (with the flag) so
   /// that cloud DB sync + DatabaseMergeService can propagate the deletion
   /// to other devices and prevent resurrection.
   ///
@@ -160,16 +183,10 @@ extension AppDatabaseLibraryQueries on AppDatabase {
   /// (repositories) when cloud sync is active. The hard `deleteCharacterById`
   /// is retained for internal purge/migration use.
   Future<int> softDeleteCharacterById(String id) async {
-    // Hard cascade the child data (sessions + messages). These are not
-    // independently surfaced in the UI and do not need soft-delete flags
-    // for the character deletion propagation use case.
-    final charSessions = await (select(
-      sessions,
-    )..where((s) => s.characterId.equals(id))).get();
-    for (final s in charSessions) {
-      await (delete(messages)..where((m) => m.sessionId.equals(s.id))).go();
-    }
-    await (delete(sessions)..where((s) => s.characterId.equals(id))).go();
+    // Hard cascade the child data (sessions and everything scoped to them).
+    // These are not independently surfaced in the UI and do not need
+    // soft-delete flags for the character deletion propagation use case.
+    await _cascadeCharacterChildRows(id);
 
     // Soft-delete the primary character row so the flag travels with the DB.
     final now = DateTime.now();

@@ -84,6 +84,13 @@ class WebAuthRoutes {
   }
 
   Future<shelf.Response> _setup(shelf.Request request) async {
+    if (!_isFirstPartyRequest(request)) {
+      return JsonResponse.forbidden(
+        'This setup request came from another website, so it was refused. '
+        'Open the Front Porch AI web page yourself and create the account '
+        'there.',
+      );
+    }
     final Map<String, dynamic> body;
     try {
       body = await RequestBody.readJsonMap(request);
@@ -363,6 +370,32 @@ class WebAuthRoutes {
     final conn = request.context['shelf.io.connection_info'];
     if (conn is HttpConnectionInfo) return conn.remoteAddress.address;
     return null;
+  }
+
+  /// Whether a state-changing public POST was really issued by the Front Porch
+  /// page (or a non-browser client), rather than by some other site's page that
+  /// happens to be open in the same browser.
+  ///
+  /// `api/auth/setup` is session-free by necessity AND token-free for a
+  /// loopback peer — and the victim's own browser IS a loopback peer no matter
+  /// which site told it to send the request. Without this check any page the
+  /// user visits while setup is pending could claim the web account with
+  /// credentials of the attacker's choosing (CSRF), which on a LAN/tunnel bind
+  /// hands over the whole library.
+  ///
+  /// `Sec-Fetch-Site` is set by the browser itself and cannot be forged by a
+  /// page, so when it is present it decides alone — that also keeps the Vite
+  /// dev proxy working, which forwards the browser's original `Origin` while
+  /// rewriting `Host`. Older browsers that don't send it fall back to the same
+  /// origin allowlist the WebSocket upgrades use. Clients that send neither
+  /// header (curl, the desktop app, tests) pass, because only a browser can be
+  /// driven cross-site in the first place.
+  bool _isFirstPartyRequest(shelf.Request request) {
+    final site = request.headers['sec-fetch-site'];
+    if (site != null) return site == 'same-origin' || site == 'none';
+    final origin = request.headers['origin'];
+    if (origin == null || origin.isEmpty) return true;
+    return wsOriginAllowed(request, origin);
   }
 
   /// Direct host browser only — see [SetupGate.isDirectLoopbackClient].

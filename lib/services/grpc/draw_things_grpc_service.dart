@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
@@ -129,6 +130,15 @@ class DrawThingsGrpcService {
     }
   }
 
+  /// Resolves the app-wide "-1 = random" seed sentinel the same way the
+  /// ComfyUI path does (comfy_ui_service.dart). Draw Things has no server-side
+  /// random sentinel: -1 used to become the CONSTANT 0, which the FlatBuffer
+  /// then omitted as its schema default — so every render on this backend came
+  /// back byte-identical while the seed field advertised "-1=random".
+  @visibleForTesting
+  static int effectiveSeed(int seed) =>
+      seed == -1 ? Random().nextInt(1 << 31) : seed;
+
   /// Generates an image via the native gRPC client (full DT-native config
   /// passed through).
   /// referenceImageBytes: optional PNG/JPG/etc bytes for img2img.
@@ -163,7 +173,7 @@ class DrawThingsGrpcService {
       'model': model,
       'start_width': width ~/ 64,
       'start_height': height ~/ 64,
-      'seed': (seed == -1 ? 0 : seed),
+      'seed': effectiveSeed(seed),
       'steps': steps,
       'guidance_scale': cfgScale,
       'strength': strength,

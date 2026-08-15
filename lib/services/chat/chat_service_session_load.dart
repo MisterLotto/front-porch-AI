@@ -139,8 +139,10 @@ extension ChatServiceSessionLoad on ChatService {
 
     // Load messages
     // Zero secondary objective flags in loaded path of _loadLast (before callers do _loadActiveObjectives / _loadObjectivesForCurrentSpeaker); incomplete zeroing hygiene.
-    // (loadSession deliberately does NOT zero these — objectives there are
-    // handled by its own callers; keep this trio out of the shared hydrate.)
+    // (loadSession zeroes + reloads this trio itself, right after
+    // _hydrateSessionScalars — it used to leave them alone on the belief that
+    // "its own callers" would, and none did. Keep the trio out of the shared
+    // hydrate: the two paths differ in WHEN the loader runs, not whether.)
     _activeObjectives = [];
     _messagesSinceLastCheck = 0;
     _isCheckingCompletion = false;
@@ -609,6 +611,26 @@ extension ChatServiceSessionLoad on ChatService {
         _loadGroupRealismStateFromSession(session);
       }
       await _hydrateSessionScalars(session);
+
+      // Quests are keyed (character, CHAT) — so switching chats has to reload
+      // them, exactly like the scalars above. Nothing did: `_activeObjectives`
+      // kept the PREVIOUS chat's rows, which the prompt then injected here
+      // while the pre-send completion check wrote (deactivate / task updates,
+      // by primary key) back into that other chat's quests. This chat's own
+      // quests never appeared at all. The stale comment in `_loadLastSession`
+      // — "objectives there are handled by its own callers" — described a
+      // caller that never existed; every call site is bare (history drawer,
+      // home page, delete-session switch, the web facade). Same both-paths
+      // loader block as every other objective entry point; the trio of
+      // per-chat counters is zeroed first, matching `_loadLastSession`.
+      _activeObjectives = [];
+      _messagesSinceLastCheck = 0;
+      _isCheckingCompletion = false;
+      if (_activeGroup != null) {
+        await _loadObjectivesForCurrentSpeaker();
+      } else {
+        await _loadActiveObjectives();
+      }
 
       // (Lorebook scanLatest already ran inside _hydrateMessagesFromRows —
       // the second scan here was pure duplicate work.)

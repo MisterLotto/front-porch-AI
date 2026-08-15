@@ -84,6 +84,17 @@ FrontPorchExtensions frontPorchFromFields(
     dialogueColor: b.dialogueColor,
     actionColor: b.actionColor,
     chatFontFamily: b.chatFontFamily,
+    // Same class of bug as `inventory` below, and missed when that one was
+    // fixed: the web editor has no control for any of these three, so they were
+    // absent from this constructor entirely and silently took their `null`
+    // default on every web save. Editing a description from a phone erased the
+    // authored Story Begins date/time (new chats then opened at "the day the
+    // chat starts") and un-starred the canonical avatar. The desktop twin
+    // (edit_character_page.dart, via copyWith) preserves them, so carrying them
+    // from the base is also what restores desktop↔web parity.
+    storyStartDate: b.storyStartDate,
+    storyStartTime: b.storyStartTime,
+    favoriteAvatarId: b.favoriteAvatarId,
 
     // Realism Engine core.
     realismEnabled: asBool('realismEnabled', b.realismEnabled),

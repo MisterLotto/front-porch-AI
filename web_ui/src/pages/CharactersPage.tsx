@@ -77,10 +77,15 @@ export function CharactersPage() {
 
   // Refresh the persona list whenever the new-chat dialog opens, so a persona
   // added on the desktop (or another tab) shows up without a reload.
+  // Depend on the stable `loadPersonas` callback, NEVER on `lib` — useLibrary
+  // returns a fresh object literal every render, and setPersonas re-renders
+  // this page, so `lib` as a dep re-fires the effect forever while the picker
+  // is open (one GET /api/personas per round trip).
+  const { loadPersonas } = lib;
   useEffect(() => {
     if (dialog?.kind !== 'newChat') return;
-    void lib.loadPersonas().then(setPersonas);
-  }, [dialog?.kind, lib]);
+    void loadPersonas().then(setPersonas);
+  }, [dialog?.kind, loadPersonas]);
 
   // ── Menu item builders (one CardMenu serves every surface) ───────────────
   const charMenu = (c: LibChar): CardMenuItem[] => [
