@@ -44,6 +44,13 @@ void main() {
       expect(w.finish(), '');
     });
 
+    test('wrap:false salvage:true keeps reasoning for eval parse', () {
+      final w = ReasoningTagWrapper(wrap: false, salvage: true);
+      expect(w.onReasoning('{"bond_delta":2}'), '{"bond_delta":2}');
+      expect(w.onContent(''), '');
+      expect(w.finish(), '');
+    });
+
     test('empty deltas yield nothing and do not open a block', () {
       final w = ReasoningTagWrapper(wrap: true);
       expect(w.onReasoning(''), '');

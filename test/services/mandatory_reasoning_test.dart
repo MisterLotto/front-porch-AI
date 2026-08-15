@@ -33,11 +33,13 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/open_router_service.dart';
+import 'package:front_porch_ai/services/reasoning_effort.dart';
 
 /// Stands in for Nano-GPT hosting a mandatory-reasoning model: 400s any request
 /// carrying `reasoning.enabled == false`, answers anything else.
 Future<HttpServer> _startFakeProvider({
   required List<Map<String, dynamic>> seenReasoning,
+  bool jsonInReasoningOnly = false,
 }) async {
   final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
   server.listen((HttpRequest req) async {
@@ -59,16 +61,66 @@ Future<HttpServer> _startFakeProvider({
       return;
     }
 
+    final wantTools = body['tools'] is List;
+    if (wantTools) {
+      req.response
+        ..statusCode = 200
+        ..headers.contentType = ContentType.json
+        ..write(jsonEncode({
+          'choices': [
+            {
+              'message': {
+                'role': 'assistant',
+                'content': null,
+                'tool_calls': [
+                  {
+                    'id': 'c1',
+                    'type': 'function',
+                    'function': {
+                      'name': 'report_realism',
+                      'arguments': '{"relationship_delta":6,"trust_delta":3}',
+                    },
+                  }
+                ],
+              }
+            }
+          ]
+        }));
+      await req.response.close();
+      return;
+    }
+
     req.response
       ..statusCode = 200
       ..headers.contentType = ContentType('text', 'event-stream');
-    req.response.write('data: ${jsonEncode({
-          'choices': [
-            {
-              'delta': {'content': '{"relationship_delta":6,"trust_delta":3}'}
-            }
-          ]
-        })}\n\n');
+    if (jsonInReasoningOnly) {
+      // Live Kimi 2.6 shape: JSON lives in the reasoning channel, content
+      // is a newline (or empty) after a long think.
+      req.response.write('data: ${jsonEncode({
+            'choices': [
+              {
+                'delta': {
+                  'reasoning': '{"relationship_delta":6,"trust_delta":3}',
+                }
+              }
+            ]
+          })}\n\n');
+      req.response.write('data: ${jsonEncode({
+            'choices': [
+              {
+                'delta': {'content': '\n'}
+              }
+            ]
+          })}\n\n');
+    } else {
+      req.response.write('data: ${jsonEncode({
+            'choices': [
+              {
+                'delta': {'content': '{"relationship_delta":6,"trust_delta":3}'}
+              }
+            ]
+          })}\n\n');
+    }
     req.response.write('data: [DONE]\n\n');
     await req.response.close();
   });
@@ -78,7 +130,11 @@ Future<HttpServer> _startFakeProvider({
 void main() {
   // The Flutter test binding stubs HttpClient to return 400 for everything,
   // which would fake the very error this test exists to distinguish from.
-  setUp(() => HttpOverrides.global = null);
+  setUp(() {
+    HttpOverrides.global = null;
+    clearReasoningEffortCatalog();
+  });
+  tearDown(clearReasoningEffortCatalog);
 
   test('an eval survives a model that refuses reasoning:{enabled:false}',
       () async {
@@ -114,19 +170,111 @@ void main() {
           'switch reasoning off is not a reason to lose bond and trust',
     );
 
-    // The first attempt is allowed to carry enabled:false (that is what saves
-    // tokens on models that honour it); the retry must not.
+    // kimi+thinking is recognized up front (2026-08-15) so we never send
+    // enabled:false and never spend a 400. Chat Continue still excludes.
+    expect(seen.length, 1, reason: 'no 400-retry needed for a known Kimi');
+    expect(seen.single.containsKey('enabled'), isFalse);
+    expect(seen.single['exclude'], true);
+  });
+
+  test('an unknown mandatory model is learned from the 400 and retried',
+      () async {
+    final seen = <Map<String, dynamic>>[];
+    final server = await _startFakeProvider(seenReasoning: seen);
+    addTearDown(() => server.close(force: true));
+
+    final svc = OpenRouterService(
+      apiUrl: 'http://127.0.0.1:${server.port}',
+      apiKey: 'test-key',
+      modelName: 'acme/mandatory-reasoner',
+    );
+
+    final out = StringBuffer();
+    await for (final chunk in svc.generateStream(
+      GenerationParams(
+        prompt: 'Score the relationship_delta for this exchange.',
+        maxLength: 128,
+        reasoningEnabled: false,
+        reasoningMaxTokens: 0,
+      ),
+    )) {
+      out.write(chunk);
+    }
+
+    expect(out.toString(), contains('relationship_delta'));
     expect(seen.length, 2, reason: 'exactly one retry, not a loop');
     expect(seen.first['enabled'], false);
-    expect(
-      seen.last.containsKey('enabled'),
-      isFalse,
-      reason: 'the retry drops the flag the provider rejected',
+    expect(seen.last.containsKey('enabled'), isFalse);
+    expect(seen.last['exclude'], true);
+  });
+
+  test('eval salvage omits exclude and keeps reasoning-channel JSON', () async {
+    final seen = <Map<String, dynamic>>[];
+    final server = await _startFakeProvider(
+      seenReasoning: seen,
+      jsonInReasoningOnly: true,
     );
-    expect(
-      seen.last['exclude'],
-      true,
-      reason: 'and still asks for the thoughts to be left out of the response',
+    addTearDown(() => server.close(force: true));
+
+    final svc = OpenRouterService(
+      apiUrl: 'http://127.0.0.1:${server.port}',
+      apiKey: 'test-key',
+      modelName: 'moonshotai/kimi-k2.6:thinking',
     );
+
+    final out = StringBuffer();
+    await for (final chunk in svc.generateStream(
+      GenerationParams(
+        prompt: 'Score the relationship_delta for this exchange.',
+        maxLength: 128,
+        reasoningEnabled: false,
+        reasoningMaxTokens: 0,
+        salvageReasoning: true,
+      ),
+    )) {
+      out.write(chunk);
+    }
+
+    expect(
+      out.toString(),
+      contains('relationship_delta'),
+      reason: 'Kimi parks the eval JSON in reasoning; exclude would leave '
+          'content empty after a long think',
+    );
+    expect(seen.single.containsKey('exclude'), isFalse);
+    expect(seen.single.containsKey('enabled'), isFalse);
+  });
+
+  test('tool evals retry a mandatory-reasoning 400', () async {
+    final seen = <Map<String, dynamic>>[];
+    final server = await _startFakeProvider(seenReasoning: seen);
+    addTearDown(() => server.close(force: true));
+
+    final svc = OpenRouterService(
+      apiUrl: 'http://127.0.0.1:${server.port}',
+      apiKey: 'test-key',
+      modelName: 'acme/mandatory-reasoner',
+    );
+
+    final resp = await svc.generateWithTools(
+      GenerationParams(
+        prompt: 'Score the relationship_delta for this exchange.',
+        maxLength: 128,
+        reasoningEnabled: false,
+        reasoningMaxTokens: 0,
+        salvageReasoning: true,
+      ),
+      const [
+        {
+          'type': 'function',
+          'function': {'name': 'report_realism', 'parameters': <String, dynamic>{}},
+        },
+      ],
+    );
+
+    expect(resp, isNotNull);
+    expect(seen.length, 2);
+    expect(seen.first['enabled'], false);
+    expect(seen.last.containsKey('enabled'), isFalse);
   });
 }

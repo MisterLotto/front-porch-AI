@@ -3,6 +3,20 @@
 
 # Changelog
 
+## 2026-08-15 — fix(eval): Kimi 2.6:thinking judges were empty after a 400
+- **Why:** First eval sent reasoning.enabled=false → HTTP 400 (mandatory).
+  Tools path did not retry. Text retry used exclude=true and discarded
+  reasoning deltas; Kimi parks the JSON there → 90s think, content=`\n`,
+  bond_delta=null. Later tools evals worked once the model was learned.
+- **What:** `reasoningCannotDisable` (kimi+thinking) omits enabled on the
+  first request. generateWithTools learns+retries the 400. Evals set
+  salvageReasoning: omit exclude, keep reasoning-channel tokens for parse.
+  Chat/Continue still exclude. Red-proven: salvage off → literal `\n`.
+- **Files:** open_router_service, llm_service, llm_eval_engine,
+  reasoning_stream_wrapper, wiring_evals, reasoning_effort,
+  mandatory_reasoning_test, reasoning_stream_test, Rawhide.md
+- **Commit:** (this commit)
+
 ## 2026-08-15 — feat(time): reply-named clock wins so sidebar matches the line
 - **Why:** Senjumaru said "six in the morning" while the clock was 8:05.
   new_day snaps to 08:00; she wrote dawn; the next turn followed her prose.

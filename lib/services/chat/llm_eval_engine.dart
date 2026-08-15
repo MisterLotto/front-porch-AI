@@ -410,6 +410,9 @@ class LlmEvalEngine {
       // through every eval — slow, costly, and a source of flaky/empty
       // structured replies. 0 → {enabled:false, max_tokens:0, exclude:true}.
       reasoningMaxTokens: 0,
+      // Mandatory-reasoning models park the JSON in the think channel.
+      // Salvage it; exclude:true would drop it (Kimi 2.6, 2026-08-15).
+      salvageReasoning: true,
       stopSequences: const [],
     );
 

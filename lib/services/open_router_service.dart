@@ -370,8 +370,12 @@ class OpenRouterService extends LLMService {
         // what actually saves money on models that honour it, and silently
         // paying for discarded reasoning tokens on every eval, forever, is a bill
         // the user never agreed to. One rejection per model is the whole cost.
-        if (kMandatoryReasoningModels.contains(modelName)) {
+        if (reasoningCannotDisable(modelName)) {
           reasoning.remove('enabled');
+          // Evals need the think channel: Kimi 2.6:thinking puts the JSON
+          // there, and exclude:true leaves content as a newline after a
+          // long think (2026-08-15). Chat Continue still excludes.
+          if (params.salvageReasoning) reasoning.remove('exclude');
         }
       }
       payload['reasoning'] = reasoning;
@@ -453,9 +457,19 @@ class OpenRouterService extends LLMService {
         );
       }
       if (response.statusCode != 200) {
+        final err = _remoteApiErrorMessage(response.body, response.statusCode);
+        if (!reasoningCannotDisable(modelName) &&
+            _isMandatoryReasoningRejection(err)) {
+          rememberMandatoryReasoning(modelName);
+          debugPrint(
+            '[RemoteAPI] $modelName cannot disable reasoning — retrying '
+            'tool call with reasoning.exclude only',
+          );
+          return generateWithTools(params, tools);
+        }
         debugPrint(
           '[RemoteAPI] Tool call rejected (HTTP ${response.statusCode}) — '
-          'falling back to text transport',
+          'falling back to text transport: $err',
         );
         return null;
       }
@@ -503,7 +517,10 @@ class OpenRouterService extends LLMService {
     // payload builder), so the provider returns no reasoning to wrap. Every
     // suppress path (Continue, evals) sets reasoningEnabled=false anyway, so the
     // two predicates are equivalent in practice.
-    final wrapper = ReasoningTagWrapper(wrap: params.reasoningEnabled);
+    final wrapper = ReasoningTagWrapper(
+      wrap: params.reasoningEnabled,
+      salvage: params.salvageReasoning,
+    );
 
     try {
       // No wall-clock timeout on the streamed reply (incl. local oMLX): a long
@@ -520,7 +537,7 @@ class OpenRouterService extends LLMService {
         // without the retry the caller still loses this eval, and for the
         // reported case that is every judge on the turn the user is waiting on.
         // The rejection then costs one round trip for the life of the process.
-        if (!kMandatoryReasoningModels.contains(modelName) &&
+        if (!reasoningCannotDisable(modelName) &&
             _isMandatoryReasoningRejection(errorMsg)) {
           rememberMandatoryReasoning(modelName);
           debugPrint(

@@ -156,6 +156,17 @@ String wireReasoningEffort(String model, String requested) {
 bool reasoningEffortIsMandatory(String model) =>
     model.isNotEmpty && kMandatoryReasoningModels.contains(model);
 
+/// Models that 400 `reasoning.enabled=false` even before we have learned
+/// them. Kimi's thinking variants did this live on 2026-08-08 and again
+/// on kimi-k2.6:thinking 2026-08-15. Used on the wire so the first eval
+/// of a session does not spend a 400; the Off switch still waits for a
+/// real 400 before locking (the effort hint still lists `none`).
+bool reasoningCannotDisable(String model) {
+  if (reasoningEffortIsMandatory(model)) return true;
+  final id = model.toLowerCase();
+  return id.contains('kimi') && id.contains('thinking');
+}
+
 /// User asked for thinking, or the model will not allow Off.
 bool reasoningEffortThinkingOn(String model, bool requested) =>
     requested || reasoningEffortIsMandatory(model);

@@ -40,11 +40,15 @@
 /// eval suppress path) never leaks stray reasoning into the visible reply,
 /// matching the long-standing SillyTavern-style behavior.
 class ReasoningTagWrapper {
-  ReasoningTagWrapper({required this.wrap});
+  ReasoningTagWrapper({required this.wrap, this.salvage = false});
 
   /// Whether reasoning should be surfaced (wrapped in `<think>…</think>`) or
   /// discarded entirely.
   final bool wrap;
+
+  /// When [wrap] is off, still yield raw reasoning deltas (evals). Mandatory
+  /// models park the JSON in this channel; discarding it is an empty judge.
+  final bool salvage;
 
   /// True while a `<think>` block is open (emitted, not yet closed).
   bool _open = false;
@@ -56,7 +60,8 @@ class ReasoningTagWrapper {
   /// text), and passes subsequent deltas of the open block through raw.
   /// Discards entirely when [wrap] is off.
   String onReasoning(String delta) {
-    if (!wrap || delta.isEmpty) return '';
+    if (delta.isEmpty) return '';
+    if (!wrap) return salvage ? delta : '';
     if (_open) return delta;
     _open = true;
     return '<think>$delta';

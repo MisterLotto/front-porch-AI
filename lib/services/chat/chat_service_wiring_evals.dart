@@ -564,6 +564,9 @@ extension ChatServiceWiringEvals on ChatService {
               // (the "had to regen twice" symptom). 0 → {enabled:false,
               // max_tokens:0, exclude:true}, the strongest disable signal.
               reasoningMaxTokens: 0,
+              // Keep the think channel on mandatory models so a 400-then-
+              // exclude path cannot swallow the JSON / tool call (Kimi 2.6).
+              salvageReasoning: true,
               stopSequences: const [],
             ),
             tools,

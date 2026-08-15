@@ -7,6 +7,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 *Since nightly `20260814` (`cd38e672` — sidebar overflow).*
 
+- 🔧 **Kimi 2.6 thinking evals work again** — The first Realism judge was 400ing because that model cannot turn thinking off, then the fallback hid the answer inside discarded thought tokens (90 seconds, then a blank line). Judges now keep that channel and parse the JSON out of it. Needs and pockets already worked; bond/trust/emotion/time catch up.
+
 - 🕐 **If she says it is 6am, the clock becomes 6am** — After a night skip the story clock used to park at 8:00 AM even when she wrote dawn. The sidebar now follows a time she actually names in the reply (within a few hours), so the line you just read and the clock agree. Regen that reply on an old chat to heal it.
 
 - 🧠 **Local models stop pretending they can think** — Thinking strength used to show Low · Medium · High for every local model, including the many that have no thinking mode at all, so the setting quietly did nothing. Front Porch now reads the model file itself and tells you the truth: a model with no reasoning says so and the switch is greyed out; one that only does on/off says it has no strength levels instead of showing three that don't work; one that can't stop thinking locks Off; and only models with real levels show the chips. No extra requests and no waiting — the answer comes from the file you already loaded. Same on the web Settings. **KoboldCpp, oMLX, and LM Studio** all do this now. Front Porch never loads a model just to ask — it reads the template off disk.
