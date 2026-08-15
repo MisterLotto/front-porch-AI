@@ -78,6 +78,15 @@ class _ThinkingSettingsBlockState extends State<ThinkingSettingsBlock> {
     }
   }
 
+  bool get _isOmlx {
+    try {
+      return Provider.of<LLMProvider>(context, listen: false).activeBackend ==
+          BackendType.omlx;
+    } catch (_) {
+      return false;
+    }
+  }
+
   void _kickProbe() {
     if (!mounted) return;
     final storage = _storage;
@@ -94,6 +103,37 @@ class _ThinkingSettingsBlockState extends State<ThinkingSettingsBlock> {
       unawaited(ReasoningSupportResolver.instance.resolveLocalGguf(path));
       return;
     }
+    // oMLX: same detector, different source. Status + on-disk jinja — never
+    // a completions poke, which would load a 30–90 GB model.
+    if (_isOmlx) {
+      final model = widget.modelId;
+      if (model.isEmpty) return;
+      if (ReasoningSupportResolver.instance.isResolved(model)) return;
+      unawaited(
+        ReasoningSupportResolver.instance.resolveOmlx(
+          apiUrl: 'http://localhost:8000/v1',
+          modelName: model,
+          apiKey: storage.remoteApiKey,
+        ),
+      );
+      return;
+    }
+    // LM Studio (or any local OpenAI URL): confirm /api/v0/models then read
+    // the GGUF. Do NOT poke — JIT loading would pull the model in, and the
+    // 400 listing is the server's enum, not this model's capability.
+    if (isLocalRemoteUrl(storage.remoteApiUrl)) {
+      final model = widget.modelId;
+      if (model.isEmpty) return;
+      if (ReasoningSupportResolver.instance.isResolved(model)) return;
+      unawaited(
+        ReasoningSupportResolver.instance.resolveLmStudio(
+          apiUrl: storage.remoteApiUrl,
+          modelName: model,
+          apiKey: storage.remoteApiKey,
+        ),
+      );
+      return;
+    }
     if (widget.modelId.isEmpty) return;
     kickReasoningEffortProbe(
       model: widget.modelId,
@@ -107,11 +147,23 @@ class _ThinkingSettingsBlockState extends State<ThinkingSettingsBlock> {
   /// the generic chips stand, exactly as before.
   String get _localModelPath => _storage?.lastUsedModelPath ?? '';
 
-  /// The thinking capability read off that file, or null while it is still
-  /// being read / could not be read.
-  ThinkingSupport? get _localSupport {
-    final path = _localModelPath;
-    return path.isEmpty ? null : ReasoningSupportResolver.instance.peek(path);
+  /// The thinking capability already resolved for this backend, or null
+  /// while it is still being read / could not be read. Build-safe: peek only.
+  ThinkingSupport? get _templateSupport {
+    if (_isLocal) {
+      final path = _localModelPath;
+      return path.isEmpty ? null : ReasoningSupportResolver.instance.peek(path);
+    }
+    if (_isOmlx || _isLocalRemote) {
+      final id = widget.modelId;
+      return id.isEmpty ? null : ReasoningSupportResolver.instance.peek(id);
+    }
+    return null;
+  }
+
+  bool get _isLocalRemote {
+    final url = _storage?.remoteApiUrl ?? '';
+    return url.isNotEmpty && isLocalRemoteUrl(url);
   }
 
   @override
@@ -123,22 +175,25 @@ class _ThinkingSettingsBlockState extends State<ThinkingSettingsBlock> {
     // EMPTY until the file has actually been read: an unresolved (or
     // preset-mode) local model must fall back to the generic chips rather
     // than claim knowledge we do not have.
-    final localSupport = local ? _localSupport : null;
+    final templateSupport = _templateSupport;
     final effectiveModelId = local
-        ? (localSupport == null ? '' : _localModelPath)
+        ? (templateSupport == null ? '' : _localModelPath)
         : widget.modelId;
     final mandatory = reasoningEffortIsMandatory(effectiveModelId);
     final thinkingOn = local
         ? widget.enabled
         : reasoningEffortThinkingOn(widget.modelId, widget.enabled);
-    final pending = !local &&
-        reasoningEffortMenuPending(
-          widget.modelId,
-          apiUrl: _storage?.remoteApiUrl ?? '',
-        );
+    final pending = (_isOmlx || _isLocalRemote)
+        ? widget.modelId.isNotEmpty &&
+            !ReasoningSupportResolver.instance.isResolved(widget.modelId)
+        : !local &&
+            reasoningEffortMenuPending(
+              widget.modelId,
+              apiUrl: _storage?.remoteApiUrl ?? '',
+            );
     // A model whose template has no thinking machinery at all: the switch and
     // the chips would both be no-ops, so say that instead of implying they work.
-    final localCannotThink = localSupport == ThinkingSupport.none;
+    final localCannotThink = templateSupport == ThinkingSupport.none;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -176,7 +231,7 @@ class _ThinkingSettingsBlockState extends State<ThinkingSettingsBlock> {
               ),
             ),
           ),
-        if (localSupport == ThinkingSupport.toggle)
+        if (templateSupport == ThinkingSupport.toggle)
           Padding(
             padding: EdgeInsets.only(top: widget.compact ? 2 : 4),
             child: Text(
@@ -205,7 +260,9 @@ class _ThinkingSettingsBlockState extends State<ThinkingSettingsBlock> {
           Padding(
             padding: EdgeInsets.only(top: widget.compact ? 2 : 4),
             child: Text(
-              'Asking this provider which thinking levels it accepts…',
+              (_isOmlx || _isLocalRemote)
+                  ? 'Reading this model\'s thinking mode…'
+                  : 'Asking this provider which thinking levels it accepts…',
               style: TextStyle(
                 color: AppColors.textTertiary(context),
                 fontSize: 12,

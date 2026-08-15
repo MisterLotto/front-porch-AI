@@ -1,8 +1,8 @@
 # Local reasoning capability: what shipped, and what LM Studio / oMLX still need
 
-**Status:** KoboldCpp half shipped 2026-08-15. LM Studio + oMLX halves are
-**open** and need a machine with those servers running — this doc is the
-hand-off for that work.
+**Status:** All three halves shipped 2026-08-15. KoboldCpp reads the GGUF
+header. oMLX reads `chat_template.jinja` via `/v1/models/status`. LM Studio
+reads the GGUF under `~/.lmstudio/models` after `/api/v0/models` (no poke).
 
 ---
 
@@ -102,7 +102,7 @@ Off, and only `graded` shows real levels.
 
 ---
 
-## 4. OPEN: LM Studio and oMLX
+## 4. oMLX (shipped) and LM Studio (still open)
 
 ### Why they are a separate question
 
@@ -118,42 +118,62 @@ There is also a known wrinkle, verified against oMLX v0.5.2 and documented in
 object and honour only `enable_thinking` in the chat template. So we already
 send `chat_template_kwargs` for local URLs.
 
-### Step 1 — settle it with curl (5 minutes)
+### oMLX — settled live 2026-08-14 (no poke)
 
-With the server running and a reasoning model loaded:
+Against oMLX at `http://localhost:8000` with 18 models listed and
+**none loaded**:
 
-```bash
-curl -s http://localhost:1234/v1/chat/completions \
-  -H 'Content-Type: application/json' \
-  -d '{"model":"YOUR_MODEL","max_tokens":1,
-       "messages":[{"role":"user","content":"ok"}],
-       "reasoning_effort":"fpai_probe"}'
-```
+- Completions poke is **outcome (b) and dangerous**. No model is resident;
+  a `/v1/chat/completions` call would load 30–90 GB. Do not poke.
+- `GET /props` and `GET /v1/props` are **404**. No llama.cpp template
+  endpoint.
+- `GET /v1/models/status` (already used for vision) carries `model_path`
+  and `thinking_default`. `thinking_default` is a classification
+  (`true` / `false` / `null`), **not** a capability: gpt-oss is `null`
+  and still graded; Gemma is `false` and still toggle.
+- `/admin/api/models` `settings.enable_thinking` is a **user pref**, not
+  a capability. Ignore it.
+- Every MLX dir ships `chat_template.jinja`. Feeding that into the SAME
+  `detectThinkingFromChatTemplate()` is the honest signal. Ran live on
+  all 18: gpt-oss → `graded`, Qwen3.6 / GLM / Gemma / Laguna / MiniMax →
+  `toggle`, Devstral / Qwen3-Coder-Next / Qwen3-VL-Instruct → `none`,
+  two distill/harmony-history templates → `always`.
 
-(LM Studio defaults to :1234, oMLX usually :8080. Repeat per server.)
+Shipped path: `ReasoningSupportResolver.resolveOmlx` fetches status,
+reads `chat_template.jinja` (or `tokenizer_config.json`'s
+`chat_template`), runs `detectThinkingFromOmlxEntry` (template wins;
+`thinking_default is bool` promotes a silent template to `toggle`;
+missing template + null default stays unknown). Registers into the
+shared chip store with `persist: false` (toggle vs none would collapse
+on disk). Never generates. Failures are not cached.
 
-Three possible outcomes, and each implies different work:
+### LM Studio — settled live 2026-08-15 (no poke)
 
-**(a) It returns a 400 naming the valid values.** Best case. The existing
-parser already handles it. The change is small: pass `allowLocal: true` from
-the pick-time kick for these two backends, and narrow `isLocalRemoteUrl`'s use
-so it still protects genuinely unrelated LAN hosts. Add a truth-table test for
-the new gate and one parser test using the server's **real** error string —
-capture it verbatim in the commit message.
+Against LM Studio **0.4.21+2** at `http://127.0.0.1:1234` (the GUI can be
+up while `lms status` still says Server: OFF — start it with
+`lms server start`). Only model on disk: `qwen2.5-0.5b-instruct` (531 MB).
 
-**(b) It returns a normal completion** (the bogus value is ignored). The poke
-is worthless there. Fall back to the same trick as Kobold: ask the server for
-the chat template. llama.cpp-family servers expose `GET /props` with
-`chat_template`; LM Studio also has `GET /api/v0/models` (already used by
-`vision_support_resolver` for its `type == "vlm"` check — copy that shape).
-Feed whatever template text comes back into the SAME
-`detectThinkingFromChatTemplate()` — it is pure and backend-agnostic, so this
-is a fetch plus a cache, not new policy.
+- Completions poke is **outcome (a) and the wrong signal.** Verbatim 400:
+  `Invalid 'reasoning_effort' value: 'fpai_probe'. Supported values: none, minimal, low, medium, high, xhigh.`
+  That is the *server's* parameter enum, not this model's capability. Using
+  it would put six chips on every LM Studio model, including the 0.5B
+  instruct that cannot think — the original bug. The parser was also
+  extended: the live string says `reasoning_effort` (underscore), which
+  the old `reasoning.effort` / `reasoning effort` trigger missed.
+- The poke **JIT-loaded** the 0.5B (`justInTimeModelLoading: true`). A
+  31B selected in Settings would have been pulled in. Do not poke.
+- `GET /props` is not a template endpoint (`Unexpected endpoint`).
+- `GET /api/v0/models` has **no path** (id / publisher / quantization /
+  state / compatibility_type only). GGUFs still live under
+  `~/.lmstudio/models`; `findLmStudioGguf` matches the compact id onto
+  a filename and skips `mmproj`.
 
-**(c) It errors without a listing** (generic 500 / unknown-parameter). Treat as
-(b), and make sure the failure caches as *unknown* rather than as a verdict —
-`vision_support_resolver` has the precedent: cache only definitive answers, or
-a model gets branded wrongly for the whole session.
+Shipped path: `ReasoningSupportResolver.resolveLmStudio` confirms the
+listing is LM Studio-shaped, finds the GGUF, runs
+`detectThinkingFromChatTemplate`, registers into the shared store
+(`persist: false`). Failures are not cached. Kicked for any
+`isLocalRemoteUrl` that is not the oMLX backend — a generic llama.cpp
+on LAN 404s `/api/v0/models` and stays on generic chips.
 
 ### Step 2 — wire it the same way
 
@@ -162,9 +182,10 @@ Whatever the source, register through
 and caption machinery applies. Do **not** add a parallel local-only path; that
 is the whole point of the current shape.
 
-Persistence differs from Kobold here: LM Studio/oMLX model ids are stable
-strings (not file paths), so persisting them is reasonable — match what the
-remote probe does.
+oMLX and LM Studio both ship with `persist: false`: toggle and none both
+store `{none}`, so a disk menu cannot tell them apart, and the re-read
+is cheap. Do not persist the LM Studio poke listing — it is the server
+enum, not a per-model capability.
 
 ### Step 3 — verify honestly
 
@@ -190,9 +211,9 @@ showing a confidently wrong menu.
 
 | File | Why |
 |---|---|
-| `lib/services/capability/reasoning_support.dart` | the detector + resolver |
-| `lib/services/reasoning_effort.dart` | shared vocabulary, chips, captions |
-| `lib/services/reasoning_effort_probe.dart` | the remote poke, incl. `allowLocal` |
-| `lib/services/capability/vision_support_resolver.dart` | the per-backend resolution precedent (LM Studio + oMLX endpoints already used here) |
-| `lib/services/open_router_service.dart` (~line 380) | the verified oMLX `enable_thinking` finding |
-| `test/services/capability/reasoning_support_test.dart` | the truth table to extend |
+| `lib/services/capability/reasoning_support.dart` | the detector + Kobold / oMLX / LMS resolver |
+| `lib/services/capability/lmstudio_gguf.dart` | LMS downloads-folder GGUF matcher |
+| `lib/services/reasoning_effort.dart` | shared vocabulary, chips, captions, 400 parser |
+| `lib/services/reasoning_effort_probe.dart` | the remote poke (not used for LMS / oMLX) |
+| `lib/services/capability/vision_support_resolver.dart` | the per-backend listing precedent |
+| `test/services/capability/reasoning_support_test.dart` | the truth table |

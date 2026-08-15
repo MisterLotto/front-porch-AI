@@ -23,9 +23,15 @@
 //   * returning a graded set for `toggle` → the "no strength chips" case
 //     fails (decorative chips come back).
 
-import 'package:flutter_test/flutter_test.dart';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 
-import 'package:front_porch_ai/services/capability/reasoning_support.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+
+import 'package:front_porch_ai/services/capability/capability.dart';
 import 'package:front_porch_ai/services/reasoning_effort.dart';
 
 /// Qwen3-style: a real on/off kwarg, and the think tags it emits when on.
@@ -181,4 +187,315 @@ void main() {
       );
     });
   });
+
+  group('oMLX status + on-disk template', () {
+    // Live-settled 2026-08-14 against oMLX at :8000: /props 404s, a
+    // completions poke would load the model, thinking_default is a
+    // classification (gpt-oss is null but graded), and chat_template.jinja
+    // sits next to the weights. This table is that settlement.
+
+    setUp(() {
+      ReasoningSupportResolver.instance.clearForTest();
+      clearReasoningEffortCatalog();
+    });
+    tearDown(() {
+      ReasoningSupportResolver.instance.clearForTest();
+      clearReasoningEffortCatalog();
+    });
+
+    test('a graded template wins even when thinking_default is null', () {
+      expect(
+        detectThinkingFromOmlxEntry(
+          chatTemplate: _harmony,
+          thinkingDefault: null,
+        ),
+        ThinkingSupport.graded,
+        reason: 'gpt-oss on this machine reports thinking_default=null — '
+            'the template is the only honest graded signal',
+      );
+    });
+
+    test('a toggle template wins over thinking_default false', () {
+      expect(
+        detectThinkingFromOmlxEntry(
+          chatTemplate: _qwen3,
+          thinkingDefault: false,
+        ),
+        ThinkingSupport.toggle,
+      );
+    });
+
+    test('a silent template with a classified thinking_default is toggle', () {
+      expect(
+        detectThinkingFromOmlxEntry(
+          chatTemplate: _llama3,
+          thinkingDefault: false,
+        ),
+        ThinkingSupport.toggle,
+        reason: 'oMLX marked it as a thinking model; the engine still has '
+            'enable_thinking even when the jinja never names it',
+      );
+      expect(
+        detectThinkingFromOmlxEntry(
+          chatTemplate: null,
+          thinkingDefault: true,
+        ),
+        ThinkingSupport.toggle,
+      );
+    });
+
+    test('a silent template with no classification is none, not unknown', () {
+      expect(
+        detectThinkingFromOmlxEntry(
+          chatTemplate: _llama3,
+          thinkingDefault: null,
+        ),
+        ThinkingSupport.none,
+      );
+    });
+
+    test('no template and no classification claims nothing', () {
+      expect(
+        detectThinkingFromOmlxEntry(
+          chatTemplate: null,
+          thinkingDefault: null,
+        ),
+        isNull,
+      );
+      expect(
+        detectThinkingFromOmlxEntry(
+          chatTemplate: '',
+          thinkingDefault: null,
+        ),
+        isNull,
+      );
+    });
+
+    test('readChatTemplateFromModelDir prefers jinja over tokenizer_config',
+        () async {
+      final dir = await Directory.systemTemp.createTemp('fpai_omlx_tmpl_');
+      addTearDown(() => dir.delete(recursive: true));
+      await File('${dir.path}/chat_template.jinja').writeAsString(_harmony);
+      await File('${dir.path}/tokenizer_config.json').writeAsString(
+        jsonEncode({'chat_template': _llama3}),
+      );
+      expect(await readChatTemplateFromModelDir(dir.path), _harmony);
+    });
+
+    test('resolveOmlx registers graded chips from a status + jinja pair',
+        () async {
+      final dir = await Directory.systemTemp.createTemp('fpai_omlx_res_');
+      addTearDown(() => dir.delete(recursive: true));
+      await File('${dir.path}/chat_template.jinja').writeAsString(_harmony);
+
+      var hits = 0;
+      ReasoningSupportResolver.instance.httpClientFactory = () => MockClient(
+        (request) async {
+          hits++;
+          expect(request.url.path, '/v1/models/status');
+          return http.Response(
+            jsonEncode({
+              'models': [
+                {
+                  'id': 'GPT-OSS-120B-MLX-3.6bit',
+                  'model_path': dir.path,
+                  'thinking_default': null,
+                },
+              ],
+            }),
+            200,
+          );
+        },
+      );
+
+      final verdict = await ReasoningSupportResolver.instance.resolveOmlx(
+        apiUrl: 'http://localhost:8000/v1',
+        modelName: 'GPT-OSS-120B-MLX-3.6bit',
+      );
+      expect(verdict, ThinkingSupport.graded);
+      expect(
+        reasoningEffortChipsFor('GPT-OSS-120B-MLX-3.6bit'),
+        ['low', 'medium', 'high'],
+      );
+      expect(hits, 1);
+
+      // Cached — a second resolve must not hit the network.
+      await ReasoningSupportResolver.instance.resolveOmlx(
+        apiUrl: 'http://localhost:8000/v1',
+        modelName: 'GPT-OSS-120B-MLX-3.6bit',
+      );
+      expect(hits, 1);
+    });
+
+    test('a failed status fetch is not cached as a verdict', () async {
+      var hits = 0;
+      ReasoningSupportResolver.instance.httpClientFactory = () => MockClient(
+        (request) async {
+          hits++;
+          return http.Response('nope', 500);
+        },
+      );
+      expect(
+        await ReasoningSupportResolver.instance.resolveOmlx(
+          apiUrl: 'http://localhost:8000/v1',
+          modelName: 'anything',
+        ),
+        isNull,
+      );
+      expect(
+        ReasoningSupportResolver.instance.isResolved('anything'),
+        isFalse,
+        reason: 'caching a downed server would brand the model unknown '
+            'for the rest of the session',
+      );
+      expect(
+        reasoningEffortSupportedFor('anything'),
+        isNull,
+        reason: 'a failed fetch must leave generic chips, never a guess',
+      );
+      await ReasoningSupportResolver.instance.resolveOmlx(
+        apiUrl: 'http://localhost:8000/v1',
+        modelName: 'anything',
+      );
+      expect(hits, 2);
+    });
+  });
+
+  group('LM Studio listing + on-disk GGUF', () {
+    // Live-settled 2026-08-15 against LM Studio 0.4.21 at :1234:
+    // a completions poke returns a 400 listing (server enum, NOT per-model)
+    // AND JIT-loads the model. /api/v0/models has no path. /props 404s.
+    // Read the GGUF instead.
+
+    setUp(() {
+      ReasoningSupportResolver.instance.clearForTest();
+      clearReasoningEffortCatalog();
+    });
+    tearDown(() {
+      ReasoningSupportResolver.instance.clearForTest();
+      clearReasoningEffortCatalog();
+      lmStudioModelsRootOverride = null;
+    });
+
+    test('the live LM Studio 400 is parseable (underscore form)', () {
+      const verbatim =
+          "Invalid 'reasoning_effort' value: 'fpai_probe'. "
+          'Supported values: none, minimal, low, medium, high, xhigh.';
+      expect(
+        supportedReasoningEffortsFromError(verbatim),
+        {'none', 'minimal', 'low', 'medium', 'high', 'xhigh'},
+        reason: 'the live 0.4.21 string uses reasoning_effort (underscore) '
+            'and "Supported values:" without "are" — missing either '
+            'would drop the listing on the floor',
+      );
+    });
+
+    test('findLmStudioGguf matches the id and skips mmproj', () async {
+      final dir = await Directory.systemTemp.createTemp('fpai_lms_find_');
+      addTearDown(() => dir.delete(recursive: true));
+      final pub = Directory('${dir.path}/lmstudio-community')..createSync();
+      await File('${pub.path}/Qwen2.5-0.5B-Instruct-Q8_0.gguf')
+          .writeAsBytes([0]);
+      await File('${pub.path}/mmproj-BF16.gguf').writeAsBytes([0]);
+      await File('${pub.path}/Other-Model-Q8_0.gguf').writeAsBytes([0]);
+
+      final found = await findLmStudioGguf(
+        modelsRoot: dir.path,
+        modelId: 'qwen2.5-0.5b-instruct',
+        publisher: 'lmstudio-community',
+        quantization: 'Q8_0',
+      );
+      expect(found, endsWith('Qwen2.5-0.5B-Instruct-Q8_0.gguf'));
+      expect(found, isNot(contains('mmproj')));
+    });
+
+    test('resolveLmStudio registers none from a silent GGUF, never pokes',
+        () async {
+      final dir = await Directory.systemTemp.createTemp('fpai_lms_res_');
+      addTearDown(() => dir.delete(recursive: true));
+      final pub = Directory('${dir.path}/lmstudio-community')..createSync();
+      await File('${pub.path}/Qwen2.5-0.5B-Instruct-Q8_0.gguf')
+          .writeAsBytes(_buildGgufTemplate(_llama3));
+      lmStudioModelsRootOverride = dir.path;
+
+      var hits = 0;
+      var poked = false;
+      ReasoningSupportResolver.instance.httpClientFactory = () => MockClient(
+        (request) async {
+          hits++;
+          if (request.method == 'POST') poked = true;
+          expect(request.url.path, '/api/v0/models');
+          return http.Response(
+            jsonEncode({
+              'data': [
+                {
+                  'id': 'qwen2.5-0.5b-instruct',
+                  'type': 'llm',
+                  'publisher': 'lmstudio-community',
+                  'compatibility_type': 'gguf',
+                  'quantization': 'Q8_0',
+                  'state': 'not-loaded',
+                },
+              ],
+            }),
+            200,
+          );
+        },
+      );
+
+      final verdict = await ReasoningSupportResolver.instance.resolveLmStudio(
+        apiUrl: 'http://localhost:1234/v1',
+        modelName: 'qwen2.5-0.5b-instruct',
+      );
+      expect(verdict, ThinkingSupport.none);
+      expect(reasoningEffortChipsFor('qwen2.5-0.5b-instruct'), isEmpty);
+      expect(hits, 1);
+      expect(poked, isFalse, reason: 'a poke would JIT-load the model');
+    });
+
+    test('a failed LMS listing is not cached as a verdict', () async {
+      var hits = 0;
+      ReasoningSupportResolver.instance.httpClientFactory = () => MockClient(
+        (request) async {
+          hits++;
+          return http.Response('nope', 404);
+        },
+      );
+      expect(
+        await ReasoningSupportResolver.instance.resolveLmStudio(
+          apiUrl: 'http://localhost:1234/v1',
+          modelName: 'qwen2.5-0.5b-instruct',
+        ),
+        isNull,
+      );
+      expect(
+        ReasoningSupportResolver.instance.isResolved('qwen2.5-0.5b-instruct'),
+        isFalse,
+      );
+      await ReasoningSupportResolver.instance.resolveLmStudio(
+        apiUrl: 'http://localhost:1234/v1',
+        modelName: 'qwen2.5-0.5b-instruct',
+      );
+      expect(hits, 2);
+    });
+  });
 }
+
+Uint8List _buildGgufTemplate(String template) {
+  final builder = BytesBuilder();
+  builder.add(utf8.encode('GGUF'));
+  builder.add(_u32(3));
+  builder.add(_u64(0)); // tensors
+  builder.add(_u64(1)); // kv count
+  final key = utf8.encode('tokenizer.chat_template');
+  builder.add(_u64(key.length));
+  builder.add(key);
+  builder.add(_u32(8)); // string
+  final val = utf8.encode(template);
+  builder.add(_u64(val.length));
+  builder.add(val);
+  return Uint8List.fromList(builder.takeBytes());
+}
+
+Uint8List _u32(int v) => Uint8List(4)..buffer.asUint32List()[0] = v;
+Uint8List _u64(int v) => Uint8List(8)..buffer.asUint64List()[0] = v;

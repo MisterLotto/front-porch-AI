@@ -76,10 +76,11 @@ interface Settings {
   reasoningEffort: string;
   reasoningMandatory?: boolean;
   reasoningEfforts?: string[];
-  // Local (KoboldCpp) only: what the loaded GGUF's chat template supports —
-  // 'graded' | 'toggle' | 'always' | 'none'. Absent on remote backends and
-  // until the file has been read, which is the signal to fall back to the
-  // generic chips instead of claiming knowledge we do not have.
+  // KoboldCpp / oMLX / LM Studio template verdict: what this model actually
+  // supports — 'graded' | 'toggle' | 'always' | 'none'. Absent on remote
+  // hosted backends and until the template has been read, which is the
+  // signal to fall back to the generic chips instead of claiming knowledge
+  // we do not have.
   reasoningLocalSupport?: string;
   generation: Gen;
   /** Dictionary tag ('en_US') or 'off'. Optional for the same reason. */
@@ -280,6 +281,7 @@ export function SettingsPage() {
                       const menu = await api.post<{
                         efforts?: string[]
                         mandatory?: boolean
+                        localSupport?: string
                       }>('/api/backend/reasoning-menu', {
                         model: id,
                         apiUrl: s.remoteApiUrl,
@@ -291,6 +293,7 @@ export function SettingsPage() {
                               ...prev,
                               reasoningEfforts: menu.efforts ?? [],
                               reasoningMandatory: Boolean(menu.mandatory),
+                              reasoningLocalSupport: menu.localSupport,
                             }
                           : prev,
                       )
@@ -412,13 +415,16 @@ export function SettingsPage() {
         )}
         {(s.reasoningEnabled || Boolean(s.reasoningMandatory)) &&
           s.reasoningLocalSupport !== 'none' &&
-          !(s.isLocal && s.reasoningLocalSupport && !s.reasoningEfforts?.length) && (
+          ((s.reasoningEfforts?.length ?? 0) > 0 ||
+            !s.reasoningLocalSupport) && (
           <div className="thinking-strength">
             <div className="thinking-strength-label">Thinking strength</div>
             <div className="thinking-strength-chips" role="group" aria-label="Thinking strength">
               {(s.reasoningEfforts?.length
                 ? s.reasoningEfforts
-                : reasoningEffortChipsFor(s.isLocal ? '' : (s.remoteModelName ?? ''))
+                : s.reasoningLocalSupport
+                  ? []
+                  : reasoningEffortChipsFor(s.isLocal ? '' : (s.remoteModelName ?? ''))
               ).map((id) => {
                 const model = s.isLocal ? '' : (s.remoteModelName ?? '')
                 const row = s.reasoningEfforts?.length

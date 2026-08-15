@@ -18,6 +18,7 @@
 
 import 'dart:async';
 
+import 'package:front_porch_ai/services/capability/capability.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/utils/utils.dart';
 
@@ -221,11 +222,42 @@ class BackendFacade {
 
   /// Poke the provider for [model]'s real reasoning.effort menu (Nano has
   /// none in /models). Returns chips + whether Off is locked.
+  ///
+  /// oMLX is not a poke: caller-supplied localhost URLs fail the SSRF
+  /// gate in [_remoteCreds], and a completions probe would load the model.
+  /// Resolve from `/v1/models/status` + the on-disk template instead.
   Future<Map<String, dynamic>> reasoningMenu({
     required String model,
     String? apiUrl,
     String? apiKey,
   }) async {
+    if (_llm.activeBackend == BackendType.omlx) {
+      await ReasoningSupportResolver.instance.resolveOmlx(
+        apiUrl: 'http://localhost:8000/v1',
+        modelName: model,
+        apiKey: apiKey ?? _storage.backendSettings.remoteApiKey,
+      );
+      return {
+        'efforts': reasoningEffortChipsFor(model),
+        'mandatory': reasoningEffortIsMandatory(model),
+        'localSupport': ReasoningSupportResolver.instance.peek(model)?.name,
+      };
+    }
+    // Stored localhost / LAN URL (LM Studio). Caller-supplied override is
+    // the SSRF vector — use the desktop-configured URL only.
+    final stored = _storage.backendSettings.remoteApiUrl;
+    if (isLocalRemoteUrl(stored)) {
+      await ReasoningSupportResolver.instance.resolveLmStudio(
+        apiUrl: stored,
+        modelName: model,
+        apiKey: apiKey ?? _storage.backendSettings.remoteApiKey,
+      );
+      return {
+        'efforts': reasoningEffortChipsFor(model),
+        'mandatory': reasoningEffortIsMandatory(model),
+        'localSupport': ReasoningSupportResolver.instance.peek(model)?.name,
+      };
+    }
     final c = _remoteCreds(apiUrl, apiKey);
     if (c == null) {
       return {

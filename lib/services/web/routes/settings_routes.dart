@@ -60,6 +60,7 @@ class WebSettingsRoutes {
   /// the same shape — a web client that saved settings must not lose the
   /// picker's options as a side effect.
   Future<Map<String, dynamic>> _readWithLanguages() async {
+    await _facade.ensureReasoningResolved();
     final data = _facade.read();
     data['spellCheckLanguages'] = await _facade.spellCheckLanguages();
     return data;

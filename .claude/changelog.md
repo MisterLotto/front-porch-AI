@@ -3,6 +3,38 @@
 
 # Changelog
 
+## 2026-08-15 — feat(reasoning): LM Studio thinking capability from GGUF, no poke
+- **Why:** LMS 0.4.21 returns a 400 listing for `reasoning_effort=fpai_probe`,
+  but that list is the *server* enum (none/minimal/low/medium/high/xhigh)
+  and the poke JIT-loads the model. Using it would decorate every LMS
+  model — including Qwen2.5-0.5B-Instruct — with fake strength chips.
+- **What:** `resolveLmStudio` GETs `/api/v0/models` (no load),
+  `findLmStudioGguf` matches the id onto `~/.lmstudio/models`, existing
+  detector reads the GGUF. Parser now accepts the underscore
+  `reasoning_effort` 400 (verbatim live string in the test). Desktop +
+  web kick on any local remote URL that is not the oMLX backend.
+- **Files:** reasoning_support.dart, NEW lmstudio_gguf.dart,
+  thinking_settings_block.dart, settings_facade.dart, backend_facade.dart,
+  reasoning_effort.dart, reasoning_support_test.dart,
+  docs/design/local-reasoning-capability.md, docs/Rawhide.md
+- **Commit:** (this commit)
+
+## 2026-08-15 — feat(reasoning): oMLX thinking capability from template, no poke
+- **Why:** Local reasoning chips were honest for Kobold GGUFs but oMLX still
+  showed Low/Medium/High for every model. A completions poke would load a
+  30–90 GB model; `/props` 404s; `thinking_default` is a classification
+  (gpt-oss is null and still graded).
+- **What:** `detectThinkingFromOmlxEntry` + `resolveOmlx` reads
+  `/v1/models/status` `model_path` then `chat_template.jinja`, runs the
+  existing detector, registers into the shared chip store. Desktop block,
+  settings facade, web Settings, and `/api/backend/reasoning-menu` all
+  kick that path. Failures are not cached. persist: false (toggle vs none).
+- **Files:** reasoning_support.dart, thinking_settings_block.dart,
+  settings_facade.dart, backend_facade.dart, settings_routes.dart,
+  SettingsPage.tsx, reasoning_support_test.dart,
+  docs/design/local-reasoning-capability.md, docs/Rawhide.md
+- **Commit:** (this commit)
+
 ## 2026-08-14 — fix(audit): Opus NO-GO B1–B3 + M1
 - **B1 RAG:** do not gate retrieve on lazy `isOperational`; stamp
   not_operational only after retrieve returns empty.

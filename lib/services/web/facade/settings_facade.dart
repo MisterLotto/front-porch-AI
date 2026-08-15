@@ -56,18 +56,61 @@ class SettingsFacade {
     return ReasoningSupportResolver.instance.peek(path) == null ? '' : path;
   }
 
-  /// Local thinking verdict, kicking the (file-reading) resolve once so a
-  /// later state poll carries the answer. Mirrors the desktop block's
-  /// kick-then-peek: this getter itself never touches the disk.
+  bool get _usesTemplateResolve =>
+      _llm.activeBackend == BackendType.omlx ||
+      isLocalRemoteUrl(_storage.backendSettings.remoteApiUrl);
+
+  /// Template thinking verdict, kicking resolve once so a later state poll
+  /// carries the answer. Mirrors the desktop block's kick-then-peek: this
+  /// getter itself never touches disk or the network.
   ThinkingSupport? get _localThinkingSupport {
-    if (!_llm.isLocal) return null;
-    final path = _storage.lastUsedModelPath ?? '';
-    if (path.isEmpty) return null;
-    if (!ReasoningSupportResolver.instance.isResolved(path)) {
-      unawaited(ReasoningSupportResolver.instance.resolveLocalGguf(path));
+    if (_llm.isLocal) {
+      final path = _storage.lastUsedModelPath ?? '';
+      if (path.isEmpty) return null;
+      if (!ReasoningSupportResolver.instance.isResolved(path)) {
+        unawaited(ReasoningSupportResolver.instance.resolveLocalGguf(path));
+        return null;
+      }
+      return ReasoningSupportResolver.instance.peek(path);
+    }
+    if (!_usesTemplateResolve) return null;
+    final name = _storage.backendSettings.remoteModelName;
+    if (name.isEmpty) return null;
+    if (!ReasoningSupportResolver.instance.isResolved(name)) {
+      unawaited(_resolveTemplate(name));
       return null;
     }
-    return ReasoningSupportResolver.instance.peek(path);
+    return ReasoningSupportResolver.instance.peek(name);
+  }
+
+  Future<void> _resolveTemplate(String name) {
+    final key = _storage.backendSettings.remoteApiKey;
+    if (_llm.activeBackend == BackendType.omlx) {
+      return ReasoningSupportResolver.instance.resolveOmlx(
+        apiUrl: 'http://localhost:8000/v1',
+        modelName: name,
+        apiKey: key,
+      );
+    }
+    return ReasoningSupportResolver.instance.resolveLmStudio(
+      apiUrl: _storage.backendSettings.remoteApiUrl,
+      modelName: name,
+      apiKey: key,
+    );
+  }
+
+  /// Await the local-template verdict so a web GET/POST does not return
+  /// generic chips for one round and the truth on the next.
+  Future<void> ensureReasoningResolved() async {
+    if (_llm.isLocal) {
+      final path = _storage.lastUsedModelPath ?? '';
+      if (path.isEmpty) return;
+      await ReasoningSupportResolver.instance.resolveLocalGguf(path);
+      return;
+    }
+    final name = _storage.backendSettings.remoteModelName;
+    if (name.isEmpty || !_usesTemplateResolve) return;
+    await _resolveTemplate(name);
   }
 
   void _seedReasoningCatalog() {
@@ -98,10 +141,10 @@ class SettingsFacade {
       // <think> block is ever produced for the chat to show.
       'reasoningEnabled': b.reasoningEnabled,
       'reasoningEffort': b.reasoningEffort,
-      // Local models answer from their GGUF's chat template instead of a
-      // provider menu (see ReasoningSupportResolver). Same two fields, so the
-      // web control needs no local-only branch — plus one ADDITIVE field for
-      // the copy that only local can produce ("this model cannot think").
+      // Kobold GGUF + oMLX on-disk template answer from
+      // ReasoningSupportResolver. Same two fields, so the web control needs
+      // no local-only branch — plus one ADDITIVE field for the copy that
+      // only a template verdict can produce ("this model cannot think").
       'reasoningMandatory': reasoningEffortIsMandatory(_reasoningModelKey),
       'reasoningEfforts': reasoningEffortChipsFor(_reasoningModelKey),
       'reasoningLocalSupport': _localThinkingSupport?.name,
@@ -331,11 +374,15 @@ class SettingsFacade {
         apiKey: b.remoteApiKey,
         modelName: b.remoteModelName,
       );
-      kickReasoningEffortProbe(
-        model: b.remoteModelName,
-        apiUrl: b.remoteApiUrl,
-        apiKey: b.remoteApiKey,
-      );
+      if (_usesTemplateResolve) {
+        unawaited(_resolveTemplate(b.remoteModelName));
+      } else {
+        kickReasoningEffortProbe(
+          model: b.remoteModelName,
+          apiUrl: b.remoteApiUrl,
+          apiKey: b.remoteApiKey,
+        );
+      }
     }
 
     final gen = body['generation'];

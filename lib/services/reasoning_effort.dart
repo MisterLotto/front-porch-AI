@@ -203,7 +203,9 @@ String reasoningEffortMappingCaption(String model, String requested) {
 /// Parse "Supported values are: none, high, max" from a provider error body.
 Set<String>? supportedReasoningEffortsFromError(String msg) {
   final m = msg.toLowerCase();
-  if (!m.contains('reasoning.effort') && !m.contains('reasoning effort')) {
+  if (!m.contains('reasoning.effort') &&
+      !m.contains('reasoning effort') &&
+      !m.contains('reasoning_effort')) {
     return null;
   }
   final listing = m.indexOf('supported values');
