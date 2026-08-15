@@ -34,7 +34,7 @@
 - **Files:** open_router_service.dart, reasoning_effort.dart,
   reasoning_stream_wrapper.dart, llm_eval_engine.dart,
   openai_chat_stream.dart, docs/Rawhide.md, + tests above
-- **Commit:** (this commit)
+- **Commit:** 79b75459
 
 ## 2026-08-15 — fix(chat): Scene Guests were answering an older question
 - **Why:** Discord (v1.2.0.1 + nanoGPT/DeepSeek v4): after chatting with
@@ -54,7 +54,7 @@
 - **Files:** NEW scene_guest_prompt.dart + scene_guest_prompt_test.dart;
   generation_blocks, generation_rag, history, generation_plan,
   impersonate; chat.dart; docs/Rawhide.md
-- **Commit:** (this commit)
+- **Commit:** 636ee3db
 
 ## 2026-08-15 — fix(chat): Continue inserts a word-break so words do not mash
 - **Why:** Discord report (adv997): Continue concatenated new tokens onto
@@ -83,7 +83,7 @@
 - **Files:** open_router_service, llm_service, llm_eval_engine,
   reasoning_stream_wrapper, wiring_evals, reasoning_effort,
   mandatory_reasoning_test, reasoning_stream_test, Rawhide.md
-- **Commit:** (this commit)
+- **Commit:** 55918806
 
 ## 2026-08-15 — feat(time): reply-named clock wins so sidebar matches the line
 - **Why:** Senjumaru said "six in the morning" while the clock was 8:05.
@@ -98,7 +98,7 @@
 - **Files:** NEW story_clock_claims.dart + test; time_service.dart
   applyReconciledClock; group_realism_helpers restamp; chat.dart export;
   docs/Rawhide.md
-- **Commit:** (this commit)
+- **Commit:** 6ba44843
 
 ## 2026-08-15 — feat(reasoning): LM Studio thinking capability from GGUF, no poke
 - **Why:** LMS 0.4.21 returns a 400 listing for `reasoning_effort=fpai_probe`,
