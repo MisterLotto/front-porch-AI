@@ -52,6 +52,13 @@ class StreamHub {
   final StringBuffer _pendingTokens = StringBuffer();
   Timer? _tokenFlushTimer;
 
+  // Impersonate sends the FULL accumulated composer text each tick (not a
+  // delta). Keep the latest snapshot and flush on the same 33ms cadence so
+  // a fast local model does not melt the composer the way per-token
+  // `token` frames melted iPad Safari.
+  String? _pendingImpersonate;
+  Timer? _impersonateFlush;
+
   int get clientCount => _clients.length;
 
   /// Register a freshly-upgraded socket. The auth middleware has already
@@ -71,6 +78,31 @@ class StreamHub {
 
   /// Broadcast a chat-state-changed signal (after send/stop/select/etc.).
   void broadcastChatUpdate() => broadcast({'event': 'chat_updated'});
+
+  /// Live composer fill for Impersonate. [accumulated] is the whole draft
+  /// so far — clients REPLACE, they do not append.
+  void broadcastImpersonate(String accumulated) {
+    _pendingImpersonate = accumulated;
+    _impersonateFlush ??= Timer(
+      const Duration(milliseconds: 33),
+      _flushImpersonate,
+    );
+  }
+
+  /// Flush any parked snapshot, then tell clients the wand is done.
+  void broadcastImpersonateDone() {
+    _flushImpersonate();
+    broadcast({'event': 'impersonate_done'});
+  }
+
+  void _flushImpersonate() {
+    _impersonateFlush?.cancel();
+    _impersonateFlush = null;
+    final data = _pendingImpersonate;
+    _pendingImpersonate = null;
+    if (data == null) return;
+    broadcast({'event': 'impersonate', 'data': data});
+  }
 
   /// Broadcast an arbitrary typed event to every connected client.
   void broadcast(Map<String, dynamic> event) {
@@ -140,6 +172,7 @@ class StreamHub {
     // Flush (not drop) any buffered tail so a server stop mid-generation
     // still delivers everything the clients were owed (Grok review finding).
     _flushPendingTokens();
+    _flushImpersonate();
     // Copy first: closing a sink fires its onDone, which mutates _clients.
     for (final c in _clients.toList()) {
       try {

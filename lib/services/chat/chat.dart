@@ -31,6 +31,7 @@ export 'group_speaker_resolution.dart';
 export 'growth_service.dart';
 export 'growth_store.dart';
 export 'image_command_service.dart';
+export 'impersonate_prompt.dart';
 export 'journal_maintenance.dart';
 export 'journal_ops.dart';
 export 'journal_physics.dart';

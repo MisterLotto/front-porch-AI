@@ -3,6 +3,30 @@
 
 # Changelog
 
+## 2026-08-15 — feat(web): Impersonate wand on the phone/browser composer
+- **Why:** Desktop had the wand; web did not. Parity is mandatory. Empty
+  and typed-prefix both have to work (same ChatService.impersonateUser).
+- **What:** POST /api/chat/impersonate {prefix}. Tokens ride a dedicated
+  `impersonate` WS event (replace, coalesced) — never the AI-bubble
+  `token` stream. Composer ✦ button + live fill. Stop cancels.
+- **Files:** stream_hub, chat_facade, chat_routes; ChatComposer,
+  ChatPage, styles.css; NEW impersonate_hub_test.dart; docs/Rawhide.md
+- **Commit:** (this commit)
+
+## 2026-08-15 — fix(chat): Impersonate from a typed prefix wrote as the character
+- **Why:** Empty-box impersonate worked. A start already in the composer
+  looked like a finished user turn, and the card's "do not decide for
+  {{user}}" still sat in the system prompt, so the model answered as the
+  character (Discord 2026-08-15).
+- **What:** IMPERSONATE identity + card frame go first in the system
+  message (card anti-user rules SUSPENDED). Typed prefix gets a
+  Continue-style "incomplete user line" rule. Character examples and
+  post-history omitted (they few-shot the character). Client-side stop
+  trim cuts `\nChar:` bleed. Web never had the wand — pre-existing.
+- **Files:** NEW impersonate_prompt.dart + impersonate_prefix_test.dart;
+  chat_service_impersonate.dart; chat.dart; docs/Rawhide.md
+- **Commit:** (this commit)
+
 ## 2026-08-15 — fix(eval): Kimi 2.6 judges no longer flip a coin (round 2)
 - **Why:** After 55918806, deltas were still intermittent. Live log:
   `RawEval len=17348` opening with UN-tagged reasoning prose,

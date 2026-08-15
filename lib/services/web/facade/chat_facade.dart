@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -448,6 +449,24 @@ class ChatFacade {
 
   void continueGeneration() {
     _chat.continueGeneration();
+    _notify();
+  }
+
+  /// AI writes the user's next line into the composer (desktop wand parity).
+  /// Tokens ride a dedicated `impersonate` WS event — never the `token`
+  /// bubble stream.
+  void impersonate(String prefix) {
+    unawaited(
+      _chat
+          .impersonateUser(
+            prefix: prefix,
+            onToken: (acc) => _hub?.broadcastImpersonate(acc),
+          )
+          .whenComplete(() {
+            _hub?.broadcastImpersonateDone();
+            _notify();
+          }),
+    );
     _notify();
   }
 

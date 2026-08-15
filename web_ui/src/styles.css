@@ -699,6 +699,14 @@ button.ghost.small, .ghost.small { font-size: 0.72rem; padding: 4px 8px; backgro
 .chat-input .composer-backdrop .dlg { color: var(--dialogue); }
 .chat-input .composer-backdrop .act { color: var(--action); font-style: normal; font-weight: inherit; }
 .chat-input .composer-backdrop .act.bold { font-style: normal; font-weight: inherit; }
+.chat-input .impersonate-btn {
+  color: var(--accent);
+  font-size: 1.2rem;
+  padding: 6px 8px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.chat-input .impersonate-btn:disabled { opacity: 0.4; }
 
 /* ── Slash-command cheat sheet (chat input) ───────────────────── */
 .slash-cheatsheet {

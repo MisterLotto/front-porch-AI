@@ -7,6 +7,10 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 *Since nightly `20260814` (`cd38e672` — sidebar overflow).*
 
+- ✍️ **Impersonate is on the web too** — the same wand as desktop: tap ✦ and the AI writes your next line into the box. A start you already typed is continued as you, not answered as the character. Stop cancels.
+
+- ✍️ **Impersonate keeps writing as you when the box is not empty** — the wand already filled a blank composer. A start you had typed ("I walk toward…") used to make it switch into the character's voice, especially on cards that say "do not decide for the user." It now treats that text as an unfinished line of yours and only continues it.
+
 - 🎭 **Scene Guests answer the line you just sent** — after a long stretch talking to one guest (name first), bringing the narrator back in used to make that guest reply to an older question further up the chat. Regen usually fixed it; eventually it got stuck. The guest turn now pins your most recent line, a squeezed context can no longer drop that line and keep only the narrator's reaction, and guest turns no longer pull Memory search or a stale "Where we are" into the prompt (thinking models were treating those old lines as the live question).
 
 - ▶️ **Continue no longer mashes the last word into the next one** — hitting Continue used to glue the new text straight onto whatever was already there, so "She waved from the steps." plus "Then she sat" became "steps.Then". Models often skip the leading space. Continue now puts a word-break in (same as editing a space onto the end yourself) and will not add a second space if the model already sent one.

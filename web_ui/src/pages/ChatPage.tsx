@@ -112,6 +112,8 @@ export function ChatPage() {
   const [focusRealism, setFocusRealism] = useState<Realism | null>(null);
   // Voice capability snapshot (TTS on? STT usable?) — gates the Speak/Mic UI.
   const [voice, setVoice] = useState<{ ttsEnabled: boolean; sttAvailable: boolean } | null>(null);
+  // Live Impersonate composer fill (dedicated WS event — not the AI bubble).
+  const [impersonateFill, setImpersonateFill] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Coalesces bursts of `chat_updated` (a single turn fires several: send, guest
   // actions, realism chip-attach, …) into one refresh so the transcript doesn't
@@ -184,7 +186,12 @@ export function ChatPage() {
   useEffect(() => {
     void refresh();
     const socket = new ChatSocket((e) => {
-      if (e.event === 'token' && e.data) {
+      if (e.event === 'impersonate' && typeof e.data === 'string') {
+        setImpersonateFill(e.data);
+      } else if (e.event === 'impersonate_done') {
+        setImpersonateFill(null);
+        void refresh();
+      } else if (e.event === 'token' && e.data) {
         setStreaming((prev) => prev + e.data);
       } else if (e.event === 'done' || e.event === 'error') {
         // Refresh FIRST, then drop the live streaming bubble — so the finalized
@@ -668,6 +675,10 @@ export function ChatPage() {
           canMic={canMic}
           onDraftChange={setDraft}
           cast={cast}
+          impersonateFill={impersonateFill}
+          onImpersonate={(prefix) => {
+            void api.post('/api/chat/impersonate', { prefix });
+          }}
         />
       </div>
 

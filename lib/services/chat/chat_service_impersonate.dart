@@ -133,36 +133,12 @@ extension ChatServiceImpersonate on ChatService {
 
       String history = _buildChatHistory();
 
-      // Suffix: user name + any partial text the user typed
-      String suffix = "\n$userName:";
-      if (prefix.isNotEmpty) {
-        suffix = "$suffix $prefix";
-      }
-
-      String mesExampleBlock = '';
-      if (_activeGroup != null) {
-        final examples = _groupCharacters
-            .where((ch) => ch.mesExample.isNotEmpty)
-            .map(
-              (ch) => _macroResolver.resolve(
-                ch.mesExample,
-                MacroContext(userName: userName, characterName: ch.name),
-                section: 'mesExample',
-              ),
-            )
-            .toList();
-        if (examples.isNotEmpty) {
-          mesExampleBlock = '${examples.join('\n')}\n';
-        }
-      } else if (speakingCharacter.mesExample.isNotEmpty) {
-        mesExampleBlock = '${speakingCharacter.mesExample}\n';
-      }
-
-      String postHistoryBlock = '';
-      if (_activeGroup == null &&
-          speakingCharacter.postHistoryInstructions.isNotEmpty) {
-        postHistoryBlock = '${speakingCharacter.postHistoryInstructions}\n';
-      }
+      // Suffix + prefix rule: a typed start is an incomplete USER line
+      // (Continue-shaped). Character examples / post-history few-shot the
+      // character's voice and often repeat "do not write for the user".
+      final suffix = impersonateSuffix(userName: userName, prefix: prefix);
+      const mesExampleBlock = '';
+      const postHistoryBlock = '';
 
       String authorNoteBlock = '';
       if (_authorNote.isNotEmpty) {
@@ -202,29 +178,20 @@ extension ChatServiceImpersonate on ChatService {
         macroCtx,
         section: 'scenario',
       );
-      if (_activeGroup == null && mesExampleBlock.isNotEmpty) {
-        mesExampleBlock = _macroResolver.resolve(
-          mesExampleBlock,
-          macroCtx,
-          section: 'mesExample',
-        );
-      }
-      if (postHistoryBlock.isNotEmpty) {
-        postHistoryBlock = _macroResolver.resolve(
-          postHistoryBlock,
-          macroCtx,
-          section: 'postHistory',
-        );
-      }
-
-      // Impersonate instruction — comprehensive guidance for writing as the user
-      final impersonateInstruction =
-          '[System: You are now writing as $userName (the user), NOT as ${speakingCharacter.name} or any other character. '
-          'Compose $userName\'s next message in first person. '
-          'Match $userName\'s established voice, personality, and writing style from the conversation so far. '
-          'Write only $userName\'s words and actions — never narrate for ${speakingCharacter.name} or other characters. '
-          'Do not include meta-commentary, stage directions for others, or break the fourth wall. '
-          'Keep the response natural, and consistent with the scene.]\n';
+      final identity = impersonateIdentityBlock(
+        userName: userName,
+        characterName: speakingCharacter.name,
+      );
+      final cardFrame = impersonateCardFrame(
+        userName: userName,
+        characterName: speakingCharacter.name,
+      );
+      final prefixRule = impersonatePrefixRule(
+        userName: userName,
+        characterName: speakingCharacter.name,
+        prefix: prefix,
+      );
+      systemPrompt = '$identity$cardFrame$systemPrompt';
 
       // ── Context Shift: budget-aware history trimming ──
       // Same single-source PromptPlan as the main generation path (spec §7):
@@ -232,9 +199,9 @@ extension ChatServiceImpersonate on ChatService {
       // No state zone here, and that is not a divergence from §6.1: writing
       // the USER's next line needs the card, the scene and the transcript,
       // never the character's private feelings, needs or objectives — this
-      // path has never registered those sections at all. The author-directive
-      // tail (post-history, @AN lore, author's note) sits in the user message
-      // exactly as the main path leaves it.
+      // path has never registered those sections at all. Identity + card
+      // frame ride the system message (they must outrank "do not write
+      // for {{user}}"). Character examples and post-history are omitted.
       final plan = PromptPlan();
       plan.add(id: 'system', inSystem: true, text: '$systemPrompt\n');
       plan.add(id: 'lore.before', inSystem: true, text: loreBefore);
@@ -261,7 +228,7 @@ extension ChatServiceImpersonate on ChatService {
       plan.add(id: 'author_note', text: authorNoteBlock);
       plan.add(id: 'lore.an_bottom', text: loreAnBottom);
       plan.add(id: 'lore.depth', text: loreDepthJoined, rendered: false);
-      plan.add(id: 'impersonate', text: impersonateInstruction);
+      plan.add(id: 'impersonate', text: prefixRule);
       plan.add(id: 'suffix', text: suffix);
       final fixedTokens = await _countTokens(plan.fixedCountText);
       final contextBudget = _sessionGenSettings.resolveContextSize(
@@ -349,6 +316,13 @@ extension ChatServiceImpersonate on ChatService {
         }
         if (inThinkBlock) continue;
         accumulated += token;
+        // Server stop lists are capped; trim "\nChar:" bleed ourselves.
+        final trimmed = trimAtFirstStop(accumulated, stopList);
+        if (trimmed != accumulated) {
+          accumulated = trimmed;
+          onToken(accumulated);
+          break;
+        }
         onToken(accumulated);
       }
 

@@ -47,6 +47,7 @@ class WebChatRoutes {
     router.post('/api/chat/regenerate', _regenerate);
     router.post('/api/chat/cancel-realism', _cancelRealism);
     router.post('/api/chat/continue', _continue);
+    router.post('/api/chat/impersonate', _impersonate);
     router.post('/api/chat/swipe', _swipe);
     router.post('/api/chat/edit', _edit);
     router.post('/api/chat/delete', _delete);
@@ -257,6 +258,12 @@ class WebChatRoutes {
 
   shelf.Response _continue(shelf.Request request) {
     _facade.continueGeneration();
+    return JsonResponse.ok({'status': 'ok'});
+  }
+
+  Future<shelf.Response> _impersonate(shelf.Request request) async {
+    final body = await _json(request);
+    _facade.impersonate(body['prefix']?.toString() ?? '');
     return JsonResponse.ok({'status': 'ok'});
   }
 
