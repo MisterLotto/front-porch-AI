@@ -170,9 +170,28 @@ void main() {
     );
 
     // Close the detail panel so later taps aren't over its barrier.
+    //
+    // BOTH button labels, or this confirmation is true for the wrong reason
+    // (Windows 3/5 flake, run 31865341572). The panel's download button reads
+    // 'Download to library' at rest and 'Adding…' while _downloading — and
+    // _downloading is only cleared in _download's `finally`, AFTER the
+    // "added to your library" snackbar the previous step waits on. So on a
+    // machine where that setState has not been pumped yet, checking the
+    // rest-label alone reports "already closed" while the panel is still
+    // fully open: tapUntilTrue's loop is `attempt < 8 && !done()`, so it
+    // never taps close at all, and the @PorchFriend tap below then lands on
+    // the dialog's modal barrier and is swallowed eight times over. The
+    // suite died two minutes later at the share button — a symptom three
+    // steps from the cause. The button renders exactly one of these two
+    // strings whenever the panel is up, so "neither present" is the honest
+    // test for "the panel is gone". Both are mirrored from
+    // stoop_card_detail_page.dart's download button — rename one there and
+    // this predicate silently goes back to lying, so change both together.
     await d.tapUntilTrue(
       [find.byIcon(Icons.close)],
-      () => find.text('Download to library').evaluate().isEmpty,
+      () =>
+          find.text('Download to library').evaluate().isEmpty &&
+          find.text('Adding…').evaluate().isEmpty,
       () => 'the detail panel to close',
     );
 

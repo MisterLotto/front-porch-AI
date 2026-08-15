@@ -15974,3 +15974,45 @@ give/`to` path is untouched, and a parity test pins the fused prompt to the
 same shared fragment.
 
 Commit: d5c30d2
+
+## 2026-08-15 — Fix the flaky Stoop E2E: a close-confirmation that was true for the wrong reason
+
+Files: integration_test/stoop_test.dart (one predicate + rationale comment).
+
+Maintainer-approved test change ("Also fix the flaky test"), rationale below.
+
+Windows 3/5 failed on run 31865341572 (Rawhide head 2b3d015) at the share
+wizard: 120s timeout waiting for the "Share to The Stoop" StoopAmberButton
+after tapping @PorchFriend. Re-running the same commit went green, so the
+step was non-deterministic. The failure point was three steps from the cause.
+
+Cause: the PRECEDING step closes the detail panel with
+  tapUntilTrue([Icons.close], () => find.text('Download to library').isEmpty)
+and that predicate is satisfied by a state that is not "closed". The panel's
+download button renders `_downloading ? 'Adding…' : 'Download to library'`,
+and `_downloading` is cleared in _download's `finally` — AFTER the "added to
+your library" snackbar the previous step waits on. So when that setState has
+not been pumped yet, the rest-label is absent while the panel is still fully
+open. tapUntilTrue's loop is `attempt < 8 && !done()`, so with done() already
+true at entry it never taps close at all. The panel stays up, and the
+@PorchFriend tab tap below lands on the dialog's modal barrier (it is a
+showGeneralDialog with barrierDismissible) and is swallowed all eight
+attempts — then waitFor times out naming the share button.
+
+Fix: require BOTH labels absent. The button renders exactly one of the two
+whenever the panel is up, so "neither present" is the honest test for "the
+panel is gone". Also makes a genuine failure fail AT the close step, naming
+the cause, instead of two minutes later at a symptom.
+
+NOT VERIFIED LOCALLY, and deliberately not papered over with a synthetic
+guard: the race is Windows E2E timing, this sandbox cannot run the suite
+(app handshake dies, documented earlier), and a unit test re-implementing the
+predicate would stay green if the call site were reverted — decoration by the
+project's own standard. The reasoning is mechanism-level (both label states
+read from the product source); CI is the arbiter.
+
+Coupling noted in-comment: both strings mirror stoop_card_detail_page.dart's
+download button, so a rename there must update this predicate or it silently
+starts lying again.
+
+Commit: 2353493
