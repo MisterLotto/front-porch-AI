@@ -16,7 +16,7 @@
 - **Files:** NEW continue_glue.dart + continue_glue_test.dart +
   continue_space_test.dart; generation_plan/stream/postgen/generation;
   chat.dart export; docs/Rawhide.md
-- **Commit:** f96acaee
+- **Commit:** 936bfb09
 
 ## 2026-08-15 — fix(eval): Kimi 2.6:thinking judges were empty after a 400
 - **Why:** First eval sent reasoning.enabled=false → HTTP 400 (mandatory).
