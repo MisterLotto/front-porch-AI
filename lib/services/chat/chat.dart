@@ -79,6 +79,7 @@ export 'scene_guest_factory.dart';
 export 'sentence_stream.dart';
 export 'stop_sequences.dart';
 export 'story_clock.dart';
+export 'story_clock_claims.dart';
 export 'time_service.dart';
 export 'tool_support_tester.dart';
 export 'weather_biomes.dart';

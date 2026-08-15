@@ -216,6 +216,14 @@ extension ChatServiceGroupRealismHelpers on ChatService {
   /// realism_state, so this no-ops for them.
   void _restampRealismSnapshotPostGen(ChatMessage msg) {
     if (msg.isUser) return;
+    // She named a time ("six in the morning") that disagrees with the
+    // pre-gen snap (new_day → 08:00). Fiction wins so the sidebar matches
+    // the line you just read. Gated on a moving clock — a frozen clock
+    // must not start chasing dialogue.
+    if (_clockRunning) {
+      final named = clockNamedInReply(msg.text, _timeService.clock);
+      if (named != null) _timeService.applyReconciledClock(named);
+    }
     final meta = msg.activeMetadata;
     final rs = meta?['realism_state'];
     if (rs is! Map) return;
@@ -247,6 +255,11 @@ extension ChatServiceGroupRealismHelpers on ChatService {
       if (p != null) {
         rs['pockets'] = p.toJson();
       }
+    }
+    if (rs.containsKey('storyClock')) {
+      rs['storyClock'] = _timeService.storyClockIso;
+      rs['timeOfDay'] = _timeService.timeOfDay;
+      rs['dayCount'] = _timeService.dayCount;
     }
   }
 

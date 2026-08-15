@@ -3,6 +3,21 @@
 
 # Changelog
 
+## 2026-08-15 — feat(time): reply-named clock wins so sidebar matches the line
+- **Why:** Senjumaru said "six in the morning" while the clock was 8:05.
+  new_day snaps to 08:00; she wrote dawn; the next turn followed her prose.
+  The eval on that turn only added 5 minutes. Prompt nagging cannot force
+  the model to say 8:05.
+- **What:** After generation, `clockNamedInReply` reads a present-tense
+  hour from the think-stripped reply (spoken "six in the morning", 6am,
+  at dawn). If it is within 6 hours of the live clock, TimeService
+  follows. Snapshot restamps storyClock. Think-blocks and "another six
+  hours" / "until 6am" are ignored.
+- **Files:** NEW story_clock_claims.dart + test; time_service.dart
+  applyReconciledClock; group_realism_helpers restamp; chat.dart export;
+  docs/Rawhide.md
+- **Commit:** (this commit)
+
 ## 2026-08-15 — feat(reasoning): LM Studio thinking capability from GGUF, no poke
 - **Why:** LMS 0.4.21 returns a 400 listing for `reasoning_effort=fpai_probe`,
   but that list is the *server* enum (none/minimal/low/medium/high/xhigh)

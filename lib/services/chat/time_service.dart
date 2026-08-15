@@ -430,6 +430,20 @@ class TimeService {
     onPatchLastMessageRealismState(timeOfDay, dayCount, storyClockIso);
   }
 
+  /// Post-reply: she named a time, so the live clock follows. Not a user
+  /// nudge — swipe/regen still rewind from the previous snapshot.
+  void applyReconciledClock(DateTime newClock) {
+    _clock = DateTime.utc(
+      newClock.year,
+      newClock.month,
+      newClock.day,
+      newClock.hour,
+      newClock.minute,
+    );
+    if (_clock.isBefore(_startDate)) _startDate = StoryClock.dateOnly(_clock);
+    _turnsSinceClockMoved = 0;
+  }
+
   /// Calendar dialog: re-anchor "story begins on…". Shifts the clock by the
   /// same delta so elapsed days (and Day N) are preserved — the whole
   /// timeline slides together (design §3).
