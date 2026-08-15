@@ -150,10 +150,18 @@ class PocketsEval {
       // scoping to the reply alone — which quietly re-opened the very hole
       // recentExchange was added to close (a change the USER narrated was
       // context the model had been told to ignore).
+      // "were offered AND DID NOT TAKE" (2026-08-14): the old blanket
+      // "were offered" told the model to ignore the user's own gift — "here,
+      // take my keys" is an offer, so accepting it scored nothing and the
+      // keys never reached the record. That is the ONE way a user can hand a
+      // character something by narration (the sidebar's "Hand it over" being
+      // the deterministic path), and in a 1:1 it is the only kind of handover
+      // there is. An offer left hanging is still correctly ignored.
       '\nWhat changed? Report ONLY changes that actually happened in the '
       'reply or the recent exchange below — not things they merely mentioned, '
-      'remembered, wanted, or were offered. If nothing changed, report an '
-      'empty list; that is the common answer and it is the right one.\n\n'
+      'remembered, wanted, or were offered and did not take. If nothing '
+      'changed, report an empty list; that is the common answer and it is '
+      'the right one.\n\n'
       'Each change is one op:\n'
       '  wear / remove — clothing put on or taken off. Undressing (for bed, '
       'a bath, a shower) is one remove per worn item, named as listed above — '
@@ -162,7 +170,8 @@ class PocketsEval {
       'went on\n'
       '  pickup / drop — something taken up; or gone for GOOD (thrown away, '
       'lost, destroyed, given up). Taking back something set aside is a '
-      'pickup\n'
+      'pickup; so is accepting something handed over — by the person they '
+      'are talking to or by anyone else\n'
       '  setdown — put down nearby but still theirs: on the table, the '
       'nightstand, by the door. It can be taken back later. Use drop only '
       'when it is gone for good. Include "where" when the scene says '

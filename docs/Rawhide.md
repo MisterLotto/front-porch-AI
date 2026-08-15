@@ -7,6 +7,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 *Since nightly `20260811` (`aa66f57` — web eraser).*
 
+- 🎁 **Hand her something in the story and she actually has it** — Typing "here, take my keys" and having her pocket them used to leave her record empty: the bookkeeping was told to ignore anything she "was offered", which is exactly what your gift looks like. Now an offer she **accepts** goes into her pockets, while one she ignores or turns down still counts for nothing. This is the only kind of handover a 1:1 chat has, so giving your character things by narration works there now — the same as passing an item between characters in a group. (The sidebar's **Hand it over** button still does it directly if you'd rather not leave it to the story.)
+
 - 🧹 **Scan & Clean no longer wipes group memory or your “remember these characters” lists** — group chat archives and those checkboxes were being treated as leftovers. They stay.
 - ▶️ **Continue no longer eats Chance Time / night-porch / “she picked up the keys” / a Needs crash** — those still fire on the next real Send. And if you Stop mid-thought then Continue, the new words show up as spoken text, not a blank bubble.
 - 🌙 **A dream cannot land in the wrong chat** if you switch conversations while it is still writing.

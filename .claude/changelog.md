@@ -15921,3 +15921,56 @@ half-faded frame. Settling the switcher (or pumping until stable) would make
 them read as real screens and stop unrelated step edits from moving them.
 
 Commit: 9b38b6d
+
+## 2026-08-14 — Pockets rubric: an offer the character ACCEPTS is a pickup (user→character gives in 1:1)
+
+Files: lib/services/chat/pockets_eval.dart (prompt text only).
+NEW test: test/services/chat/pockets_offer_accepted_test.dart.
+
+Maintainer question: "I would like the give eval to work for one to one chats
+as well — ie my user gives an item to the character", with a case made for
+moving it to a PRE-generation eval of the next speaker (the give is stated in
+the USER's message, so it is knowable before generation).
+
+Investigated first. The premise was half right and the conclusion would have
+hurt:
+ * The pockets pass ALREADY runs in 1:1 (gates on pocketsEnabled alone) and
+   ALREADY reads the user's message — recentExchange is passed in and the
+   rubric scopes to "the reply or the recent exchange".
+ * What is group-only is the RECIPIENT side (others roster + give/`to`),
+   because a character→character handover needs a second record. A user
+   handing the character something needs none of that: it is a plain pickup
+   on her own record, an op that works identically in both modes.
+ * The actual blocker was one clause: "not things they merely mentioned,
+   remembered, wanted, or were offered". A user's gift IS an offer, so the
+   model was explicitly instructed to score nothing.
+
+So the fix is prompt-only: "were offered AND DID NOT TAKE", plus the pickup op
+naming acceptance outright ("so is accepting something handed over — by the
+person they are talking to or by anyone else"). Zero new calls. Because
+opsRubric is the fragment SHARED verbatim with the fused ReplyFactsEval
+prompt, both transports change together by construction.
+
+Pre-generation was declined, with reasons (documented for the record):
+ (1) it removes her right to refuse — post-gen, her reply arbitrates whether
+     she took it; pre-gen writes the item in before she has answered, and a
+     refusal in the reply then leaves the record wrong with nothing to undo
+     it. That distinction is the whole reason the sidebar has both "Hand it
+     over" and "Add quietly";
+ (2) double-apply, structurally: the post-gen pass reads recentExchange,
+     which CONTAINS the user's message, so the same sentence would score
+     twice — the Continue double-apply failure class;
+ (3) cost in the latency path: another pre-gen call on EVERY user turn to
+     catch something rare, right where the voice-call work just cut calls.
+ The lag it would fix is not observable: she takes the item in the prose on
+ turn N and the record carries it from turn N+1, so no turn shows her
+ empty-handed after taking it.
+
+Red-proven three ways: restoring the blanket "were offered" fails the
+acceptance test; deleting the exclusion entirely fails the "offer left
+hanging is still ignored" test (phantom acquisitions); dropping the pickup
+clause fails the op-naming test. Group roster assertions pin that the
+give/`to` path is untouched, and a parity test pins the fused prompt to the
+same shared fragment.
+
+Commit: d5c30d2
