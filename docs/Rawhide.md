@@ -7,6 +7,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 *Since nightly `20260811` (`aa66f57` — web eraser).*
 
+- 🧠 **Local models stop pretending they can think** — Thinking strength used to show Low · Medium · High for every local model, including the many that have no thinking mode at all, so the setting quietly did nothing. Front Porch now reads the model file itself and tells you the truth: a model with no reasoning says so and the switch is greyed out; one that only does on/off says it has no strength levels instead of showing three that don't work; one that can't stop thinking locks Off; and only models with real levels show the chips. No extra requests and no waiting — the answer comes from the file you already loaded. Same on the web Settings. (LM Studio and oMLX are unchanged for now.)
+
 - 🎁 **Hand her something in the story and she actually has it** — Typing "here, take my keys" and having her pocket them used to leave her record empty: the bookkeeping was told to ignore anything she "was offered", which is exactly what your gift looks like. Now an offer she **accepts** goes into her pockets, while one she ignores or turns down still counts for nothing. This is the only kind of handover a 1:1 chat has, so giving your character things by narration works there now — the same as passing an item between characters in a group. (The sidebar's **Hand it over** button still does it directly if you'd rather not leave it to the story.)
 
 - 🧹 **Scan & Clean no longer wipes group memory or your “remember these characters” lists** — group chat archives and those checkboxes were being treated as leftovers. They stay.

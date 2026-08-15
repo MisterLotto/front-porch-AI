@@ -21,6 +21,7 @@ import 'dart:async';
 import 'package:path/path.dart' as p;
 
 import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/capability/capability.dart';
 import 'package:front_porch_ai/services/legacy_model_cleanup.dart';
 import 'package:front_porch_ai/services/services.dart';
 
@@ -44,6 +45,30 @@ class SettingsFacade {
   static const List<String> backends = ['kobold', 'openRouter', 'omlx'];
 
   static String? _seededReasoningCatalogUrl;
+
+  /// The identity the shared reasoning-effort helpers key on: the remote model
+  /// name, or — for managed KoboldCpp — the loaded .gguf path the resolver
+  /// registers under. Empty (generic chips, nothing claimed) until the file
+  /// has actually been read, or in preset mode where there is no path.
+  String get _reasoningModelKey {
+    if (!_llm.isLocal) return _storage.backendSettings.remoteModelName;
+    final path = _storage.lastUsedModelPath ?? '';
+    return ReasoningSupportResolver.instance.peek(path) == null ? '' : path;
+  }
+
+  /// Local thinking verdict, kicking the (file-reading) resolve once so a
+  /// later state poll carries the answer. Mirrors the desktop block's
+  /// kick-then-peek: this getter itself never touches the disk.
+  ThinkingSupport? get _localThinkingSupport {
+    if (!_llm.isLocal) return null;
+    final path = _storage.lastUsedModelPath ?? '';
+    if (path.isEmpty) return null;
+    if (!ReasoningSupportResolver.instance.isResolved(path)) {
+      unawaited(ReasoningSupportResolver.instance.resolveLocalGguf(path));
+      return null;
+    }
+    return ReasoningSupportResolver.instance.peek(path);
+  }
 
   void _seedReasoningCatalog() {
     if (_llm.isLocal) return;
@@ -73,11 +98,13 @@ class SettingsFacade {
       // <think> block is ever produced for the chat to show.
       'reasoningEnabled': b.reasoningEnabled,
       'reasoningEffort': b.reasoningEffort,
-      'reasoningMandatory': !_llm.isLocal &&
-          reasoningEffortIsMandatory(b.remoteModelName),
-      'reasoningEfforts': _llm.isLocal
-          ? const <String>[]
-          : reasoningEffortChipsFor(b.remoteModelName),
+      // Local models answer from their GGUF's chat template instead of a
+      // provider menu (see ReasoningSupportResolver). Same two fields, so the
+      // web control needs no local-only branch — plus one ADDITIVE field for
+      // the copy that only local can produce ("this model cannot think").
+      'reasoningMandatory': reasoningEffortIsMandatory(_reasoningModelKey),
+      'reasoningEfforts': reasoningEffortChipsFor(_reasoningModelKey),
+      'reasoningLocalSupport': _localThinkingSupport?.name,
       'generation': {
         'temperature': g.temperature,
         'minP': g.minP,

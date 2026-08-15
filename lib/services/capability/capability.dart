@@ -7,4 +7,5 @@
 export 'image_reference_resolver.dart';
 export 'image_reference_role.dart';
 export 'model_capabilities.dart';
+export 'reasoning_support.dart';
 export 'vision_support_resolver.dart';

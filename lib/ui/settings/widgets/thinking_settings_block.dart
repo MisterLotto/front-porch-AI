@@ -5,9 +5,12 @@
 // when the model cannot disable reasoning. A Nano poke at pick time fills
 // the menu when the provider does not advertise it.
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:front_porch_ai/services/capability/capability.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/settings/widgets/thinking_strength_control.dart';
@@ -76,9 +79,22 @@ class _ThinkingSettingsBlockState extends State<ThinkingSettingsBlock> {
   }
 
   void _kickProbe() {
-    if (widget.modelId.isEmpty || !mounted || _isLocal) return;
+    if (!mounted) return;
     final storage = _storage;
     if (storage == null) return;
+    // Local (managed KoboldCpp): the capability is in the loaded GGUF's chat
+    // template, not in a provider's 400 — read the file instead of poking.
+    // Off the build path by construction: this runs from initState's
+    // post-frame hook / didUpdateWidget, and the widget reads only the cached
+    // verdict via peek().
+    if (_isLocal) {
+      final path = _localModelPath;
+      if (path.isEmpty) return;
+      if (ReasoningSupportResolver.instance.isResolved(path)) return;
+      unawaited(ReasoningSupportResolver.instance.resolveLocalGguf(path));
+      return;
+    }
+    if (widget.modelId.isEmpty) return;
     kickReasoningEffortProbe(
       model: widget.modelId,
       apiUrl: storage.remoteApiUrl,
@@ -86,11 +102,32 @@ class _ThinkingSettingsBlockState extends State<ThinkingSettingsBlock> {
     );
   }
 
+  /// The .gguf KoboldCpp has loaded. Empty in preset mode (the .kcpps owns the
+  /// model, so there is no path here to read) — then nothing is claimed and
+  /// the generic chips stand, exactly as before.
+  String get _localModelPath => _storage?.lastUsedModelPath ?? '';
+
+  /// The thinking capability read off that file, or null while it is still
+  /// being read / could not be read.
+  ThinkingSupport? get _localSupport {
+    final path = _localModelPath;
+    return path.isEmpty ? null : ReasoningSupportResolver.instance.peek(path);
+  }
+
   @override
   Widget build(BuildContext context) {
     final local = _isLocal;
-    final mandatory =
-        !local && reasoningEffortIsMandatory(widget.modelId);
+    // The identity the shared chip/caption machinery keys on. Local models
+    // are keyed by their .gguf path, which is what the resolver registers
+    // under — so one store, one set of helpers, no local-only fork. It stays
+    // EMPTY until the file has actually been read: an unresolved (or
+    // preset-mode) local model must fall back to the generic chips rather
+    // than claim knowledge we do not have.
+    final localSupport = local ? _localSupport : null;
+    final effectiveModelId = local
+        ? (localSupport == null ? '' : _localModelPath)
+        : widget.modelId;
+    final mandatory = reasoningEffortIsMandatory(effectiveModelId);
     final thinkingOn = local
         ? widget.enabled
         : reasoningEffortThinkingOn(widget.modelId, widget.enabled);
@@ -99,6 +136,9 @@ class _ThinkingSettingsBlockState extends State<ThinkingSettingsBlock> {
           widget.modelId,
           apiUrl: _storage?.remoteApiUrl ?? '',
         );
+    // A model whose template has no thinking machinery at all: the switch and
+    // the chips would both be no-ops, so say that instead of implying they work.
+    final localCannotThink = localSupport == ThinkingSupport.none;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -116,11 +156,39 @@ class _ThinkingSettingsBlockState extends State<ThinkingSettingsBlock> {
             ),
             Switch(
               value: thinkingOn,
-              onChanged: mandatory ? null : widget.onEnabledChanged,
+              onChanged: mandatory || localCannotThink
+                  ? null
+                  : widget.onEnabledChanged,
               activeTrackColor: AppColors.formMasterAccent,
             ),
           ],
         ),
+        if (localCannotThink)
+          Padding(
+            padding: EdgeInsets.only(top: widget.compact ? 2 : 4),
+            child: Text(
+              'This model has no thinking mode — its chat template never '
+              'produces think-steps, so this switch would do nothing.',
+              style: TextStyle(
+                color: AppColors.textTertiary(context),
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
+          ),
+        if (localSupport == ThinkingSupport.toggle)
+          Padding(
+            padding: EdgeInsets.only(top: widget.compact ? 2 : 4),
+            child: Text(
+              'This model thinks on or off only — it has no strength levels, '
+              'so there are no chips to pick.',
+              style: TextStyle(
+                color: AppColors.textTertiary(context),
+                fontSize: 12,
+                height: 1.35,
+              ),
+            ),
+          ),
         if (mandatory)
           Padding(
             padding: EdgeInsets.only(top: widget.compact ? 2 : 4),
@@ -145,13 +213,13 @@ class _ThinkingSettingsBlockState extends State<ThinkingSettingsBlock> {
               ),
             ),
           ),
-        if (thinkingOn)
+        if (thinkingOn && !localCannotThink)
           Padding(
             padding: EdgeInsets.only(top: widget.compact ? 4 : 12),
             child: ThinkingStrengthControl(
               compact: widget.compact,
               value: widget.effort,
-              modelId: local ? '' : widget.modelId,
+              modelId: effectiveModelId,
               onChanged: widget.onEffortChanged,
             ),
           )

@@ -76,6 +76,11 @@ interface Settings {
   reasoningEffort: string;
   reasoningMandatory?: boolean;
   reasoningEfforts?: string[];
+  // Local (KoboldCpp) only: what the loaded GGUF's chat template supports —
+  // 'graded' | 'toggle' | 'always' | 'none'. Absent on remote backends and
+  // until the file has been read, which is the signal to fall back to the
+  // generic chips instead of claiming knowledge we do not have.
+  reasoningLocalSupport?: string;
   generation: Gen;
   /** Dictionary tag ('en_US') or 'off'. Optional for the same reason. */
   spellCheckLanguage?: string;
@@ -381,19 +386,33 @@ export function SettingsPage() {
           <span>Request thinking</span>
           <input
             type="checkbox"
-            checked={Boolean(s.reasoningEnabled) || (Boolean(s.reasoningMandatory) && !s.isLocal)}
-            disabled={Boolean(s.reasoningMandatory) && !s.isLocal}
+            checked={Boolean(s.reasoningEnabled) || Boolean(s.reasoningMandatory)}
+            disabled={Boolean(s.reasoningMandatory) || s.reasoningLocalSupport === 'none'}
             onChange={(e) => {
-              if (!(s.reasoningMandatory && !s.isLocal)) {
+              if (!s.reasoningMandatory && s.reasoningLocalSupport !== 'none') {
                 patch({ reasoningEnabled: e.target.checked })
               }
             }}
           />
         </label>
-        {s.reasoningMandatory && !s.isLocal && (
+        {Boolean(s.reasoningMandatory) && (
           <p className="muted small">This model always thinks — Off is not available.</p>
         )}
-        {(s.reasoningEnabled || (s.reasoningMandatory && !s.isLocal)) && (
+        {s.reasoningLocalSupport === 'none' && (
+          <p className="muted small">
+            This model has no thinking mode — its chat template never produces
+            think-steps, so this switch would do nothing.
+          </p>
+        )}
+        {s.reasoningLocalSupport === 'toggle' && (
+          <p className="muted small">
+            This model thinks on or off only — it has no strength levels, so
+            there are no chips to pick.
+          </p>
+        )}
+        {(s.reasoningEnabled || Boolean(s.reasoningMandatory)) &&
+          s.reasoningLocalSupport !== 'none' &&
+          !(s.isLocal && s.reasoningLocalSupport && !s.reasoningEfforts?.length) && (
           <div className="thinking-strength">
             <div className="thinking-strength-label">Thinking strength</div>
             <div className="thinking-strength-chips" role="group" aria-label="Thinking strength">

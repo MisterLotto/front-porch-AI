@@ -16016,3 +16016,63 @@ download button, so a rename there must update this predicate or it silently
 starts lying again.
 
 Commit: 2353493
+
+## 2026-08-15 — Local (KoboldCpp) thinking capability read from the GGUF chat template
+
+Files: NEW lib/services/capability/reasoning_support.dart, capability.dart
+(barrel), lib/ui/settings/widgets/thinking_settings_block.dart,
+lib/services/web/facade/settings_facade.dart,
+web_ui/src/pages/SettingsPage.tsx (+ rebuilt assets/web_app bundle),
+docs/Rawhide.md, NEW docs/design/local-reasoning-capability.md.
+NEW test: test/services/capability/reasoning_support_test.dart.
+
+Maintainer asked to extend the reasoning-effort POKE to local backends. The
+poke cannot work on KoboldCpp and the reason matters: the remote probe learns
+a menu from a provider's "Supported values are: …" 400, but Kobold forwards
+enable_thinking / reasoning_effort straight to the chat template and never
+validates, so a bogus value is ignored. Poking it would spend a request to
+learn nothing AND set the "already probed" flag, permanently silencing the
+question. Reported this, and the maintainer approved doing the Kobold half by
+template inspection plus a planning doc for LM Studio/oMLX.
+
+The capability is on disk: in jinja mode (--jinja, which the managed backend
+launches with) Kobold executes the GGUF's own chat template, so the template
+IS the capability. detectThinkingFromChatTemplate() is pure, four outcomes:
+reasoning_effort => graded; enable_thinking => toggle; think markers with no
+switch => always (mandatory); nothing => none. ORDER IS LOAD-BEARING — harmony
+carries reasoning_effort AND channel markers, Qwen3 carries enable_thinking
+AND <think>, so a marker-first check misreads both as `always`. Markers
+include '<|channel|>analysis' because gpt-oss reasoners never emit <think>.
+
+readChatTemplate() reuses GGUFFileReader.parseMetadataBytes (already skips the
+token array by length arithmetic) over a bounded 4MB header read — no
+generation, no backend, no network. ReasoningSupportResolver caches one
+verdict per path INCLUDING misses (peek() is called from build; an uncached
+miss would hit the filesystem every frame) and registers into the SHARED
+kLearnedReasoningEffortsByModel / kMandatoryReasoningModels with persist:false,
+so the existing chip/caption helpers apply with no local-only fork. No
+notifier of its own — registering bumps kReasoningEffortCatalogTick, which
+Settings already listens to.
+
+UI: the block used to pass modelId:'' for local (the reason the generic chips
+always showed). It now passes the .gguf path, but ONLY once a verdict exists —
+unresolved and preset(.kcpps) mode still claim nothing and fall back to
+generic. `none` disables the switch and explains; `toggle` shows no strength
+chips and explains; `always` locks Off. Web parity via reasoningEfforts /
+reasoningMandatory (now correct for local) + the additive
+reasoningLocalSupport field; the web's `&& !s.isLocal` mandatory guards were
+dropped since the facade now computes local mandatory correctly.
+
+Red-proven: marker-first ordering fails harmony+Qwen3; dropping the harmony
+channel marker fails the always case; a graded set for `toggle` fails the
+no-chips case. Suite 3846 + 94 goldens green, analyze clean, web lint/tests
+green, bundle rebuilt.
+
+NOT done (documented in docs/design/local-reasoning-capability.md for the
+maintainer's Mac agent): LM Studio + oMLX. They already ride the remote path
+and are blocked only by isLocalRemoteUrl; probeReasoningEfforts already has an
+unused allowLocal flag. Whether the poke works there is an empirical question
+needing those servers — the doc carries the curl, the three possible outcomes
+and the work each implies.
+
+Commit: 6bc81de
