@@ -275,32 +275,70 @@ class UpdateService extends ChangeNotifier {
       final file = File(installerPath);
 
       final request = http.Request('GET', Uri.parse(_downloadUrl));
-      final response = await http.Client().send(request);
-
-      final totalBytes = response.contentLength ?? 0;
-      int receivedBytes = 0;
-      final sink = file.openWrite();
-
-      await for (final chunk in response.stream) {
-        sink.add(chunk);
-        receivedBytes += chunk.length;
-        if (totalBytes > 0) {
-          _downloadProgress = receivedBytes / totalBytes;
-          notifyListeners();
+      final client = http.Client();
+      try {
+        final response = await client.send(request);
+        // A 404/500 HTML error page must never become "the installer":
+        // the Linux path deletes the RUNNING AppImage before copying, so a
+        // garbage file that passed this point destroyed the install.
+        if (response.statusCode != 200) {
+          throw Exception('installer download HTTP ${response.statusCode}');
         }
-      }
-      await sink.close();
 
-      _pendingInstallerPath = installerPath;
-      _downloadComplete = true;
-      _downloading = false;
-      notifyListeners();
+        final totalBytes = response.contentLength ?? 0;
+        int receivedBytes = 0;
+        final sink = file.openWrite();
+        try {
+          await for (final chunk in response.stream) {
+            sink.add(chunk);
+            receivedBytes += chunk.length;
+            if (totalBytes > 0) {
+              _downloadProgress = receivedBytes / totalBytes;
+              notifyListeners();
+            }
+          }
+        } finally {
+          await sink.close();
+        }
+
+        final invalid = validateInstallerDownload(
+          receivedBytes: receivedBytes,
+          expectedBytes: totalBytes,
+        );
+        if (invalid != null) throw Exception(invalid);
+
+        _pendingInstallerPath = installerPath;
+        _downloadComplete = true;
+        _downloading = false;
+        notifyListeners();
+      } finally {
+        client.close();
+      }
     } catch (e) {
       debugPrint('Download error: $e');
       _downloading = false;
       _downloadProgress = 0.0;
       notifyListeners();
     }
+  }
+
+  /// Reject a download that cannot be a real installer: a truncated stream
+  /// (received != Content-Length) or a body so small it is an error page,
+  /// not a binary — every installer this app ships is tens of MB, so 1 MB
+  /// is a generous floor. Returns the rejection reason, or null when valid.
+  @visibleForTesting
+  static String? validateInstallerDownload({
+    required int receivedBytes,
+    required int expectedBytes,
+  }) {
+    if (expectedBytes > 0 && receivedBytes != expectedBytes) {
+      return 'installer download truncated '
+          '($receivedBytes of $expectedBytes bytes)';
+    }
+    if (receivedBytes < 1024 * 1024) {
+      return 'installer download implausibly small ($receivedBytes bytes)';
+    }
+    return null;
   }
 
   /// Run the update immediately and exit (or relaunch on Linux/macOS).
@@ -401,21 +439,23 @@ class UpdateService extends ChangeNotifier {
     }
     debugPrint('Replacing AppImage: $currentAppImage with $downloadedPath');
 
-    // Delete the old AppImage first (Linux allows unlinking running executables)
-    final rmResult = await Process.run('rm', ['-f', currentAppImage]);
-    if (rmResult.exitCode != 0) {
-      debugPrint('rm failed: ${rmResult.stderr}');
-    }
-
-    // Copy the new AppImage to the original location
-    final cpResult = await Process.run('cp', [downloadedPath, currentAppImage]);
+    // Copy beside the target FIRST, then atomically rename over it. The old
+    // order (rm the running AppImage, then cp) left the user with NO app at
+    // all when the copy failed — a full disk or a bad download uninstalled
+    // Front Porch. rename(2) on the same filesystem atomically replaces the
+    // path while the running process keeps its unlinked inode.
+    final staging = '$currentAppImage.new';
+    final cpResult = await Process.run('cp', [downloadedPath, staging]);
     if (cpResult.exitCode != 0) {
-      debugPrint('cp failed: ${cpResult.stderr}');
+      await Process.run('rm', ['-f', staging]);
       throw Exception('Failed to copy new AppImage: ${cpResult.stderr}');
     }
-
-    // Make executable
-    await Process.run('chmod', ['+x', currentAppImage]);
+    await Process.run('chmod', ['+x', staging]);
+    final mvResult = await Process.run('mv', ['-f', staging, currentAppImage]);
+    if (mvResult.exitCode != 0) {
+      await Process.run('rm', ['-f', staging]);
+      throw Exception('Failed to swap new AppImage in: ${mvResult.stderr}');
+    }
     debugPrint('AppImage replaced successfully');
   }
 

@@ -3,6 +3,33 @@
 
 # Changelog
 
+## 2026-08-15 — fix(sweep): the 4 CRITICAL findings from the 1.3 release bug sweep
+- **Why:** 29-agent Opus sweep + adversarial verification ahead of 1.3; I
+  (Fable) re-read every cited path by hand before fixing. The four criticals:
+  (1) chat-to-story never persisted (saveProject no-opped on dbId==null, then
+  the dialog crashed on `dbId!`; web twin returned `{'id': null}` — feature
+  dead on both surfaces); (2) Linux AppImage self-update deleted the RUNNING
+  app before validating the download (404 page or truncated stream =
+  uninstalled app); (3) a regen whose generation bailed (realism cancel /
+  backend error) dropped the popped reply + all its swipes, permanently —
+  and in groups could merge the PREVIOUS member's reply into the regen
+  target; (4) backup restore left ChatService (and StoryRepository) on the
+  pre-restore in-memory state, so the next save wrote the discarded
+  transcript back into the restored DB.
+- **What:** saveProject upserts (insert + register when dbId==null);
+  downloadUpdate requires HTTP 200 + validateInstallerDownload (truncation +
+  1MB floor) and _replaceAppImage is copy-then-atomic-rename; regen merge is
+  count-aware with a restore branch (re-inserts popped reply at its position,
+  sweeps the failed turn's empty ghost bubble, force-saves replaceAll);
+  reopenAndRebindDatabase now calls chatService.reloadCurrentSession() +
+  storyRepo.loadProjects() (reunification already did).
+- **Tests (all new files):** chat_to_story_persist_test (red-proven),
+  update_download_validation_test, regen_failed_generation_restore_test
+  (red-proven, full-turn FakeBackendServer harness),
+  database_rebind_session_reload_test (mechanism; call-site pin flagged as
+  follow-up). Analyze clean.
+- **Commit:** (this commit)
+
 ## 2026-08-15 — tune(realism): long-term bond check every 3 applies
 - **Why:** Long-term felt a tad slow at every 5. Every 2 was too
   fast (Senjumaru replay). Every 3 is ~1.7× and is the first

@@ -618,9 +618,40 @@ extension ChatServiceReprocess on ChatService {
       // (1:1 and group alike) and ride newMetadata into the swipe-merge below.
       // The duplicate post-generation recompute that used to live here was a
       // second source of truth for the same numbers; deleted 2026-08-04.
+      final preGenLen = _messages.length;
       await _generateResponse(GenerationMode.normal, guestSpeaker: regenGuest);
 
-      // After generation, merge the new response as a swipe on the original message
+      // After generation, merge the new response as a swipe on the original
+      // message — but ONLY when _generateResponse actually appended one. It
+      // can return empty-handed (the group per-speaker realism cancel path
+      // saves-and-returns before assembling blocks) or append a System error
+      // banner (any phase-1..4 throw). The old guard read `_messages.last`
+      // alone, so an empty return dropped the popped reply — with every
+      // alternate swipe it held — forever (and in a group whose previous
+      // entry was ANOTHER member's reply, it merged that member's message
+      // into the regen target instead). The length check makes "no new
+      // reply" restore the popped message at its original position.
+      final appendedReply =
+          _messages.length > preGenLen &&
+          !_messages.last.isUser &&
+          _messages.last.sender != 'System';
+      if (!appendedReply) {
+        // The shell catch leaves the failed turn's EMPTY stream target in
+        // place before the System banner — drop that ghost so the restored
+        // reply doesn't sit next to a blank bubble of the same speaker.
+        final ghostIdx = _messages.indexWhere(
+          (m) => !m.isUser && m.sender != 'System' && m.text.isEmpty,
+          preGenLen,
+        );
+        if (ghostIdx >= 0) _messages.removeAt(ghostIdx);
+        _messages.insert(preGenLen, lastMsg);
+        if (regenGuest == null) _restoreRealismStateForSpeaker(lastMsg);
+        notifyListeners();
+        // Full rewrite: the abort inside _generateResponse already persisted
+        // the shortened transcript, so an upsert alone cannot heal the row.
+        await _saveChat(replaceAll: true);
+        return;
+      }
       if (_messages.isNotEmpty &&
           !_messages.last.isUser &&
           _messages.last.sender != 'System') {

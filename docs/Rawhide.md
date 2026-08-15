@@ -9,6 +9,11 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 - 💛 **Long-term bond notices a stretch a little sooner** — it now cements every 3 warm turns instead of 5. Existing chats keep the score they already earned; nothing is replayed from old history.
 
+- 📖 **"Turn this chat into a story" actually creates the project** — it was silently saving nothing, then erroring on the way to the dashboard, on both desktop and web.
+- 🛟 **A failed regenerate can no longer eat the message** — if the backend errors (or you cancel the realism pass) mid-regenerate, the original reply and all its swipes come back exactly where they were, instead of vanishing for good.
+- 💾 **Restoring a backup now really restores the open chat** — the conversation on screen used to quietly write its old self back into the restored library the next time you sent a line. It now reloads to match the snapshot.
+- 🐧 **Linux self-update can't uninstall the app anymore** — the updater used to delete the running AppImage before checking the download was good; a bad download left you with nothing. It now verifies first and swaps atomically.
+
 - ✍️ **Impersonate is on the web too** — the same wand as desktop: tap ✦ and the AI writes your next line into the box. A start you already typed is continued as you, not answered as the character. Stop cancels.
 
 - ✍️ **Impersonate keeps writing as you when the box is not empty** — the wand already filled a blank composer. A start you had typed ("I walk toward…") used to make it switch into the character's voice, especially on cards that say "do not decide for the user." It now treats that text as an unfinished line of yours and only continues it.
