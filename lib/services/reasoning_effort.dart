@@ -171,6 +171,17 @@ bool reasoningCannotDisable(String model) {
 bool reasoningEffortThinkingOn(String model, bool requested) =>
     requested || reasoningEffortIsMandatory(model);
 
+/// Extra `max_tokens` headroom for EVAL calls (salvageReasoning) on a model
+/// whose thinking cannot be switched off. Mandatory reasoning counts against
+/// `max_tokens`, and the evals cap at 4000 — Kimi 2.6:thinking regularly
+/// thinks past that on the fused one-shot prompt, so the stream was cut
+/// mid-think (finish_reason=length) and the final JSON / tool call never
+/// arrived: bond_delta=null on some turns and not others, purely on how long
+/// the model happened to deliberate (live repro 2026-08-15, a 17,348-char
+/// think ≈ the 4000-token cap exactly). The cap is a runaway guard, not a
+/// spend — billing follows actual tokens generated.
+const int kMandatoryReasoningThinkHeadroomTokens = 16000;
+
 /// Thinking-on chips for [model], weakest → strongest. Unknown → Low/Med/High.
 List<String> reasoningEffortChipsFor(String model) {
   final supported = reasoningEffortSupportedFor(model);

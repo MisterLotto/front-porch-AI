@@ -3,6 +3,39 @@
 
 # Changelog
 
+## 2026-08-15 — fix(eval): Kimi 2.6 judges no longer flip a coin (round 2)
+- **Why:** After 55918806, deltas were still intermittent. Live log:
+  `RawEval len=17348` opening with UN-tagged reasoning prose,
+  bond_delta=null, "Reason: unknown". Two stacked causes: (1) evals send
+  max_tokens:4000 and mandatory reasoning counts against it — 17,348
+  chars ≈ that cap exactly, so long thinks were cut before the JSON/tool
+  call was written (the tools lane failed the same way, silently: a cut
+  tool call is a clean 200 with no tool_calls → "inconclusive" → text
+  fallback → cut again); (2) raw un-tagged salvage meant stripThinkBlocks
+  could not separate deliberation from answer, and firstMatch extractors
+  fished DRAFT deltas out of mid-think text.
+- **What:** `_chatPayload` adds kMandatoryReasoningThinkHeadroomTokens
+  (16000) to max_tokens when salvageReasoning && reasoningCannotDisable
+  (both lanes; chat/Continue keep the user's cap). ReasoningTagWrapper
+  salvage now emits TAGGED `<think>…</think>` (the framing the whole eval
+  pipeline already strips; every call site already falls back to raw when
+  the answer only lives in the think channel). evaluateNeedsImpactCall
+  gains that same raw fallback (was returning null → silent needs skip).
+  Kobold/local twin: streamOpenAiChat now passes salvage through too.
+  finish_reason=length is now named in the log on both lanes.
+- **Tests:** NEW test/services/chat/mandatory_think_salvage_test.dart
+  (headroom, Continue cap untouched, final-beats-draft, needs raw
+  fallback) — all 3 red-proven against the reverted fixes. UPDATED one
+  assertion in reasoning_stream_test.dart (salvage now tags; subject
+  changed same-day — needs approved-test-change if PR'd). NOTE:
+  llm_eval_engine_test "returns null for think-only output" is green for
+  the wrong reason (no activeChar → early return; never reached the
+  strip) — left untouched per test-integrity, flagged to maintainer.
+- **Files:** open_router_service.dart, reasoning_effort.dart,
+  reasoning_stream_wrapper.dart, llm_eval_engine.dart,
+  openai_chat_stream.dart, docs/Rawhide.md, + tests above
+- **Commit:** (this commit)
+
 ## 2026-08-15 — fix(chat): Scene Guests were answering an older question
 - **Why:** Discord (v1.2.0.1 + nanoGPT/DeepSeek v4): after chatting with
   one Scene Guest by name, a later mention that let the host speak first

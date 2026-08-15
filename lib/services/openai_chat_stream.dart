@@ -247,9 +247,14 @@ Stream<String> streamOpenAiChat(
   // <think>…</think> for the app's parser. Armed only when thinking was actually
   // requested (matches the payload's `thinkOn`) so an off toggle / the Continue
   // + eval suppress path (reasoningMaxTokens==0) discards any stray reasoning
-  // rather than leaking it into the visible reply.
+  // rather than leaking it into the visible reply. Evals (salvageReasoning)
+  // keep the channel TAGGED instead — a local model that ignores
+  // enable_thinking:false and parks its answer in reasoning_content would
+  // otherwise hand the judges an empty reply (the remote Kimi 2.6 bug's
+  // local twin); evals are never user-visible, so nothing can leak.
   final wrapper = ReasoningTagWrapper(
     wrap: params.reasoningEnabled && params.reasoningMaxTokens != 0,
+    salvage: params.salvageReasoning,
   );
 
   final request = http.Request('POST', uri);

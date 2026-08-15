@@ -777,8 +777,13 @@ class LlmEvalEngine {
             );
       if (raw == null) return null;
       final searchText = stripThinkBlocks(raw);
-      if (searchText.trim().isEmpty) return null;
-      return searchText;
+      // Same fallback the four realism calls use: a think-only reply (a
+      // mandatory-reasoning model that parked its JSON in the think channel,
+      // or was cut mid-think) must still reach the regex parse rather than
+      // silently skipping the needs turn.
+      final text = searchText.trim().isNotEmpty ? searchText : raw;
+      if (text.trim().isEmpty) return null;
+      return text;
     } catch (e) {
       debugPrint('[Realism:Needs] Engine impact call failed: $e');
       return null;

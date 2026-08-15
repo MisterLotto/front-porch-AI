@@ -307,10 +307,20 @@ class OpenRouterService extends LLMService {
     // extensions). Everyone else (OpenRouter, Nano-GPT, vLLM, LM Studio)
     // supports or ignores the native sampler fields.
     final strictOpenAi = _apiUrl.contains('openai.com');
+    // Mandatory-reasoning models spend `max_tokens` on the think they cannot
+    // switch off, so an eval's 4000 cap was regularly consumed mid-think and
+    // the answer (content JSON or tool call) never arrived — the intermittent
+    // "no deltas" on Kimi 2.6:thinking. Evals (salvageReasoning) get think
+    // headroom on such models; chat/Continue keep the caller's cap (the think
+    // is excluded there and reply length is the user's setting).
+    final maxTokens =
+        params.salvageReasoning && reasoningCannotDisable(modelName)
+        ? params.maxLength + kMandatoryReasoningThinkHeadroomTokens
+        : params.maxLength;
     final payload = <String, dynamic>{
       'model': _modelName,
       'stream': stream,
-      'max_tokens': params.maxLength,
+      'max_tokens': maxTokens,
       'temperature': params.temperature,
       'top_p': params.topP,
       'messages': messages,
@@ -473,6 +483,15 @@ class OpenRouterService extends LLMService {
         );
         return null;
       }
+      // A tool call cut by max_tokens comes back as a clean 200 with no
+      // tool_calls and no content — downstream that reads as "inconclusive,
+      // fall back to text" with no trace. Name it in the log.
+      if (RegExp(r'"finish_reason"\s*:\s*"length"').hasMatch(response.body)) {
+        debugPrint(
+          '[RemoteAPI] $modelName tool call hit max_tokens '
+          '(finish_reason=length) — likely truncated mid-think, no tool call',
+        );
+      }
       return parseOpenAiToolResponse(response.body);
     } catch (e) {
       // Rethrow instead of collapsing to null — a killed connection must not
@@ -618,6 +637,15 @@ class OpenRouterService extends LLMService {
           try {
             final json = jsonDecode(data);
             final choice = json['choices']?[0];
+            // The cut-mid-think signature: on a mandatory-reasoning model
+            // this is exactly "the eval will have no deltas this turn".
+            // One glance at the log now names the failure class.
+            if (choice?['finish_reason'] == 'length') {
+              debugPrint(
+                '[RemoteAPI] $modelName hit max_tokens '
+                '(finish_reason=length) — response truncated',
+              );
+            }
             final delta = choice?['delta'];
             if (delta == null) continue;
 
