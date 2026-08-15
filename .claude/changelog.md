@@ -16,7 +16,7 @@
   .persistence.dart (comment), database.tables.core.dart (comment);
   relationship_service_test.dart (3-apply now +1, not 0);
   NEW long_term_cadence_test.dart; docs/Rawhide.md
-- **Commit:** (this commit)
+- **Commit:** 8daf9fde
 
 ## 2026-08-15 — feat(web): Impersonate wand on the phone/browser composer
 - **Why:** Desktop had the wand; web did not. Parity is mandatory. Empty
