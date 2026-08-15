@@ -3,6 +3,21 @@
 
 # Changelog
 
+## 2026-08-15 — fix(chat): Continue inserts a word-break so words do not mash
+- **Why:** Discord report (adv997): Continue concatenated new tokens onto
+  the existing bubble with no space. Models often emit the next word with
+  no leading space, so "steps." + "Then" became "steps.Then" mid-sentence
+  or at a period. Workaround was edit-in-a-space then Continue.
+- **What:** `padContinuePartial` on the Continue prompt suffix (the
+  workaround, automated). `glueContinueText` at stream display + postgen
+  finalize: one space when the prefix does not already end with
+  whitespace; `trimLeft` on new tokens so a model-emitted space does not
+  double. Shared helper — 1:1 and group, desktop and web (same Dart path).
+- **Files:** NEW continue_glue.dart + continue_glue_test.dart +
+  continue_space_test.dart; generation_plan/stream/postgen/generation;
+  chat.dart export; docs/Rawhide.md
+- **Commit:** f96acaee
+
 ## 2026-08-15 — fix(eval): Kimi 2.6:thinking judges were empty after a 400
 - **Why:** First eval sent reasoning.enabled=false → HTTP 400 (mandatory).
   Tools path did not retry. Text retry used exclude=true and discarded

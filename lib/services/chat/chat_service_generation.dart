@@ -105,9 +105,11 @@ class _GenTurn {
 
   /// Pre-Continue body of the message being extended. Empty for non-Continue
   /// modes. [accumulatedResponse] is only the NEW tokens; the stream phase
-  /// paints `continuePrefix + tokens` for display, and postgen must re-merge
-  /// before sanitize/persist or the bubble collapses to the continuation
-  /// fragment alone (full-codebase audit 2026-08-11 P0).
+  /// paints `glueContinueText(continuePrefix, tokens)` for display, and
+  /// postgen must re-merge the same way before sanitize/persist or the
+  /// bubble collapses to the continuation fragment alone (full-codebase
+  /// audit 2026-08-11 P0). The glue inserts a word-break space when the
+  /// prefix does not already end with whitespace (Discord 2026-08-15).
   String continuePrefix = '';
 }
 

@@ -15,6 +15,7 @@ export 'chaos_mode_service.dart';
 export 'chat_command_handler.dart';
 export 'chat_import_busy.dart';
 export 'context_viewer_snapshot.dart';
+export 'continue_glue.dart';
 export 'dream_service.dart';
 export 'expression_classifier.dart';
 export 'fpchat_codec.dart';

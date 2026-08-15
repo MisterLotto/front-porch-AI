@@ -7,6 +7,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 *Since nightly `20260814` (`cd38e672` — sidebar overflow).*
 
+- ▶️ **Continue no longer mashes the last word into the next one** — hitting Continue used to glue the new text straight onto whatever was already there, so "She waved from the steps." plus "Then she sat" became "steps.Then". Models often skip the leading space. Continue now puts a word-break in (same as editing a space onto the end yourself) and will not add a second space if the model already sent one.
+
 - 🔧 **Kimi 2.6 thinking evals work again** — The first Realism judge was 400ing because that model cannot turn thinking off, then the fallback hid the answer inside discarded thought tokens (90 seconds, then a blank line). Judges now keep that channel and parse the JSON out of it. Needs and pockets already worked; bond/trust/emotion/time catch up.
 
 - 🕐 **If she says it is 6am, the clock becomes 6am** — After a night skip the story clock used to park at 8:00 AM even when she wrote dawn. The sidebar now follows a time she actually names in the reply (within a few hours), so the line you just read and the clock agree. Regen that reply on an old chat to heal it.

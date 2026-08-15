@@ -138,7 +138,7 @@ extension ChatServiceGenerationStream on ChatService {
       final displayTokens = displayedBuf.toString();
       String displayText;
       if (t.mode == GenerationMode.continue_) {
-        displayText = originalText + displayTokens;
+        displayText = glueContinueText(originalText, displayTokens);
       } else {
         displayText = displayTokens.trimLeft();
       }

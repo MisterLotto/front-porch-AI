@@ -72,9 +72,9 @@ extension ChatServiceGenerationPostGen on ChatService {
     // Only finalize if this generation is still current
     if (t.epoch == _generationEpoch) {
       // New tokens only from the stream. Continue paints
-      // `continuePrefix + tokens` mid-stream; we must re-merge before any
-      // write-back or sanitize, or the saved bubble collapses to the
-      // continuation fragment (full-codebase audit 2026-08-11 P0.1).
+      // `glueContinueText(continuePrefix, tokens)` mid-stream; we must
+      // re-merge the same way before write-back or sanitize, or the saved
+      // bubble collapses to the continuation fragment (audit 2026-08-11 P0.1).
       String newPart = t.accumulatedResponse;
 
       // SillyTavern-like safety net for Continue (and call mode): even after
@@ -91,7 +91,7 @@ extension ChatServiceGenerationPostGen on ChatService {
           ? closeOpenThink(t.continuePrefix)
           : '';
       String finalResponse = t.mode == GenerationMode.continue_
-          ? '$prefix$newPart'.trimRight()
+          ? glueContinueText(prefix, newPart)
           : newPart.trim();
 
       // Salvage a reply stranded inside an unclosed <think> in the NEW
