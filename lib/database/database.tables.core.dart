@@ -95,9 +95,9 @@ class Sessions extends Table {
   IntColumn get longTermTier =>
       integer().withDefault(const Constant(0))(); // long-term rank
   IntColumn get turnsSinceLongTermCheck =>
-      integer().withDefault(const Constant(0))(); // 5-turn counter
+      integer().withDefault(const Constant(0))(); // long-term check window
   IntColumn get shortTermDeltasSummary =>
-      integer().withDefault(const Constant(0))(); // trends over 5 turns
+      integer().withDefault(const Constant(0))(); // trends over the LT window
   BoolColumn get realismEnabled =>
       boolean().withDefault(const Constant(false))(); // master realism toggle
   IntColumn get shortTermMood =>

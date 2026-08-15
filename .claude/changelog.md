@@ -3,6 +3,21 @@
 
 # Changelog
 
+## 2026-08-15 — tune(realism): long-term bond check every 3 applies
+- **Why:** Long-term felt a tad slow at every 5. Every 2 was too
+  fast (Senjumaru replay). Every 3 is ~1.7× and is the first
+  cadence that moves that chat's named rung (Cordial → Receptive)
+  if it *had* been replayed — it is not. Going forward only.
+- **What:** `kLongTermCheckEvery = 3`. Stored `longTermScore` and
+  `turnsSinceLongTermCheck` are left as-is; the next apply uses 3.
+  No history walk, no score migration. 1:1 and group share
+  `applyScoreDelta`.
+- **Files:** relationship_service.dart (+ const), .dynamics.dart,
+  .persistence.dart (comment), database.tables.core.dart (comment);
+  relationship_service_test.dart (3-apply now +1, not 0);
+  NEW long_term_cadence_test.dart; docs/Rawhide.md
+- **Commit:** (this commit)
+
 ## 2026-08-15 — feat(web): Impersonate wand on the phone/browser composer
 - **Why:** Desktop had the wand; web did not. Parity is mandatory. Empty
   and typed-prefix both have to work (same ChatService.impersonateUser).

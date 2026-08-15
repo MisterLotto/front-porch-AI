@@ -26,6 +26,11 @@ part 'relationship_service.persistence.dart';
 part 'relationship_service.dynamics.dart';
 part 'relationship_service.rewind.dart';
 
+/// Bond applies between long-term growth checks. Going forward only —
+/// stored session counters and [RelationshipService.longTermScore] are
+/// never recomputed from chat history when this number changes.
+const int kLongTermCheckEvery = 3;
+
 /// Plain (non-ChangeNotifier) domain service owning relationship / affection /
 /// trust / fixation / inter-character feelings state and logic (scores, bond+trust
 /// deltas via apply, tier calculation, fixation lifespan+update, short/long term

@@ -7,6 +7,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 *Since nightly `20260814` (`cd38e672` — sidebar overflow).*
 
+- 💛 **Long-term bond notices a stretch a little sooner** — it now cements every 3 warm turns instead of 5. Existing chats keep the score they already earned; nothing is replayed from old history.
+
 - ✍️ **Impersonate is on the web too** — the same wand as desktop: tap ✦ and the AI writes your next line into the box. A start you already typed is continued as you, not answered as the character. Stop cancels.
 
 - ✍️ **Impersonate keeps writing as you when the box is not empty** — the wand already filled a blank composer. A start you had typed ("I walk toward…") used to make it switch into the character's voice, especially on cards that say "do not decide for the user." It now treats that text as an unfinished line of yours and only continues it.

@@ -125,7 +125,7 @@ void main() {
     });
 
     test(
-      'applyScoreDelta updates score/tier, accumulates deltas, triggers long growth at 5',
+      'applyScoreDelta updates score/tier, accumulates deltas, triggers long growth at 3',
       () {
         final n = <String>[];
         final svc = createTestRelationship(notifies: n);
@@ -141,9 +141,10 @@ void main() {
         svc.applyScoreDelta(20);
         expect(svc.affectionScore, 30);
         expect(svc.relationshipTier, 3); // 30 >=30 <50 -> 3 per verbatim calc
-        // 5 triggers long growth (no-op on fresh)
+        // Third apply fires long-term growth. The check runs BEFORE this
+        // apply's short-term delta, so avgTier is still 3 (>= 2) → +1.
         svc.applyScoreDelta(5);
-        expect(svc.longTermScore, 0); // no prior long
+        expect(svc.longTermScore, 1);
       },
     );
 

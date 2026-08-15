@@ -23,15 +23,15 @@ part of 'relationship_service.dart';
 extension RelationshipServiceDynamics on RelationshipService {
   /// Apply a short-term bond delta. When the named short-term tier changes
   /// and [recordMilestone] is true, fires [onTierCrossing] (Living Time
-  /// v1.5). Every 5 applies also runs long-term growth, which may fire a
-  /// separate `long_term` crossing (v1.5.1). Regen/reprocess passes
-  /// [recordMilestone]: false so undoing a rejected reply never invents
+  /// v1.5). Every [kLongTermCheckEvery] applies also runs long-term growth,
+  /// which may fire a separate `long_term` crossing (v1.5.1). Regen/reprocess
+  /// passes [recordMilestone]: false so undoing a rejected reply never invents
   /// reverse story beats (short- or long-term).
   void applyScoreDelta(int delta, {bool recordMilestone = true}) {
     _shortTermDeltasSummary += delta;
     _turnsSinceLongTermCheck++;
 
-    if (_turnsSinceLongTermCheck >= 5) {
+    if (_turnsSinceLongTermCheck >= kLongTermCheckEvery) {
       _evalLongTermGrowth(recordMilestone: recordMilestone);
     }
 

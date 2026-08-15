@@ -72,8 +72,8 @@ extension RelationshipServicePersistence on RelationshipService {
 
     // Per-speaker long-term cadence (parity): each member's growth check runs
     // on THEIR OWN eval count and THEIR OWN delta history. With the shared
-    // registers, the 5-turn threshold was hit by the whole group's evals and
-    // the long-term bump landed on whichever member happened to be loaded.
+    // registers, the growth-check threshold was hit by the whole group's evals
+    // and the long-term bump landed on whichever member happened to be loaded.
     if (getGroupCounter != null) {
       _turnsSinceLongTermCheck = getGroupCounter!(
         charId,
