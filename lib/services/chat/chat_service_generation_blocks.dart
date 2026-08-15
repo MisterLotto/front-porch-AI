@@ -221,17 +221,29 @@ extension ChatServiceGenerationBlocks on ChatService {
       if (t.guestSpeaker != null) {
         // A guest turn reuses the host's full transcript, so the identity
         // switch must be unmistakable or the model conflates the guest with
-        // the host (confirmed even on strong API models). State plainly that
-        // everything above belongs to the host/user and the reply is ONLY the
-        // guest, and forbid voicing anyone else.
-        t.authorNoteBlock +=
-            '[SCENE GUEST TURN. You are now ${t.guestSpeaker!.name}, who is '
-            'present in this scene — you are NOT $hostName and NOT ${t.userName}. '
-            'Everything written above was said and done by $hostName and '
-            '${t.userName}; ${t.guestSpeaker!.name} is a separate person. Reply ONLY '
-            'as ${t.guestSpeaker!.name}: their own dialogue, actions, and '
-            'thoughts, reacting to what just happened. Do NOT write, speak, or '
-            'narrate anything for $hostName or ${t.userName}.]\n';
+        // the host (confirmed even on strong API models). Also pin the
+        // latest user line: long adventures + guest RAG/recap made DeepSeek
+        // answer an older "Magus, tell me about the spell" instead of the
+        // line just sent (Discord 2026-08-15).
+        var latestUser = '';
+        var latestHost = '';
+        for (final m in _messages.reversed) {
+          if (m.sender == 'System') continue;
+          if (m.isUser) {
+            latestUser = m.promptText.trim();
+            break;
+          }
+          if (latestHost.isEmpty && !_isGuestAuthoredMessage(m)) {
+            latestHost = m.displayText.trim();
+          }
+        }
+        t.authorNoteBlock += buildGuestTurnNote(
+          guestName: t.guestSpeaker!.name,
+          hostName: hostName,
+          userName: t.userName,
+          latestUserText: latestUser,
+          latestHostText: latestHost,
+        );
       } else if (_sceneGuest.cards.isNotEmpty) {
         // Host turn with guests present: hard ban on ventriloquising them, or
         // the host writes the guests' lines too (the "generated both at once"
@@ -278,7 +290,12 @@ extension ChatServiceGenerationBlocks on ChatService {
     // has moved on since it was written" — that stamp measured as a NET
     // NEGATIVE (models quoted it back as the contradiction) and was deleted,
     // taking the derivation with it.
-    t.summaryBlock = buildRecapBlock(recap: _summary);
+    // Guests never journal; a stale host recap is a competing claim about
+    // NOW. Reasoning + RAG already pull them onto old beats (Discord
+    // 2026-08-15); do not also hand them "Where we are".
+    t.summaryBlock = t.guestSpeaker != null
+        ? ''
+        : buildRecapBlock(recap: _summary);
 
     // The Journal — the upcoming speaker's pinned + hot memory cards, with
     // their felt emotions (strictly this chat's cards; guests never

@@ -56,6 +56,18 @@ extension ChatServiceHistory on ChatService {
   /// and generated-image shares keep their brackets.
   String _formatHistoryLine(ChatMessage m) => m.toPromptHistoryLine();
 
+  /// Tiny-context floor: keep the latest user line and everything after it.
+  /// A guest chime-in used to keep only `_messages.last` (the host reaction)
+  /// and the question the guest was meant to answer vanished.
+  ({String history, int droppedCount}) _overflowContinuityHistory() {
+    if (_messages.isEmpty) return (history: '', droppedCount: 0);
+    final start = overflowHistoryStart(_messages);
+    return (
+      history: _messages.sublist(start).map(_formatHistoryLine).join('\n'),
+      droppedCount: start,
+    );
+  }
+
   String _buildChatHistory({List<LoreDepthEntry> depthLore = const []}) {
     final lines = _messages.map(_formatHistoryLine).toList();
     if (lines.any((l) => _macroPattern.hasMatch(l))) {

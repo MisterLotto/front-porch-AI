@@ -75,6 +75,7 @@ export 'relationship_tiers.dart';
 export 'reply_facts_eval.dart';
 export 'scenario_fade.dart';
 export 'scene_guest_director.dart';
+export 'scene_guest_prompt.dart';
 export 'scene_guest_state.dart';
 export 'scene_guest_factory.dart';
 export 'sentence_stream.dart';

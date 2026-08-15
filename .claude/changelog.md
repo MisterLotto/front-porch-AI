@@ -3,6 +3,26 @@
 
 # Changelog
 
+## 2026-08-15 — fix(chat): Scene Guests were answering an older question
+- **Why:** Discord (v1.2.0.1 + nanoGPT/DeepSeek v4): after chatting with
+  one Scene Guest by name, a later mention that let the host speak first
+  made the guest reply to an older line further up the chat. Regen usually
+  fixed it; a long adventure got stuck. The guest note only said "react to
+  what just happened"; overflow history kept `_messages.last` (the host
+  reaction) and dropped the user question; guest RAG then resurfaced the
+  old Magus-only exchange.
+- **What:** `buildGuestTurnNote` pins the latest user line (and host
+  reaction, when this is a chime-in). Overflow floor is last-user +
+  everything after (`overflowHistoryStart`), shared with impersonate.
+  Guest turns skip RAG and the host recap — the reporter's matrix
+  (DeepSeek v4): reasoning+RAG = old line; RAG off = latest. Recap
+  cursor / force-regen is already fixed on Rawhide (every-pass window
+  cap + recap-first); not re-touched.
+- **Files:** NEW scene_guest_prompt.dart + scene_guest_prompt_test.dart;
+  generation_blocks, generation_rag, history, generation_plan,
+  impersonate; chat.dart; docs/Rawhide.md
+- **Commit:** (this commit)
+
 ## 2026-08-15 — fix(chat): Continue inserts a word-break so words do not mash
 - **Why:** Discord report (adv997): Continue concatenated new tokens onto
   the existing bubble with no space. Models often emit the next word with

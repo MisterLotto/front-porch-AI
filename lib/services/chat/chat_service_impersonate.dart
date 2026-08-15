@@ -278,9 +278,9 @@ extension ChatServiceImpersonate on ChatService {
         );
         history = result.history;
       } else if (_messages.isNotEmpty) {
-        // Think-strip + photo markers — same as budgeted history / generation
-        // zero-budget continuity (not raw .text; Nina-class hole).
-        history = _messages.last.toPromptHistoryLine();
+        // Same overflow floor as the main generate path: last user line +
+        // everything after (think-stripped). Not raw .text (Nina-class hole).
+        history = _overflowContinuityHistory().history;
       }
 
       // Every backend now speaks the OpenAI chat protocol (local KoboldCpp via

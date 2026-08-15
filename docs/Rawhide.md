@@ -7,6 +7,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 *Since nightly `20260814` (`cd38e672` — sidebar overflow).*
 
+- 🎭 **Scene Guests answer the line you just sent** — after a long stretch talking to one guest (name first), bringing the narrator back in used to make that guest reply to an older question further up the chat. Regen usually fixed it; eventually it got stuck. The guest turn now pins your most recent line, a squeezed context can no longer drop that line and keep only the narrator's reaction, and guest turns no longer pull Memory search or a stale "Where we are" into the prompt (thinking models were treating those old lines as the live question).
+
 - ▶️ **Continue no longer mashes the last word into the next one** — hitting Continue used to glue the new text straight onto whatever was already there, so "She waved from the steps." plus "Then she sat" became "steps.Then". Models often skip the leading space. Continue now puts a word-break in (same as editing a space onto the end yourself) and will not add a second space if the model already sent one.
 
 - 🔧 **Kimi 2.6 thinking evals work again** — The first Realism judge was 400ing because that model cannot turn thinking off, then the fallback hid the answer inside discarded thought tokens (90 seconds, then a blank line). Judges now keep that channel and parse the JSON out of it. Needs and pockets already worked; bond/trust/emotion/time catch up.

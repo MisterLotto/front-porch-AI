@@ -39,6 +39,13 @@ extension ChatServiceGenerationRag on ChatService {
       debugPrint(
         '[RAG:Chat] Skipping memory retrieval - new chat in progress',
       );
+    } else if (t.guestSpeaker != null) {
+      // Guest turns answer THIS beat. Guest RAG resurfaces dropped Magus
+      // Q&As; a reasoning model treats those as the live question
+      // (Discord 2026-08-15: reasoning+RAG = old line; RAG off = latest).
+      debugPrint(
+        '[RAG:Chat] Skipping memory retrieval — Scene Guest turn',
+      );
     } else if (t.droppedMessages > 0 &&
         _memoryService != null &&
         effectiveRagEnabled) {

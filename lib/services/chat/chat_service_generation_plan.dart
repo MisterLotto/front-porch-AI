@@ -493,13 +493,12 @@ extension ChatServiceGenerationPlan on ChatService {
           }
         }
       }
-      // If budget is zero or negative, fixed sections already fill the context —
-      // use minimal history. MUST go through toPromptHistoryLine (think-stripped
-      // + photo markers): raw lastMsg.text re-injects prior <think> plans — the
-      // same Nina-class hole the budgeted path already closed (audit 2026-08-11).
+      // Zero/negative budget: last user line + everything after it (think-
+      // stripped). Raw lastMsg.text re-injects <think> (audit 2026-08-11).
       if (t.historyBudget <= 0 && _messages.isNotEmpty) {
-        t.history = _messages.last.toPromptHistoryLine();
-        t.droppedMessages = _messages.length - 1;
+        final overflow = _overflowContinuityHistory();
+        t.history = overflow.history;
+        t.droppedMessages = overflow.droppedCount;
       }
     } finally {
       // ── Restore the popped continue message back into the list ──
