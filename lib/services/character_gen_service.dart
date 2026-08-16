@@ -23,6 +23,7 @@ import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/kobold_service.dart';
 import 'package:front_porch_ai/services/chargen/chargen.dart';
+import 'package:front_porch_ai/services/chat/chat.dart' show Pockets;
 
 part 'chargen/character_gen_llm.dart';
 part 'chargen/character_gen_prompts.dart';
@@ -30,6 +31,7 @@ part 'chargen/character_gen_steps.dart';
 part 'chargen/character_gen_steps2.dart';
 part 'chargen/character_gen_parsing.dart';
 part 'chargen/character_gen_enhance.dart';
+part 'chargen/character_gen_porch_life.dart';
 
 /// Per-category descriptions for lorebook generation prompts.
 const _loreCategoryDescriptions = {
@@ -80,8 +82,9 @@ const _qPressure =
 const _qJoy =
     'What brings you genuine joy or peace — the thing that lets your guard down?';
 const _qAppearance =
-    'Now describe your physical appearance in your own words — what you look like '
-    'and how you carry yourself. Be specific.';
+    'Now describe your physical appearance in your own words — what you look like, '
+    'how you carry yourself, and what you are wearing and carrying in this opening '
+    'scene. Be specific.';
 
 /// Only asked when a relationship to {{user}} is set — voices the bond so the
 /// greeting and example dialogue carry real history. Skipped for strangers /
@@ -480,6 +483,20 @@ class CharacterGenService {
       }
       card.alternateGreetings = alts;
     }
+    if (_aborted || _generationEpoch != currentEpoch) return null;
+
+    // ── Step 4b: Porch Life identity (ambitions / wardrobe / tastes) ──
+    // After the greeting exists so worn/carrying match the opening beat.
+    // Tools first when the backend speaks them; text JSON is the floor.
+    onStatus?.call('Seeding wardrobe and ambitions...');
+    onProgress?.call('');
+    await _seedPorchLifeIdentity(
+      card: card,
+      name: name,
+      interviewTranscript: interviewTranscript,
+      nsfwEnabled: nsfwEnabled,
+      onProgress: onProgress,
+    );
     if (_aborted || _generationEpoch != currentEpoch) return null;
 
     // ── Step 5: Generate Tailored Image Prompt ────────────────

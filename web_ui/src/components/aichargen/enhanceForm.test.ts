@@ -28,6 +28,7 @@ describe('buildEnhancePayload', () => {
         scenario: false,
         greetings: false,
         lorebook: false,
+        porchLife: true,
       },
       nsfwEnabled: true,
     });
@@ -43,7 +44,13 @@ describe('buildEnhancePayload', () => {
   it('defaults: persona trio on, the rest off, and counts as selected', () => {
     expect(anySelected(DEFAULT_ENHANCE_SELECTION)).toBe(true);
     expect(
-      anySelected({ ...DEFAULT_ENHANCE_SELECTION, description: false, personality: false, exampleDialogue: false }),
+      anySelected({
+        ...DEFAULT_ENHANCE_SELECTION,
+        description: false,
+        personality: false,
+        exampleDialogue: false,
+        porchLife: false,
+      }),
     ).toBe(false);
   });
 });
@@ -65,6 +72,7 @@ describe('buildApplyBody', () => {
     scenario: true,
     greetings: true,
     lorebook: true,
+    porchLife: true,
   };
 
   it('includes only accepted sections', () => {
@@ -92,6 +100,29 @@ describe('buildApplyBody', () => {
     expect(body).toEqual({ description: 'only desc' });
   });
 
+  it('accepted Porch Life writes ambitions and inventory', () => {
+    const body = buildApplyBody(
+      {
+        porchLife: {
+          ambitions: ['stay fed'],
+          likes: ['hot coffee'],
+          dislikes: ['being interrupted'],
+          worn: ['flour-dusted apron'],
+          carrying: ['shop keys'],
+          intimateInto: [],
+          intimateNotInto: [],
+        },
+      },
+      { ...allOn, description: false, personality: false, exampleDialogue: false, scenario: false, greetings: false, lorebook: false },
+    );
+    expect(body.ambitions).toEqual(['stay fed']);
+    expect(body.inventory).toEqual({
+      worn: ['flour-dusted apron'],
+      carrying: ['shop keys'],
+    });
+    expect(body).not.toHaveProperty('description');
+  });
+
   it('nothing accepted → empty body (duplicate stays pristine)', () => {
     const body = buildApplyBody(proposal, {
       description: false,
@@ -100,6 +131,7 @@ describe('buildApplyBody', () => {
       scenario: false,
       greetings: false,
       lorebook: false,
+      porchLife: false,
     });
     expect(body).toEqual({});
   });

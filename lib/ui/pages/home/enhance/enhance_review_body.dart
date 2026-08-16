@@ -22,6 +22,8 @@ import 'package:provider/provider.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/chargen/chargen.dart';
+import 'package:front_porch_ai/services/chat/chat.dart' show Pockets;
+import 'package:front_porch_ai/ui/pages/home/enhance/enhance_review_porch_life.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Old-vs-new review of an AI Enhance run — the Review step's body inside
@@ -38,11 +40,15 @@ class EnhanceReviewBody extends StatefulWidget {
     required this.original,
     required this.enhanced,
     required this.selection,
+    this.showIntimate = false,
   });
 
   final CharacterCard original;
   final CharacterCard enhanced;
   final EnhanceSelection selection;
+
+  /// Wizard's 18+ toggle — intimate lists stay hidden on an SFW run.
+  final bool showIntimate;
 
   @override
   State<EnhanceReviewBody> createState() => EnhanceReviewBodyState();
@@ -53,6 +59,13 @@ class EnhanceReviewBodyState extends State<EnhanceReviewBody> {
   final _controllers = <String, TextEditingController>{};
   final _use = <String, bool>{};
   late final List<bool> _useLoreEntry;
+  late List<String> _porchAmbitions;
+  late List<String> _porchLikes;
+  late List<String> _porchDislikes;
+  late List<String> _porchWorn;
+  late List<String> _porchCarrying;
+  late List<String> _porchIntimateInto;
+  late List<String> _porchIntimateNotInto;
   bool _saving = false;
 
   @override
@@ -64,12 +77,21 @@ class EnhanceReviewBodyState extends State<EnhanceReviewBody> {
       _use[key] = true;
     }
 
-    field('description', widget.selection.description,
-        widget.enhanced.description);
-    field('personality', widget.selection.personality,
-        widget.enhanced.personality);
-    field('exampleDialogue', widget.selection.exampleDialogue,
-        widget.enhanced.mesExample);
+    field(
+      'description',
+      widget.selection.description,
+      widget.enhanced.description,
+    );
+    field(
+      'personality',
+      widget.selection.personality,
+      widget.enhanced.personality,
+    );
+    field(
+      'exampleDialogue',
+      widget.selection.exampleDialogue,
+      widget.enhanced.mesExample,
+    );
     field('scenario', widget.selection.scenario, widget.enhanced.scenario);
     if (widget.selection.greetings) {
       field('firstMessage', true, widget.enhanced.firstMessage);
@@ -82,6 +104,19 @@ class EnhanceReviewBodyState extends State<EnhanceReviewBody> {
       widget.enhanced.lorebook?.entries.length ?? 0,
       true,
     );
+    final proposed = porchLifeIdentityOf(widget.enhanced.frontPorchExtensions);
+    _porchAmbitions = List<String>.from(proposed.ambitions);
+    _porchLikes = List<String>.from(proposed.likes);
+    _porchDislikes = List<String>.from(proposed.dislikes);
+    _porchWorn = List<String>.from(proposed.worn);
+    _porchCarrying = List<String>.from(proposed.carrying);
+    _porchIntimateInto = List<String>.from(proposed.intimateInto);
+    _porchIntimateNotInto = List<String>.from(proposed.intimateNotInto);
+    if (widget.selection.porchLife) {
+      // Empty proposal must not default ON — that would wipe an authored
+      // wardrobe if the model said nothing.
+      _use['porchLife'] = !proposed.isEmpty;
+    }
   }
 
   @override
@@ -122,9 +157,7 @@ class EnhanceReviewBodyState extends State<EnhanceReviewBody> {
       if (widget.selection.greetings && (_use['greetings'] ?? false)) {
         copy.firstMessage = _controllers['firstMessage']!.text.trim();
         copy.alternateGreetings = [
-          for (var i = 0;
-              i < widget.enhanced.alternateGreetings.length;
-              i++)
+          for (var i = 0; i < widget.enhanced.alternateGreetings.length; i++)
             _controllers['alt$i']!.text.trim(),
         ]..removeWhere((g) => g.isEmpty);
       }
@@ -135,6 +168,20 @@ class EnhanceReviewBodyState extends State<EnhanceReviewBody> {
       ];
       if (keptLore.isNotEmpty) {
         copy.lorebook = Lorebook(entries: keptLore);
+      }
+      if (widget.selection.porchLife && (_use['porchLife'] ?? false)) {
+        final ext = copy.frontPorchExtensions ?? FrontPorchExtensions();
+        copy.frontPorchExtensions = ext.copyWith(
+          ambitions: _porchAmbitions,
+          likes: _porchLikes,
+          dislikes: _porchDislikes,
+          intimateInto: _porchIntimateInto,
+          intimateNotInto: _porchIntimateNotInto,
+          inventory: Pockets.cardJsonFrom(
+            worn: _porchWorn,
+            carrying: _porchCarrying,
+          ),
+        );
       }
 
       await repo.updateCharacter(copy);
@@ -154,20 +201,50 @@ class EnhanceReviewBodyState extends State<EnhanceReviewBody> {
   Widget build(BuildContext context) {
     final sections = <Widget>[
       if (widget.selection.description)
-        _fieldSection('Description', 'description',
-            widget.original.description),
+        _fieldSection(
+          'Description',
+          'description',
+          widget.original.description,
+        ),
       if (widget.selection.personality)
-        _fieldSection('Personality', 'personality',
-            widget.original.personality),
+        _fieldSection(
+          'Personality',
+          'personality',
+          widget.original.personality,
+        ),
       if (widget.selection.exampleDialogue)
-        _fieldSection('Example dialogue', 'exampleDialogue',
-            widget.original.mesExample),
+        _fieldSection(
+          'Example dialogue',
+          'exampleDialogue',
+          widget.original.mesExample,
+        ),
       if (widget.selection.scenario)
         _fieldSection('Scenario', 'scenario', widget.original.scenario),
       if (widget.selection.greetings) _greetingsSection(),
       if (widget.selection.lorebook &&
           (widget.enhanced.lorebook?.entries.isNotEmpty ?? false))
         _lorebookSection(),
+      if (widget.selection.porchLife)
+        EnhancePorchLifeReview(
+          use: _use['porchLife'] ?? false,
+          onUseChanged: (v) => setState(() => _use['porchLife'] = v),
+          before: porchLifeIdentityOf(widget.original.frontPorchExtensions),
+          ambitions: _porchAmbitions,
+          onAmbitions: (v) => setState(() => _porchAmbitions = v),
+          likes: _porchLikes,
+          onLikes: (v) => setState(() => _porchLikes = v),
+          dislikes: _porchDislikes,
+          onDislikes: (v) => setState(() => _porchDislikes = v),
+          worn: _porchWorn,
+          onWorn: (v) => setState(() => _porchWorn = v),
+          carrying: _porchCarrying,
+          onCarrying: (v) => setState(() => _porchCarrying = v),
+          intimateInto: _porchIntimateInto,
+          onIntimateInto: (v) => setState(() => _porchIntimateInto = v),
+          intimateNotInto: _porchIntimateNotInto,
+          onIntimateNotInto: (v) => setState(() => _porchIntimateNotInto = v),
+          showIntimate: widget.showIntimate,
+        ),
     ];
 
     return ListView(
@@ -265,8 +342,11 @@ class EnhanceReviewBodyState extends State<EnhanceReviewBody> {
     );
   }
 
-  Widget _newField(String label, TextEditingController controller,
-      {bool enabled = true}) {
+  Widget _newField(
+    String label,
+    TextEditingController controller, {
+    bool enabled = true,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -283,10 +363,7 @@ class EnhanceReviewBodyState extends State<EnhanceReviewBody> {
           enabled: enabled,
           maxLines: null,
           minLines: 2,
-          style: TextStyle(
-            fontSize: 12,
-            color: AppColors.textPrimary(context),
-          ),
+          style: TextStyle(fontSize: 12, color: AppColors.textPrimary(context)),
           decoration: InputDecoration(
             filled: true,
             fillColor: AppColors.surfaceContainerOf(context),
@@ -300,8 +377,7 @@ class EnhanceReviewBodyState extends State<EnhanceReviewBody> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide:
-                  BorderSide(color: AppColors.porchAmberOf(context)),
+              borderSide: BorderSide(color: AppColors.porchAmberOf(context)),
             ),
             contentPadding: const EdgeInsets.all(8),
           ),
@@ -336,14 +412,22 @@ class EnhanceReviewBodyState extends State<EnhanceReviewBody> {
           const SizedBox(height: 8),
           _oldText('Before (first message)', widget.original.firstMessage),
           const SizedBox(height: 8),
-          _newField('After (editable)', _controllers['firstMessage']!,
-              enabled: use),
-          for (var i = 0;
-              i < widget.enhanced.alternateGreetings.length;
-              i++) ...[
+          _newField(
+            'After (editable)',
+            _controllers['firstMessage']!,
+            enabled: use,
+          ),
+          for (
+            var i = 0;
+            i < widget.enhanced.alternateGreetings.length;
+            i++
+          ) ...[
             const SizedBox(height: 8),
-            _newField('Alternate ${i + 1} (editable)', _controllers['alt$i']!,
-                enabled: use),
+            _newField(
+              'Alternate ${i + 1} (editable)',
+              _controllers['alt$i']!,
+              enabled: use,
+            ),
           ],
         ],
       ),
@@ -368,8 +452,7 @@ class EnhanceReviewBodyState extends State<EnhanceReviewBody> {
           for (var i = 0; i < entries.length; i++)
             CheckboxListTile(
               value: _useLoreEntry[i],
-              onChanged: (v) =>
-                  setState(() => _useLoreEntry[i] = v ?? false),
+              onChanged: (v) => setState(() => _useLoreEntry[i] = v ?? false),
               dense: true,
               controlAffinity: ListTileControlAffinity.leading,
               activeColor: AppColors.porchAmberOf(context),

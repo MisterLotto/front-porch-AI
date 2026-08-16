@@ -73,6 +73,7 @@ class _EnhanceWizardPageState extends State<EnhanceWizardPage> {
   bool _selScenario = false;
   bool _selGreetings = false;
   bool _selLorebook = false;
+  bool _selPorchLife = true;
   late bool _nsfw =
       widget.character.frontPorchExtensions?.nsfwCooldownEnabled ?? false;
   EnhanceContext? _chatContext;
@@ -104,6 +105,7 @@ class _EnhanceWizardPageState extends State<EnhanceWizardPage> {
     scenario: _selScenario,
     greetings: _selGreetings,
     lorebook: _selLorebook,
+    porchLife: _selPorchLife,
   );
 
   bool get _navLocked => _running || _saving || _copying;
@@ -390,6 +392,7 @@ class _EnhanceWizardPageState extends State<EnhanceWizardPage> {
                     original: widget.character,
                     enhanced: _enhanced!,
                     selection: _ranSelection!,
+                    showIntimate: _nsfw,
                   ),
                   _ => _buildChatsStep(context),
                 },

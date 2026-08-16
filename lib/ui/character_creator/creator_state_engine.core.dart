@@ -67,6 +67,7 @@ extension _CreatorCore on CreatorState {
 
     if (card != null) {
       generatedCard = card;
+      _applyGeneratedPorchLife(card);
       lorebookEntryEnabled = {};
       final lore = card.lorebook;
       if (lore != null) {
@@ -96,6 +97,21 @@ extension _CreatorCore on CreatorState {
       setStep(4); // → Realism step (shows the error/Try-Again state)
       notify();
     }
+  }
+
+  /// Copy the extract pass onto the wizard's Porch Life chips so Review
+  /// and Save see what the model wrote. Empty lists stay empty.
+  void _applyGeneratedPorchLife(CharacterCard card) {
+    final ext = card.frontPorchExtensions;
+    if (ext == null) return;
+    realismAmbitions = List<String>.from(ext.ambitions);
+    realismLikes = List<String>.from(ext.likes);
+    realismDislikes = List<String>.from(ext.dislikes);
+    realismIntimateInto = List<String>.from(ext.intimateInto);
+    realismIntimateNotInto = List<String>.from(ext.intimateNotInto);
+    final pockets = Pockets.fromJson(ext.inventory);
+    realismWorn = pockets.wornDisplay;
+    realismCarrying = pockets.carryingDisplay;
   }
 
   String _personaContext(UserPersonaService personaService) {

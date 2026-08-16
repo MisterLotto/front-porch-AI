@@ -3,6 +3,32 @@
 
 # Changelog
 
+## 2026-08-16 — feat(enhance): Porch Life is a keep-or-accept proposal
+- **Why:** AI Create now seeds wardrobe/ambitions, but Enhance is a
+  sibling path. Blindly overwriting an authored wardrobe would be
+  worse than leaving it. The existing Review step already lets you
+  keep the original or accept the rewrite per field.
+- **What:** Enhance checklist gains Porch Life (on by default). The
+  pass proposes lists; Review shows Before vs After with Use this.
+  Empty proposal defaults off so a mute model cannot wipe chips.
+  Same on web.
+- **Files:** character_gen_enhance.dart, chat_grounding.dart,
+  enhance_review_*.dart, enhance_wizard_page*, web enhanceForm +
+  EnhanceDialog + EnhanceReviewModal
+
+## 2026-08-16 — feat(chargen): seed Porch Life chips after the greeting
+- **Why:** Manual Create can author wardrobe / ambitions / intimate
+  prefs, but AI Create left those chips empty. Character-forge fills
+  them because it is a SOTA pass; the in-app wizard uses the user's
+  model, so a short structured extract after the greeting is the
+  local-model-safe way.
+- **What:** New post-greeting pass. Tools first when the backend
+  speaks them; text JSON is the floor. Intimate lists only when the
+  wizard's 18+ toggle is on. Failure leaves the chips blank.
+- **Files:** chargen/porch_life_identity.dart,
+  chargen/character_gen_porch_life.dart, character_gen_service.dart,
+  creator_state_engine.core.dart
+
 ## 2026-08-16 — docs(rawhide): wipe accumulated What's New
 - **Why:** The nightly notes file had grown into a running history. The
   maintainer asked to delete the bullets, not keep a "since last nightly"

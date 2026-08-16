@@ -106,14 +106,16 @@ class ChargenFacade {
     if (!selection.anySelected) {
       return {'ok': false, 'error': 'no fields selected'};
     }
-    unawaited(_runEnhance(
-      card,
-      sessionId,
-      selection,
-      body['nsfwEnabled'] == true,
-      svc,
-      db,
-    ));
+    unawaited(
+      _runEnhance(
+        card,
+        sessionId,
+        selection,
+        body['nsfwEnabled'] == true,
+        svc,
+        db,
+      ),
+    );
     return {'ok': true};
   }
 
@@ -136,7 +138,8 @@ class ChargenFacade {
         recap: ctx.recap,
         memoryCards: ctx.memoryCards,
         maxChars: enhanceGroundingCharBudget(
-          isLocalKobold: _llm.activeBackend == BackendType.kobold &&
+          isLocalKobold:
+              _llm.activeBackend == BackendType.kobold &&
               _llm.koboldService.isReady,
           contextSize: _storage?.contextSize ?? 8192,
         ),
@@ -160,6 +163,9 @@ class ChargenFacade {
         });
         return;
       }
+      final porch = selection.porchLife
+          ? porchLifeIdentityOf(result.frontPorchExtensions)
+          : null;
       _hub?.broadcast({
         'event': 'chargen_enhance_done',
         'characterId': card.dbId,
@@ -173,6 +179,16 @@ class ChargenFacade {
             'alternateGreetings': result.alternateGreetings,
           if (selection.lorebook && result.lorebook != null)
             'lorebook': result.lorebook!.toJson(),
+          if (porch != null)
+            'porchLife': {
+              'ambitions': porch.ambitions,
+              'likes': porch.likes,
+              'dislikes': porch.dislikes,
+              'worn': porch.worn,
+              'carrying': porch.carrying,
+              'intimateInto': porch.intimateInto,
+              'intimateNotInto': porch.intimateNotInto,
+            },
         },
       });
     } catch (e) {

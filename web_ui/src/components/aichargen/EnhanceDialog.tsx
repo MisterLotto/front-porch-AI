@@ -26,6 +26,7 @@ const FIELD_ROWS: { key: keyof EnhanceSelection; label: string; hint: string }[]
   { key: 'scenario', label: 'Scenario', hint: 'Re-anchor the opening to where the story went' },
   { key: 'greetings', label: 'First message + alternates', hint: 'Fresh openings in the voice from the chat' },
   { key: 'lorebook', label: 'Lorebook', hint: 'World entries from places the story revealed' },
+  { key: 'porchLife', label: 'Porch Life (wardrobe, ambitions, likes)', hint: 'Propose what they wear and carry, long-term goals, and tastes — keep or accept on the next step' },
 ];
 
 export function EnhanceDialog({

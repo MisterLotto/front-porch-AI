@@ -207,6 +207,25 @@ extension GenEnhance on CharacterGenService {
     }
     if (_aborted || _generationEpoch != currentEpoch) return null;
 
+    // Same seed as AI Create, proposed not applied — Review's "Use this"
+    // is what writes it onto the (Enhanced) duplicate.
+    if (selection.porchLife) {
+      onStatus?.call('Proposing wardrobe and ambitions...');
+      onProgress?.call('');
+      card.frontPorchExtensions =
+          (source.frontPorchExtensions ??
+                  FrontPorchExtensions(needsSimEnabled: true))
+              .copyWith();
+      await _seedPorchLifeIdentity(
+        card: card,
+        name: name,
+        interviewTranscript: interviewTranscript,
+        nsfwEnabled: nsfwEnabled,
+        onProgress: onProgress,
+      );
+    }
+    if (_aborted || _generationEpoch != currentEpoch) return null;
+
     applyCharMacroToCard(card, name);
     // Unselected fields must carry over BYTE-VERBATIM. The clone expanded
     // {{char}} and the macro pass above re-collapsed the name everywhere —

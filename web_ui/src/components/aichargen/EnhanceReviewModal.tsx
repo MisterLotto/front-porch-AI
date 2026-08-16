@@ -25,6 +25,14 @@ interface CharDetail {
   mesExample?: string;
   scenario?: string;
   firstMessage?: string;
+  realism?: {
+    ambitions?: string[];
+    likes?: string[];
+    dislikes?: string[];
+    intimateInto?: string[];
+    intimateNotInto?: string[];
+    inventory?: { worn?: unknown[]; carrying?: unknown[] };
+  } | null;
 }
 
 export function EnhanceReviewModal({
@@ -44,7 +52,12 @@ export function EnhanceReviewModal({
 }) {
   const { wide } = useLayout();
   const [old, setOld] = useState<CharDetail | null>(null);
-  const [accepted, setAccepted] = useState<EnhanceAccepted>({ ...selection });
+  const [accepted, setAccepted] = useState<EnhanceAccepted>(() => ({
+    ...selection,
+    porchLife:
+      selection.porchLife &&
+      porchHasItems(proposal.porchLife),
+  }));
   const [edits, setEdits] = useState<EnhanceEdits>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -152,6 +165,32 @@ export function EnhanceReviewModal({
     ? (proposal.lorebook as { entries: unknown[] }).entries.length
     : 0;
 
+  const porchLive = edits.porchLife ?? proposal.porchLife;
+  const porchField = (title: string, key: keyof NonNullable<EnhanceEdits['porchLife']>) => {
+    if (!proposal.porchLife || !porchLive) return null;
+    return (
+      <label key={key} className="enh-porch-field">
+        <small className="muted">{title} (comma-separated)</small>
+        <textarea
+          className="enh-new"
+          disabled={!accepted.porchLife}
+          value={(porchLive[key] ?? []).join(', ')}
+          onChange={(e) => {
+            const next = {
+              ...proposal.porchLife!,
+              ...edits.porchLife,
+              [key]: e.target.value
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean),
+            };
+            setEdits({ ...edits, porchLife: next });
+          }}
+        />
+      </label>
+    );
+  };
+
   if (applied !== null) {
     return (
       <div className="drawer-backdrop center" onClick={copying ? undefined : leave}>
@@ -239,6 +278,38 @@ export function EnhanceReviewModal({
                 />
               </div>
             ))}
+            {selection.porchLife && proposal.porchLife && (
+              <div className="enh-section">
+                <div className="enh-section-head">
+                  <strong>Porch Life (wardrobe, ambitions, likes)</strong>
+                  <label className="cg-field cg-toggle enh-use">
+                    <input
+                      type="checkbox"
+                      checked={accepted.porchLife}
+                      onChange={(e) =>
+                        setAccepted({ ...accepted, porchLife: e.target.checked })
+                      }
+                    />
+                    <span>Use this</span>
+                  </label>
+                </div>
+                <p className="muted small">
+                  Before: {formatPorchBefore(old.realism)}
+                </p>
+                {porchField('Ambitions', 'ambitions')}
+                {porchField('Drawn to', 'likes')}
+                {porchField('Put off by', 'dislikes')}
+                {porchField('Wearing', 'worn')}
+                {porchField('Carrying', 'carrying')}
+                {(proposal.porchLife.intimateInto.length > 0 ||
+                  proposal.porchLife.intimateNotInto.length > 0) && (
+                  <>
+                    {porchField('Warms to', 'intimateInto')}
+                    {porchField('Not interested in', 'intimateNotInto')}
+                  </>
+                )}
+              </div>
+            )}
             {selection.lorebook && loreCount > 0 && (
               <div className="enh-section">
                 <div className="enh-section-head">
@@ -269,4 +340,34 @@ export function EnhanceReviewModal({
       </div>
     </div>
   );
+}
+
+function porchHasItems(p: EnhanceProposal['porchLife'] | undefined): boolean {
+  if (!p) return false;
+  return (
+    p.ambitions.length +
+      p.likes.length +
+      p.dislikes.length +
+      p.worn.length +
+      p.carrying.length +
+      p.intimateInto.length +
+      p.intimateNotInto.length >
+    0
+  );
+}
+
+function formatPorchBefore(realism: CharDetail['realism']): string {
+  if (!realism) return '(empty)';
+  const worn = (realism.inventory?.worn ?? [])
+    .map((e) => (typeof e === 'string' ? e : (e as { name?: string }).name ?? ''))
+    .filter(Boolean);
+  const carrying = (realism.inventory?.carrying ?? [])
+    .map((e) => (typeof e === 'string' ? e : (e as { name?: string }).name ?? ''))
+    .filter(Boolean);
+  const bits = [
+    realism.ambitions?.length ? `ambitions ${realism.ambitions.join(', ')}` : null,
+    worn.length ? `wearing ${worn.join(', ')}` : null,
+    carrying.length ? `carrying ${carrying.join(', ')}` : null,
+  ].filter(Boolean);
+  return bits.length ? bits.join(' · ') : '(empty)';
 }

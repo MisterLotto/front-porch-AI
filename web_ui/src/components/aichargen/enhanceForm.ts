@@ -17,6 +17,7 @@ export interface EnhanceSelection {
   scenario: boolean;
   greetings: boolean;
   lorebook: boolean;
+  porchLife: boolean;
 }
 
 export const DEFAULT_ENHANCE_SELECTION: EnhanceSelection = {
@@ -26,12 +27,29 @@ export const DEFAULT_ENHANCE_SELECTION: EnhanceSelection = {
   scenario: false,
   greetings: false,
   lorebook: false,
+  porchLife: true,
 };
 
 export function anySelected(s: EnhanceSelection): boolean {
   return (
-    s.description || s.personality || s.exampleDialogue || s.scenario || s.greetings || s.lorebook
+    s.description ||
+    s.personality ||
+    s.exampleDialogue ||
+    s.scenario ||
+    s.greetings ||
+    s.lorebook ||
+    s.porchLife
   );
+}
+
+export interface EnhancePorchLife {
+  ambitions: string[];
+  likes: string[];
+  dislikes: string[];
+  worn: string[];
+  carrying: string[];
+  intimateInto: string[];
+  intimateNotInto: string[];
 }
 
 /** What `chargen_enhance_done` carries — only the selected keys are present. */
@@ -43,6 +61,7 @@ export interface EnhanceProposal {
   firstMessage?: string;
   alternateGreetings?: string[];
   lorebook?: unknown;
+  porchLife?: EnhancePorchLife;
 }
 
 /** Per-section "use this" toggles in the review step. */
@@ -53,6 +72,7 @@ export interface EnhanceAccepted {
   scenario: boolean;
   greetings: boolean;
   lorebook: boolean;
+  porchLife: boolean;
 }
 
 /** Review-step edits (text the user tweaked before applying). */
@@ -63,6 +83,7 @@ export interface EnhanceEdits {
   scenario?: string;
   firstMessage?: string;
   alternateGreetings?: string[];
+  porchLife?: EnhancePorchLife;
 }
 
 export function buildEnhancePayload(
@@ -116,6 +137,18 @@ export function buildApplyBody(
   }
   if (accepted.lorebook && proposal.lorebook != null) {
     body.lorebook = proposal.lorebook;
+  }
+  if (accepted.porchLife && proposal.porchLife) {
+    const p = edits.porchLife ?? proposal.porchLife;
+    body.ambitions = p.ambitions;
+    body.likes = p.likes;
+    body.dislikes = p.dislikes;
+    body.intimateInto = p.intimateInto;
+    body.intimateNotInto = p.intimateNotInto;
+    body.inventory = {
+      worn: p.worn,
+      carrying: p.carrying,
+    };
   }
   return body;
 }
