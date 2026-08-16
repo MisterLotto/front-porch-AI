@@ -24,6 +24,7 @@ import 'package:front_porch_ai/services/llm_tool_parsing.dart';
 import 'package:front_porch_ai/services/reasoning_effort.dart';
 import 'package:front_porch_ai/services/reasoning_stream_wrapper.dart';
 import 'package:front_porch_ai/services/remote_model_info.dart';
+import 'package:front_porch_ai/services/openai_completions_fallback.dart';
 
 // RemoteModelInfo lived here for years — re-export so importers keep working.
 export 'package:front_porch_ai/services/remote_model_info.dart';
@@ -522,6 +523,11 @@ class OpenRouterService extends LLMService {
       );
     }
 
+    if (isRememberedCompletionsOnlyModel(_modelName)) {
+      yield* _generateCompletionsStream(params);
+      return;
+    }
+
     final request = http.Request(
       'POST',
       Uri.parse('$_apiUrl/chat/completions'),
@@ -617,6 +623,15 @@ class OpenRouterService extends LLMService {
             yield* generateStream(params);
             return;
           }
+        }
+        if (isChatCompletionsUnsupportedError(errorMsg)) {
+          rememberCompletionsOnlyModel(_modelName);
+          debugPrint(
+            '[RemoteAPI] $_modelName is completions-only on this '
+            'server — retrying /v1/completions',
+          );
+          yield* _generateCompletionsStream(params);
+          return;
         }
         throw Exception('API error: $errorMsg');
       }
@@ -716,6 +731,35 @@ class OpenRouterService extends LLMService {
       // Close reasoning block if stream ended without [DONE]
       final tail = wrapper.finish();
       if (tail.isNotEmpty) yield tail;
+    } finally {
+      _activeClients.remove(client);
+      client.close();
+    }
+  }
+
+  /// oMLX VLM / completions-only models. Same abort set as [generateStream].
+  Stream<String> _generateCompletionsStream(GenerationParams params) async* {
+    final payload = openAiCompletionsPayload(
+      params,
+      modelName: _modelName,
+      stream: true,
+    );
+    final client = http.Client();
+    _activeClients.add(client);
+    try {
+      final response = await postOpenAiCompletions(
+        apiUrl: _apiUrl,
+        headers: _chatHeaders,
+        payload: payload,
+        client: client,
+      );
+      if (response.statusCode != 200) {
+        final body = await response.stream.bytesToString();
+        throw Exception(
+          'API error: ${_remoteApiErrorMessage(body, response.statusCode)}',
+        );
+      }
+      yield* parseCompletionsSse(response.stream);
     } finally {
       _activeClients.remove(client);
       client.close();

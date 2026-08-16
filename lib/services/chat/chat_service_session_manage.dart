@@ -108,11 +108,12 @@ extension ChatServiceSessionManage on ChatService {
         _currentSessionId == null) {
       return;
     }
-    if (messageIndex < 0 || messageIndex >= _messages.length) return;
+    final tip = await _resolveHydratedIndex(messageIndex);
+    if (tip == null) return;
 
     final oldSessionId = _currentSessionId!;
     final forkedMessages = _messages
-        .sublist(0, messageIndex + 1)
+        .sublist(0, tip + 1)
         .map(
           (m) => ChatMessage(
             text: m.text,
@@ -139,6 +140,7 @@ extension ChatServiceSessionManage on ChatService {
     );
     _messages.clear();
     _messages.addAll(forkedMessages);
+    _history.reset();
     _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
     _computeAbsenceGap(const []); // fresh session — no real-world gap (Living Time §2)
     // Forks stay in the parent chat's place: carry the world attachments so
@@ -146,7 +148,7 @@ extension ChatServiceSessionManage on ChatService {
     // default, like every other new session).
     await _seedChatWorldsForNewSession(carryRefs: _chatWorldIds);
     _parentSessionId = oldSessionId;
-    _forkIndex = messageIndex;
+    _forkIndex = tip;
     _sessionGenSettings = _sessionGenSettings
         .copy(); // inherit parent's overrides
     _summary = '';
@@ -335,6 +337,7 @@ extension ChatServiceSessionManage on ChatService {
     // The open session's last exchange may still be memory-only.
     await flushPendingSaves();
     _messages.clear();
+    _history.reset();
     _greetingIndex = 0;
     // A fresh chat starts with no Scene Guests (they don't carry across sessions).
     _sceneGuest.ids.clear();

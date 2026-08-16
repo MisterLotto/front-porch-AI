@@ -203,14 +203,16 @@ export function ChatMessageList({
   streaming,
   genStatus,
   scrollRef,
+  onScroll,
   ...transcript
 }: TranscriptProps & {
   streaming: string;
   genStatus: GenStatus | null;
   scrollRef: RefObject<HTMLDivElement>;
+  onScroll?: () => void;
 }) {
   return (
-    <div className="chat-messages" ref={scrollRef}>
+    <div className="chat-messages" ref={scrollRef} onScroll={onScroll}>
       <TranscriptRows {...transcript} />
       {streaming && (() => {
         // Separate a (possibly still-open) <think> block so reasoning streams

@@ -130,6 +130,13 @@ extension _HomePageChrome on _HomePageState {
     _openingChat = true;
     try {
       final chatService = Provider.of<ChatService>(context, listen: false);
+      // One session (the common case): skip the full session list + the
+      // getAllCharacters scan inside getSessionsForId. The picker still
+      // uses the basename id when there are several chats.
+      if (!await chatService.hasMultipleSavedSessions(character)) {
+        await _pushChatWhile(chatService.setActiveCharacter(character));
+        return;
+      }
       // getSessionsForId resolves 1:1 ids by imagePath basename (stableGroupId)
       // — the dbId UUID silently returns [] and kills the session picker
       // (documented identity gotcha; same warning at enhance_wizard_page.dart).

@@ -119,6 +119,7 @@ extension ChatServiceGroupEntry on ChatService {
       '(had ${_messages.length}) for group ${group.name}',
     );
     _messages.clear();
+    _history.reset();
     _currentSessionId = null;
     // Clear fork/branch state so it doesn't leak across group switches
     // (see startNewChat and setActiveCharacter for rationale).

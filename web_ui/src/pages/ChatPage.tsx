@@ -33,6 +33,8 @@ interface ChatState {
   isGenerating: boolean;
   isSettlingTurn?: boolean;
   isLoadingSession?: boolean;
+  isBackfillingHistory?: boolean;
+  hasOlderHistory?: boolean;
   isEvaluatingRealism?: boolean;
   isCheckingCompletion?: boolean;
   isProcessingGreeting?: boolean;
@@ -251,6 +253,14 @@ export function ChatPage() {
       void refresh();
     }
   }, [opening, refresh]);
+
+  useEffect(() => {
+    if (!state?.isBackfillingHistory) return;
+    const t = setTimeout(() => {
+      void refresh();
+    }, 120);
+    return () => clearTimeout(t);
+  }, [state?.isBackfillingHistory, state?.messages.length, refresh]);
 
   useEffect(() => {
     void refresh();

@@ -17,7 +17,7 @@ import { AltGreetingsEditor } from '../components/AltGreetingsEditor';
 import { RealismFormSection } from '../components/realism/RealismFormSection';
 import { useAdultThemes } from '../components/realism/useAdultThemes';
 import { NeedsFormSection } from '../components/realism/NeedsFormSection';
-import { type RealismValues, REALISM_DEFAULTS } from '../components/realism/realismTypes';
+import { type RealismValues, REALISM_DEFAULTS, inventoryToChips } from '../components/realism/realismTypes';
 
 interface Draft extends RealismValues {
   name: string;
@@ -33,7 +33,7 @@ interface Draft extends RealismValues {
   lorebook: LoreEntry[];
 }
 
-const STEPS = ['Identity', 'Personality', 'Dialogue', 'Lorebook', 'Realism', 'Review'];
+const STEPS = ['Identity', 'Personality', 'Dialogue', 'Lorebook', 'Porch Life', 'Review'];
 
 const EMPTY: Draft = {
   name: '',
@@ -153,7 +153,7 @@ export function CreateCharacterPage() {
         {step === 4 && (
           <>
             <RealismFormSection v={d} set={patch} showIntimate={adultThemes} />
-            <NeedsFormSection v={d} set={patch} />
+            {d.realismEnabled && <NeedsFormSection v={d} set={patch} />}
           </>
         )}
 
@@ -165,8 +165,24 @@ export function CreateCharacterPage() {
             <ReviewRow label="Scenario" value={d.scenario} />
             <ReviewRow label="First message" value={d.firstMessage} />
             <ReviewRow label="Lorebook" value={d.lorebook.length ? `${d.lorebook.length} entr${d.lorebook.length === 1 ? 'y' : 'ies'}` : 'None'} />
-            <ReviewRow label="Realism" value={d.realismEnabled ? `On · bond ${d.shortTermBond}, trust ${d.trustLevel}` : 'Off'} />
-            <ReviewRow label="Needs" value={d.needsSimEnabled ? `On · ${d.needsSimStrength}× strength` : 'Off'} />
+            <ReviewRow
+              label="Porch Life"
+              value={[
+                d.realismEnabled ? `Engine on · bond ${d.shortTermBond}` : 'Engine off',
+                d.chaosModeEnabled ? 'Chaos' : null,
+                d.ambitions.length ? `ambitions ${d.ambitions.length}` : null,
+                d.likes.length ? `likes ${d.likes.length}` : null,
+                inventoryToChips(d.inventory).worn.length
+                  ? `wearing ${inventoryToChips(d.inventory).worn.length}`
+                  : null,
+                inventoryToChips(d.inventory).carrying.length
+                  ? `carrying ${inventoryToChips(d.inventory).carrying.length}`
+                  : null,
+              ].filter(Boolean).join(' · ')}
+            />
+            {d.realismEnabled && (
+              <ReviewRow label="Needs" value={d.needsSimEnabled ? `On · ${d.needsSimStrength}× strength` : 'Off'} />
+            )}
             {error && <p className="error">{error}</p>}
           </div>
         )}

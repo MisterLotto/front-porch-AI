@@ -213,6 +213,8 @@ extension _CreateCharacterSave on _CreateCharacterPageState {
       _realismEnabled = false;
       _realismTimeOfDay = 'morning';
       _realismDayCount = 1;
+      _realismStoryStartDate = null;
+      _realismStoryStartTime = null;
       _realismShortTermBond = 0;
       _realismLongTermBond = 0;
       _realismTrustLevel = 0;
@@ -220,6 +222,8 @@ extension _CreateCharacterSave on _CreateCharacterPageState {
       _realismEmotionIntensity = 'mild';
       _realismNsfwCooldown = false;
       _realismChaosMode = false;
+      _realismNeedsSim = true;
+      _realismEnjoysLowHygiene = false;
       _realismAmbitions = const [];
       _realismLikes = const [];
       _realismDislikes = const [];
@@ -231,6 +235,20 @@ extension _CreateCharacterSave on _CreateCharacterPageState {
       _realismVerificationMaxReprocesses = 1;
       _realismVerificationStrictness = 3;
       _realismNeedsDirectorAuthority = false;
+      _needsBaselineHunger = 80;
+      _needsBaselineBladder = 80;
+      _needsBaselineEnergy = 80;
+      _needsBaselineSocial = 80;
+      _needsBaselineFun = 80;
+      _needsBaselineHygiene = 80;
+      _needsBaselineComfort = 80;
+      _needsDecayHunger = 5;
+      _needsDecayBladder = 5;
+      _needsDecayEnergy = 5;
+      _needsDecaySocial = 5;
+      _needsDecayFun = 5;
+      _needsDecayHygiene = 5;
+      _needsDecayComfort = 5;
       _tokenNotifier.value = 0;
     });
   }

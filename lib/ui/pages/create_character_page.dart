@@ -42,7 +42,7 @@ part 'create_character_page.steps_core.dart';
 /// Step 1: Personality (description, personality, scenario, advanced prompts)
 /// Step 2: Dialogue (first message, alt greetings, example dialogues)
 /// Step 3: Lorebook (CRUD)
-/// Step 4: Realism Engine (initial state)
+/// Step 4: Porch Life + Realism Engine (wardrobe, time, chaos, engine seeds)
 /// Step 5: Review & Create (the card is SAVED advancing out of here)
 /// Step 6: Portrait & Avatars — the shared AvatarGenerationPanel (phase #12);
 ///         post-save by design, so a failed generation can't lose the writing.
@@ -105,7 +105,10 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
   String _realismEmotionIntensity = 'mild';
   bool _realismNsfwCooldown = false;
   bool _realismChaosMode = false;
-  bool _realismNeedsSim = false;
+  // AND-gated at chat start (card && Porch Life global). Default true so
+  // a new card does not silently veto Needs — the form used to hide this
+  // toggle unless the engine was on, so every manual create baked false.
+  bool _realismNeedsSim = true;
   bool _realismEnjoysLowHygiene = false;
 
   /// Long-term ambitions (approved sketch §4) — a list, not newline text.
@@ -278,7 +281,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
         _stepLine(),
         _stepDot(3, 'Lorebook'),
         _stepLine(),
-        _stepDot(4, 'Realism'),
+        _stepDot(4, 'Porch Life'),
         _stepLine(),
         _stepDot(5, 'Review'),
         _stepLine(),
@@ -398,7 +401,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
       'Personality',
       'Dialogue',
       'Lorebook',
-      'Realism Engine',
+      'Porch Life',
       'Review & Create',
     ];
     final nextText =

@@ -46,11 +46,12 @@ extension ChatServiceGenerationRag on ChatService {
       debugPrint(
         '[RAG:Chat] Skipping memory retrieval — Scene Guest turn',
       );
-    } else if (t.droppedMessages > 0 &&
+    } else if ((t.droppedMessages > 0 || _history.basePosition > 0) &&
         _memoryService != null &&
         effectiveRagEnabled) {
       debugPrint(
-        '[RAG:Chat] ── Prompt assembly: ${t.droppedMessages} messages dropped, triggering retrieval ──',
+        '[RAG:Chat] ── Prompt assembly: ${t.droppedMessages} in-window '
+        'dropped, base=${_history.basePosition}, triggering retrieval ──',
       );
       try {
         // Use last 3 messages as the query. promptText, not displayText
@@ -96,8 +97,7 @@ extension ChatServiceGenerationRag on ChatService {
           queryText: queryMessages,
           sourceCharacterIds: sourceIds,
           currentSessionId: _currentSessionId ?? '',
-          inContextStart:
-              t.droppedMessages, // only search messages that are out of context
+          inContextStart: _history.basePosition + t.droppedMessages,
           limit: retrievalLimit == 0 ? 9999 : retrievalLimit,
           characterPriorities: currentGroupRAGPriorities,
           sessionScopedCharacterIds: sessionScoped,
@@ -281,7 +281,7 @@ extension ChatServiceGenerationRag on ChatService {
           status: kRagReceiptError,
         );
       }
-    } else if (t.droppedMessages > 0 &&
+    } else if ((t.droppedMessages > 0 || _history.basePosition > 0) &&
         _storageService.memorySettings.ragEnabled) {
       debugPrint(
         '[RAG:Chat] ⚠ ${t.droppedMessages} messages dropped but RAG not operational (service=${_memoryService != null}, operational=${_memoryService?.isOperational ?? false})',

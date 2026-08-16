@@ -35,7 +35,7 @@ extension _CreateCharacterRealismStep on _CreateCharacterPageState {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Realism Engine',
+                'Porch Life',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
@@ -44,8 +44,9 @@ extension _CreateCharacterRealismStep on _CreateCharacterPageState {
               ),
               const SizedBox(height: 8),
               Text(
-                'Set the initial state for the Realism Engine when a new conversation starts. '
-                'These values will seed the relationship, emotion, and time-of-day systems.',
+                'Wardrobe, likes, the story clock and Chaos work with or without '
+                'the Realism Engine. Turn the engine on only if you want bond, '
+                'trust, mood and Needs to seed the first chat.',
                 style: TextStyle(
                   fontSize: 14,
                   color: AppColors.textSecondary(context),

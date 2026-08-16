@@ -91,6 +91,23 @@ void main() {
     expect(identical(provider.serviceForModel(''), active), isTrue);
   });
 
+  test('oMLX + a different pick still aims at localhost oMLX, not Remote API',
+      () async {
+    await storage.setBackendType('omlx');
+    await storage.setRemoteApiUrl('https://openrouter.ai/api/v1');
+    await storage.setRemoteModel('Qwen3.6-40B');
+    final provider = LLMProvider(
+      KoboldService(storage),
+      active,
+      storage,
+      BackendManager(storage),
+    );
+    final svc = provider.serviceForModel('Qwen3.8-27B-MLX-8bit');
+    expect(svc, isA<OpenRouterService>());
+    expect((svc as OpenRouterService).modelName, 'Qwen3.8-27B-MLX-8bit');
+    expect(svc.apiUrl, 'http://localhost:8000/v1');
+  });
+
   test('managed local backend ignores the pick (loaded model IS the model)',
       () {
     final provider = _LocalProvider(

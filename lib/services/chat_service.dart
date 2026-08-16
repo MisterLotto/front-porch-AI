@@ -76,6 +76,7 @@ part 'chat/chat_service_chat_entry.dart';
 part 'chat/chat_service_group_entry.dart';
 part 'chat/chat_service_session_state.dart';
 part 'chat/chat_service_session_load.dart';
+part 'chat/chat_service_session_window.dart';
 part 'chat/chat_service_realism_evals.dart';
 part 'chat/chat_service_actions.dart';
 part 'chat/chat_service_objectives.dart';
@@ -291,6 +292,7 @@ class ChatService extends ChangeNotifier {
   // drop the shared field entirely.)
   bool _entrancesInFlight = false;
   bool _isLoadingSession = false;
+  final _history = SessionHistoryWindow();
   bool _cancelRequested = false;
   int _generationEpoch = 0;
   String? _currentSessionId;
@@ -989,8 +991,6 @@ class ChatService extends ChangeNotifier {
     super.notifyListeners();
   }
 
-  /// Cleanup body (everything but the mandatory `super.dispose()` call,
-  /// which must stay in the class) lives in chat_service_accessors.dart.
   @override
   void dispose() {
     _disposeCleanupImpl();

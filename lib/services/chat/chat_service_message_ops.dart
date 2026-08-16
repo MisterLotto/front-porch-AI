@@ -163,9 +163,21 @@ extension ChatServiceMessageOps on ChatService {
     // journal invalidation) — and made a dream banner the last message,
     // where the aborted turn's writes landed (2026-07-28). Stop first.
     if (_isTurnBusy) return;
+    if (index < 0 || index >= _messages.length) return;
+    final dbPos = persistMessagePosition(
+      base: _history.basePosition,
+      index: index,
+    );
+    final wasTail = index == _messages.length - 1;
+    // Middle-of-history delete needs the full prefix so replaceAll
+    // cannot drop the 11k rows we have not loaded yet.
+    if (!wasTail && _history.hasMore) {
+      await _awaitHistoryHydrated();
+      index = dbPos;
+      if (index < 0 || index >= _messages.length) return;
+    }
     if (index >= 0 && index < _messages.length) {
       final deleted = _messages[index];
-      final wasTail = index == _messages.length - 1;
 
       // Pockets stamp restore runs AFTER realism time-travel below (not
       // here). realism_state.pockets was historically pre-gen and, even
@@ -262,7 +274,15 @@ extension ChatServiceMessageOps on ChatService {
         _restorePocketsFromStamp(deleted, after: false);
       }
 
-      await _saveChat(replaceAll: true);
+      if (wasTail && _history.hasMore) {
+        await _saveChat(replaceAll: false);
+        final sid = _currentSessionId;
+        if (sid != null) {
+          await _db.deleteMessagesAtPosition(sid, dbPos);
+        }
+      } else {
+        await _saveChat(replaceAll: true);
+      }
       notifyListeners();
     }
   }

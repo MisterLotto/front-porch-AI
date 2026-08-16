@@ -3,6 +3,52 @@
 
 # Changelog
 
+## 2026-08-16 — docs(rawhide): wipe accumulated What's New
+- **Why:** The nightly notes file had grown into a running history. The
+  maintainer asked to delete the bullets, not keep a "since last nightly"
+  subset that still piles up.
+- **What:** `docs/Rawhide.md` is the header + empty section again.
+- **Files:** docs/Rawhide.md
+
+## 2026-08-16 — fix(creator): Porch Life step matches the settings matrix
+- **Why:** Manual (and AI) creator hid wardrobe, likes, time and Chaos
+  behind Enable Realism Engine. Porch Life split those off — they work
+  alone. Edit-character already showed the chips with the engine off.
+  New cards also baked needsSimEnabled=false, which AND-gates Needs
+  off even after the engine is turned on later.
+- **What:** RealismFormSection always shows time, Chaos, and identity
+  chips. Bond/emotion/needs/afterglow/verifier stay behind the switch.
+  Step retitled Porch Life. Review lists wardrobe/likes/ambitions.
+  New cards default Needs on (AND with the Porch Life global). Same
+  on web; Needs form hides unless the engine is on.
+- **Files:** lib/ui/widgets/realism_form_section.dart,
+  create_character_page.*, character_creator/creator_state.dart,
+  web_ui RealismFormSection.tsx + CreateCharacterPage.tsx +
+  CharacterEditPage.tsx + realismTypes.ts
+
+## 2026-08-16 — fix(chargen): Enhance on oMLX Qwen3.8
+- **Why:** Enhance posted `/v1/chat/completions`. oMLX lists
+  Qwen3.8-27B-MLX-8bit as a VLM and rejects that door ("not supported
+  on /v1/chat/completions") while `/v1/completions` answers. Picking a
+  model other than the active one also built an ad-hoc client against
+  Remote API's URL instead of localhost:8000/v1.
+- **What:** Remember completions-only models and retry `/v1/completions`.
+  serviceForModel on oMLX always uses the oMLX URL.
+- **Files:** lib/services/openai_completions_fallback.dart,
+  open_router_service.dart, llm_provider.dart
+
+## 2026-08-16 — perf(chat): tail-first open, chunked background backfill
+- **Why:** Maintainer: get to the chat screen now; backfill the archive
+  in the background regardless of scroll so RAG and Journal still see
+  the full list. Scroll-only load left Memory/Journal on a 24-row lie.
+- **What:** Overlay drops after the last 24. Older rows page in (200
+  at a time) with a yield between pages so a 28 MB decode cannot freeze
+  the first paint. One notify when the prefix is complete. RAG treats
+  basePosition as already out of context; Journal waits for hydrate.
+- **Files:** lib/services/chat/session_open_window.dart,
+  chat_service_session_window.dart, session_load/state/manage,
+  database.queries.chat.dart, web ChatPage + facade
+
 ## 2026-08-16 — fix(ui): tap-to-chat no longer freezes the home grid
 - **Why:** Home awaited the full session load (cancel/settle/flush +
   messages + realism + RAG) before pushing ChatPage, so a character tap

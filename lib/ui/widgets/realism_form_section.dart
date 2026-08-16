@@ -23,10 +23,12 @@ import 'package:front_porch_ai/ui/widgets/identity_chip_lists.dart';
 import 'package:front_porch_ai/ui/widgets/story_begins_row.dart';
 import 'package:front_porch_ai/ui/widgets/synced_text_field.dart';
 
-/// Shared Realism Engine configuration form.
+/// Shared Realism + Porch Life authoring form.
 ///
-/// Used by both the Manual Character Creator and AI Character Creator
-/// to configure initial Realism Engine state for a character card.
+/// The engine master switch only hides bond/emotion/needs/afterglow/verifier
+/// — those need the Realism Engine at runtime. Time, Chaos, wardrobe,
+/// ambitions and likes are Porch Life and stay editable with the engine off
+/// (docs: porch_life_tab / feature independence).
 class RealismFormSection extends StatelessWidget {
   final bool enabled;
   final ValueChanged<bool> onEnabledChanged;
@@ -297,7 +299,8 @@ class RealismFormSection extends StatelessWidget {
                       Text(
                         enabled
                             ? 'Character will start with pre-configured state'
-                            : 'Realism Engine will use default values',
+                            : 'Wardrobe, likes, time and Chaos still apply. '
+                              'Bond, mood and Needs stay off.',
                         style: TextStyle(
                           color: enabled
                               ? AppColors.formMasterAccent
@@ -320,11 +323,11 @@ class RealismFormSection extends StatelessWidget {
             ),
           ),
 
-        // ── Configuration Form (only when enabled) ──
-        if (enabled) ...[
-          const SizedBox(height: 20),
+        // Time / Chaos / identity chips are Porch Life — they run without
+        // the engine. Do not hide them behind [enabled].
+        const SizedBox(height: 20),
 
-          if (showTimeAndDay) ...[
+        if (showTimeAndDay) ...[
             // Time & Day Section
             _sectionHeader(
               Icons.schedule,
@@ -444,7 +447,9 @@ class RealismFormSection extends StatelessWidget {
                 onStoryStartTimeChanged: onStoryStartTimeChanged,
               ),
             ],
-          ], // end showTimeAndDay
+        ], // end showTimeAndDay
+
+        if (enabled) ...[
           const SizedBox(height: 20),
 
           // Needs Simulation (rendered separately when provided by caller).
@@ -715,30 +720,52 @@ class RealismFormSection extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 20),
+        ],
 
-          // The card-authored identity lists — Ambitions, Likes & Dislikes,
-          // and the 18+ pair. All chips, all optional, all in one leaf
-          // (identity_chip_lists.dart) so this file stops growing a section
-          // per field.
-          IdentityChipLists(
-            ambitions: ambitions,
-            onAmbitionsChanged: onAmbitionsChanged,
-            likes: likes,
-            onLikesChanged: onLikesChanged,
-            dislikes: dislikes,
-            onDislikesChanged: onDislikesChanged,
-            intimateInto: intimateInto,
-            onIntimateIntoChanged: onIntimateIntoChanged,
-            intimateNotInto: intimateNotInto,
-            onIntimateNotIntoChanged: onIntimateNotIntoChanged,
-            showIntimate: showIntimate,
-            worn: worn,
-            onWornChanged: onWornChanged,
-            carrying: carrying,
-            onCarryingChanged: onCarryingChanged,
+        if (showChaosToggle && !enabled) ...[
+          const SizedBox(height: 20),
+          _sectionHeader(
+            Icons.tune,
+            'Optional Features',
+            AppColors.optionalAccent,
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.cardOf(context),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.borderOf(context)),
+            ),
+            child: buildToggleRow(
+              icon: Icons.casino,
+              label: 'Chaos Mode (Chance Time)',
+              subtitle: 'Random narrative events during roleplay',
+              value: chaosModeEnabled,
+              onChanged: onChaosModeChanged,
+              context: context,
+            ),
           ),
         ],
+
+        // Identity / wardrobe — Porch Life, not the engine.
+        IdentityChipLists(
+          ambitions: ambitions,
+          onAmbitionsChanged: onAmbitionsChanged,
+          likes: likes,
+          onLikesChanged: onLikesChanged,
+          dislikes: dislikes,
+          onDislikesChanged: onDislikesChanged,
+          intimateInto: intimateInto,
+          onIntimateIntoChanged: onIntimateIntoChanged,
+          intimateNotInto: intimateNotInto,
+          onIntimateNotIntoChanged: onIntimateNotIntoChanged,
+          showIntimate: showIntimate,
+          worn: worn,
+          onWornChanged: onWornChanged,
+          carrying: carrying,
+          onCarryingChanged: onCarryingChanged,
+        ),
       ],
     );
   }

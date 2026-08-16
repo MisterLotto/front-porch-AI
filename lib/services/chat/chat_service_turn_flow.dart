@@ -191,6 +191,7 @@ extension ChatServiceTurnFlow on ChatService {
   /// the existing public surface).
   Future<void> forceSummaryUpdate() async {
     if (_isSummaryGenerating) return;
+    await _awaitHistoryHydrated();
     await _journalMaintenance.runMaintenancePass(force: true);
   }
 
@@ -211,25 +212,26 @@ extension ChatServiceTurnFlow on ChatService {
     if (_isSummaryGenerating) return;
     if (_llmProvider == null) return;
 
-    final windowStart = _summaryLastIndex.clamp(0, _messages.length);
-    int userMessagesSincePass = 0;
-    for (int i = windowStart; i < _messages.length; i++) {
-      if (_messages[i].isUser) userMessagesSincePass++;
-    }
-    if (userMessagesSincePass == 0) return;
-
-    final due =
-        userMessagesSincePass >= _storageService.memorySettings.journalInterval;
-    final eventKick =
-        _journalMaintenance.eventKickPending ||
-        JournalPhysics.hasSalientEvent(_messages.sublist(windowStart));
-
-    if (due || eventKick) {
-      // Fire and forget — don't await. The pass consumes eventKickPending
-      // itself once it actually starts, so a parked review batch (or an
-      // already-running pass) can't silently eat the kick.
-      _journalMaintenance.runMaintenancePass();
-    }
+    // Cursor is an index into the FULL transcript. Wait for the
+    // background backfill so we don't clamp 11200 down to 24.
+    unawaited(() async {
+      await _awaitHistoryHydrated();
+      if (!_storageService.memorySettings.journalEnabled) return;
+      if (_summaryPaused || _isSummaryGenerating) return;
+      final windowStart = _summaryLastIndex.clamp(0, _messages.length);
+      var userMessagesSincePass = 0;
+      for (var i = windowStart; i < _messages.length; i++) {
+        if (_messages[i].isUser) userMessagesSincePass++;
+      }
+      if (userMessagesSincePass == 0) return;
+      final due = userMessagesSincePass >=
+          _storageService.memorySettings.journalInterval;
+      final eventKick = _journalMaintenance.eventKickPending ||
+          JournalPhysics.hasSalientEvent(_messages.sublist(windowStart));
+      if (due || eventKick) {
+        _journalMaintenance.runMaintenancePass();
+      }
+    }());
   }
 
   /// Embed message windows for RAG memory retrieval (fire-and-forget).

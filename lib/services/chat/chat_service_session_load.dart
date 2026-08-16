@@ -123,6 +123,17 @@ extension ChatServiceSessionLoad on ChatService {
       (a, b) => a.updatedAt.isAfter(b.updatedAt) ? a : b,
     );
     _currentSessionId = lastSession.id;
+    // Sanitizer + first paint need gen settings and the tail ONLY.
+    // Growth/worlds/scalars used to run first and kept the spinner up
+    // for the same beat as loading 11k messages.
+    _sessionGenSettings = ChatGenerationSettings.fromJsonString(
+      lastSession.generationSettings,
+    );
+    try {
+      await _openSessionMessages(lastSession.id);
+    } catch (e) {
+      print('Error loading chat session: $e');
+    }
     await _reloadChatWorldIds();
     await _hydrateSessionScalars(lastSession);
 
@@ -148,22 +159,6 @@ extension ChatServiceSessionLoad on ChatService {
     _isCheckingCompletion = false;
 
     // Load per-chat generation settings override for this session.
-    _sessionGenSettings = ChatGenerationSettings.fromJsonString(
-      lastSession.generationSettings,
-    );
-
-    try {
-      final dbMessages = await _db.getMessagesForSession(_currentSessionId!);
-      _computeAbsenceGap(dbMessages);
-      debugPrint(
-        '[ChatService] 🟢 _loadLastSession: loading ${dbMessages.length} '
-        'messages for session $_currentSessionId',
-      );
-      _messages.clear();
-      _hydrateMessagesFromRows(dbMessages);
-    } catch (e) {
-      print('Error loading chat session: $e');
-    }
     // LLMerta porch memories on last-session open (same as loadSession).
     unawaited(_maybeImportPorchMemories());
   }
@@ -557,14 +552,9 @@ extension ChatServiceSessionLoad on ChatService {
     );
 
     try {
-      final dbMessages = await _db.getMessagesForSession(sessionId);
-      _computeAbsenceGap(dbMessages);
-      debugPrint(
-        '[ChatService] 🟢 loadSession: loading ${dbMessages.length} '
-        'messages for session $sessionId',
-      );
-      _messages.clear();
-      _hydrateMessagesFromRows(dbMessages);
+      // Backfill checks `_currentSessionId` so this must be set first.
+      _currentSessionId = sessionId;
+      await _openSessionMessages(sessionId);
 
       // Post-load sanitization: force valid swipe indices. This protects
       // against any legacy corrupted rows or previous buggy saves, even if
@@ -580,7 +570,6 @@ extension ChatServiceSessionLoad on ChatService {
       // stripped from the in-memory list so the UI and prompt builders never see it.
       // (v30: _hydrateGroupRealismCheckpointIfPresent removed — state now loads from DB column)
 
-      _currentSessionId = sessionId;
       await _reloadChatWorldIds();
       // Touch updatedAt so this session becomes the "last active" for the
       // character/group — _loadLastSession sorts by updatedAt DESC.

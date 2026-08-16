@@ -42,14 +42,15 @@ export function RealismFormSection({
         hint={
           v.realismEnabled
             ? 'Character starts with the pre-configured state below'
-            : 'Realism Engine will use default values'
+            : 'Wardrobe, likes, time and Chaos still apply. Bond, mood and Needs stay off.'
         }
         value={v.realismEnabled}
         onChange={(b) => set({ realismEnabled: b })}
       />
 
-      {v.realismEnabled && (
-        <>
+      {/* Time, Chaos, identity chips are Porch Life — they run without the
+          Realism Engine. Bond/emotion/afterglow/verifier stay behind the
+          switch (those need the engine). */}
           {/* ── Time & Day ── */}
           <h4 className="realism-head">Time &amp; Day</h4>
           <div className="realism-grid-2">
@@ -70,6 +71,21 @@ export function RealismFormSection({
             </label>
           </div>
 
+          <ToggleRow
+            label="Chaos mode (Chance Time)"
+            hint="Random narrative events during roleplay — works with the engine off"
+            value={v.chaosModeEnabled}
+            onChange={(b) => set({ chaosModeEnabled: b })}
+          />
+          <ToggleRow
+            label="Auto passage of time"
+            hint="Advance the scene clock automatically — works with the engine off"
+            value={v.passageOfTimeEnabled}
+            onChange={(b) => set({ passageOfTimeEnabled: b })}
+          />
+
+          {v.realismEnabled && (
+          <>
           {/* ── Relationship ── */}
           <h4 className="realism-head">Relationship</h4>
           <div className="card realism-card">
@@ -122,22 +138,10 @@ export function RealismFormSection({
           <h4 className="realism-head">Optional features</h4>
           <div className="card realism-card">
             <ToggleRow
-              label="NSFW cooldown system"
+              label="Afterglow (intimacy pacing)"
               hint="Realistic arousal / refractory mechanics"
               value={v.nsfwCooldownEnabled}
               onChange={(b) => set({ nsfwCooldownEnabled: b })}
-            />
-            <ToggleRow
-              label="Chaos mode (Chance Time)"
-              hint="Random narrative events during roleplay"
-              value={v.chaosModeEnabled}
-              onChange={(b) => set({ chaosModeEnabled: b })}
-            />
-            <ToggleRow
-              label="Auto passage of time"
-              hint="Advance the scene clock automatically"
-              value={v.passageOfTimeEnabled}
-              onChange={(b) => set({ passageOfTimeEnabled: b })}
             />
             <ToggleRow
               label="Realism verification (Director/Verifier)"
@@ -172,6 +176,8 @@ export function RealismFormSection({
               </>
             )}
           </div>
+          </>
+          )}
 
           {/* ── Ambitions (approved sketch §4) ──
               "Ambitions — long-term goals, one per chip (replaces 'Current
@@ -247,8 +253,6 @@ export function RealismFormSection({
               /detail, sent straight back on save) so a card authored before the
               swap keeps its task on disk — the chat now imports it as a starting
               objective instead of asking the author to maintain it by hand. */}
-        </>
-      )}
     </div>
   );
 }

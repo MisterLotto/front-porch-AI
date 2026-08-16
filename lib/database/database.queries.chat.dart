@@ -248,6 +248,71 @@ extension AppDatabaseChatQueries on AppDatabase {
             ..orderBy([(m) => OrderingTerm.asc(m.position)]))
           .get();
 
+  /// Newest [limit] rows, returned oldest-first so hydrate order matches
+  /// the full-list path. Used to drop the chat spinner before backfill.
+  Future<List<Message>> getMessagesTailForSession(
+    String sessionId,
+    int limit,
+  ) async {
+    final rows = await (select(messages)
+          ..where((m) => m.sessionId.equals(sessionId) & m.deletedAt.isNull())
+          ..orderBy([(m) => OrderingTerm.desc(m.position)])
+          ..limit(limit))
+        .get();
+    return rows.reversed.toList();
+  }
+
+  /// Rows strictly before [position], oldest-first. [limit] takes the
+  /// newest of those (a page sitting just above the current window).
+  Future<List<Message>> getMessagesBeforePosition(
+    String sessionId,
+    int position, {
+    int? limit,
+  }) async {
+    if (limit == null) {
+      return (select(messages)
+            ..where(
+              (m) =>
+                  m.sessionId.equals(sessionId) &
+                  m.deletedAt.isNull() &
+                  m.position.isSmallerThanValue(position),
+            )
+            ..orderBy([(m) => OrderingTerm.asc(m.position)]))
+          .get();
+    }
+    final newestFirst = await (select(messages)
+          ..where(
+            (m) =>
+                m.sessionId.equals(sessionId) &
+                m.deletedAt.isNull() &
+                m.position.isSmallerThanValue(position),
+          )
+          ..orderBy([(m) => OrderingTerm.desc(m.position)])
+          ..limit(limit))
+        .get();
+    return newestFirst.reversed.toList();
+  }
+
+  Future<int> countSessionsForCharacter(String characterId) async {
+    final countExp = sessions.id.count();
+    final query = selectOnly(sessions)
+      ..addColumns([countExp])
+      ..where(
+        sessions.characterId.equals(characterId) & sessions.deletedAt.isNull(),
+      );
+    final row = await query.getSingle();
+    return row.read(countExp) ?? 0;
+  }
+
+  Future<int> deleteMessagesAtPosition(String sessionId, int position) async {
+    final count = await (delete(messages)..where(
+          (m) => m.sessionId.equals(sessionId) & m.position.equals(position),
+        ))
+        .go();
+    if (count > 0) await bumpSyncVersion();
+    return count;
+  }
+
   Stream<List<Message>> watchMessagesForSession(String sessionId) =>
       (select(messages)
             ..where((m) => m.sessionId.equals(sessionId) & m.deletedAt.isNull())

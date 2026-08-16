@@ -105,8 +105,13 @@ extension _CreateCharacterReviewStep on _CreateCharacterPageState {
                         .toList(),
                   ),
                 const SizedBox(height: 16),
-                // Realism Engine summary
-                if (_realismEnabled)
+                if (_realismWorn.isNotEmpty ||
+                    _realismCarrying.isNotEmpty ||
+                    _realismAmbitions.isNotEmpty ||
+                    _realismLikes.isNotEmpty ||
+                    _realismDislikes.isNotEmpty ||
+                    _realismChaosMode ||
+                    _realismEnabled)
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(12),
@@ -125,13 +130,13 @@ extension _CreateCharacterReviewStep on _CreateCharacterPageState {
                         const Row(
                           children: [
                             Icon(
-                              Icons.psychology,
+                              Icons.weekend,
                               size: 14,
                               color: AppColors.formMasterAccent,
                             ),
                             SizedBox(width: 6),
                             Text(
-                              'Realism Engine',
+                              'Porch Life',
                               style: TextStyle(
                                 color: AppColors.formMasterAccent,
                                 fontSize: 12,
@@ -142,27 +147,70 @@ extension _CreateCharacterReviewStep on _CreateCharacterPageState {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Day $_realismDayCount · ${_realismTimeOfDay.split('_').map((w) => w[0].toUpperCase() + w.substring(1)).join(' ')}',
+                          'Day $_realismDayCount · ${_realismTimeOfDay.split('_').map((w) => w[0].toUpperCase() + w.substring(1)).join(' ')}'
+                          '${_realismChaosMode ? ' · Chaos on' : ''}',
                           style: TextStyle(
                             color: AppColors.textTertiary(context),
                             fontSize: 11,
                           ),
                         ),
-                        if (_realismEmotion.isNotEmpty)
+                        if (_realismWorn.isNotEmpty)
                           Text(
-                            'Emotion: $_realismEmotion ($_realismEmotionIntensity)',
+                            'Wearing: ${_realismWorn.join(', ')}',
                             style: TextStyle(
                               color: AppColors.textTertiary(context),
                               fontSize: 11,
                             ),
                           ),
-                        Text(
-                          'Bond: $_realismShortTermBond / $_realismLongTermBond · Trust: $_realismTrustLevel',
-                          style: TextStyle(
-                            color: AppColors.textTertiary(context),
-                            fontSize: 11,
+                        if (_realismCarrying.isNotEmpty)
+                          Text(
+                            'Carrying: ${_realismCarrying.join(', ')}',
+                            style: TextStyle(
+                              color: AppColors.textTertiary(context),
+                              fontSize: 11,
+                            ),
                           ),
-                        ),
+                        if (_realismAmbitions.isNotEmpty)
+                          Text(
+                            'Ambitions: ${_realismAmbitions.join(', ')}',
+                            style: TextStyle(
+                              color: AppColors.textTertiary(context),
+                              fontSize: 11,
+                            ),
+                          ),
+                        if (_realismLikes.isNotEmpty)
+                          Text(
+                            'Likes: ${_realismLikes.join(', ')}',
+                            style: TextStyle(
+                              color: AppColors.textTertiary(context),
+                              fontSize: 11,
+                            ),
+                          ),
+                        if (_realismDislikes.isNotEmpty)
+                          Text(
+                            'Dislikes: ${_realismDislikes.join(', ')}',
+                            style: TextStyle(
+                              color: AppColors.textTertiary(context),
+                              fontSize: 11,
+                            ),
+                          ),
+                        if (_realismEnabled) ...[
+                          if (_realismEmotion.isNotEmpty)
+                            Text(
+                              'Emotion: $_realismEmotion ($_realismEmotionIntensity)',
+                              style: TextStyle(
+                                color: AppColors.textTertiary(context),
+                                fontSize: 11,
+                              ),
+                            ),
+                          Text(
+                            'Bond: $_realismShortTermBond / $_realismLongTermBond · Trust: $_realismTrustLevel',
+                            style: TextStyle(
+                              color: AppColors.textTertiary(context),
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),

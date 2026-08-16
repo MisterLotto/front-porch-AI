@@ -173,6 +173,8 @@ class ChatFacade {
       'isSettlingTurn': _chat.isSettlingTurn,
       // Overlay while setActiveCharacter/Group hydrates (navigate-first open).
       'isLoadingSession': _chat.isLoadingSession,
+      'isBackfillingHistory': _chat.isBackfillingHistory,
+      'hasOlderHistory': _chat.hasOlderHistory,
       // Processing-overlay state (mirrors the desktop Realism + Objective engine
       // overlays). The WS pushes a live `processing` event during eval; these
       // fields let a client that connects mid-eval render the overlay too.
@@ -370,6 +372,15 @@ class ChatFacade {
         .firstOrNull;
     if (card == null) return false;
     await _chat.setActiveCharacter(card);
+    _notify();
+    return true;
+  }
+
+  /// Next older page of the open chat (scroll-up). No-op when the
+  /// window already holds the full transcript.
+  Future<bool> loadOlderHistory() async {
+    if (!_chat.hasOlderHistory) return false;
+    await _chat.loadOlderHistory();
     _notify();
     return true;
   }

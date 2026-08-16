@@ -309,8 +309,12 @@ export function CharacterEditPage() {
       <h3 className="section-label">Realism Engine</h3>
       <RealismFormSection v={rv} set={patch} showIntimate={adultThemes} />
 
-      <h3 className="section-label">Needs Simulation</h3>
-      <NeedsFormSection v={rv} set={patch} />
+      {rv.realismEnabled && (
+        <>
+          <h3 className="section-label">Needs Simulation</h3>
+          <NeedsFormSection v={rv} set={patch} />
+        </>
+      )}
 
       <h3 className="section-label">Avatars &amp; expressions</h3>
       <AvatarManager characterId={c.id} />

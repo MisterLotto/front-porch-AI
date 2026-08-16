@@ -62,6 +62,7 @@ class WebChatRoutes {
     router.post('/api/chat/lorebook', _setChatLorebook);
     router.post('/api/chat/lore-preview', _lorePreview);
     router.post('/api/chat/session', _session);
+    router.post('/api/chat/history-older', _historyOlder);
   }
 
   final ChatFacade _facade;
@@ -220,6 +221,15 @@ class WebChatRoutes {
     return JsonResponse.ok({
       'status': 'ok',
       'sessionId': _facade.currentSessionId,
+    });
+  }
+
+  Future<shelf.Response> _historyOlder(shelf.Request request) async {
+    final loaded = await _facade.loadOlderHistory();
+    return JsonResponse.ok({
+      'ok': true,
+      'loaded': loaded,
+      'hasOlderHistory': _facade.state()['hasOlderHistory'] == true,
     });
   }
 

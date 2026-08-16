@@ -201,6 +201,7 @@ extension ChatServiceChatEntry on ChatService {
       '(had ${_messages.length}) for ${character?.name}, loading session...',
     );
     _messages.clear();
+    _history.reset();
     _currentSessionId = null;
     _summary = '';
     _summaryLastIndex = 0;

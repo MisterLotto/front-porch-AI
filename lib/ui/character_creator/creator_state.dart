@@ -259,7 +259,8 @@ class CreatorState extends ChangeNotifier {
   String realismEmotionIntensity = 'moderate';
   bool realismNsfwCooldown = false;
   bool realismChaosMode = false;
-  bool realismNeedsSim = false;
+  // Same AND-gate as the manual creator: false on the card is a veto.
+  bool realismNeedsSim = true;
   bool realismEnjoysLowHygiene = false;
 
   /// Long-term ambitions authored in the creator's realism step (approved

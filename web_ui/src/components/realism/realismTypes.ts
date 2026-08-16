@@ -106,7 +106,9 @@ export const REALISM_DEFAULTS: RealismValues = {
   realismVerificationMaxReprocesses: 1,
   realismVerificationStrictness: 3,
   realismNeedsDirectorAuthority: false,
-  needsSimEnabled: false,
+  // AND-gated with the Porch Life global (default on). A new card that
+  // writes false silently vetoes Needs even after the engine is turned on.
+  needsSimEnabled: true,
   enjoysLowHygiene: false,
   needsSimStrength: 1,
   needsBaselineHunger: 80,

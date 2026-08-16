@@ -157,8 +157,14 @@ class LLMProvider extends ChangeNotifier {
     }
     if (selectedModelId.isNotEmpty &&
         selectedModelId != _openRouterService.modelName) {
+      // oMLX is a fixed local URL. Using remoteApiUrl here sent Enhance
+      // at OpenRouter (or whatever Remote API is set to) with an MLX
+      // model id — or, when that URL happened to be oMLX, still worked
+      // only by accident. Same literal LLMProvider configures on sync.
       return OpenRouterService(
-        apiUrl: _storageService.remoteApiUrl,
+        apiUrl: _activeBackend == BackendType.omlx
+            ? 'http://localhost:8000/v1'
+            : _storageService.remoteApiUrl,
         apiKey: _storageService.remoteApiKey,
         modelName: selectedModelId,
       );

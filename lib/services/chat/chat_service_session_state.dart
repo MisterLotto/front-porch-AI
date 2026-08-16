@@ -187,6 +187,7 @@ extension ChatServiceSessionState on ChatService {
         _currentSessionId == null) {
       return;
     }
+    if (replaceAll) await _awaitHistoryHydrated();
     if (_messages.isEmpty) {
       debugPrint(
         '[ChatService] ⚠ _saveChat called with empty messages for '
@@ -196,10 +197,16 @@ extension ChatServiceSessionState on ChatService {
     }
     final sessionId = _currentSessionId!;
     final snapshot = List<ChatMessage>.from(_messages);
+    final positionBase = _history.basePosition;
     _saveChain = _saveChain.then((_) async {
       for (var i = 0; i < 3; i++) {
         try {
-          await _doSaveChat(sessionId, snapshot, replaceAll: replaceAll);
+          await _doSaveChat(
+            sessionId,
+            snapshot,
+            replaceAll: replaceAll,
+            positionBase: positionBase,
+          );
           return;
         } catch (e) {
           debugPrint('[ChatService] ⚠ persist ${i + 1}/3 failed: $e');
@@ -218,6 +225,7 @@ extension ChatServiceSessionState on ChatService {
     String sessionId,
     List<ChatMessage> snapshot, {
     bool replaceAll = false,
+    int positionBase = 0,
   }) async {
     if (snapshot.isEmpty) return;
 
@@ -226,7 +234,11 @@ extension ChatServiceSessionState on ChatService {
     // scalars onto that row (that is the inverse of the cross-chat wipe
     // this method's sessionId local was introduced to stop).
     if (_currentSessionId != sessionId) {
-      await _replaceSessionMessages(sessionId, snapshot);
+      await _replaceSessionMessages(
+        sessionId,
+        snapshot,
+        positionBase: positionBase,
+      );
       return;
     }
 
@@ -405,6 +417,7 @@ extension ChatServiceSessionState on ChatService {
       sessionId,
       snapshot,
       replaceAll: replaceAll,
+      positionBase: positionBase,
     );
   }
 
@@ -414,6 +427,7 @@ extension ChatServiceSessionState on ChatService {
     String sessionId,
     List<ChatMessage> snapshot, {
     bool replaceAll = false,
+    int positionBase = 0,
   }) async {
     final messageBatch = <MessagesCompanion>[];
     for (int i = 0; i < snapshot.length; i++) {
@@ -421,7 +435,9 @@ extension ChatServiceSessionState on ChatService {
       messageBatch.add(
         MessagesCompanion(
           sessionId: drift.Value(sessionId),
-          position: drift.Value(i),
+          position: drift.Value(
+            persistMessagePosition(base: positionBase, index: i),
+          ),
           sender: drift.Value(m.sender),
           isUser: drift.Value(m.isUser),
           characterId: drift.Value(m.characterId),
