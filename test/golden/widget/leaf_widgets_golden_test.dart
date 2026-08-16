@@ -83,8 +83,6 @@ Widget _realismForm() => RealismFormSection(
   onNsfwCooldownChanged: (_) {},
   chaosModeEnabled: false,
   onChaosModeChanged: (_) {},
-  currentTask: '',
-  onCurrentTaskChanged: (_) {},
   realismVerificationEnabled: true,
   onRealismVerificationChanged: (_) {},
 );

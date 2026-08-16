@@ -40,11 +40,22 @@
 /// eval suppress path) never leaks stray reasoning into the visible reply,
 /// matching the long-standing SillyTavern-style behavior.
 class ReasoningTagWrapper {
-  ReasoningTagWrapper({required this.wrap});
+  ReasoningTagWrapper({required this.wrap, this.salvage = false});
 
   /// Whether reasoning should be surfaced (wrapped in `<think>…</think>`) or
   /// discarded entirely.
   final bool wrap;
+
+  /// When [wrap] is off, still yield reasoning deltas (evals) — TAGGED, the
+  /// same `<think>…</think>` framing as [wrap]. Mandatory models park the
+  /// JSON in this channel; discarding it is an empty judge. Tagging (rather
+  /// than raw pass-through, the 2026-08-15 first cut) is what lets the eval
+  /// pipeline's stripThinkBlocks separate 15k chars of deliberation from the
+  /// final answer: raw salvage let firstMatch regexes grab DRAFT deltas out
+  /// of mid-think text instead of the model's final JSON. When the answer
+  /// only exists inside the think channel, every eval call site already
+  /// falls back to parsing the raw text, tags and all.
+  final bool salvage;
 
   /// True while a `<think>` block is open (emitted, not yet closed).
   bool _open = false;
@@ -56,7 +67,8 @@ class ReasoningTagWrapper {
   /// text), and passes subsequent deltas of the open block through raw.
   /// Discards entirely when [wrap] is off.
   String onReasoning(String delta) {
-    if (!wrap || delta.isEmpty) return '';
+    if (delta.isEmpty) return '';
+    if (!wrap && !salvage) return '';
     if (_open) return delta;
     _open = true;
     return '<think>$delta';

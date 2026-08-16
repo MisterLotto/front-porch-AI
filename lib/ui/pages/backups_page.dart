@@ -93,8 +93,8 @@ class _BackupsPageState extends State<BackupsPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Database backups are disabled in pre-release builds to prevent '
-            'confusion between beta and stable databases. Backups will be '
+            'Database backups are disabled in nightly builds to prevent '
+            'confusion between nightly and stable databases. Backups will be '
             're-enabled once $stableVersionBase goes stable.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodySmall?.copyWith(color: accent, height: 1.5),
@@ -300,7 +300,7 @@ class _BackupsPageState extends State<BackupsPage> {
         content: Text(
           'This will replace your current database with the backup. '
           'All changes made after this backup was created will be lost.\n\n'
-          'The app will need to restart after restoring.',
+          'Your library reloads in place, so you should not need to restart.',
           style: TextStyle(color: AppColors.textSecondary(ctx), height: 1.5),
         ),
         actions: [

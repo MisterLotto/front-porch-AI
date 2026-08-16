@@ -21,20 +21,65 @@ import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/llm_tool_parsing.dart';
+import 'package:front_porch_ai/services/reasoning_effort.dart';
 import 'package:front_porch_ai/services/reasoning_stream_wrapper.dart';
 import 'package:front_porch_ai/services/remote_model_info.dart';
 
 // RemoteModelInfo lived here for years — re-export so importers keep working.
 export 'package:front_porch_ai/services/remote_model_info.dart';
 
-/// LLM backend that connects to OpenAI-compatible APIs
-/// (OpenRouter, Nano-GPT, vLLM, LM Studio, etc).
+/// Does this provider error mean "you may not switch my reasoning off"?
+///
+/// Matched on the message rather than a status code because 400 covers every
+/// malformed-request case; keyed on the two words every provider phrasing so
+/// far shares. Nano-GPT: "Kimi K2 Thinking is a mandatory-reasoning model. Use
+/// reasoning.exclude=true to hide reasoning output." Deliberately narrow — a
+/// false positive here would silently stop us disabling reasoning on a model
+/// that supports it, which costs the user tokens on every eval forever.
+bool _isMandatoryReasoningRejection(String msg) {
+  final m = msg.toLowerCase();
+  return m.contains('reasoning') &&
+      (m.contains('mandatory') ||
+          m.contains('cannot be disabled') ||
+          m.contains('exclude=true'));
+}
+
+/// Pull a human error string out of a provider JSON body (or the raw body).
+/// Several Nano/OpenRouter shapes exist; we try them all so the effort
+/// learn-path is not skipped just because the envelope moved.
+String _remoteApiErrorMessage(String body, int statusCode) {
+  final fallback = 'HTTP $statusCode';
+  if (body.isEmpty) return fallback;
+  try {
+    final decoded = jsonDecode(body);
+    if (decoded is Map) {
+      final err = decoded['error'];
+      if (err is Map && err['message'] != null) {
+        return err['message'].toString();
+      }
+      if (err is String && err.isNotEmpty) return err;
+      if (decoded['message'] != null) return decoded['message'].toString();
+    }
+    if (decoded is String && decoded.isNotEmpty) return decoded;
+  } catch (_) {}
+  // Plain-text / HTML body still carries the effort rejection wording.
+  return body.length > 800 ? '${body.substring(0, 800)}…' : body;
+}
+
+/// LLM backend for OpenAI-compatible APIs (OpenRouter, Nano-GPT, vLLM, …).
 class OpenRouterService extends LLMService {
   String _apiUrl;
   String _apiKey;
   String _modelName;
   bool _isReady = false;
-  http.Client? _activeClient;
+
+  /// Every client with a call in flight, so [abortGeneration] can close all of
+  /// them. A SET rather than one slot because this is a single shared instance
+  /// and the app deliberately overlaps remote calls on it (the staggered
+  /// realism judges, post-gen needs + reply-facts): with one slot the first
+  /// call to finish cleared the field, and Cancel then closed nothing while
+  /// the rest kept streaming (and billing).
+  final Set<http.Client> _activeClients = {};
 
   String get apiUrl => _apiUrl;
   String get apiKey => _apiKey;
@@ -152,6 +197,7 @@ class OpenRouterService extends LLMService {
     if (key.isEmpty && !isLocal) return [];
 
     final client = http.Client();
+    var batched = false;
     try {
       final uri = Uri.parse('$url/models');
       debugPrint('[OpenRouter] Fetching models from: $uri');
@@ -182,6 +228,8 @@ class OpenRouterService extends LLMService {
         debugPrint('[OpenRouter] First entry type: ${data.first.runtimeType}');
         debugPrint('[OpenRouter] First entry: ${data.first}');
       }
+      beginReasoningEffortCatalogBatch();
+      batched = true;
       final models = <RemoteModelInfo>[];
 
       for (final m in data) {
@@ -206,12 +254,19 @@ class OpenRouterService extends LLMService {
               id;
         }
         if (id.isEmpty) continue;
-        final pricing = m['pricing'] as Map<String, dynamic>?;
+        if (m is Map) {
+          rememberReasoningProfileFromCatalog(id, m['reasoning']);
+        }
+        // `m` is dynamic, so indexing a plain-String entry dispatches to
+        // String.operator[](int) and THROWS — which aborted the whole loop and
+        // emptied the picker for any backend answering {"models":["llama-3"]},
+        // the very shape the `m is String` branch above exists to support.
+        final pricing = m is Map ? m['pricing'] : null;
 
         // API returns USD per token; convert to per 1M tokens for readability
         double? promptCost;
         double? completionCost;
-        if (pricing != null) {
+        if (pricing is Map) {
           final promptRaw = double.tryParse(
             pricing['prompt']?.toString() ?? '',
           );
@@ -239,6 +294,7 @@ class OpenRouterService extends LLMService {
       debugPrint('[OpenRouter] Error fetching models: $e');
       return [];
     } finally {
+      if (batched) endReasoningEffortCatalogBatch();
       client.close();
     }
   }
@@ -262,10 +318,20 @@ class OpenRouterService extends LLMService {
     // extensions). Everyone else (OpenRouter, Nano-GPT, vLLM, LM Studio)
     // supports or ignores the native sampler fields.
     final strictOpenAi = _apiUrl.contains('openai.com');
+    // Mandatory-reasoning models spend `max_tokens` on the think they cannot
+    // switch off, so an eval's 4000 cap was regularly consumed mid-think and
+    // the answer (content JSON or tool call) never arrived — the intermittent
+    // "no deltas" on Kimi 2.6:thinking. Evals (salvageReasoning) get think
+    // headroom on such models; chat/Continue keep the caller's cap (the think
+    // is excluded there and reply length is the user's setting).
+    final maxTokens =
+        params.salvageReasoning && reasoningCannotDisable(modelName)
+        ? params.maxLength + kMandatoryReasoningThinkHeadroomTokens
+        : params.maxLength;
     final payload = <String, dynamic>{
       'model': _modelName,
       'stream': stream,
-      'max_tokens': params.maxLength,
+      'max_tokens': maxTokens,
       'temperature': params.temperature,
       'top_p': params.topP,
       'messages': messages,
@@ -292,7 +358,10 @@ class OpenRouterService extends LLMService {
         'enabled': params.reasoningEnabled,
       };
       if (params.reasoningEnabled) {
-        reasoning['effort'] = params.reasoningEffort;
+        // User setting stays in prefs; wire value may adapt (learned 400 or
+        // :thinking suffix hint — see wireReasoningEffort).
+        reasoning['effort'] =
+            wireReasoningEffort(modelName, params.reasoningEffort);
       }
       if (params.reasoningMaxTokens != null) {
         reasoning['max_tokens'] = params.reasoningMaxTokens;
@@ -302,6 +371,33 @@ class OpenRouterService extends LLMService {
       // handles "Request model reasoning" = off for OpenRouter models.
       if (!params.reasoningEnabled) {
         reasoning['exclude'] = true;
+        // MANDATORY-REASONING MODELS REJECT `enabled:false` OUTRIGHT.
+        //
+        // The two keys do different jobs: `enabled:false` stops the model
+        // thinking (saves tokens), `exclude:true` merely keeps the thoughts out
+        // of the response. A model whose reasoning cannot be switched off 400s
+        // the first and is perfectly happy with the second — its own error says
+        // so: "Kimi K2 Thinking is a mandatory-reasoning model. Use
+        // reasoning.exclude=true to hide reasoning output."
+        //
+        // This is not cosmetic. EVERY eval suppresses reasoning (they want flat
+        // JSON, not think-blocks), so on such a model every judge 400s, twice
+        // each with the retry — relationship, emotional, narrative, needs-impact
+        // and objective-completion all fail, and the maintainer sees "no deltas,
+        // emotion sticking across messages" with bond_delta=null on every turn
+        // while needs quietly fall back to plain decay. Reported 2026-08-08.
+        //
+        // Learned per model rather than dropped for everyone: `enabled:false` is
+        // what actually saves money on models that honour it, and silently
+        // paying for discarded reasoning tokens on every eval, forever, is a bill
+        // the user never agreed to. One rejection per model is the whole cost.
+        if (reasoningCannotDisable(modelName)) {
+          reasoning.remove('enabled');
+          // Evals need the think channel: Kimi 2.6:thinking puts the JSON
+          // there, and exclude:true leaves content as a newline after a
+          // long think (2026-08-15). Chat Continue still excludes.
+          if (params.salvageReasoning) reasoning.remove('exclude');
+        }
       }
       payload['reasoning'] = reasoning;
     }
@@ -363,7 +459,7 @@ class OpenRouterService extends LLMService {
       ..['tool_choice'] = 'auto';
 
     final client = http.Client();
-    _activeClient = client;
+    _activeClients.add(client);
     try {
       // No wall-clock timeout: a tool/eval call (incl. local oMLX via this same
       // client) can legitimately run long on a slow model or reasoning pass. A
@@ -382,11 +478,30 @@ class OpenRouterService extends LLMService {
         );
       }
       if (response.statusCode != 200) {
+        final err = _remoteApiErrorMessage(response.body, response.statusCode);
+        if (!reasoningCannotDisable(modelName) &&
+            _isMandatoryReasoningRejection(err)) {
+          rememberMandatoryReasoning(modelName);
+          debugPrint(
+            '[RemoteAPI] $modelName cannot disable reasoning — retrying '
+            'tool call with reasoning.exclude only',
+          );
+          return generateWithTools(params, tools);
+        }
         debugPrint(
           '[RemoteAPI] Tool call rejected (HTTP ${response.statusCode}) — '
-          'falling back to text transport',
+          'falling back to text transport: $err',
         );
         return null;
+      }
+      // A tool call cut by max_tokens comes back as a clean 200 with no
+      // tool_calls and no content — downstream that reads as "inconclusive,
+      // fall back to text" with no trace. Name it in the log.
+      if (RegExp(r'"finish_reason"\s*:\s*"length"').hasMatch(response.body)) {
+        debugPrint(
+          '[RemoteAPI] $modelName tool call hit max_tokens '
+          '(finish_reason=length) — likely truncated mid-think, no tool call',
+        );
       }
       return parseOpenAiToolResponse(response.body);
     } catch (e) {
@@ -396,7 +511,7 @@ class OpenRouterService extends LLMService {
       debugPrint('[RemoteAPI] Tool call transport failure: $e');
       rethrow;
     } finally {
-      if (identical(_activeClient, client)) _activeClient = null;
+      _activeClients.remove(client);
       client.close();
     }
   }
@@ -417,7 +532,7 @@ class OpenRouterService extends LLMService {
     request.body = jsonEncode(_chatPayload(params, stream: true));
 
     final client = http.Client();
-    _activeClient = client;
+    _activeClients.add(client);
     // Only wrap reasoning in <think> tags when the app explicitly requested it.
     // Some models (e.g. Qwen on LM Studio) send the entire response as
     // reasoning_content even when reasoning wasn't requested — wrapping those
@@ -432,7 +547,10 @@ class OpenRouterService extends LLMService {
     // payload builder), so the provider returns no reasoning to wrap. Every
     // suppress path (Continue, evals) sets reasoningEnabled=false anyway, so the
     // two predicates are equivalent in practice.
-    final wrapper = ReasoningTagWrapper(wrap: params.reasoningEnabled);
+    final wrapper = ReasoningTagWrapper(
+      wrap: params.reasoningEnabled,
+      salvage: params.salvageReasoning,
+    );
 
     try {
       // No wall-clock timeout on the streamed reply (incl. local oMLX): a long
@@ -443,11 +561,63 @@ class OpenRouterService extends LLMService {
 
       if (response.statusCode != 200) {
         final body = await response.stream.bytesToString();
-        String errorMsg = 'HTTP ${response.statusCode}';
-        try {
-          final errJson = jsonDecode(body);
-          errorMsg = errJson['error']?['message'] ?? errorMsg;
-        } catch (_) {}
+        final errorMsg = _remoteApiErrorMessage(body, response.statusCode);
+        // A mandatory-reasoning model refusing `reasoning:{enabled:false}`.
+        // Remember it and RETRY ONCE right here rather than just throwing:
+        // without the retry the caller still loses this eval, and for the
+        // reported case that is every judge on the turn the user is waiting on.
+        // The rejection then costs one round trip for the life of the process.
+        if (!reasoningCannotDisable(modelName) &&
+            _isMandatoryReasoningRejection(errorMsg)) {
+          rememberMandatoryReasoning(modelName);
+          debugPrint(
+            '[RemoteAPI] $modelName cannot disable reasoning — retrying with '
+            'reasoning.exclude only (remembered for this session)',
+          );
+          yield* generateStream(params);
+          return;
+        }
+        // The provider re-tiered this model's reasoning.effort values under
+        // us (DeepSeek v4-flash:thinking dropped low/medium, 2026-07-18) and
+        // its 400 names the values it still takes. Same learn-once-and-retry
+        // as the mandatory-reasoning case above: remember the supported set,
+        // let the payload builder substitute the closest one, and retry right
+        // here so the turn the user is waiting on still completes. The
+        // containsKey guard makes a second rejection for the same model
+        // throw instead of loop. Parse message AND raw body — some providers
+        // put the listing only in one of the two.
+        final supportedEfforts = supportedReasoningEffortsFromError(errorMsg) ??
+            supportedReasoningEffortsFromError(body);
+        if (supportedEfforts != null &&
+            !kLearnedReasoningEffortsByModel.containsKey(modelName)) {
+          rememberReasoningEffortsForModel(modelName, supportedEfforts);
+          debugPrint(
+            '[RemoteAPI] $modelName rejected reasoning.effort '
+            '"${params.reasoningEffort}" — provider supports '
+            '${supportedEfforts.join('/')}; retrying with '
+            '"${nearestReasoningEffort(params.reasoningEffort, supportedEfforts)}" '
+            '(remembered for this session)',
+          );
+          yield* generateStream(params);
+          return;
+        }
+        // Already learned / hinted but still rejected — allow one overwrite
+        // when the provider's new listing differs (re-tier mid-session).
+        if (supportedEfforts != null) {
+          final prev = kLearnedReasoningEffortsByModel[modelName];
+          final same = prev != null &&
+              prev.length == supportedEfforts.length &&
+              prev.containsAll(supportedEfforts);
+          if (!same) {
+            rememberReasoningEffortsForModel(modelName, supportedEfforts);
+            debugPrint(
+              '[RemoteAPI] $modelName re-tiered reasoning.effort again — '
+              'now ${supportedEfforts.join('/')}; retrying once',
+            );
+            yield* generateStream(params);
+            return;
+          }
+        }
         throw Exception('API error: $errorMsg');
       }
 
@@ -478,6 +648,15 @@ class OpenRouterService extends LLMService {
           try {
             final json = jsonDecode(data);
             final choice = json['choices']?[0];
+            // The cut-mid-think signature: on a mandatory-reasoning model
+            // this is exactly "the eval will have no deltas this turn".
+            // One glance at the log now names the failure class.
+            if (choice?['finish_reason'] == 'length') {
+              debugPrint(
+                '[RemoteAPI] $modelName hit max_tokens '
+                '(finish_reason=length) — response truncated',
+              );
+            }
             final delta = choice?['delta'];
             if (delta == null) continue;
 
@@ -538,14 +717,18 @@ class OpenRouterService extends LLMService {
       final tail = wrapper.finish();
       if (tail.isNotEmpty) yield tail;
     } finally {
-      _activeClient = null;
+      _activeClients.remove(client);
       client.close();
     }
   }
 
   @override
   void abortGeneration() {
-    _activeClient?.close();
-    _activeClient = null;
+    // Iterate a copy: each close() lets its call's finally run, which mutates
+    // the set.
+    for (final client in _activeClients.toList()) {
+      client.close();
+    }
+    _activeClients.clear();
   }
 }

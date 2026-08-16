@@ -219,9 +219,9 @@ function CredentialsCard({
   );
 }
 
-/** 2FA enroll (QR + confirm) and — new — a re-authenticated disable flow:
- *  turning 2FA off requires the current password AND a current code, so a
- *  hijacked session can't silently strip the second factor. */
+/** 2FA enroll (QR + confirm) and disable — both paths re-authenticate with
+ *  the current password so a stolen session cookie alone cannot enroll a new
+ *  authenticator (locking the owner out) or strip the second factor. */
 function TwoFactorCard({
   state,
   onChanged,
@@ -238,8 +238,14 @@ function TwoFactorCard({
   const begin = async () => {
     setError('');
     setRecovery(null);
+    if (!password) {
+      return setError('Enter your current password to start 2FA setup.');
+    }
     try {
-      const r = await api.post<{ otpauthUri: string; secret: string }>('/api/auth/2fa/begin');
+      const r = await api.post<{ otpauthUri: string; secret: string }>(
+        '/api/auth/2fa/begin',
+        { currentPassword: password },
+      );
       setEnroll(r);
     } catch (e) {
       setError(errText(e, 'Could not start 2FA setup'));
@@ -248,11 +254,18 @@ function TwoFactorCard({
 
   const confirm = async () => {
     setError('');
+    if (!password) {
+      return setError('Enter your current password to enable 2FA.');
+    }
     try {
-      const r = await api.post<{ recoveryCodes: string[] }>('/api/auth/2fa/confirm', { code });
+      const r = await api.post<{ recoveryCodes: string[] }>('/api/auth/2fa/confirm', {
+        code,
+        currentPassword: password,
+      });
       setRecovery(r.recoveryCodes);
       setEnroll(null);
       setCode('');
+      setPassword('');
       onChanged();
     } catch (e) {
       setError(errText(e, 'Invalid code'));
@@ -323,6 +336,15 @@ function TwoFactorCard({
           </div>
           <p className="muted">Secret: <code>{enroll.secret}</code></p>
           <label>
+            Current password <span className="muted">(required to enable)</span>
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+          <label>
             Code
             <input
               inputMode="numeric"
@@ -331,14 +353,29 @@ function TwoFactorCard({
               placeholder="123456"
             />
           </label>
-          <button className="primary" onClick={confirm}>
+          <button className="primary" disabled={!password || !code.trim()} onClick={confirm}>
             Confirm &amp; enable
           </button>
         </>
       ) : (
-        <button className="primary" onClick={begin}>
-          Set up 2FA
-        </button>
+        <>
+          <p className="muted">
+            Enabling 2FA requires your current password so a stolen session alone
+            cannot lock you out with a new authenticator.
+          </p>
+          <label>
+            Current password
+            <input
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+          <button className="primary" disabled={!password} onClick={begin}>
+            Set up 2FA
+          </button>
+        </>
       )}
       {error && <p className="error">{error}</p>}
     </section>

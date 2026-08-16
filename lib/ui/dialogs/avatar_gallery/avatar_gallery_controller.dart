@@ -244,8 +244,9 @@ class AvatarGalleryController extends ChangeNotifier {
     _needsCloseBroadcast = true;
   });
 
-  /// Delete the portrait — the ★ starred look (else the first) is promoted
-  /// in its place. The UI hides this affordance when no looks exist.
+  /// Swap the portrait — the ★ starred look (else the first) is promoted
+  /// in its place and the OLD portrait demotes into the gallery as a look
+  /// (2026-08-14: nothing destroyed). The UI hides this with no looks.
   Future<void> deletePortrait() => _run(() async {
     if (dbId == null) return;
     final promotedId = await repository.deletePortraitPromotingLook(

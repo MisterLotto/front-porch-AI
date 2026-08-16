@@ -30,7 +30,7 @@ import 'package:http/http.dart' as http;
 class NgrokProvider {
   NgrokProvider({String? executable}) : _exe = executable ?? _findExe();
 
-  final String _exe;
+  String _exe;
   Process? _process;
   String? _publicUrl;
 
@@ -48,11 +48,23 @@ class NgrokProvider {
   /// Start a tunnel to [port]. Returns the public https URL, or null on
   /// failure (bad token, tunnel limit, etc. — surfaced via debug logs).
   Future<String?> start(int port, {String? authToken}) async {
+    if (_exe.isEmpty) {
+      try {
+        final r = await Process.run('ngrok', ['version']);
+        if (r.exitCode == 0) {
+          _exe = _cachedExe = 'ngrok';
+        }
+      } catch (_) {}
+    }
     if (!isInstalled) return null;
     if (isRunning) return _publicUrl;
     try {
       if (authToken != null && authToken.isNotEmpty) {
-        await Process.run(_exe, ['config', 'add-authtoken', authToken]);
+        await Process.run(_exe, [
+          'config',
+          'add-authtoken',
+          authToken,
+        ]).timeout(const Duration(seconds: 10));
       }
       _process = await Process.start(
         _exe,
@@ -125,7 +137,14 @@ class NgrokProvider {
     }
   }
 
+  // Cached for the same reason as TailscaleProvider: the sync PATH probe can
+  // take seconds on Windows under antivirus, and this ctor runs on every
+  // server start (via TunnelManager).
+  static String? _cachedExe;
+
   static String _findExe() {
+    final cached = _cachedExe;
+    if (cached != null) return cached;
     const candidates = [
       'ngrok',
       '/usr/local/bin/ngrok',
@@ -134,14 +153,8 @@ class NgrokProvider {
       r'C:\Program Files\ngrok\ngrok.exe',
     ];
     for (final c in candidates) {
-      if (c == 'ngrok') {
-        try {
-          final r = Process.runSync(c, ['version']);
-          if (r.exitCode == 0) return c;
-        } catch (_) {}
-      } else if (File(c).existsSync()) {
-        return c;
-      }
+      if (c == 'ngrok') continue;
+      if (File(c).existsSync()) return _cachedExe = c;
     }
     return '';
   }

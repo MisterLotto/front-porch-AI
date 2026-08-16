@@ -9,6 +9,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { StoopBadges, StoopCardArt } from '../../components/stoop/StoopCardTile';
+import {
+  type InventoryRecord,
+  inventoryToChips,
+} from '../../components/realism/realismTypes';
 import { stoop, stoopErrorText } from '../../stoop/stoopApi';
 import { REPORT_CATEGORIES, type StoopCardDetail } from '../../stoop/stoopTypes';
 
@@ -93,6 +97,44 @@ export function StoopCardPage() {
     return typeof v === 'string' ? v.trim() : '';
   };
 
+  // One reader for every card-authored phrase list, straight out of the card
+  // the relay already hands us — `extensions.front_porch.realism_engine.<key>`,
+  // the same path the desktop panel walks. No backend field is involved: the
+  // card blob travels verbatim, so these sections are display-only additions.
+  //
+  // Mirrors the Dart stoopPhrases(). Array.isArray rather than a cast, and
+  // defensive at every hop, because old cards have no extensions at all and a
+  // malformed field on a stranger's upload must cost that field, not the page.
+  const realismBlock = (): Record<string, unknown> | undefined => {
+    const ext = detail.card.extensions as Record<string, unknown> | undefined;
+    const fp = ext?.front_porch as Record<string, unknown> | undefined;
+    return fp?.realism_engine as Record<string, unknown> | undefined;
+  };
+  const cardPhrases = (key: string): string[] => {
+    const raw = realismBlock()?.[key];
+    if (!Array.isArray(raw)) return [];
+    return raw.filter((a): a is string => typeof a === 'string' && a.trim() !== '').map((a) => a.trim());
+  };
+  const ambitions = cardPhrases('ambitions');
+  const likes = cardPhrases('likes');
+  const dislikes = cardPhrases('dislikes');
+  // Starting Pockets & Wardrobe. NOT readable through cardPhrases: this field
+  // is a map of two lists whose entries may each be a bare string or a
+  // {name, state} object, so the phrase reader returns [] for every card
+  // forever — and silently, since an absent section looks identical to a card
+  // whose author wrote no wardrobe. inventoryToChips is the same converter the
+  // web editor uses, so the Stoop shows exactly what a download would produce,
+  // caps and all (mirrors stoopWardrobeSection on desktop).
+  const inventoryRaw = realismBlock()?.inventory;
+  const wardrobe =
+    inventoryRaw && typeof inventoryRaw === 'object' && !Array.isArray(inventoryRaw)
+      ? inventoryToChips(inventoryRaw as InventoryRecord)
+      : { worn: [], carrying: [] };
+  // The 18+ pair is deliberately NOT read here: the card page is browsed by
+  // anyone signed in, and opening a card is not opting into 18+ content. The
+  // data still travels with the card and works once downloaded (mirrors
+  // stoopPreferencesSection on desktop).
+
   return (
     <div className="stoop-detail">
       <div className="stoop-detail-head">
@@ -174,6 +216,69 @@ export function StoopCardPage() {
           </section>
         );
       })}
+
+      {ambitions.length > 0 && (
+        <section className="card stoop-section">
+          <h4>Ambitions ({ambitions.length})</h4>
+          <ul className="stoop-ambitions">
+            {ambitions.map((a, i) => (
+              <li key={i}>🧭 {a}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {(likes.length > 0 || dislikes.length > 0) && (
+        <section className="card stoop-section">
+          <h4>Likes &amp; Dislikes ({likes.length + dislikes.length})</h4>
+          {likes.length > 0 && (
+            <>
+              <h5 className="stoop-sublabel">Drawn to</h5>
+              <ul className="stoop-ambitions">
+                {likes.map((a, i) => (
+                  <li key={i}>♥ {a}</li>
+                ))}
+              </ul>
+            </>
+          )}
+          {dislikes.length > 0 && (
+            <>
+              <h5 className="stoop-sublabel">Put off by</h5>
+              <ul className="stoop-ambitions">
+                {dislikes.map((a, i) => (
+                  <li key={i}>✕ {a}</li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
+      )}
+
+      {(wardrobe.worn.length > 0 || wardrobe.carrying.length > 0) && (
+        <section className="card stoop-section">
+          <h4>Pockets &amp; Wardrobe ({wardrobe.worn.length + wardrobe.carrying.length})</h4>
+          {wardrobe.worn.length > 0 && (
+            <>
+              <h5 className="stoop-sublabel">Wearing</h5>
+              <ul className="stoop-ambitions">
+                {wardrobe.worn.map((a, i) => (
+                  <li key={i}>🧥 {a}</li>
+                ))}
+              </ul>
+            </>
+          )}
+          {wardrobe.carrying.length > 0 && (
+            <>
+              <h5 className="stoop-sublabel">Carrying</h5>
+              <ul className="stoop-ambitions">
+                {wardrobe.carrying.map((a, i) => (
+                  <li key={i}>🎒 {a}</li>
+                ))}
+              </ul>
+            </>
+          )}
+        </section>
+      )}
 
       {reporting && (
         <ReportDialog

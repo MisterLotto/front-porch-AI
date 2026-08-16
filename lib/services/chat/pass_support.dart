@@ -21,6 +21,8 @@ import 'package:flutter/foundation.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/llm_service.dart'
     show LlmToolResponse, isToolTransportFailure;
+import 'package:front_porch_ai/services/storage/settings/realism_settings.dart'
+    show OneShotMode;
 
 /// Shared support for the two background maintenance passes (the Journal and
 /// Growth Rings) — extracted from JournalMaintenance so the growth pass
@@ -78,6 +80,37 @@ List<CharacterCard> resolvePassOwners({
 
 /// A backend identity's native tool-calling verdict, as observed this run.
 enum ToolCallSupport { untested, supported, unsupported }
+
+/// Resolve the effective one-shot decision for a turn — pure, so the whole
+/// policy is testable as a truth table (eval review Tier-1 §3.4).
+///
+/// [OneShotMode.auto] means: fuse on a REMOTE backend that has PROVEN native
+/// tool calls (the probe verdict this run) — exactly the class of model the
+/// combined prompt is easy for — and stay multi-call everywhere else,
+/// including every local backend, where small models struggle with the fused
+/// length (the reason the old bool defaulted off). An untested verdict
+/// resolves multi-call: the first eval of the run probes, and Auto converges
+/// from the next turn (usually sooner — ToolSupportTester pings on backend
+/// change). The explicit modes always win in both directions.
+///
+/// [callMode] (2026-08-14, voice call overhaul, safe lane): on a live voice
+/// call latency IS the product, so Off is upgraded to Auto's rule — the
+/// fused single call — exactly where fusing is proven safe (remote + tools
+/// verdict). The one-shot parity law guarantees 1:1 equivalent outputs, so
+/// the only observable difference in a call is speed. On stays On, Auto
+/// stays Auto, and local backends still never fuse (small models struggle
+/// with the fused prompt length, call or no call).
+bool resolveOneShotMode({
+  required OneShotMode mode,
+  required bool isLocal,
+  required ToolCallSupport toolSupport,
+  bool callMode = false,
+}) => switch (mode) {
+  OneShotMode.on => true,
+  OneShotMode.off =>
+    callMode && !isLocal && toolSupport == ToolCallSupport.supported,
+  OneShotMode.auto => !isLocal && toolSupport == ToolCallSupport.supported,
+};
 
 /// Per-run memory of which backend identities can (or can't) speak the
 /// OpenAI tools protocol — shared by every tool-negotiating consumer (the

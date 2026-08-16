@@ -209,9 +209,12 @@ void main() {
           // legitimately receives no hit and is not what this test is about.
           if (rect.width <= 0 || rect.height <= 0) continue;
           final size = tester.view.physicalSize / tester.view.devicePixelRatio;
-          if (!Rect.fromLTWH(0, 0, size.width, size.height).contains(
-            rect.center,
-          )) {
+          if (!Rect.fromLTWH(
+            0,
+            0,
+            size.width,
+            size.height,
+          ).contains(rect.center)) {
             continue;
           }
           if (!_tapReaches(tester, b)) {

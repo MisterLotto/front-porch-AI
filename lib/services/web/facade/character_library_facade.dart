@@ -199,11 +199,12 @@ class CharacterLibraryFacade {
   }
 
   /// Duplicate a character (deep-copies extensions + fresh stable id via the
-  /// desktop path). Returns the new {id, name} or null.
-  Future<Map<String, dynamic>?> duplicate(String charId) async {
+  /// desktop path). Returns the new {id, name} or null. [newName] overrides
+  /// the default "(duplicate)" suffix — web AI Enhance passes "(Enhanced)".
+  Future<Map<String, dynamic>?> duplicate(String charId, {String? newName}) async {
     final card = await _resolve(charId);
     if (card == null) return null;
-    final dup = await _repo.duplicateCharacter(card);
+    final dup = await _repo.duplicateCharacter(card, newNameOverride: newName);
     if (dup == null) return null;
     // Same folder-inheritance rule as the desktop context menu: the copy
     // lands beside its source, not on the top level.

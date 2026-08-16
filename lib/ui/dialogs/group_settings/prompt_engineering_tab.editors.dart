@@ -63,7 +63,10 @@ extension _GroupPromptEditors on _GroupPromptEngineeringTabState {
             controller: noteCtrl,
             maxLines: 3,
             minLines: 1,
-            style: const TextStyle(color: Colors.white, fontSize: 12),
+            style: TextStyle(
+              color: AppColors.textPrimary(context),
+              fontSize: 12,
+            ),
             decoration: InputDecoration(
               hintText: "Author's note for ${c.name} (when they speak)...",
               hintStyle: TextStyle(
@@ -207,6 +210,10 @@ extension _GroupPromptEditors on _GroupPromptEngineeringTabState {
               TextButton(
                 onPressed: () {
                   promptCtrl.clear();
+                  // A programmatic clear() never fires TextField.onChanged, so
+                  // without this the box looked empty while the old override
+                  // kept being injected every turn (and came back on reopen).
+                  widget.chatService.setSystemPromptForGroupCharacter(c, '');
                 },
                 child: const Text('Clear', style: TextStyle(fontSize: 11)),
               ),
@@ -218,7 +225,10 @@ extension _GroupPromptEditors on _GroupPromptEngineeringTabState {
             controller: promptCtrl,
             maxLines: 4,
             minLines: 2,
-            style: const TextStyle(color: Colors.white, fontSize: 12),
+            style: TextStyle(
+              color: AppColors.textPrimary(context),
+              fontSize: 12,
+            ),
             decoration: InputDecoration(
               hintText: 'Group-only system prompt for ${c.name}...',
               hintStyle: TextStyle(

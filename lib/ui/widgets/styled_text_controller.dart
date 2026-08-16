@@ -1,9 +1,9 @@
 import 'dart:async';
-import 'dart:ui' show PlatformDispatcher;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show SpellCheckResults, SuggestionSpan;
 
-import 'package:front_porch_ai/services/desktop_spell_check_service.dart';
+import 'package:front_porch_ai/services/services.dart'
+    show DesktopSpellCheckService;
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/app_text_field.dart';
 
@@ -83,6 +83,13 @@ class StyledTextController extends TextEditingController
   bool _spellCheckInFlight = false;
   bool _ignoreTextChange = false;
 
+  /// dispose() cancels the debounce timer, but an ALREADY-IN-FLIGHT async
+  /// spell check resumes after its await and used to notifyListeners() on
+  /// the dead controller — "used after being disposed", surfaced by the
+  /// message-actions E2E typing into the edit dialog and saving before the
+  /// fetch returned. Every async resume point checks this flag.
+  bool _disposed = false;
+
   void applySpellResults(String checkedText, List<SuggestionSpan> spans) {
     _lastCheckedText = checkedText;
     _misspelledRanges
@@ -120,13 +127,17 @@ class StyledTextController extends TextEditingController
   }
 
   void _trySpellCheck() {
-    if (!_spellCheckInFlight) {
+    // Skip entirely when the user turned spell check off, rather than making a
+    // channel round trip only to throw the answer away. This controller fires
+    // on a 300ms debounce after every keystroke pause in the chat composer and
+    // both character editors, so the wasted work is not hypothetical.
+    if (!_spellCheckInFlight && !_disposed && DesktopSpellCheckService.isEnabled) {
       _runSpellCheck();
     }
   }
 
   Future<void> _runSpellCheck() async {
-    if (_spellCheckInFlight) return;
+    if (_spellCheckInFlight || _disposed) return;
     _spellCheckInFlight = true;
     final text = this.text;
     _ignoreTextChange = true;
@@ -136,9 +147,15 @@ class StyledTextController extends TextEditingController
         notifyListeners();
         return;
       }
-      final locale = PlatformDispatcher.instance.locale;
-      final results =
-          await _spellService.fetchSpellCheckSuggestions(locale, text);
+      // The locale is a formality — the service ignores it and uses the
+      // configured spell check language instead. Passing the OS locale here
+      // (as this used to, meaningfully) is what made a German desktop check
+      // English role-play against a German dictionary.
+      final results = await _spellService.fetchSpellCheckSuggestions(
+        const Locale('en', 'US'),
+        text,
+      );
+      if (_disposed) return; // resumed after dispose — never touch state
       if (text != this.text) return;
       if (results != null && results.isNotEmpty) {
         applySpellResults(text, results);
@@ -148,12 +165,13 @@ class StyledTextController extends TextEditingController
       notifyListeners();
     } catch (e) {
       debugPrint('Spell check error: $e');
+      if (_disposed) return; // the error may BE the disposed assert
       clearSpellResults();
       notifyListeners();
     } finally {
       _ignoreTextChange = false;
       _spellCheckInFlight = false;
-      if (text != this.text) {
+      if (!_disposed && text != this.text) {
         _spellDebounce?.cancel();
         _spellDebounce = Timer(
           const Duration(milliseconds: 300),
@@ -295,6 +313,7 @@ class StyledTextController extends TextEditingController
 
   @override
   void dispose() {
+    _disposed = true;
     _spellDebounce?.cancel();
     super.dispose();
   }

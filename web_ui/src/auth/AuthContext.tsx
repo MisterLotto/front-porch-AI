@@ -3,12 +3,18 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { api } from '../api/client';
+import { api, ApiError } from '../api/client';
 
 interface AuthState {
   loading: boolean;
   setupRequired: boolean;
   authenticated: boolean;
+  /** The desktop app didn't answer at all (server off / asleep / away) — as
+   *  opposed to answering "not signed in". The service worker serves this page
+   *  from cache even with the server fully off, so without this flag a dead
+   *  server renders as a perfectly normal-looking (but non-functional) login
+   *  form. */
+  unreachable: boolean;
 }
 
 interface AuthContextValue extends AuthState {
@@ -23,6 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading: true,
     setupRequired: false,
     authenticated: false,
+    unreachable: false,
   });
 
   const refresh = useCallback(async () => {
@@ -34,9 +41,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading: false,
         setupRequired: s.setupRequired,
         authenticated: s.authenticated,
+        unreachable: false,
       });
-    } catch {
-      setState({ loading: false, setupRequired: false, authenticated: false });
+    } catch (err) {
+      // An ApiError means the server ANSWERED (just not with a session);
+      // anything else (fetch TypeError, abort) means nothing is listening.
+      setState({
+        loading: false,
+        setupRequired: false,
+        authenticated: false,
+        unreachable: !(err instanceof ApiError),
+      });
     }
   }, []);
 

@@ -26,6 +26,7 @@ import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/services/folder_service.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
+import 'package:front_porch_ai/services/story_pipeline_service.dart';
 import 'package:front_porch_ai/services/story_repository.dart';
 import 'package:front_porch_ai/services/user_persona_service.dart';
 import 'package:front_porch_ai/services/web/web_server_host.dart';
@@ -101,8 +102,16 @@ Future<AppDatabase?> reopenAndRebindDatabase(
     worldRepo.updateDatabase(newDb);
     // ChatService.updateDatabase also re-points the MemoryService it owns, so
     // RAG memory survives the swap instead of querying the closed handle.
-    Provider.of<ChatService>(context, listen: false).updateDatabase(newDb);
-    Provider.of<StoryRepository>(context, listen: false).updateDatabase(newDb);
+    final chatService = Provider.of<ChatService>(context, listen: false);
+    final storyRepo = Provider.of<StoryRepository>(context, listen: false);
+    chatService.updateDatabase(newDb);
+    storyRepo.updateDatabase(newDb);
+    // The pipeline binds its own handle at construction; without this it kept
+    // the CLOSED one until an unrelated rebuild (Porch Stories looked empty).
+    Provider.of<StoryPipelineService>(
+      context,
+      listen: false,
+    ).updateDatabase(newDb);
     Provider.of<WebServerHost>(context, listen: false).setDatabase(newDb);
 
     // Every in-memory cache is now a view of the previous database file.
@@ -114,6 +123,14 @@ Future<AppDatabase?> reopenAndRebindDatabase(
     await personaService.reload();
     await groupRepo.reload();
     await worldRepo.loadWorlds();
+    await storyRepo.loadProjects();
+    // The open chat's transcript is ALSO a view of the previous file. Without
+    // this reload, the next _saveChat upserts the pre-swap messages back into
+    // the swapped database — a user who restored a 10-message snapshot while
+    // a 20-message chat was open silently un-restored that conversation the
+    // moment they sent one more line (1.3 sweep, 2026-08-15). Reunification
+    // already did this; import/move/restore now do too.
+    await chatService.reloadCurrentSession();
     return newDb;
   } catch (e) {
     debugPrint('[DB] Rebind after database swap failed: $e');

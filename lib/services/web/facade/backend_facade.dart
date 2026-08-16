@@ -18,7 +18,9 @@
 
 import 'dart:async';
 
+import 'package:front_porch_ai/services/capability/capability.dart';
 import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Web adapter for local-backend lifecycle, local-model switching, and the
 /// HuggingFace model browser/downloader. Reuses [LLMProvider]'s managed-backend
@@ -44,6 +46,10 @@ class BackendFacade {
       'modelReady': k.modelReady,
       'statusMessage': k.modelLoadingStatus,
       'loadedModel': _loadedModelName(),
+      // The active REMOTE model id (additive; '' on local). loadedModel above
+      // is the local .gguf name — the web AI Enhance model picker needs the
+      // remote one to label its "current model" default.
+      'remoteModel': _storage.backendSettings.remoteModelName,
       // True when the desktop host can only run local models on the CPU, slowly
       // (no AVX2 + no NVIDIA GPU → KoboldCpp's oldpc build, which has no ROCm/
       // Vulkan). Mirrors the desktop warning so the web Models page warns too.
@@ -177,12 +183,18 @@ class BackendFacade {
   // supply an as-yet-unsaved [apiUrl]/[apiKey] (so the Settings page can preview
   // a provider before the user saves), otherwise we fall back to the stored
   // remote settings. Local servers (oMLX / vLLM at localhost) need no key.
-  ({String url, String key}) _remoteCreds(String? apiUrl, String? apiKey) {
+  /// Caller-supplied [apiUrl] is the SSRF vector (unsaved Settings preview).
+  /// The stored remote URL is whatever the desktop user configured — including
+  /// localhost / LAN oMLX — and must stay usable from web.
+  ({String url, String key})? _remoteCreds(String? apiUrl, String? apiKey) {
     final b = _storage.backendSettings;
-    final url = (apiUrl != null && apiUrl.trim().isNotEmpty)
-        ? apiUrl.trim()
-        : b.remoteApiUrl;
+    final override = apiUrl != null && apiUrl.trim().isNotEmpty;
+    final url = override ? apiUrl.trim() : b.remoteApiUrl;
     final key = (apiKey != null && apiKey.isNotEmpty) ? apiKey : b.remoteApiKey;
+    if (override) {
+      final uri = Uri.tryParse(url);
+      if (uri == null || !isSafeOutboundUrl(uri)) return null;
+    }
     return (url: url, key: key);
   }
 
@@ -195,6 +207,7 @@ class BackendFacade {
     String? apiKey,
   }) async {
     final c = _remoteCreds(apiUrl, apiKey);
+    if (c == null) return [];
     final svc = OpenRouterService(apiUrl: c.url, apiKey: c.key);
     final models = await svc.fetchAvailableModels();
     return models
@@ -207,10 +220,69 @@ class BackendFacade {
         .toList();
   }
 
+  /// Poke the provider for [model]'s real reasoning.effort menu (Nano has
+  /// none in /models). Returns chips + whether Off is locked.
+  ///
+  /// oMLX is not a poke: caller-supplied localhost URLs fail the SSRF
+  /// gate in [_remoteCreds], and a completions probe would load the model.
+  /// Resolve from `/v1/models/status` + the on-disk template instead.
+  Future<Map<String, dynamic>> reasoningMenu({
+    required String model,
+    String? apiUrl,
+    String? apiKey,
+  }) async {
+    if (_llm.activeBackend == BackendType.omlx) {
+      await ReasoningSupportResolver.instance.resolveOmlx(
+        apiUrl: 'http://localhost:8000/v1',
+        modelName: model,
+        apiKey: apiKey ?? _storage.backendSettings.remoteApiKey,
+      );
+      return {
+        'efforts': reasoningEffortChipsFor(model),
+        'mandatory': reasoningEffortIsMandatory(model),
+        'localSupport': ReasoningSupportResolver.instance.peek(model)?.name,
+      };
+    }
+    // Stored localhost / LAN URL (LM Studio). Caller-supplied override is
+    // the SSRF vector — use the desktop-configured URL only.
+    final stored = _storage.backendSettings.remoteApiUrl;
+    if (isLocalRemoteUrl(stored)) {
+      await ReasoningSupportResolver.instance.resolveLmStudio(
+        apiUrl: stored,
+        modelName: model,
+        apiKey: apiKey ?? _storage.backendSettings.remoteApiKey,
+      );
+      return {
+        'efforts': reasoningEffortChipsFor(model),
+        'mandatory': reasoningEffortIsMandatory(model),
+        'localSupport': ReasoningSupportResolver.instance.peek(model)?.name,
+      };
+    }
+    final c = _remoteCreds(apiUrl, apiKey);
+    if (c == null) {
+      return {
+        'efforts': reasoningEffortChipsFor(model),
+        'mandatory': reasoningEffortIsMandatory(model),
+      };
+    }
+    await probeReasoningEfforts(
+      model: model,
+      apiUrl: c.url,
+      apiKey: c.key,
+    );
+    return {
+      'efforts': reasoningEffortChipsFor(model),
+      'mandatory': reasoningEffortIsMandatory(model),
+    };
+  }
+
   /// Test the remote API connection (same credential fallback as
   /// [remoteModels]). Returns the human-readable status from the service.
   Future<String> testRemoteConnection({String? apiUrl, String? apiKey}) async {
     final c = _remoteCreds(apiUrl, apiKey);
+    if (c == null) {
+      return 'Connection refused: URL is not a public http(s) address.';
+    }
     final svc = OpenRouterService(apiUrl: c.url, apiKey: c.key);
     return svc.testConnection();
   }

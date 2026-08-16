@@ -235,7 +235,10 @@ class _JournalPanelState extends State<JournalPanel> {
           ),
         Padding(
           padding: const EdgeInsets.only(left: 12),
-          child: Row(
+          child: Wrap(
+            spacing: 0,
+            runSpacing: 0,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               TextButton.icon(
                 style: TextButton.styleFrom(

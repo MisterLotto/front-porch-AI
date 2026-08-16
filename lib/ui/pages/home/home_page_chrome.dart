@@ -25,79 +25,27 @@ part of '../home_page.dart';
 extension _HomePageChrome on _HomePageState {
 
   Widget _buildModeToggle() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerOf(context),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.borderOf(context)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _modeButton(
-            'Chats',
-            Icons.chat_bubble_outline,
-            !_showStories,
-            () => applyState(() => _showStories = false),
-          ),
-          _modeButton(
-            'Porch Stories',
-            Icons.auto_stories,
-            _showStories,
-            () => applyState(() => _showStories = true),
-          ),
-        ],
-      ),
+    return HomeModeToggle(
+      showStories: _showStories,
+      onShowChats: () => applyState(() => _showStories = false),
+      onShowStories: () => applyState(() => _showStories = true),
     );
   }
 
-  Widget _modeButton(
-    String label,
-    IconData icon,
-    bool isActive,
-    VoidCallback onTap,
-  ) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive
-              ? AppColors.porchAmberOf(context).withValues(alpha: 0.15)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-          border: isActive
-              ? Border.all(
-                  color: AppColors.porchAmberOf(
-                    context,
-                  ).withValues(alpha: 0.45),
-                )
-              : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 18,
-              color: isActive
-                  ? AppColors.porchAmberOf(context)
-                  : AppColors.iconSecondary(context),
+  /// Toggle row that shrinks instead of overflowing when the window is
+  /// squeezed. Used on the empty-library and Stories chrome.
+  Widget _modeToggleBar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+      child: Row(
+        children: [
+          Flexible(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _buildModeToggle(),
             ),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: isActive
-                    ? AppColors.textPrimary(context)
-                    : AppColors.textSecondary(context),
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-                fontSize: 14,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -156,67 +104,83 @@ extension _HomePageChrome on _HomePageState {
   // ─── CharacterCardGrid Callback Handlers ────────────────────────
 
   Future<void> _handleTapCharacter(CharacterCard character) async {
-    final chatService = Provider.of<ChatService>(context, listen: false);
-    final charId = character.dbId ?? _getCharacterIdFromCard(character);
-    final sessions = await chatService.getSessionsForId(charId);
+    // Use State.mounted — NOT context.mounted. Reading State.context after
+    // unmount throws before .mounted is ever evaluated (exit chat → reenter
+    // multi-tap race, maintainer 2026-08-11).
+    if (_openingChat || !mounted) return;
+    _openingChat = true;
+    try {
+      final chatService = Provider.of<ChatService>(context, listen: false);
+      // getSessionsForId resolves 1:1 ids by imagePath basename (stableGroupId)
+      // — the dbId UUID silently returns [] and kills the session picker
+      // (documented identity gotcha; same warning at enhance_wizard_page.dart).
+      final charId = _getCharacterIdFromCard(character);
+      final sessions = await chatService.getSessionsForId(charId);
 
-    if (!context.mounted) return;
+      if (!mounted) return;
 
-    if (sessions.length > 1) {
-      final selectedId = await showSessionPickerDialog(
-        context,
-        sessions,
-        character.name,
-      );
-      if (selectedId == null || !context.mounted) return;
-      await chatService.setActiveCharacter(character);
-      if (selectedId != '__new__') {
-        await chatService.loadSession(selectedId);
+      if (sessions.length > 1) {
+        final selectedId = await showSessionPickerDialog(
+          context,
+          sessions,
+          character.name,
+        );
+        if (selectedId == null || !mounted) return;
+        await chatService.setActiveCharacter(character);
+        if (!mounted) return;
+        if (selectedId != '__new__') {
+          await chatService.loadSession(selectedId);
+        } else {
+          await chatService.startNewChat();
+        }
+      } else {
+        await chatService.setActiveCharacter(character);
       }
-      if (selectedId == '__new__') {
-        await chatService.startNewChat();
-      }
-    } else {
-      await chatService.setActiveCharacter(character);
-    }
-    if (context.mounted) {
+      if (!mounted) return;
       await Navigator.of(
         context,
       ).push(MaterialPageRoute(builder: (_) => const ChatPage()));
-      _refreshLastActivityCache();
+      if (mounted) _refreshLastActivityCache();
+    } finally {
+      _openingChat = false;
     }
   }
 
   Future<void> _handleTapGroup(GroupChat group) async {
-    final chatService = Provider.of<ChatService>(context, listen: false);
-    final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
-    final groupId = 'group_${group.id}';
-    final sessions = await chatService.getSessionsForId(groupId);
+    if (_openingChat || !mounted) return;
+    _openingChat = true;
+    try {
+      final chatService = Provider.of<ChatService>(context, listen: false);
+      final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
+      final groupId = 'group_${group.id}';
+      final sessions = await chatService.getSessionsForId(groupId);
 
-    if (!context.mounted) return;
+      if (!mounted) return;
 
-    if (sessions.length > 1) {
-      final selectedId = await showSessionPickerDialog(
-        context,
-        sessions,
-        group.name,
-      );
-      if (selectedId == null || !context.mounted) return;
-      await chatService.setActiveGroup(group, groupRepo: groupRepo);
-      if (selectedId != '__new__') {
-        await chatService.loadSession(selectedId);
+      if (sessions.length > 1) {
+        final selectedId = await showSessionPickerDialog(
+          context,
+          sessions,
+          group.name,
+        );
+        if (selectedId == null || !mounted) return;
+        await chatService.setActiveGroup(group, groupRepo: groupRepo);
+        if (!mounted) return;
+        if (selectedId != '__new__') {
+          await chatService.loadSession(selectedId);
+        } else {
+          await chatService.startNewChat();
+        }
+      } else {
+        await chatService.setActiveGroup(group, groupRepo: groupRepo);
       }
-      if (selectedId == '__new__') {
-        await chatService.startNewChat();
-      }
-    } else {
-      await chatService.setActiveGroup(group, groupRepo: groupRepo);
-    }
-    if (context.mounted) {
+      if (!mounted) return;
       await Navigator.of(
         context,
       ).push(MaterialPageRoute(builder: (_) => const ChatPage()));
-      _refreshLastActivityCache();
+      if (mounted) _refreshLastActivityCache();
+    } finally {
+      _openingChat = false;
     }
   }
 
@@ -228,24 +192,30 @@ extension _HomePageChrome on _HomePageState {
     CharacterCard? character,
     GroupChat? group,
   }) async {
-    final subject = character?.name ?? group?.name ?? '';
-    final personaId = await showPersonaPickerDialog(context, subject: subject);
-    if (personaId == null || !mounted) return;
+    if (_openingChat || !mounted) return;
+    _openingChat = true;
+    try {
+      final subject = character?.name ?? group?.name ?? '';
+      final personaId = await showPersonaPickerDialog(context, subject: subject);
+      if (personaId == null || !mounted) return;
 
-    final chatService = Provider.of<ChatService>(context, listen: false);
-    await chatService.startFreshChatWith(
-      character: character,
-      group: group,
-      groupRepo: group == null
-          ? null
-          : Provider.of<GroupChatRepository>(context, listen: false),
-      personaId: personaId,
-    );
-    if (!mounted) return;
-    await Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const ChatPage()));
-    _refreshLastActivityCache();
+      final chatService = Provider.of<ChatService>(context, listen: false);
+      await chatService.startFreshChatWith(
+        character: character,
+        group: group,
+        groupRepo: group == null
+            ? null
+            : Provider.of<GroupChatRepository>(context, listen: false),
+        personaId: personaId,
+      );
+      if (!mounted) return;
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const ChatPage()));
+      if (mounted) _refreshLastActivityCache();
+    } finally {
+      _openingChat = false;
+    }
   }
 
   void _handleContextMenuAction(String action, CharacterCard character) {
@@ -255,6 +225,13 @@ extension _HomePageChrome on _HomePageState {
         break;
       case 'edit':
         _editCharacter(context, character);
+        break;
+      case 'ai_enhance':
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => EnhanceWizardPage(character: character),
+          ),
+        );
         break;
       case 'avatar_gallery':
         // Replace-portrait / star both call repository.updateCharacter, which

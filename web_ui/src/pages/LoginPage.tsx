@@ -29,8 +29,15 @@ export function LoginPage() {
       if (err instanceof ApiError && err.payload.totpRequired) {
         setNeedTotp(true);
         setError(totp ? 'Invalid code, try again.' : '');
+      } else if (err instanceof ApiError) {
+        setError(err.message);
       } else {
-        setError(err instanceof ApiError ? err.message : 'Login failed.');
+        // Network failure, not a wrong password — the server stopped
+        // answering between page load and this submit.
+        setError(
+          'Can’t reach Front Porch AI on your computer — make sure the app '
+          + 'is open and the web server is on, then try again.',
+        );
       }
     } finally {
       setBusy(false);

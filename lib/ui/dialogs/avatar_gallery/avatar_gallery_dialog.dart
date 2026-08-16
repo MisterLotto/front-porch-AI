@@ -23,6 +23,7 @@ import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/services/portrait_promotion.dart';
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_controller.dart';
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_expressions_section.dart';
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_looks_section.dart';
@@ -201,20 +202,49 @@ class _AvatarGalleryDialogState extends State<_AvatarGalleryDialog> {
   }
 
   Future<void> _confirmDeletePortrait() async {
+    // The SAME selection rule the action uses (portrait_promotion.dart), so
+    // the preview can never show a different image than the one promoted —
+    // the Discord report's confusion was exactly not knowing WHICH image
+    // would move into the portrait slot.
+    final candidate = promotionCandidate(_c.looks, _c.favoriteId);
+    if (candidate == null) return; // affordance is hidden with no looks
+    final starred = candidate.id == _c.favoriteId;
     final ok = await showWarmDialog<bool>(
       context,
-      title: 'Delete the portrait?',
-      content: const WarmDialogText(
-        'A gallery avatar becomes the new portrait — the ★ one when a '
-        'gallery avatar is starred, otherwise the first. The old portrait '
-        'image is replaced.',
+      title: 'Swap the portrait?',
+      content: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.file(
+              _c.fileFor(candidate),
+              width: 56,
+              height: 56,
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) => Icon(
+                Icons.image_outlined,
+                size: 40,
+                color: AppColors.iconSecondary(context),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: WarmDialogText(
+              'This image — ${starred ? 'your ★ starred look' : 'your first '
+                  'gallery look'} — becomes the new portrait, and the old '
+              'portrait moves into the gallery as a look. Nothing is '
+              'deleted; swap back any time.',
+            ),
+          ),
+        ],
       ),
       actions: [
         warmDialogCancel(context),
         warmDialogConfirm(
           context,
-          label: 'Delete portrait',
-          destructive: true,
+          label: 'Swap portrait',
           onPressed: () => Navigator.pop(context, true),
         ),
       ],

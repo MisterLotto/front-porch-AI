@@ -22,6 +22,7 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/chat_settings_generation_section.dart';
+import 'package:front_porch_ai/ui/settings/widgets/widgets.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 class ChatSettingsDialog extends StatefulWidget {
@@ -69,8 +70,11 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
     final isRemote = !llmProvider.isLocal;
     final hasOverrides = _gen.hasOverrides;
 
+    // surfaceOf — peer dialogs (UI/Model/TTS) already use brightness-aware
+    // surfaces; the always-dark AppColors.surface made light-mode titles
+    // (textPrimary → black) unreadable black-on-dark (audit P3).
     return Dialog(
-      backgroundColor: AppColors.surface,
+      backgroundColor: AppColors.surfaceOf(context),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
         width: 500,
@@ -174,98 +178,32 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Reasoning toggle — all backends. KoboldCpp honors
-                    // thinking too now (native chat_template_kwargs +
-                    // reasoning_effort in openai_chat_stream.dart), so this is
-                    // no longer remote-only.
+                    // Thinking toggle — all backends. KoboldCpp honors
+                    // thinking too (native chat_template_kwargs +
+                    // reasoning_effort in openai_chat_stream.dart).
                     ...[
                       const Text(
-                        'Reasoning',
+                        'Thinking',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: AppColors.formMasterAccent,
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Text(
-                            'Request Reasoning',
-                            style: TextStyle(color: AppColors.textPrimary(context)),
-                          ),
-                          const Spacer(),
-                          Switch(
-                            value: _gen.resolveReasoningEnabled(storage),
-                            onChanged: (val) {
-                              setState(() => _gen.reasoningEnabled = val);
-                              _save();
-                            },
-                            activeTrackColor: AppColors.formMasterAccent,
-                          ),
-                        ],
+                      ThinkingSettingsBlock(
+                        compact: true,
+                        enabled: _gen.resolveReasoningEnabled(storage),
+                        onEnabledChanged: (val) {
+                          setState(() => _gen.reasoningEnabled = val);
+                          _save();
+                        },
+                        effort: _gen.resolveReasoningEffort(storage),
+                        onEffortChanged: (val) {
+                          setState(() => _gen.reasoningEffort = val);
+                          _save();
+                        },
+                        modelId: storage.remoteModelName,
                       ),
-                      if (_gen.resolveReasoningEnabled(storage))
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Row(
-                            children: [
-                              Text(
-                                'Effort Level',
-                                style: TextStyle(color: AppColors.textSecondary(context)),
-                              ),
-                              const Spacer(),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.surfaceContainer,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: DropdownButtonHideUnderline(
-                                  child: DropdownButton<String>(
-                                    value: _gen.resolveReasoningEffort(storage),
-                                    dropdownColor: AppColors.surfaceContainer,
-                                    style: TextStyle(color: AppColors.textPrimary(context)),
-                                    items: const [
-                                      DropdownMenuItem(
-                                        value: 'low',
-                                        child: Text('Low'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'medium',
-                                        child: Text('Medium'),
-                                      ),
-                                      DropdownMenuItem(
-                                        value: 'high',
-                                        child: Text('High'),
-                                      ),
-                                    ],
-                                    onChanged: (val) {
-                                      if (val != null) {
-                                        setState(
-                                          () => _gen.reasoningEffort = val,
-                                        );
-                                        _save();
-                                      }
-                                    },
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      if (!_gen.resolveReasoningEnabled(storage))
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          child: Text(
-                            'Enable to request thinking/reasoning from compatible models',
-                            style: TextStyle(
-                              color: AppColors.textTertiary(context),
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
                       const SizedBox(height: 8),
                       Divider(color: AppColors.borderOf(context)),
                       const SizedBox(height: 8),
@@ -297,7 +235,8 @@ class _ChatSettingsDialogState extends State<ChatSettingsDialog> {
                         setState(() => _gen.stopSequences = newList);
                         _save();
                       },
-                      backgroundColor: AppColors.surfaceContainer,
+                      backgroundColor:
+                          AppColors.surfaceContainerOf(context),
                     ),
 
                     // ── Banned Phrases (Anti-Slop) — local KoboldCpp only ──

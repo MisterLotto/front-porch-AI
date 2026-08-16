@@ -206,6 +206,57 @@ class EditableTaskRowState extends State<EditableTaskRow> {
   }
 }
 
+/// "→ open her own bakery" — the ambition a quest is a step toward, from
+/// `objectives.served_ambition` (schema v46).
+///
+/// Since v46 the proposal eval is shown the character's ambitions and asked
+/// for the next step up one of them, then reports which it chose. That answer
+/// was stored and read by the completion judge but shown to nobody, so the
+/// hierarchy the user is paying an eval to maintain — Ambition (the mountain)
+/// → Objective (the switchback) → Task (the step) — was invisible in the one
+/// place it would explain what a quest is *for*.
+///
+/// Renders nothing when [servedAmbition] is null or blank, which is the
+/// common case: a situational quest that serves no ambition is legal by
+/// design, and every objective created before v46 has a NULL tag.
+///
+/// Shared by all three objective surfaces (1:1 sidebar panel, side-quest row,
+/// group objectives dialog) so the link reads identically wherever a quest
+/// appears — 🧭 is the ambition glyph everywhere else in the app.
+class AmbitionServedChip extends StatelessWidget {
+  final String? servedAmbition;
+
+  const AmbitionServedChip({super.key, required this.servedAmbition});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = servedAmbition?.trim() ?? '';
+    if (text.isEmpty) return const SizedBox.shrink();
+    final amber = AppColors.porchAmberOf(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Tooltip(
+        message: 'A step toward: $text',
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('🧭', style: TextStyle(fontSize: 9)),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                text,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 9.5, color: amber),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// A secondary objective ("side quest") row — goal text, task progress badge,
 /// promote / clear buttons, and an expandable task list. AI-proposed side
 /// quests come with auto-generated subtasks that drive the story, so the row
@@ -304,6 +355,11 @@ class _SecondaryObjectiveRowState extends State<SecondaryObjectiveRow> {
                 ),
               ],
             ),
+          ),
+          // Indented to sit under the goal text, clear of the chevron.
+          Padding(
+            padding: const EdgeInsets.only(left: 20),
+            child: AmbitionServedChip(servedAmbition: obj.servedAmbition),
           ),
           if (_expanded && tasks.isNotEmpty) ...[
             const SizedBox(height: 6),

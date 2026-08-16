@@ -17,10 +17,13 @@ class GroupGeneralTab extends StatefulWidget {
   const GroupGeneralTab({super.key, required this.chatService, this.groupRepo});
 
   @override
-  State<GroupGeneralTab> createState() => _GroupGeneralTabState();
+  State<GroupGeneralTab> createState() => GroupGeneralTabState();
 }
 
-class _GroupGeneralTabState extends State<GroupGeneralTab> {
+class GroupGeneralTabState extends State<GroupGeneralTab>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   // Local editing controllers and state (applied on Save)
   late final StyledTextController _nameController;
   late final StyledTextController _scenarioController;
@@ -109,15 +112,32 @@ class _GroupGeneralTabState extends State<GroupGeneralTab> {
     });
   }
 
+  /// Copies the General editors onto the live group so the dialog footer
+  /// Save persists what the user typed, not the untouched [GroupChat].
+  void applyToLiveGroup() {
+    final g = widget.chatService.activeGroup;
+    if (g == null) return;
+    g.name = _nameController.text;
+    g.scenario = _scenarioController.text;
+    g.firstMessage = _firstMessageController.text;
+    g.turnOrder = _turnOrder;
+    g.autoAdvance = _autoAdvance;
+    g.directorMode = _directorModeDefault;
+    if (_hasUnsavedChanges) {
+      setState(() => _hasUnsavedChanges = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final group = widget.chatService.activeGroup;
 
     if (group == null) {
-      return const Center(
+      return Center(
         child: Text(
           'No active group chat selected.',
-          style: TextStyle(color: Colors.white54),
+          style: TextStyle(color: AppColors.textSecondary(context)),
         ),
       );
     }
@@ -133,7 +153,11 @@ class _GroupGeneralTabState extends State<GroupGeneralTab> {
                 // Header
                 Row(
                   children: [
-                    const Icon(Icons.tune, color: Colors.tealAccent, size: 20),
+                    Icon(
+                      Icons.tune,
+                      color: AppColors.porchAmberOf(context),
+                      size: 20,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -147,9 +171,12 @@ class _GroupGeneralTabState extends State<GroupGeneralTab> {
                   ],
                 ),
                 const SizedBox(height: 6),
-                const Text(
+                Text(
                   'Basic group identity, opening message, and conversation flow rules. All changes apply live after Save.',
-                  style: TextStyle(fontSize: 12, color: Colors.white70),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary(context),
+                  ),
                 ),
                 const SizedBox(height: 16),
 
@@ -157,15 +184,15 @@ class _GroupGeneralTabState extends State<GroupGeneralTab> {
                 GroupSectionHeader(
                   'Identity',
                   Icons.label_outline,
-                  Colors.tealAccent,
+                  AppColors.porchAmberOf(context),
                 ),
                 const SizedBox(height: 8),
 
                 // Group Name
-                const Text(
+                Text(
                   'Group Name',
                   style: TextStyle(
-                    color: Colors.white70,
+                    color: AppColors.textSecondary(context),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -199,7 +226,9 @@ class _GroupGeneralTabState extends State<GroupGeneralTab> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Colors.tealAccent),
+                      borderSide: BorderSide(
+                        color: AppColors.porchAmberOf(context),
+                      ),
                     ),
                     contentPadding: const EdgeInsets.symmetric(
                       horizontal: 12,
@@ -211,45 +240,57 @@ class _GroupGeneralTabState extends State<GroupGeneralTab> {
                 const SizedBox(height: 14),
 
                 // Scenario
-                const Text(
+                Text(
                   'Scenario',
                   style: TextStyle(
-                    color: Colors.white70,
+                    color: AppColors.textSecondary(context),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 const SizedBox(height: 4),
-                const Text(
+                Text(
                   'Group-level scenario override (blank = use first character\'s scenario).',
-                  style: TextStyle(fontSize: 11, color: Colors.white38),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textTertiary(context),
+                  ),
                 ),
                 const SizedBox(height: 6),
                 AppTextField(
                   controller: _scenarioController,
                   maxLines: 4,
                   minLines: 2,
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  style: TextStyle(
+                    color: AppColors.textPrimary(context),
+                    fontSize: 12,
+                  ),
                   decoration: InputDecoration(
                     hintText:
                         'The scene, time period, and situation for this group conversation...',
-                    hintStyle: const TextStyle(
-                      color: Colors.white24,
+                    hintStyle: TextStyle(
+                      color: AppColors.textTertiary(context),
                       fontSize: 12,
                     ),
                     filled: true,
-                    fillColor: const Color(0xFF111827),
+                    fillColor: AppColors.surfaceContainerOf(context),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Colors.white12),
+                      borderSide: BorderSide(
+                        color: AppColors.borderOf(context),
+                      ),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Colors.white12),
+                      borderSide: BorderSide(
+                        color: AppColors.borderOf(context),
+                      ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Colors.tealAccent),
+                      borderSide: BorderSide(
+                        color: AppColors.porchAmberOf(context),
+                      ),
                     ),
                     contentPadding: const EdgeInsets.all(10),
                   ),
@@ -258,44 +299,56 @@ class _GroupGeneralTabState extends State<GroupGeneralTab> {
                 const SizedBox(height: 14),
 
                 // First Message
-                const Text(
+                Text(
                   'First Message / Greeting',
                   style: TextStyle(
-                    color: Colors.white70,
+                    color: AppColors.textSecondary(context),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 const SizedBox(height: 4),
-                const Text(
+                Text(
                   'Custom opening message shown when the group starts or is reset (blank = use first character\'s greeting).',
-                  style: TextStyle(fontSize: 11, color: Colors.white38),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textTertiary(context),
+                  ),
                 ),
                 const SizedBox(height: 6),
                 AppTextField(
                   controller: _firstMessageController,
                   maxLines: 3,
                   minLines: 2,
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  style: TextStyle(
+                    color: AppColors.textPrimary(context),
+                    fontSize: 12,
+                  ),
                   decoration: InputDecoration(
                     hintText: 'The group\'s initial greeting or narration...',
-                    hintStyle: const TextStyle(
-                      color: Colors.white24,
+                    hintStyle: TextStyle(
+                      color: AppColors.textTertiary(context),
                       fontSize: 12,
                     ),
                     filled: true,
-                    fillColor: const Color(0xFF111827),
+                    fillColor: AppColors.surfaceContainerOf(context),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Colors.white12),
+                      borderSide: BorderSide(
+                        color: AppColors.borderOf(context),
+                      ),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Colors.white12),
+                      borderSide: BorderSide(
+                        color: AppColors.borderOf(context),
+                      ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Colors.tealAccent),
+                      borderSide: BorderSide(
+                        color: AppColors.porchAmberOf(context),
+                      ),
                     ),
                     contentPadding: const EdgeInsets.all(10),
                   ),
@@ -307,14 +360,14 @@ class _GroupGeneralTabState extends State<GroupGeneralTab> {
                 GroupSectionHeader(
                   'Turn Management',
                   Icons.swap_horiz,
-                  Colors.purpleAccent,
+                  AppColors.porchAmberOf(context),
                 ),
                 const SizedBox(height: 8),
 
-                const Text(
+                Text(
                   'Turn Order Strategy',
                   style: TextStyle(
-                    color: Colors.white70,
+                    color: AppColors.textSecondary(context),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -348,44 +401,45 @@ class _GroupGeneralTabState extends State<GroupGeneralTab> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF111827),
+                    color: AppColors.surfaceContainerOf(context),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white12),
+                    border: Border.all(color: AppColors.borderOf(context)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.play_circle_outline,
                             size: 18,
-                            color: Colors.white54,
+                            color: AppColors.iconSecondary(context),
                           ),
                           const SizedBox(width: 8),
-                          const Text(
+                          Text(
                             'Auto-advance',
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
                               fontSize: 13,
+                              color: AppColors.textPrimary(context),
                             ),
                           ),
                           const Spacer(),
                           Switch(
                             value: _autoAdvance,
-                            activeTrackColor: Colors.greenAccent,
+                            activeTrackColor: AppColors.porchAmberOf(context),
                             onChanged: _setAutoAdvance,
                           ),
                         ],
                       ),
                       const SizedBox(height: 4),
-                      const Padding(
-                        padding: EdgeInsets.only(left: 26),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 26),
                         child: Text(
                           'After a character finishes responding, automatically prompt the next speaker. Works with both turn orders and Director Mode.',
                           style: TextStyle(
                             fontSize: 11,
-                            color: Colors.white38,
+                            color: AppColors.textTertiary(context),
                             height: 1.3,
                           ),
                         ),
@@ -399,16 +453,6 @@ class _GroupGeneralTabState extends State<GroupGeneralTab> {
               ],
             ),
           ),
-        ),
-
-        // ── Save bar ───────────────────────────────────────────────
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            border: Border(top: BorderSide(color: AppColors.borderOf(context))),
-            color: AppColors.surfaceContainerOf(context),
-          ),
-          child: Row(children: []),
         ),
       ],
     );

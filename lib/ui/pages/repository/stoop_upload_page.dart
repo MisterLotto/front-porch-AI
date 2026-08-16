@@ -19,15 +19,17 @@ import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/providers/auth_state.dart';
 import 'package:front_porch_ai/services/backporch/backporch.dart';
 import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_adult_lock_banner.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_completeness_panel.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_verify_banner.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_pick_step.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_standards.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_tag_selector.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_wizard_steps.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_world_share.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/utils/group_avatar_compositor.dart';
-import 'package:front_porch_ai/utils/world_cover.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Wizard to share one of the user's local characters to The Stoop. Mirrors the
 /// app's create-wizard chrome (step dots + AnimatedSwitcher + nav buttons).
@@ -87,6 +89,10 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
   CharacterCard? _selected;
   GroupChat? _selectedGroup; // set instead of _selected when sharing a group
   World? _selectedWorld; // set when sharing a place (.fpworld) — see below
+
+  /// [_selectedGroup]'s cast once it has loaded (null until then). Members live
+  /// in their own table, not on GroupChat, so the 18+ scan needs an async read.
+  List<GroupMember>? _groupMembers;
   final _name = TextEditingController();
   final _summary = TextEditingController();
   final _originalCreator = TextEditingController();
@@ -97,7 +103,10 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
 
   /// The subset (≤ [_maxTags]) that will actually be published.
   List<String> _tags = [];
-  bool _nsfw = false;
+
+  /// The 18+ flag AND who set it (author vs the intimate-preferences rule), so
+  /// changing the pick withdraws a forced tick without touching the author's.
+  final _adult = StoopAdultFlag();
   bool _standardsAck = false;
   bool _busy = false;
   String? _error;
@@ -129,8 +138,8 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     setState(() => _applyGroupSelection(group));
   }
 
-  // Pre-fills the wizard from a chosen group. No setState — safe to call from
-  // initState (update mode) and from _selectGroup (wrapped in setState).
+  // Pre-fills the wizard from a chosen group. No setState of its own — safe to
+  // call from initState and from _selectGroup; the member load setStates itself.
   void _applyGroupSelection(GroupChat group) {
     _selectedGroup = group;
     _selected = null;
@@ -139,6 +148,21 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     _setSummaryFrom(group.scenario); // groups have no description; seed scenario
     _tagPool = [];
     _tags = [];
+    // The cast lives in group_members, so the 18+ scan can't be synchronous.
+    // Keyed by id on the way back so a slow first pick can't overwrite a second.
+    // ADVISORY ONLY: this read feeds the banner and the switch, because the
+    // wizard has to show something before Submit. The published flag is decided
+    // in _publishGroup from the card it actually uploads — this query hides its
+    // own failures behind an empty list, which reads as "clean cast".
+    _groupMembers = null;
+    _adult.reconcile(forced: false); // no cast known yet
+    context.read<GroupChatRepository>().getMembersForGroup(group.id).then((m) {
+      if (!mounted || _selectedGroup?.id != group.id) return;
+      setState(() {
+        _groupMembers = m;
+        _adult.reconcile(forced: _forcedAdult);
+      });
+    });
   }
 
   @override
@@ -147,13 +171,16 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     // Update mode: lock to the given character OR group and skip the Pick step.
     final uc = widget.updateCharacter;
     final ug = widget.updateGroup;
+    // The seed goes FIRST so the appliers' 18+ force lands on top of it: a card
+    // posted before that rule carries initialNsfw == false, and re-publishing
+    // it must not preserve that.
     if (uc != null) {
+      _adult.setByAuthor(widget.initialNsfw); // the post's own flag, not the rule
       _applySelection(uc);
-      _nsfw = widget.initialNsfw;
       _currentStep = 1;
     } else if (ug != null) {
-      _applyGroupSelection(ug);
-      _nsfw = widget.initialNsfw;
+      _adult.setByAuthor(widget.initialNsfw);
+      _applyGroupSelection(ug); // group force lands when the members do
       _currentStep = 1;
     }
     // Update mode: the post's stored display name/summary win over the
@@ -176,7 +203,11 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
   void _applySelection(CharacterCard card) {
     _selected = card;
     _selectedGroup = null;
+    _groupMembers = null;
     _selectedWorld = null;
+    // Intimate preferences force 18+ — and picking something else withdraws
+    // that force again (the author's own tick survives; see StoopAdultFlag).
+    _adult.reconcile(forced: _forcedAdult);
     _name.text = card.name;
     _setSummaryFrom(card.description);
     // De-duplicate (preserving order) into the candidate pool, then
@@ -191,7 +222,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     _tags = pool.take(_maxTags).toList();
   }
 
-  String _mapError(String code) {
+  String _mapError(String code, {String? detail}) {
     switch (code) {
       case 'policy_not_accepted':
         return 'Please accept the Acceptable Use Policy before sharing.';
@@ -206,10 +237,69 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
         return 'The Stoop’s storage is unavailable right now. Try again later.';
       case 'avatar_required':
         return 'This character needs an avatar image to be shared.';
+      case 'incomplete_card':
+        return (detail != null && detail.isNotEmpty)
+            ? detail
+            : 'This card is missing required fields (first message, '
+                'description/personality, or scenario). Fill them in the '
+                'editor and try again.';
       default:
         return 'Couldn’t share that character. Check your connection and retry.';
     }
   }
+
+  /// Live checklist for the currently selected card/group/world (sync for
+  /// solo; worlds use the repo envelope when available).
+  StoopCompleteness? _selectedCompleteness() {
+    final card = _selected;
+    if (card != null) {
+      return StoopCardCompleteness.assess(card.toJson(), 'SOLO');
+    }
+    final group = _selectedGroup;
+    if (group != null) {
+      // Group-level fields only here. Member substance is validated in
+      // _publishGroup after GroupCardExporter builds the portable payload
+      // (membership lives in group_members, not on GroupChat).
+      return StoopCardCompleteness.assess({
+        'name': group.name,
+        'first_message': group.firstMessage,
+        'scenario': group.scenario,
+        'system_prompt': group.systemPrompt,
+        'members': const [
+          {'name': '_', 'description': '_'},
+        ],
+      }, 'GROUP');
+    }
+    final world = _selectedWorld;
+    if (world != null) {
+      // Prefer the same .fpworld envelope the publish path sends.
+      try {
+        final repo = context.read<WorldRepository>();
+        final envelope = repo.fpWorldJson(world);
+        return StoopCardCompleteness.assess(envelope, 'WORLD');
+      } catch (_) {
+        return StoopCardCompleteness.assess({
+          'name': world.name,
+          'biome': const <String, dynamic>{},
+        }, 'WORLD');
+      }
+    }
+    return null;
+  }
+
+  /// True when the pick carries intimate preferences, which force the 18+ flag
+  /// on. Banner and locked switch read THIS one getter — a second copy of the
+  /// rule would drift. A place has no cast, so never.
+  ///
+  /// The GROUP publish path deliberately re-derives it from the built card
+  /// instead (see [_publishGroup]): this getter depends on a separate read that
+  /// can come back empty on a database hiccup.
+  bool get _forcedAdult => stoopForcesAdult(_selected, _groupMembers);
+
+  /// A group is picked but its cast hasn't arrived, so the rule's answer isn't
+  /// known yet. Update mode opens straight onto the Content step, so without
+  /// this the switch's first frames claim "unlocked, all-ages" and then snap.
+  bool get _castPending => _selectedGroup != null && _groupMembers == null;
 
   // Pre-fills the wizard from a chosen place. Mirrors the character/group
   // appliers above (each type builds a different payload chain, so unifying
@@ -218,6 +308,9 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     _selectedWorld = world;
     _selected = null;
     _selectedGroup = null;
+    _groupMembers = null;
+    // A place has no cast at all, so any force in effect is now released.
+    _adult.reconcile(forced: false);
     _name.text = world.name;
     _setSummaryFrom(world.description);
     _tagPool = [];
@@ -245,6 +338,11 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       setState(() => _error = 'This character has no avatar to upload.');
       return;
     }
+    final completeness = StoopCardCompleteness.assess(card.toJson(), 'SOLO');
+    if (completeness.incomplete) {
+      setState(() => _error = completeness.message);
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
@@ -259,7 +357,10 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
         'name': _name.text.trim(),
         'summary': _summary.text.trim(),
         'type': 'SOLO',
-        'nsfw': _nsfw,
+        // Belt-and-braces: the switch is forced too, but a card with intimate
+        // preferences must never leave here with the flag off. Solo reads the
+        // rule off `card` — the very object being published.
+        'nsfw': _adult.value || stoopForcesAdult(card, null),
         'tags': _tags,
         'card': card.toJson(),
         'changelog': widget.isUpdate ? 'Updated' : 'Initial upload',
@@ -285,7 +386,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       }
       if (mounted) Navigator.pop(context, true);
     } on BackporchApiException catch (e) {
-      if (mounted) setState(() => _error = _mapError(e.code));
+      if (mounted) setState(() => _error = _mapError(e.code, detail: e.detail));
     } catch (_) {
       if (mounted) {
         setState(() => _error = 'Couldn’t share that character. Try again.');
@@ -314,6 +415,19 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
         }
         return;
       }
+      final completeness =
+          StoopCardCompleteness.assess(groupCard.toJson(), 'GROUP');
+      if (completeness.incomplete) {
+        if (mounted) setState(() => _error = completeness.message);
+        return;
+      }
+      // Decide 18+ from the bytes we are about to upload, not from the wizard's
+      // advisory cast read. If the two disagree the screen is corrected too, so
+      // a failed upload can't leave Review contradicting the payload.
+      final forcedAdult = stoopGroupCardForcesAdult(groupCard);
+      if (forcedAdult && !_adult.value && mounted) {
+        setState(() => _adult.reconcile(forced: true));
+      }
       // A member-avatar collage is the Stoop cover; full member avatars still
       // travel inside the card JSON for a faithful download.
       final avatarPaths = groupCard.members
@@ -335,7 +449,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
         'name': _name.text.trim(),
         'summary': _summary.text.trim(),
         'type': 'GROUP',
-        'nsfw': _nsfw,
+        'nsfw': _adult.value || forcedAdult, // see the SOLO payload above
         'tags': _tags,
         'card': groupCard.toJson(),
         'changelog': widget.isUpdate ? 'Updated' : 'Initial upload',
@@ -363,7 +477,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       }
       if (mounted) Navigator.pop(context, true);
     } on BackporchApiException catch (e) {
-      if (mounted) setState(() => _error = _mapError(e.code));
+      if (mounted) setState(() => _error = _mapError(e.code, detail: e.detail));
     } catch (_) {
       if (mounted) {
         setState(() => _error = 'Couldn’t share that group. Try again.');
@@ -390,7 +504,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
         world: world,
         name: _name.text.trim(),
         summary: _summary.text.trim(),
-        nsfw: _nsfw,
+        nsfw: _adult.value,
         tags: _tags,
         originalCreator: _originalCreator.text.trim(),
       );
@@ -400,7 +514,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       }
       if (mounted) Navigator.pop(context, true);
     } on BackporchApiException catch (e) {
-      if (mounted) setState(() => _error = _mapError(e.code));
+      if (mounted) setState(() => _error = _mapError(e.code, detail: e.detail));
     } catch (_) {
       if (mounted) {
         setState(() => _error = 'Couldn’t share that place. Try again.');
@@ -419,7 +533,12 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       case 1:
         return _name.text.trim().isNotEmpty && _summary.text.trim().isNotEmpty;
       case 2:
-        return _standardsAck;
+        // Standards ack + definition completeness (no empty first_mes shells).
+        final comp = _selectedCompleteness();
+        return _standardsAck && !(comp?.incomplete ?? false);
+      case 3:
+        final comp = _selectedCompleteness();
+        return !(comp?.incomplete ?? false);
       default:
         return true;
     }
@@ -451,7 +570,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
           preferredSize: const Size.fromHeight(48),
           child: Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: _stepIndicator(),
+            child: StoopWizardSteps(steps: _steps, current: _currentStep),
           ),
         ),
       ),
@@ -473,72 +592,6 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       bottomNavigationBar: _navButtons(),
     );
   }
-
-  Widget _stepIndicator() {
-    final children = <Widget>[];
-    for (var i = 0; i < _steps.length; i++) {
-      children.add(_stepDot(i, _steps[i]));
-      if (i < _steps.length - 1) children.add(_stepLine());
-    }
-    return Row(mainAxisAlignment: MainAxisAlignment.center, children: children);
-  }
-
-  Widget _stepDot(int step, String label) {
-    final isActive = _currentStep >= step;
-    final isCurrent = _currentStep == step;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 24,
-          height: 24,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: isActive ? stoopAmberGradient : null,
-            color: isActive ? null : stoopBg1(context),
-            border: isCurrent
-                ? Border.all(color: stoopCream(context), width: 2)
-                : isActive
-                ? null
-                : Border.all(color: stoopBorderHi(context)),
-          ),
-          child: Center(
-            child: isActive && !isCurrent
-                ? const Icon(
-                    Icons.check,
-                    size: 14,
-                    color: AppColors.stoopAmberInk,
-                  )
-                : Text(
-                    '${step + 1}',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: isActive
-                          ? AppColors.stoopAmberInk
-                          : stoopMute(context),
-                    ),
-                  ),
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 10,
-            color: isCurrent ? stoopAmberText(context) : stoopFaint(context),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _stepLine() => Container(
-    width: 24,
-    height: 2,
-    margin: const EdgeInsets.only(bottom: 14),
-    color: stoopBorder(context),
-  );
 
   Widget _stepBody() {
     switch (_currentStep) {
@@ -690,40 +743,26 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
     );
   }
 
-  // Step 2 — NSFW flag + the character-agency acknowledgement.
+  // Step 2 — NSFW flag + the character-agency acknowledgement + completeness.
   Widget _contentStep() {
+    final completeness = _selectedCompleteness();
     return ListView(
       key: const ValueKey('content'),
       padding: const EdgeInsets.all(24),
       children: [
-        Container(
-          decoration: BoxDecoration(
-            gradient: stoopCardGradient(context),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: stoopBorder(context)),
-          ),
-          // The gradient must stay on the box, so the tile gets its own
-          // transparent Material — ink painted on the nearest Material would
-          // otherwise be hidden under the DecoratedBox (Flutter assertion).
-          child: Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(12),
-            clipBehavior: Clip.antiAlias,
-            child: SwitchListTile(
-              value: _nsfw,
-              onChanged: (v) => setState(() => _nsfw = v),
-              activeThumbColor: AppColors.stoopEmber,
-              title: Text(
-                'This content is NSFW (18+)',
-                style: TextStyle(color: stoopCream(context)),
-              ),
-              subtitle: Text(
-                'Mark adult content so it’s hidden from people who haven’t '
-                'opted in.',
-                style: TextStyle(color: stoopMute(context), fontSize: 12),
-              ),
-            ),
-          ),
+        if (completeness != null) ...[
+          StoopCompletenessPanel(completeness: completeness),
+          const SizedBox(height: 16),
+        ],
+        if (_forcedAdult) ...[
+          const StoopAdultLockBanner(),
+          const SizedBox(height: 16),
+        ],
+        StoopAdultSwitch(
+          value: _adult.value,
+          locked: _forcedAdult,
+          pending: _castPending,
+          onChanged: (v) => setState(() => _adult.setByAuthor(v)),
         ),
         const SizedBox(height: 20),
         StoopStandardsCard(
@@ -785,6 +824,10 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
       key: const ValueKey('review'),
       padding: const EdgeInsets.all(24),
       children: [
+        if (_selectedCompleteness() != null) ...[
+          StoopCompletenessPanel(completeness: _selectedCompleteness()!),
+          const SizedBox(height: 16),
+        ],
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -814,7 +857,7 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
                       ),
                     ),
                   ],
-                  if (_nsfw) ...[
+                  if (_adult.value) ...[
                     const SizedBox(height: 8),
                     const StoopBadge(StoopBadgeKind.nsfw),
                   ],
@@ -823,6 +866,11 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
             ),
           ],
         ),
+        // Last surface before Submit — say why that badge is there.
+        if (_forcedAdult) ...[
+          const SizedBox(height: 18),
+          const StoopAdultLockBanner(),
+        ],
         const SizedBox(height: 18),
         if (_tags.isNotEmpty)
           Wrap(
@@ -903,5 +951,4 @@ class _StoopUploadPageState extends State<StoopUploadPage> {
   );
 
   InputDecoration _input(String hint) => stoopInput(context, hint);
-
 }

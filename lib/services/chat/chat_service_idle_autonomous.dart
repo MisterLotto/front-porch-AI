@@ -97,7 +97,9 @@ extension ChatServiceIdleAutonomous on ChatService {
     // Needs are NOT decayed automatically during AFK — the evaluator is the
     // sole source of need changes, so the character isn't stuck firefighting
     // survival needs and has room for varied activities.
-    if (_realismEnabled) {
+    // AFK advance is deterministic (the user's own away pace, no model call),
+    // so it follows the clock's driver rather than the engine specifically.
+    if (_clockRunning) {
       _timeService.advanceTimePeriods(
         _storageService.generationSettings.dynamicResponsePacePeriods,
       );
@@ -146,12 +148,13 @@ extension ChatServiceIdleAutonomous on ChatService {
     final flavorStr =
         '\n\n${[...flavorLines, if (span.isNotEmpty) span].join('\n')}';
     // Only announce elapsed time when the clock actually moved this cycle. Time
-    // advances iff Realism is on (the guard in _onIdleTimerFired) AND passage of
-    // time is enabled (the guard inside TimeService.advanceTimePeriods). If we
-    // announced "a few hours have passed" while the clock was frozen — e.g.
-    // Realism off but passage-of-time still defaulted on — the cue would
-    // contradict the unchanging time on every AFK turn.
-    final timeAdvancing = _realismEnabled && _timeService.passageOfTimeEnabled;
+    // advances iff the clock has a driver (the guard in _onIdleTimerFired) AND
+    // passage of time is enabled (the guard inside advanceTimePeriods) — both
+    // of which _clockRunning states directly. If we announced "a few hours have
+    // passed" while the clock was frozen — e.g. Realism off, standalone clock
+    // off, but passage-of-time still defaulted on — the cue would contradict
+    // the unchanging time on every AFK turn.
+    final timeAdvancing = _clockRunning;
     final timeStr = timeAdvancing
         ? '${_timeService.timeOfDay} (Day ${_timeService.dayCount})'
         : '';

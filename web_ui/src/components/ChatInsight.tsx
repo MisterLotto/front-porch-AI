@@ -95,6 +95,7 @@ export function ChatInsight({
   expressionLabel,
   isGroup,
   focusedIsHost,
+  focusedIsLiteGuest,
   focusedAvatarUrl,
   toolsKey,
   focusedId,
@@ -109,6 +110,8 @@ export function ChatInsight({
   toolSupport,
 }: {
   realism: Realism;
+  /** Focused cast member is a lightweight scene guest with no realism state. */
+  focusedIsLiteGuest?: boolean;
   lorebook?: LoreEntry[];
   authorNote: string;
   authorNoteDepth: number;
@@ -219,6 +222,22 @@ export function ChatInsight({
         Save note
       </button>
 
+      {/* Realism off: desktop replaces this whole block with one honest line.
+          Disabling realism PRESERVES the last numbers rather than zeroing them,
+          so rendering the bars anyway showed a live-looking dashboard that had
+          silently stopped moving. `!== false` keeps older desktop builds, which
+          do not send the flag, on their existing behaviour. */}
+      {focusedIsLiteGuest ? (
+        <p className="muted realism-off">
+          Lite NPC — no realism or needs tracking for this guest.
+        </p>
+      ) : realism.realismEnabled === false ? (
+        <p className="muted realism-off">
+          Realism Mode is off — flip the switch to track bond, trust, mood,
+          needs, and scene time for this character.
+        </p>
+      ) : (
+      <>
       {/* Current fixation, highlighted, just above the realism stats (desktop order). */}
       {realism.fixation && (
         <div className="stat-fixation">
@@ -243,6 +262,8 @@ export function ChatInsight({
               tone={v <= 20 ? 'danger' : ''} />
           ))}
         </>
+      )}
+      </>
       )}
 
       <ChatTools reloadKey={toolsKey} focusedId={focusedId} groupId={groupId} onCommand={onCommand} />

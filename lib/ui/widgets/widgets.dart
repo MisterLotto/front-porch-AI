@@ -28,11 +28,14 @@
 // import 'package:front_porch_ai/ui/widgets/widgets.dart';
 // ```
 
+export 'chip_list_editor.dart';
+export 'identity_chip_lists.dart';
 export 'ai_engine_status_card.dart';
 export 'app_text_field.dart';
 export 'engine_status_chip.dart';
 export 'folder_character_picker.dart';
 export 'realism_form_section.dart';
+export 'styled_dropdown.dart';
 export 'styled_text_controller.dart';
 export 'sidebar.dart';
 export 'model_selector.dart';
@@ -56,6 +59,8 @@ export 'needs_bar.dart';
 export 'fixation_chip.dart';
 export 'group_avatar_montage.dart';
 export 'group_member_card.dart';
+export 'group_member_chips.dart';
 export 'banned_phrases_editor.dart';
 export 'output_sanitizer_rule_editor.dart';
 export 'vision_projector_field.dart';
+export 'character_voice_picker.dart';

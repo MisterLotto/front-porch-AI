@@ -19,6 +19,15 @@
 /integration_test/                  @linux4life1
 /test/deps/dependency_floors.json   @linux4life1
 
+# The WebUI suite is evidence too, and it does NOT live under /test/ — vitest
+# files sit beside the code they test, which is how they stayed off both this
+# list and test-integrity.yml's until 2026-08-07. The catch-all `*` above
+# already routes them here; these lines exist so the omission is not repeated
+# by someone reading this file to learn what the net covers.
+/web_ui/**/*.test.ts                @linux4life1
+/web_ui/**/*.test.tsx               @linux4life1
+/web_ui/vitest.config.ts            @linux4life1
+
 # ── CI, and the config that decides what CI even checks ──────────────────
 # A PR that can rewrite the workflows can grant itself a pass.
 /.github/                           @linux4life1

@@ -44,6 +44,7 @@ import 'package:flutter/material.dart';
 import 'package:front_porch_ai/services/storage/settings/backend_settings.dart';
 import 'package:front_porch_ai/services/storage/settings/generation_settings.dart';
 import 'package:front_porch_ai/services/storage/settings/image_gen_settings.dart';
+import 'package:front_porch_ai/services/storage/settings/realism_settings.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 
 /// Minimal [StorageService] double. Implements only the getters that widget
@@ -188,6 +189,42 @@ class FakeStorageService extends ChangeNotifier implements StorageService {
   String get drawThingsGrpcHost => '';
   @override
   int get drawThingsGrpcPort => 8080;
+
+  // The character editor and both creators read the realism settings SUB-OBJECT
+  // in build() to decide whether the 18+ "Intimate preferences" chip section is
+  // shown. Same reasoning as imageGenSettings above and objectivesEnabled below
+  // — a member the real class grew but the fake did not falls through to
+  // noSuchMethod and throws while BUILDING the page, taking down tests that have
+  // nothing to do with preferences. A real instance carries production defaults
+  // (18+ off), so the section stays hidden and existing goldens are unmoved.
+  @override
+  RealismSettings get realismSettings => _realismSettings;
+  final _realismSettings = RealismSettings();
+
+  // Porch Life reads this in build(). Added with the v45 Objectives switch:
+  // this fake tracks StorageService's surface, and a getter the real class
+  // grew but the fake did not falls through to noSuchMethod and throws while
+  // BUILDING the tab — taking every Porch Life test down with it, including
+  // ones that have nothing to do with objectives. Subclasses that care about
+  // the value (objectives_toggle_test) override it with a real RealismSettings;
+  // everyone else gets the production default, which is ON.
+  @override
+  bool get objectivesEnabled => true;
+
+  /// 18+ themes. TRUE in the fake on purpose: this gates whether Porch Life's
+  /// "After Dark" group renders at all, and before that group existed the
+  /// Afterglow row was unconditionally present. Returning true keeps the fake's
+  /// rendered surface identical to what it was, so a net that walks every row
+  /// still finds every row. Subclasses that specifically test the hidden state
+  /// override it.
+  @override
+  bool get adultThemesEnabled => true;
+
+  /// Growth Rings global (production default is false). The row renders either
+  /// way — it is a plain switch, not a gated one — so the truthful value is
+  /// fine here.
+  @override
+  bool get characterEvolutionEnabled => false;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);

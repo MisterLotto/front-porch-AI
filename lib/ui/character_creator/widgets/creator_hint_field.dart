@@ -1,6 +1,8 @@
 // Copyright (C) 2026 Front Porch AI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:front_porch_ai/ui/character_creator/creator_state.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
@@ -9,7 +11,15 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 /// (relationship, custom kinks, backstory notes, description). Restored from
 /// the pre-refactor `_styledTextField`; auto-saves and notifies on change so
 /// the wizard's Generate button reacts to typing.
-class CreatorHintField extends StatelessWidget {
+///
+/// Stateful only to own the save debounce: `CreatorState.saveState()` writes
+/// all ~70 wizard preference keys, which on Windows and Linux is a full
+/// re-serialize plus a synchronous whole-file rewrite PER KEY. Running that
+/// per keystroke made a typed sentence thousands of file writes on the UI
+/// thread (invisible on macOS/NSUserDefaults, janky everywhere else).
+/// `notify()` stays immediate — it is just a listener callback, and the
+/// Generate button's enabled state rides on it.
+class CreatorHintField extends StatefulWidget {
   final CreatorState state;
   final TextEditingController controller;
   final String hint;
@@ -30,13 +40,35 @@ class CreatorHintField extends StatelessWidget {
   });
 
   @override
+  State<CreatorHintField> createState() => _CreatorHintFieldState();
+}
+
+class _CreatorHintFieldState extends State<CreatorHintField> {
+  static const _saveDebounce = Duration(milliseconds: 500);
+
+  Timer? _saveTimer;
+
+  @override
+  void dispose() {
+    // Flush a pending save so the last keystrokes before leaving the field
+    // (or the wizard) are never the ones that get dropped.
+    if (_saveTimer?.isActive ?? false) {
+      _saveTimer!.cancel();
+      widget.state.saveState();
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final state = widget.state;
+    final enabled = widget.enabled;
     return TextField(
-      controller: controller,
-      readOnly: readOnly,
+      controller: widget.controller,
+      readOnly: widget.readOnly,
       enabled: enabled,
-      maxLines: maxLines,
-      minLines: minLines,
+      maxLines: widget.maxLines,
+      minLines: widget.minLines,
       style: TextStyle(
         color: enabled
             ? AppColors.textPrimary(context)
@@ -44,11 +76,12 @@ class CreatorHintField extends StatelessWidget {
         fontSize: 14,
       ),
       onChanged: (_) {
-        state.saveState();
+        _saveTimer?.cancel();
+        _saveTimer = Timer(_saveDebounce, state.saveState);
         state.notify();
       },
       decoration: InputDecoration(
-        hintText: hint,
+        hintText: widget.hint,
         hintStyle: TextStyle(
           color: AppColors.textTertiary(context),
           fontSize: 13,

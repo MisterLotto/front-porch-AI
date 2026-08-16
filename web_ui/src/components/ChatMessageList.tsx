@@ -6,7 +6,7 @@
 // the per-message action toolbar) plus the live streaming bubble. Message edit
 // is a fullscreen modal owned by ChatPage (MessageEditModal).
 
-import { type RefObject } from 'react';
+import { memo, type RefObject } from 'react';
 import { MessageContent } from './MessageContent';
 import { ChipsRow } from './ChipsRow';
 import { MessageActions } from './MessageActions';
@@ -89,32 +89,12 @@ function genStatusLabel(s: GenStatus): { label: string; fraction: number | null 
   return { label: 'Processing prompt…', fraction: null };
 }
 
-export function ChatMessageList({
-  messages,
-  castById,
-  multiCast,
-  lastIndex,
-  busy,
-  streaming,
-  genStatus,
-  scrollRef,
-  canSpeak,
-  onBeginEdit,
-  onSwipe,
-  onRegenerate,
-  onContinue,
-  onDelete,
-  onReprocess,
-  onRevert,
-}: {
+type TranscriptProps = {
   messages: Message[];
   castById: Map<string, CastMember>;
   multiCast: boolean;
   lastIndex: number;
   busy: boolean;
-  streaming: string;
-  genStatus: GenStatus | null;
-  scrollRef: RefObject<HTMLDivElement>;
   canSpeak: boolean;
   onBeginEdit: (m: Message) => void;
   onSwipe: (index: number, direction: number) => void;
@@ -123,9 +103,30 @@ export function ChatMessageList({
   onDelete: (index: number) => void;
   onReprocess: (index: number) => void;
   onRevert: (index: number) => void;
-}) {
+};
+
+// Memoized separately from the live streaming tail: token/processing WS
+// frames re-render ChatPage many times a second during a turn, and
+// reconciling every transcript row each frame is what froze iPad Safari on
+// long chats. The handlers are useCallback-stable in ChatPage, so these
+// props only change identity when the transcript genuinely changes.
+const TranscriptRows = memo(function TranscriptRows({
+  messages,
+  castById,
+  multiCast,
+  lastIndex,
+  busy,
+  canSpeak,
+  onBeginEdit,
+  onSwipe,
+  onRegenerate,
+  onContinue,
+  onDelete,
+  onReprocess,
+  onRevert,
+}: TranscriptProps) {
   return (
-    <div className="chat-messages" ref={scrollRef}>
+    <>
       {messages.map((m) => {
         const speaker = !m.isUser && m.characterId ? castById.get(m.characterId) : undefined;
         // Living Time §1: dreams render as a centered narration banner
@@ -160,7 +161,16 @@ export function ChatMessageList({
                   loading="lazy"
                 />
               )}
-              {m.text && <MessageContent text={m.text} />}
+              {m.text ? (
+                <MessageContent text={m.text} />
+              ) : !m.isUser && m.thinkingContent && !busy ? (
+                // Thought-only reply (the model spent its whole turn inside a
+                // <think> block): say so instead of a bare empty bubble.
+                <span className="muted small">
+                  💭 Only thoughts this turn — Continue or Regenerate for a
+                  spoken reply.
+                </span>
+              ) : null}
             </div>
             {!m.isUser && m.chips && (
               <ChipsRow
@@ -185,16 +195,37 @@ export function ChatMessageList({
           </div>
         );
       })}
+    </>
+  );
+});
+
+export function ChatMessageList({
+  streaming,
+  genStatus,
+  scrollRef,
+  ...transcript
+}: TranscriptProps & {
+  streaming: string;
+  genStatus: GenStatus | null;
+  scrollRef: RefObject<HTMLDivElement>;
+}) {
+  return (
+    <div className="chat-messages" ref={scrollRef}>
+      <TranscriptRows {...transcript} />
       {streaming && (() => {
         // Separate a (possibly still-open) <think> block so reasoning streams
         // into a muted "thinking…" area and the reply shows below — mirrors how
         // the finished message renders its collapsible thinking block.
-        const open = streaming.indexOf('<think>');
+        // Case-INSENSITIVE like the Dart strip (<THINK> is valid there too);
+        // the old case-sensitive match streamed an uppercase think block as
+        // normal reply text that then vanished into an empty bubble at done.
+        const lower = streaming.toLowerCase();
+        const open = lower.indexOf('<think>');
         let thinking = '';
         let rest = streaming;
         if (open !== -1) {
           const after = streaming.slice(open + 7);
-          const close = after.indexOf('</think>');
+          const close = after.toLowerCase().indexOf('</think>');
           thinking = close === -1 ? after : after.slice(0, close);
           rest = streaming.slice(0, open) + (close === -1 ? '' : after.slice(close + 8));
         }

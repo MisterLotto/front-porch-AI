@@ -222,6 +222,24 @@ label input { margin-top: 6px; }
 }
 .cpu-warn strong { color: var(--porch-amber); display: block; margin-bottom: 3px; }
 .pill { font-size: 0.7rem; padding: 2px 8px; border-radius: 999px; margin-left: 8px; }
+/* Tri-state control (One-Shot Eval Auto/On/Off) — the desktop sidebar's
+   choice pills, in web clothes. */
+.mode-seg { display: inline-flex; gap: 4px; }
+.mode-seg-btn {
+  font-size: 0.7rem;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--muted);
+  cursor: pointer;
+}
+.mode-seg-btn.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text);
+  font-weight: 600;
+}
 .pill.ok { background: rgba(105, 240, 174, 0.18); color: var(--ok); }
 .tunnel-url { display: block; color: var(--accent); word-break: break-all; margin: 8px 0; }
 
@@ -273,10 +291,9 @@ button.ghost { background: transparent; border-color: var(--border); }
 
 /* ── Library toolbar ──────────────────────────────────────────── */
 .search { margin-bottom: 16px; }
-/* Desktop-first: the toolbar stays on one line. Phones wrap it (scoped so it
-   can't affect desktop) — see the layout rule at the top of this file. */
-.search-row { display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; margin-bottom: 16px; }
-[data-layout="phone"] .search-row { flex-wrap: wrap; }
+/* Wraps at whatever width the window (or phone) actually is — there is no
+   fixed desktop toolbar width. */
+.search-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
 .search-row .search { flex: 1 1 220px; min-width: 0; margin-bottom: 0; }
 .sort-select { width: auto; flex: 0 0 auto; }
 .import-btn { flex: 0 0 auto; white-space: nowrap; }
@@ -455,6 +472,28 @@ button.ghost.small, .ghost.small { font-size: 0.72rem; padding: 4px 8px; backgro
   border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
 }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* Chat import/export (Conversations drawer — desktop folder-menu twin). */
+.chat-package-bar { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 4px; }
+.chat-package-actions { display: flex; gap: 8px; }
+.chat-package-actions .ghost { flex: 1; }
+.chat-import-notice {
+  display: flex; align-items: flex-start; gap: 8px;
+  margin: 8px 12px 0; padding: 8px 10px;
+  border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text);
+}
+.chat-import-notice p { margin: 0; flex: 1; font-size: 0.9rem; }
+
+/* Reprocess-scope chips: which needs a Director redo is allowed to move. */
+.reprocess-scope-title { font-size: 0.8rem; font-weight: 600; margin: 12px 0 2px; }
+.reprocess-needs { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 4px; }
+.need-chip {
+  font-size: 0.75rem; padding: 4px 10px; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--muted);
+}
+.need-chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.need-chip:disabled { opacity: 0.5; }
 
 /* ── Settings: remote model picker (fetched dropdown) ───────────────────── */
 .model-picker { position: relative; }
@@ -660,6 +699,14 @@ button.ghost.small, .ghost.small { font-size: 0.72rem; padding: 4px 8px; backgro
 .chat-input .composer-backdrop .dlg { color: var(--dialogue); }
 .chat-input .composer-backdrop .act { color: var(--action); font-style: normal; font-weight: inherit; }
 .chat-input .composer-backdrop .act.bold { font-style: normal; font-weight: inherit; }
+.chat-input .impersonate-btn {
+  color: var(--accent);
+  font-size: 1.2rem;
+  padding: 6px 8px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.chat-input .impersonate-btn:disabled { opacity: 0.4; }
 
 /* ── Slash-command cheat sheet (chat input) ───────────────────── */
 .slash-cheatsheet {
@@ -860,6 +907,19 @@ button.ghost.small, .ghost.small { font-size: 0.72rem; padding: 4px 8px; backgro
 .tool-section > summary::-webkit-details-marker { display: none; }
 .tool-section[open] > summary { border-bottom: 1px solid var(--border); }
 .tool-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+
+/* Memory (RAG) engine status — host download progress mirrored to web. */
+.rag-engine-status { display: flex; flex-direction: column; gap: 6px; }
+.rag-progress-track {
+  height: 6px; border-radius: 3px; overflow: hidden;
+  background: color-mix(in srgb, var(--border) 80%, transparent);
+}
+.rag-progress-fill {
+  height: 100%; border-radius: 3px;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+.rag-engine-error { color: color-mix(in srgb, #e07070 90%, var(--text)); }
 .tool-toggle {
   display: flex; align-items: center; justify-content: space-between;
   margin: 0; font-size: 0.85rem; color: var(--text);
@@ -1214,10 +1274,23 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 .dl-sub { display: flex; justify-content: space-between; gap: 8px; }
 .dl-err { color: var(--danger); }
 
-/* Inline images embedded in chat messages (![alt](url)). */
+/* Inline images embedded in chat messages (![alt](https://...)). */
 .chat-image {
   display: block; max-width: 100%; margin-top: 8px;
   border-radius: var(--radius); border: 1px solid var(--border);
+}
+.chat-image-consent {
+  display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  margin-top: 8px; padding: 8px 12px;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--text); font-size: 0.82rem;
+}
+.chat-image-consent button {
+  background: var(--accent); color: var(--accent-ink);
+  border: none; font-weight: 600; cursor: pointer;
+  padding: 4px 10px; border-radius: 8px;
 }
 
 /* Porch Stories */
@@ -1235,6 +1308,33 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
   background: transparent; color: var(--text); cursor: pointer; font-size: 0.82rem;
 }
 .chip-toggle.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* Thinking strength — chips match this model's real levels */
+.thinking-strength { margin: 10px 0 4px; display: flex; flex-direction: column; gap: 8px; }
+.thinking-strength-label {
+  font-size: 0.9rem; font-weight: 600; color: var(--text);
+}
+.thinking-strength-chips {
+  display: flex; flex-wrap: wrap; gap: 8px;
+}
+.thinking-strength-chip {
+  flex: 1 1 96px; min-width: 96px; max-width: 140px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface, transparent);
+  color: var(--text); cursor: pointer; text-align: left;
+}
+.thinking-strength-chip.on {
+  background: var(--accent); border-color: var(--accent); color: #1a1208;
+  border-width: 1.5px;
+}
+.thinking-strength-chip-title { font-weight: 700; font-size: 0.95rem; }
+.thinking-strength-chip-sub {
+  font-size: 0.72rem; line-height: 1.25; opacity: 0.85;
+}
+.thinking-strength-chip.on .thinking-strength-chip-sub { opacity: 0.9; }
+.thinking-strength-caption { margin: 0; }
 .char-pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
 .wizard-nav { display: flex; justify-content: space-between; gap: 8px; margin-top: 14px; }
 .story-progress { display: flex; align-items: center; gap: 12px; }
@@ -1567,6 +1667,64 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
   padding-bottom: 10px; border-bottom: 1px solid var(--border);
 }
 .needs-row:last-child { border-bottom: none; padding-bottom: 0; }
+
+/* ── Porch Life settings (web mirror of porch_life_tab.dart + feature_row.dart) ── */
+.pl-intro { margin-top: -4px; }
+.pl-group {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 12px 14px 4px; margin: 14px 0;
+}
+.pl-group-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 2px; }
+.pl-group-title { font-weight: 800; font-size: 1rem; color: var(--text); }
+.pl-group-subtitle { font-size: 0.78rem; color: var(--faint); }
+.pl-row { padding: 10px 0; border-top: 1px solid var(--border); }
+.pl-group > .pl-row:first-of-type { border-top: none; }
+.pl-row-main { display: flex; align-items: flex-start; gap: 10px; }
+.pl-row-icon { font-size: 1rem; line-height: 1.3; opacity: 0.85; flex: none; }
+.pl-row-body { flex: 1; min-width: 0; }
+.pl-row-label-line { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.pl-label { font-weight: 700; font-size: 0.92rem; color: var(--text); }
+.pl-blurb { margin: 3px 0 0; font-size: 0.78rem; line-height: 1.4; color: var(--muted); }
+.pl-switch { flex: none; margin-top: 1px; }
+.pl-switch input { width: auto; }
+.pl-chip {
+  font-size: 0.66rem; font-weight: 700; letter-spacing: 0.3px;
+  padding: 2px 8px; border-radius: 999px; border: 1px solid transparent; white-space: nowrap;
+}
+/* "works alone" — the independent/no-strings-attached state, same semantic
+   green as the desktop chip's theme-keep marker (dependency legend). */
+.pl-chip-alone {
+  color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent);
+  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+}
+.pl-chip-needs {
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.pl-chip-core {
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 24%, transparent);
+  border-color: var(--accent); text-transform: uppercase;
+}
+.pl-row-dependent { padding-left: 16px; }
+.pl-row-gated { opacity: .45; }
+.pl-row-gated .pl-switch input { cursor: not-allowed; }
+.pl-child { margin: 8px 0 0 28px; }
+/* The standalone-clock opt-in that rides the Passage of Time row. Same shape
+   as a pl-row's main line (body + trailing switch) at sub-row weight, so it
+   reads as part of that row rather than a fourth feature. */
+.pl-substitch { display: flex; align-items: flex-start; gap: 12px; margin: 0; cursor: pointer; }
+.pl-sub-body { display: flex; flex-direction: column; gap: 2px; }
+.pl-sub-label { font-size: 0.8rem; font-weight: 600; color: var(--text-2, var(--muted)); }
+.pl-sub-blurb { font-size: 0.74rem; line-height: 1.4; color: var(--muted); }
+.pl-substitch input { flex: none; width: auto; margin-top: 1px; }
+.pl-away.row-label { margin: 0; gap: 10px; }
+.pl-away select { width: auto; }
+.pl-error { margin: 10px 0 0; }
+.pl-note {
+  margin-top: 4px; padding: 12px 14px; font-size: 0.78rem; line-height: 1.4;
+  color: var(--muted); background: var(--surface-2);
+  border-left: 3px solid var(--accent); border-radius: 0 10px 10px 0;
+}
 .lore-edit-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .world-picker { display: flex; flex-direction: column; gap: 6px; }
 .token-badge {
@@ -1629,7 +1787,48 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
   background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
   padding: 10px; display: grid; place-items: center; overflow: hidden;
 }
-.crop-wrap { position: relative; display: inline-block; line-height: 0; }
+.crop-wrap {
+  position: relative; display: inline-block; line-height: 0;
+  /* The padding (set inline from ImageCropModal's inset state) is the fill
+     margin the crop box can extend into; the background previews what an
+     overhanging crop saves as fill. */
+  background: var(--bg);
+}
+.crop-wrap.fill-white { background: #ffffff; }
+.crop-wrap.fill-transparent {
+  background:
+    repeating-conic-gradient(#bdbdbd 0% 25%, #8e8e8e 0% 50%) 0 0 / 20px 20px;
+}
+.crop-presets {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  margin: 4px 0 8px;
+}
+.crop-presets .chip {
+  border: 1px solid var(--border); background: none; color: var(--muted);
+  border-radius: 999px; padding: 2px 10px; font-size: 12px; cursor: pointer;
+}
+.crop-presets .chip.on { border-color: var(--accent); color: var(--text); }
+.crop-fill {
+  width: 20px; height: 20px; border-radius: 5px; cursor: pointer;
+  border: 1px solid var(--border);
+}
+.crop-fill.dark { background: #1a1a2e; }
+.crop-fill.white { background: #ffffff; }
+.crop-fill.transparent {
+  background: repeating-conic-gradient(#bdbdbd 0% 25%, #8e8e8e 0% 50%) 0 0 / 10px 10px;
+}
+.crop-fill.on { border: 2px solid var(--accent); }
+.crop-size { font-size: 11px; font-variant-numeric: tabular-nums; }
+.swap-preview { display: flex; gap: 12px; align-items: flex-start; margin: 8px 0; }
+.voice-select { width: 100%; max-width: 420px; }
+.swap-preview img {
+  width: 72px; height: 72px; object-fit: cover; border-radius: 8px;
+  border: 1px solid var(--border); flex: none;
+}
+.crop-circle-guide {
+  position: absolute; inset: 0; border-radius: 50%;
+  border: 1.5px solid var(--accent); opacity: 0.7; pointer-events: none;
+}
 .crop-img {
   display: block; max-width: 100%; max-height: 56vh;
   user-select: none; -webkit-user-drag: none;
@@ -1647,6 +1846,10 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 .crop-handle.ne { right: -8px; top: -8px; cursor: nesw-resize; }
 .crop-handle.sw { left: -8px; bottom: -8px; cursor: nesw-resize; }
 .crop-handle.se { right: -8px; bottom: -8px; cursor: nwse-resize; }
+.crop-handle.edge.n { left: calc(50% - 7px); top: -8px; cursor: ns-resize; }
+.crop-handle.edge.s { left: calc(50% - 7px); bottom: -8px; cursor: ns-resize; }
+.crop-handle.edge.e { right: -8px; top: calc(50% - 7px); cursor: ew-resize; }
+.crop-handle.edge.w { left: -8px; top: calc(50% - 7px); cursor: ew-resize; }
 .crop-actions { display: flex; align-items: center; gap: 8px; }
 .crop-actions .spacer { flex: 1; }
 
@@ -1731,6 +1934,17 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 .stoop-note { color: var(--accent); }
 .stoop-section h4 { margin: 0 0 6px; }
 .stoop-pre { white-space: pre-wrap; margin: 0; }
+/* Authored ambitions on a Stoop card — text only (a card you have not
+   downloaded has no story, so no progress bar or stage word). */
+.stoop-ambitions { margin: 0; padding: 0; list-style: none; }
+.stoop-ambitions li { margin: 0 0 5px; line-height: 1.35; }
+.stoop-sublabel {
+  margin: 10px 0 4px;
+  font-size: 10px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
 [data-layout='phone'] .stoop-detail-head { flex-direction: column; }
 [data-layout='phone'] .stoop-detail-art { width: 110px; }
 
@@ -2163,7 +2377,207 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
   background: color-mix(in srgb, var(--border) 60%, transparent);
   overflow: hidden;
 }
+/* Pockets & Wardrobe items — desktop parity with the sidebar PocketsRow. */
+.pocket-items { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 6px; }
+.pocket-item {
+  font-size: 11px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* Set aside — parked in the scene, still theirs: dimmed so "not on her"
+   reads at a glance (mirrors the desktop sidebar's greyed group). */
+.pocket-item-aside {
+  color: var(--muted);
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+/* The eraser on each chip — same affordance as the desktop ✕. */
+.pocket-x {
+  background: none;
+  border: none;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1;
+  padding: 0 0 0 5px;
+  cursor: pointer;
+}
+.pocket-x:hover { color: var(--muted); }
+
+/* Hand-add row — desktop add-dialog parity (2026-08-13). */
+.pocket-add { display: flex; gap: 5px; margin-top: 6px; align-items: center; }
+.pocket-add input {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+.pocket-add select {
+  font-size: 11px;
+  padding: 3px 4px;
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+.pocket-add button {
+  font-size: 11px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.pocket-add button:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
 .ambition-bar-fill {
   height: 100%;
   background: var(--accent);
 }
+/* The open quest climbing this ambition (schema v46) — desktop parity with
+   the sidebar AmbitionsRow step line. Indented to clear the 🧭 above it. */
+.ambition-step {
+  margin: 3px 0 0 16px;
+  font-size: 10.5px;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The mirror of the desktop AmbitionServedChip: which mountain a quest is a
+   switchback on. Shown under the goal in both the primary and side-quest
+   blocks of the Objectives section. */
+.obj-ambition {
+  margin: 2px 0 4px;
+  font-size: 10.5px;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Context Budget modal (desktop ContextViewerDialog parity) ──────────── */
+.ctxb-modal { max-height: 84vh; overflow-y: auto; width: min(500px, 94vw); }
+.ctxb-total {
+  display: flex; justify-content: space-between;
+  font-size: 0.9rem; font-weight: 600;
+}
+.ctxb-track {
+  height: 8px; border-radius: 6px; background: var(--surface-2);
+  overflow: hidden;
+}
+.ctxb-fill { height: 100%; border-radius: 6px; }
+.ctxb-stack {
+  display: flex; height: 22px; border-radius: 6px; overflow: hidden;
+  margin-bottom: 4px;
+}
+.ctxb-row {
+  display: flex; align-items: center; gap: 8px; padding: 8px 0;
+  cursor: pointer; border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+.ctxb-dot { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.ctxb-label { flex: 1; }
+.ctxb-tokens { font-weight: 600; }
+.ctxb-pct { color: var(--muted); font-size: 0.78rem; width: 48px; text-align: right; }
+.ctxb-text-wrap {
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface-2); margin: 4px 0 8px;
+  display: flex; flex-direction: column; align-items: flex-end;
+}
+.ctxb-copy { padding: 4px 8px 0; }
+.ctxb-text { max-height: 240px; overflow: auto; width: 100%; padding: 0 8px 8px; }
+.ctxb-text pre {
+  margin: 0; white-space: pre-wrap; word-break: break-word;
+  font-size: 11px; font-family: ui-monospace, SFMono-Regular, monospace;
+  color: var(--muted);
+}
+
+/* ── Promises panel (desktop Journal "Promises" tab parity) ─────────────── */
+.promise-row { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.promise-row:last-child { border-bottom: none; }
+.promise-head { display: flex; align-items: center; gap: 8px; }
+.promise-badge {
+  font-size: 0.7rem; padding: 1px 8px; border-radius: 999px;
+  border: 1px solid var(--border);
+}
+.promise-badge-open { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+.promise-badge-kept { color: #4ade80; border-color: rgba(74, 222, 128, 0.5); }
+.promise-badge-broken { color: #f87171; border-color: rgba(248, 113, 113, 0.5); }
+.promise-text { font-size: 0.85rem; line-height: 1.4; margin: 6px 0; }
+.promise-actions { display: flex; gap: 8px; }
+.promise-actions button { font-size: 0.75rem; padding: 3px 10px; }
+
+/* Belongings — web mirror of desktop Journal "Belongings" tab */
+.belonging-row { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.belonging-row:last-child { border-bottom: none; }
+.belonging-row.pinned .belonging-text { font-weight: 600; }
+.belonging-text { font-size: 0.85rem; line-height: 1.4; margin-bottom: 4px; }
+
+/* Chip-list editor — the web mirror of ChipListEditor (approved sketch §4).
+   Used for Ambitions now and Likes/Dislikes next, hence the neutral naming.
+   `accent` is the amber-bordered treatment the sketch draws for ambitions. */
+.chiplist { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+.chiplist-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 4px 6px 4px 10px; font-size: 0.8rem;
+}
+.chiplist-chip.accent { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.chiplist-chip button {
+  all: unset; cursor: pointer; line-height: 1; padding: 2px 3px;
+  color: var(--muted); border-radius: 4px; font-size: 0.9rem;
+}
+.chiplist-chip button:hover { color: var(--text); }
+.chiplist-add {
+  all: unset; cursor: pointer; font-size: 0.8rem; font-weight: 600;
+  color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 8px; padding: 6px 11px;
+}
+.chiplist input.chiplist-entry {
+  width: 210px; font-size: 0.8rem; padding: 6px 10px;
+  border-radius: 8px; border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.chiplist-count { font-size: 0.72rem; color: var(--muted); margin-left: auto; }
+
+/* ── AI Enhance (library menu → chat-grounded rewrite) ─────────────────── */
+.enh-modal { max-width: 720px; width: min(720px, 94vw); max-height: 86vh; overflow-y: auto; }
+.enh-warn { color: var(--accent-amber); font-style: italic; }
+.enh-sessions { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.enh-session {
+  all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 2px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 8px 12px;
+}
+.enh-session.on { border-color: var(--accent); }
+.enh-session-preview { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.enh-session-meta { font-size: 0.72rem; color: var(--muted); }
+.enh-steps { font-size: 0.8rem; display: flex; flex-direction: column; gap: 3px; margin: 8px 0; }
+.enh-sections { display: flex; flex-direction: column; gap: 12px; }
+.enh-section { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
+.enh-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.enh-use { margin: 0; }
+.enh-compare { display: grid; gap: 8px; }
+.enh-compare.wide { grid-template-columns: 1fr 1fr; }
+.enh-old {
+  font-size: 0.8rem; color: var(--muted); white-space: pre-wrap;
+  background: var(--surface-2); border-radius: 8px; padding: 8px;
+  max-height: 180px; overflow-y: auto;
+}
+.enh-new {
+  width: 100%; min-height: 120px; font-size: 0.8rem; resize: vertical;
+  background: var(--surface-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; padding: 8px;
+}
+.enh-new:focus { border-color: var(--accent); outline: none; }

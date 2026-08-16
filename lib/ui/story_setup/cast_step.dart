@@ -178,7 +178,7 @@ class CastStep extends StatelessWidget {
               .map(
                 (char) => _roleRow(
                   context,
-                  avatarLetter: char.name[0],
+                  avatarLetter: char.name.isEmpty ? '?' : char.name[0],
                   name: char.name,
                   accent: accent,
                   value: draft.characterRoles[char.dbId!] ?? 'Supporting',

@@ -22,44 +22,14 @@ import 'dart:math';
 import 'package:drift/drift.dart' show Variable;
 
 import 'package:front_porch_ai/database/database.dart';
+import 'package:front_porch_ai/services/web/auth/auth_types.dart';
 import 'package:front_porch_ai/services/web/auth/password_hasher.dart';
 import 'package:front_porch_ai/services/web/auth/rate_limiter.dart';
 import 'package:front_porch_ai/services/web/auth/session_store.dart';
+import 'package:front_porch_ai/services/web/auth/setup_gate.dart';
 import 'package:front_porch_ai/services/web/auth/totp_service.dart';
 
-/// Outcome of a login attempt.
-enum LoginStatus {
-  success,
-  invalidCredentials,
-  totpRequired,
-  lockedOut,
-  rateLimited,
-  notSetUp,
-}
-
-class LoginResult {
-  const LoginResult(this.status, {this.token, this.retryAfterSeconds});
-  final LoginStatus status;
-  final String? token; // raw session cookie token on success
-  final int? retryAfterSeconds;
-}
-
-/// Result of confirming TOTP enrollment — recovery codes are returned ONCE.
-class TotpEnrollment {
-  const TotpEnrollment(this.secret, this.provisioningUri);
-  final String secret;
-  final String provisioningUri;
-}
-
-/// Outcome of a credential change (or another re-authenticated operation).
-enum CredentialChangeStatus {
-  success,
-  invalidCurrentPassword,
-  totpRequired,
-  invalidInput,
-  notSetUp,
-  lockedOut,
-}
+export 'package:front_porch_ai/services/web/auth/auth_types.dart';
 
 /// The single-account secure-login service for the rewritten web server.
 ///
@@ -93,10 +63,25 @@ class AuthService {
   /// In-memory pending secret during TOTP enrollment (single host account).
   String? _pendingTotpSecret;
 
+  /// One-time token for non-local first-run setup. Never served over HTTP —
+  /// desktop Settings shows it while setup is open.
+  String? _setupToken;
+
   // ── Account lifecycle ───────────────────────────────────────────────────
 
   /// True when no account exists yet — the server runs in setup mode.
   Future<bool> isSetupRequired() async => (await _loadCredentials()) == null;
+
+  /// Desktop-only setup claim code while no account exists. Null once setup
+  /// completes. Lazy-minted so a fresh install always has something to show
+  /// after "Reset web login" or first server start with no credentials.
+  Future<String?> setupTokenForDesktop() async {
+    if (!await isSetupRequired()) {
+      _setupToken = null;
+      return null;
+    }
+    return _setupToken ??= SetupGate.generateToken();
+  }
 
   /// The account's public bits for display (web account page, desktop
   /// settings card). Null when no account exists yet.
@@ -106,11 +91,30 @@ class AuthService {
     return (username: creds.username, totpEnabled: creds.totpEnabled);
   }
 
-  /// Create the single account. Fails if one already exists or input is invalid.
-  Future<bool> setupAccount(String username, String password) async {
-    if (!await isSetupRequired()) return false;
+  /// Create the single account. Local (direct loopback) clients need no token;
+  /// LAN/proxy clients must supply [setupToken] matching the desktop value.
+  Future<SetupStatus> setupAccount(
+    String username,
+    String password, {
+    String? setupToken,
+    bool isDirectLoopbackClient = false,
+    String? ip,
+  }) async {
+    if (!await isSetupRequired()) return SetupStatus.alreadyConfigured;
+    if (!_limiter.setupIpAllowed(ip)) return SetupStatus.rateLimited;
+    _limiter.recordSetupAttempt(ip);
+
+    if (!isDirectLoopbackClient) {
+      await setupTokenForDesktop();
+      if (!SetupGate.tokensMatch(setupToken, _setupToken)) {
+        // Empty token from a remote client is "required", wrong token is invalid.
+        final blank = setupToken == null || setupToken.trim().isEmpty;
+        return blank ? SetupStatus.tokenRequired : SetupStatus.invalidToken;
+      }
+    }
+
     final u = username.trim();
-    if (u.isEmpty || password.length < 8) return false;
+    if (u.isEmpty || password.length < 8) return SetupStatus.invalidInput;
     final hash = await _hasher.hash(password);
     final nowSecs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     await _db.customInsert(
@@ -125,7 +129,8 @@ class AuthService {
         Variable<int>(nowSecs),
       ],
     );
-    return true;
+    _setupToken = null;
+    return SetupStatus.success;
   }
 
   // ── Login / logout ──────────────────────────────────────────────────────
@@ -184,6 +189,23 @@ class AuthService {
 
   Future<void> logout(String rawToken) => sessions.revoke(rawToken);
 
+  /// Password (+ TOTP when enabled) step-up for privileged operations that
+  /// a stolen session cookie alone must not perform — e.g. publishing a
+  /// public tunnel (audit P0.6). Returns [CredentialChangeStatus.success]
+  /// when re-auth passes.
+  Future<CredentialChangeStatus> verifyStepUp({
+    required String currentPassword,
+    String? totpCode,
+    String? ip,
+  }) async {
+    final creds = await _loadCredentials();
+    if (creds == null) return CredentialChangeStatus.notSetUp;
+    final denied = await _reauthenticate(creds, currentPassword, totpCode, ip);
+    if (denied != null) return denied;
+    _limiter.recordSuccess(creds.username);
+    return CredentialChangeStatus.success;
+  }
+
   // ── Credential management ─────────────────────────────────────────────────
 
   /// Change the username and/or password. Requires the CURRENT password (and,
@@ -231,6 +253,8 @@ class AuthService {
   /// than the web password — this is the "forgot password" path.
   Future<void> resetAccount() async {
     _pendingTotpSecret = null;
+    // Fresh token so a prior leak cannot reclaim after reset.
+    _setupToken = SetupGate.generateToken();
     await sessions.revokeAllFor(_accountId);
     await _db.customStatement(
       'DELETE FROM web_auth_credentials WHERE id = ?',
@@ -242,19 +266,63 @@ class AuthService {
 
   /// Start enrollment: returns a fresh secret + provisioning URI for the QR.
   /// Not persisted until [confirmTotpEnrollment] succeeds.
-  Future<TotpEnrollment?> beginTotpEnrollment() async {
+  ///
+  /// Requires the current password (same step-up as credential change /
+  /// disable). A session cookie alone must not mint a new secret — that is
+  /// how a hijacker replaces the owner's authenticator and recovery codes.
+  /// If 2FA is already on, enrollment is refused entirely; disable first.
+  Future<TotpBeginResult> beginTotpEnrollment({
+    required String currentPassword,
+    String? totpCode,
+    String? ip,
+  }) async {
     final creds = await _loadCredentials();
-    if (creds == null) return null;
+    if (creds == null) {
+      return const TotpBeginResult(CredentialChangeStatus.notSetUp);
+    }
+    if (creds.totpEnabled) {
+      return const TotpBeginResult(CredentialChangeStatus.alreadyEnabled);
+    }
+    final denied = await _reauthenticate(creds, currentPassword, totpCode, ip);
+    if (denied != null) return TotpBeginResult(denied);
     final secret = _totp.generateSecret();
     _pendingTotpSecret = secret;
-    return TotpEnrollment(secret, _totp.provisioningUri(creds.username, secret));
+    _limiter.recordSuccess(creds.username);
+    return TotpBeginResult(
+      CredentialChangeStatus.success,
+      enrollment: TotpEnrollment(
+        secret,
+        _totp.provisioningUri(creds.username, secret),
+      ),
+    );
   }
 
-  /// Confirm enrollment with a current code. On success persists the secret,
-  /// enables 2FA, and returns the one-time recovery codes (plaintext).
-  Future<List<String>?> confirmTotpEnrollment(String code) async {
+  /// Confirm enrollment with a current authenticator code. On success persists
+  /// the secret, enables 2FA, and returns the one-time recovery codes
+  /// (plaintext). Re-checks the current password so a hijacked session that
+  /// did not know the password still cannot complete enrollment if begin was
+  /// never reached (and cannot complete a race if begin somehow leaked).
+  Future<TotpConfirmResult> confirmTotpEnrollment({
+    required String currentPassword,
+    required String code,
+    String? totpCode,
+    String? ip,
+  }) async {
+    final creds = await _loadCredentials();
+    if (creds == null) {
+      return const TotpConfirmResult(CredentialChangeStatus.notSetUp);
+    }
+    if (creds.totpEnabled) {
+      _pendingTotpSecret = null;
+      return const TotpConfirmResult(CredentialChangeStatus.alreadyEnabled);
+    }
+    final denied = await _reauthenticate(creds, currentPassword, totpCode, ip);
+    if (denied != null) return TotpConfirmResult(denied);
+
     final secret = _pendingTotpSecret;
-    if (secret == null || !_totp.verify(secret, code)) return null;
+    if (secret == null || !_totp.verify(secret, code)) {
+      return const TotpConfirmResult(CredentialChangeStatus.invalidInput);
+    }
     final recovery = List.generate(_recoveryCodeCount, (_) => _recoveryCode());
     final hashed = <String>[];
     for (final c in recovery) {
@@ -273,7 +341,11 @@ class AuthService {
       ],
     );
     _pendingTotpSecret = null;
-    return recovery;
+    _limiter.recordSuccess(creds.username);
+    return TotpConfirmResult(
+      CredentialChangeStatus.success,
+      recoveryCodes: recovery,
+    );
   }
 
   /// Disable 2FA, clearing the secret and recovery codes. Requires the

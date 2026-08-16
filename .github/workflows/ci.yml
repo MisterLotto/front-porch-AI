@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [dev, main, Rawhide]
+    branches: [main, Rawhide]
   pull_request:
-    branches: [dev, main, Rawhide]
+    branches: [main, Rawhide]
   schedule:
     # Run full project lint every Monday at 09:00 UTC
     - cron: '0 9 * * 1'
@@ -99,18 +99,29 @@ jobs:
         run: flutter pub get
 
       - name: Run Tests
-        # Use --concurrency=1 because several tests (notably the "real production"
-        # ChatService + GroupTurnManager + per-speaker realism evals + DB settles
-        # in chat_service_realism_engine_test.dart) are integration-style and
-        # timing-sensitive. Default high concurrency on GitHub runners causes
-        # intermittent races in async group member population, isEvaluatingRealism
-        # polling, and shared mock setup (path_provider, SharedPreferences,
-        # forTesting DBs) even with the internal while-loop settles.
-        # See test file comments on "robust settle", "under load/CI", and the
-        # card-seed / inter-char key handling.
+        # --concurrency=4 since 2026-08-07 (maintainer instruction). This was
+        # pinned to 1, and the reason given was the "real production" ChatService
+        # + GroupTurnManager + per-speaker realism eval tests in
+        # chat_service_realism_engine_test.dart being integration-style and
+        # timing-sensitive under load.
+        #
+        # THOSE TESTS NO LONGER EXIST. That file is now a 771-byte placeholder
+        # and its own header records why: "The dynamic and group tests were
+        # removed for 0 test fails (flaky timing/DB/prefs in full suite)."
+        # The flaky tests were deleted; the pin protecting them was not. It has
+        # been serialising all 2929 tests to guard code that is gone.
+        #
+        # Measured on a 4-core Linux box before changing: 578s at 1 vs 180s at 4
+        # (3.2x), with 5 consecutive green unit runs and 3 green golden runs.
+        #
+        # IF FLAKES REAPPEAR: the fix is NOT to re-pin this to 1. Find the racy
+        # FILE (shared mock setup — path_provider, SharedPreferences, forTesting
+        # DBs — is the usual culprit) and fix or serialise that file. Slowing
+        # every test in the repo to hide one racy one is what got us here.
+        #
         # Pixel golden tests run in the dedicated `golden` job below so a render
         # diff never masks a logic failure here and vice-versa.
-        run: flutter test --concurrency=1 --reporter expanded --exclude-tags golden
+        run: flutter test --concurrency=4 --reporter expanded --exclude-tags golden
         timeout-minutes: 20
 
   # Full-array E2E smoke: boots the REAL desktop app (windowed, on the runner's
@@ -119,32 +130,56 @@ jobs:
   # proposal + task-gen, and a real journal maintenance pass. See
   # integration_test/app_smoke_test.dart for the isolation contract.
   # Runner notes: no human mouse and no real KoboldCpp exist here, so the two
-  # local-run hazards (hover-wedge, zombie-kill) don't apply. Build time
-  # dominates (~6-10 min); the test itself is ~7s.
+  # local-run hazards (hover-wedge, zombie-kill) don't apply.
+  #
+  # SHARDED (2026-08-05, maintainer request "make it faster"). The suites are
+  # independent, so each OS fans out over E2E_SHARDS parallel jobs instead of
+  # walking all of them in one. Round-robin (index % shards), not contiguous
+  # blocks, because suite durations vary and blocks would leave one shard long.
+  #
+  # Why the shard count is modest: every shard re-pays the app build, which is
+  # the fixed cost here. Measured on the 25-suite run 08f000f — macOS 25m01s,
+  # Windows 23m27s, Linux 15m35s — that is roughly a 5 min build plus ~48s per
+  # suite on macOS. Five shards puts macOS at build + 5 suites ~= 9 min rather
+  # than 25. Going wider mostly buys more builds, not less wall clock.
   # Every platform joins this matrix the same way: experimental
   # (continue-on-error) until it has two consecutive green runs on record —
   # so a new platform's shakedown can never red a contributor's PR — then it
   # graduates to blocking. Windows and Linux both graduated on 2026-07-28,
   # each having passed from its very first execution.
   e2e-smoke:
-    name: E2E smoke (${{ matrix.device }})
+    name: E2E smoke (${{ matrix.device }} ${{ matrix.shard }}/5)
     needs: analyze
     strategy:
       fail-fast: false
       matrix:
+        device: [macos, windows, linux]
+        shard: [1, 2, 3, 4, 5]
+        # These `include` entries match on `device`, so each one ADDS its keys
+        # to all five of that device's shard combinations rather than creating
+        # new jobs. 3 devices x 5 shards = 15 jobs.
         include:
-          - os: macos-latest
-            device: macos
+          - device: macos
+            os: macos-latest
             experimental: false
-          - os: windows-latest
-            device: windows
+          - device: windows
+            os: windows-latest
             experimental: false
-          - os: ubuntu-latest
-            device: linux
+          - device: linux
+            os: ubuntu-latest
             experimental: false
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
-    timeout-minutes: 30
+    env:
+      E2E_SHARDS: 5
+      E2E_SHARD: ${{ matrix.shard }}
+    # 20 suites per OS, each failing suite retried once with a full rebuild.
+    # Sizing history: 30 truncated a Linux round mid-list (hid four verdicts);
+    # 45 then ran out on the first 20-suite round, because a FAILING suite is
+    # far more expensive than a passing one — its waits burn their full
+    # CI-scaled deadline (kCiTimeoutScale = 4) twice over, once per attempt.
+    # 60 keeps a red round fully diagnostic instead of hiding the tail.
+    timeout-minutes: 60
     steps:
       - name: Checkout Code
         uses: actions/checkout@v5
@@ -158,6 +193,12 @@ jobs:
 
       # Linux desktop build deps + a virtual display for the windowed test.
       # GStreamer is for audioplayers_linux; GTK for the shell itself.
+      #
+      # Note what is deliberately NOT here: any spell-check package. The
+      # hunspell engine is compiled in from third_party/ and an en_US
+      # dictionary ships in the bundle, so spell_check_test.dart must pass on a
+      # machine with nothing installed. Adding one here would hide a broken
+      # bundle behind the runner's own packages.
       - name: Install Linux desktop dependencies
         if: matrix.device == 'linux'
         run: |
@@ -182,11 +223,25 @@ jobs:
         shell: bash
         run: |
           set -e
+          i=0
+          ran=0
           for f in integration_test/*_test.dart; do
+            if [ $(( i % E2E_SHARDS )) -ne $(( E2E_SHARD - 1 )) ]; then
+              i=$((i + 1)); continue
+            fi
+            i=$((i + 1)); ran=$((ran + 1))
             echo "::group::$f"
             flutter test "$f" -d ${{ matrix.device }}
             echo "::endgroup::"
           done
+          # A shard that silently matched nothing would report green having
+          # tested nothing at all — the exact failure mode the glob was
+          # introduced to kill. Only legal once suites < shards.
+          echo "shard $E2E_SHARD/$E2E_SHARDS ran $ran suite(s)"
+          if [ "$ran" -eq 0 ]; then
+            echo "::error::shard $E2E_SHARD matched no suites"
+            exit 1
+          fi
 
       # Linux under xvfb has been observed to drop the device mid-boot and
       # report "No tests were found" (exit 79) with no Dart stack — a true
@@ -197,7 +252,13 @@ jobs:
         run: |
           set +e
           overall=0
+          i=0
+          ran=0
           for f in integration_test/*_test.dart; do
+            if [ $(( i % E2E_SHARDS )) -ne $(( E2E_SHARD - 1 )) ]; then
+              i=$((i + 1)); continue
+            fi
+            i=$((i + 1)); ran=$((ran + 1))
             status=0
             for attempt in 1 2; do
               echo "::group::$f (attempt $attempt)"
@@ -219,6 +280,11 @@ jobs:
               overall="$status"
             fi
           done
+          echo "shard $E2E_SHARD/$E2E_SHARDS ran $ran suite(s)"
+          if [ "$ran" -eq 0 ]; then
+            echo "::error::shard $E2E_SHARD matched no suites"
+            exit 1
+          fi
           exit "$overall"
 
   web-tests:
@@ -236,7 +302,10 @@ jobs:
           cache-dependency-path: web_ui/package-lock.json
 
       - name: Install WebUI dependencies
-        run: npm ci
+          # --ignore-scripts: no package in this tree runs an install-time
+          # script today (verified 2026-08-05), so this changes nothing now
+          # and blocks the ChainDrop vector if one ever arrives.
+        run: npm ci --ignore-scripts
         working-directory: web_ui
 
       # Typecheck (tsc) + pure unit tests (vitest). The tests use synthetic
@@ -369,5 +438,10 @@ jobs:
         #
         # This job runs in parallel with `test` (both need `analyze` to pass)
         # so a golden failure is always reported independently of logic failures.
-        run: flutter test --concurrency=1 --reporter expanded --tags golden
+        # --concurrency=4 since 2026-08-07: goldens render with
+        # --enable-software-rendering + --skia-deterministic-rendering, so
+        # parallel load cannot change a pixel. Measured 490s -> 156s (3.1x) with
+        # 3 consecutive green runs and zero diffs. See the `test` job above for
+        # the full rationale and the rollback rule.
+        run: flutter test --concurrency=4 --reporter expanded --tags golden
         timeout-minutes: 10

@@ -110,6 +110,7 @@ extension ChatServiceSessionLoad on ChatService {
           .clear(); // 0-session: no per-chat look selection (keep reset blocks in sync)
       _sessionGenSettings =
           ChatGenerationSettings(); // 0-session: no per-chat gen overrides — without this, character B's first chat ran (and could SAVE) character A's temp/stops/sanitizer (keep reset blocks in sync)
+      _clearContextBudget();
       return;
     }
 
@@ -138,8 +139,10 @@ extension ChatServiceSessionLoad on ChatService {
 
     // Load messages
     // Zero secondary objective flags in loaded path of _loadLast (before callers do _loadActiveObjectives / _loadObjectivesForCurrentSpeaker); incomplete zeroing hygiene.
-    // (loadSession deliberately does NOT zero these — objectives there are
-    // handled by its own callers; keep this trio out of the shared hydrate.)
+    // (loadSession zeroes + reloads this trio itself, right after
+    // _hydrateSessionScalars — it used to leave them alone on the belief that
+    // "its own callers" would, and none did. Keep the trio out of the shared
+    // hydrate: the two paths differ in WHEN the loader runs, not whether.)
     _activeObjectives = [];
     _messagesSinceLastCheck = 0;
     _isCheckingCompletion = false;
@@ -375,7 +378,6 @@ extension ChatServiceSessionLoad on ChatService {
     // instead of a short topic — truncate to keep the UI and prompts sane.
     _relationshipService.sanitizeFixationIfTooLong();
     _realismEnabled = s.realismEnabled;
-    _moodDecayCounter = s.moodDecayCounter;
     _characterEmotion = s.characterEmotion;
     _emotionIntensity = s.emotionIntensity;
     _timeService.loadTimeScalars(
@@ -384,10 +386,43 @@ extension ChatServiceSessionLoad on ChatService {
       startDayOfWeek: s.startDayOfWeek,
       storyClock: s.storyClock,
       storyStartDate: s.storyStartDate,
-      passageOfTimeEnabled:
-          s.passageOfTimeEnabled &&
-          _storageService.realismSettings.passageOfTimeDefault,
+      // The saved per-chat value, NOT AND-ed with the global default. That
+      // global is a seed-time ceiling: the four seedFromV2OrExt callers apply
+      // it when a chat is first created ("Global ceiling applied before
+      // passing"). Applying it again on every load would let switching the
+      // global off retroactively disable time in chats the user had already
+      // turned it on for. Until now the AND was computed and then thrown away
+      // by loadTimeScalars, so it was inert; assigning the parameter without
+      // removing it here would have quietly switched that behaviour on.
+      passageOfTimeEnabled: s.passageOfTimeEnabled,
     );
+    // Freeze a synthesised story date into the row the FIRST time we invent it.
+    // The v38 ladder note promised legacy rows would "synthesize on first
+    // load", but nothing wrote the result back, and the synthesis is anchored
+    // on the real-world calendar — so the in-story date silently followed
+    // whatever day the chat was opened on (96 of 109 sessions in the
+    // maintainer's library were still in that state). A full save would have
+    // fixed it, but a save only happens when you send a message: opening a
+    // chat, reading it and closing it left the date free to move again.
+    //
+    // A partial patch, not _saveChat(): we are mid-hydration, so writing the
+    // whole row here would persist the half-loaded needs/pockets/chaos state
+    // that the lines below have not restored yet. Unawaited for the same reason
+    // the other load-path writes are — the open path must not block on disk.
+    if (_timeService.canonicalClockWasSynthesised) {
+      unawaited(
+        _db.patchSession(
+          SessionsCompanion(
+            id: drift.Value(s.id),
+            storyClock: drift.Value(_timeService.storyClockIso),
+            storyStartDate: drift.Value(_timeService.storyStartDateIso),
+            startDayOfWeek: drift.Value(_timeService.startDayOfWeekAnchor),
+            timeOfDay: drift.Value(_timeService.timeOfDay),
+            dayCount: drift.Value(_timeService.dayCount),
+          ),
+        ),
+      );
+    }
     _nsfwService.loadNsfwScalars(
       nsfwCooldownEnabled: s.nsfwCooldownEnabled,
       arousalLevel: s.arousalLevel,
@@ -395,6 +430,7 @@ extension ChatServiceSessionLoad on ChatService {
       cooldownTurnsTotal: s.cooldownTurnsTotal,
     );
     _needsSimEnabled = s.needsSimEnabled;
+    _objectivesEnabled = s.objectivesEnabled;
     if (_needsSimEnabled) {
       // Seed defaults first, then overlay the saved vector ONLY when it has
       // values. A blank saved vector (e.g. needs was toggled on mid-chat before
@@ -411,6 +447,23 @@ extension ChatServiceSessionLoad on ChatService {
       _needsSimulation.clearVector();
     }
 
+    // v47 — restore the 1:1 pockets record. Group members' records ride
+    // groupRealismState and are restored with it; this is the half that had no
+    // home and so was silently dropped on every reload.
+    //
+    // Restored regardless of whether Pockets is currently switched on: a
+    // record only exists because it was on at the time, and rolling a chat
+    // open must not be the thing that empties her hands.
+    final pj = s.pockets;
+    _pockets = (pj is String && pj.isNotEmpty)
+        ? Pockets.fromJson(jsonDecode(pj))
+        : null;
+    // No saved record means this chat has never run the pass, so fall back to
+    // what the card starts her with — otherwise the sidebar reads empty until
+    // after the first reply and an author who just set a wardrobe concludes it
+    // did not save. Skipped when a record exists: the chat has moved on.
+    seedPocketsFromCards();
+
     // Re-sync from the character's current setting so that toggling
     // "Enjoys low hygiene" on the character affects existing chats on next load.
     _enjoysLowHygiene =
@@ -422,6 +475,13 @@ extension ChatServiceSessionLoad on ChatService {
       _sessionThemeOverrides = ChatThemeOverrides.fromJsonString(themeJson);
     } catch (_) {
       _sessionThemeOverrides = ChatThemeOverrides();
+    }
+
+    // Context Budget bars from the last real send (empty on older chats).
+    try {
+      await _loadContextBudgetForSession(s.id);
+    } catch (_) {
+      _clearContextBudget();
     }
 
     _needsSimulation.resetBuffers();
@@ -450,6 +510,26 @@ extension ChatServiceSessionLoad on ChatService {
   Future<void> loadSession(String sessionId) async {
     if (_activeCharacter == null && _activeGroup == null) return;
 
+    // A reload mid-settle reads rows the finishing turn hasn't persisted yet
+    // (chip attach's _saveChat can land AFTER getMessagesForSession below),
+    // and that turn's finalization would then write onto the replaced list.
+    await _waitForTurnToSettle();
+    // Persist the chat we are LEAVING before replacing `_messages` from rows
+    // — only when this load actually switches sessions. A SAME-session
+    // reload must NOT flush: flushPendingSaves is a full save, so it would
+    // stamp the live scalars — the active persona above all — onto the very
+    // row this load exists to read back, and the restore below would then
+    // "restore" whatever was already live. That broke "reopening a chat
+    // restores its persona" everywhere (Rawhide E2E red since 6192ddc:
+    // persona_default_test + persona_folder_test; the picker flow after
+    // setActiveCharacter hits it because _loadLastSession sets
+    // _currentSessionId without activating the persona — by design). The
+    // same-session transcript needs no flush here: turns persist when
+    // taken, and _waitForTurnToSettle has already drained the save chain.
+    if (_currentSessionId != sessionId) {
+      await flushPendingSaves();
+    }
+
     // Reset AFK idle state when loading a new session
     _cancelIdleTimer();
     _hasCompletedExchange = false;
@@ -457,9 +537,17 @@ extension ChatServiceSessionLoad on ChatService {
     final session = await _db.getSessionById(sessionId);
     if (session == null) return;
 
-    if (session.userPersonaId != null) {
-      await _userPersonaService.setActivePersona(session.userPersonaId!);
-    }
+    // Speak as the persona this chat was chatted under. A session with no
+    // binding (pre-v25 rows) or one naming a persona that has since been
+    // DELETED falls back to the default — not to whatever the previously-open
+    // chat left behind, which is what the old silent no-op did.
+    final sessionPersonaId = session.userPersonaId;
+    final knownPersona =
+        sessionPersonaId != null &&
+        _userPersonaService.personas.any((p) => p.id == sessionPersonaId);
+    await _userPersonaService.setActivePersona(
+      knownPersona ? sessionPersonaId : _userPersonaService.defaultPersonaId,
+    );
 
     // Load per-chat generation settings override for this session (must
     // happen before the message loop so retroactive sanitization can
@@ -507,13 +595,13 @@ extension ChatServiceSessionLoad on ChatService {
       // while this session's own guests are never restored. Mirror the
       // _loadLastSession 1:1 branch: full reset, then load this session's blob.
       if (_activeGroup == null) {
-        _pendingGuestDeparture = null;
-        _pendingGuestPickerFilter = null;
+        _sceneGuest.pendingDeparture = null;
+        _sceneGuest.pendingPickerFilter = null;
         _resetGuestActivityState();
-        _userMessagesSinceLastCastScan = 0;
-        _pendingGuestDetection = null;
-        _offeredOrIgnoredGuestNames.clear();
-        // (clears + restores _sceneGuestIds/_sceneGuestCards + guest evolution)
+        _sceneGuest.turnsSinceCastScan = 0;
+        _sceneGuest.pendingDetection = null;
+        _sceneGuest.offeredOrIgnoredNames.clear();
+        // (clears + restores _sceneGuest.ids/_sceneGuest.cards + guest evolution)
         _loadSceneGuestsFromSession(session);
       } else {
         // Group session: restore live per-character realism/needs from the
@@ -523,6 +611,26 @@ extension ChatServiceSessionLoad on ChatService {
         _loadGroupRealismStateFromSession(session);
       }
       await _hydrateSessionScalars(session);
+
+      // Quests are keyed (character, CHAT) — so switching chats has to reload
+      // them, exactly like the scalars above. Nothing did: `_activeObjectives`
+      // kept the PREVIOUS chat's rows, which the prompt then injected here
+      // while the pre-send completion check wrote (deactivate / task updates,
+      // by primary key) back into that other chat's quests. This chat's own
+      // quests never appeared at all. The stale comment in `_loadLastSession`
+      // — "objectives there are handled by its own callers" — described a
+      // caller that never existed; every call site is bare (history drawer,
+      // home page, delete-session switch, the web facade). Same both-paths
+      // loader block as every other objective entry point; the trio of
+      // per-chat counters is zeroed first, matching `_loadLastSession`.
+      _activeObjectives = [];
+      _messagesSinceLastCheck = 0;
+      _isCheckingCompletion = false;
+      if (_activeGroup != null) {
+        await _loadObjectivesForCurrentSpeaker();
+      } else {
+        await _loadActiveObjectives();
+      }
 
       // (Lorebook scanLatest already ran inside _hydrateMessagesFromRows —
       // the second scan here was pure duplicate work.)

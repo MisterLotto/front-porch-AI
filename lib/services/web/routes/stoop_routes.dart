@@ -175,11 +175,19 @@ class WebStoopRoutes {
   }
 
   // Route-builder helpers so each registration stays a one-liner.
+  // GET handlers forward request.url.query so additive params (e.g.
+  // types=solo,group,world for Living Worlds — audit P2.15 / second-look)
+  // reach the backend; POST/DELETE keep the empty-query default.
   shelf.Handler _authCall(String upstreamPath) => (shelf.Request request) =>
       _relay(request, 'POST', upstreamPath, tokenRequired: false);
 
   shelf.Handler _tokenCall(String method, String upstreamPath) =>
-      (shelf.Request request) => _relay(request, method, upstreamPath);
+      (shelf.Request request) => _relay(
+        request,
+        method,
+        upstreamPath,
+        query: method == 'GET' ? request.url.query : null,
+      );
 
   Future<shelf.Response> Function(shelf.Request, String) _cardCall(
     String method,
@@ -190,8 +198,12 @@ class WebStoopRoutes {
   Future<shelf.Response> Function(shelf.Request, String) _creatorCall(
     String method,
     String suffix,
-  ) => (shelf.Request request, String id) =>
-      _relay(request, method, '/creators/${Uri.encodeComponent(id)}$suffix');
+  ) => (shelf.Request request, String id) => _relay(
+        request,
+        method,
+        '/creators/${Uri.encodeComponent(id)}$suffix',
+        query: method == 'GET' ? request.url.query : null,
+      );
 
   /// The bundled AUP text (same source the desktop policy gate renders), so
   /// the web gate shows identical policy content with no duplicated copy.

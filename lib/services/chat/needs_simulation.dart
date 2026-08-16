@@ -5,7 +5,7 @@
 //
 // Front Porch AI is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
-// the Software Foundation, either version 3 of the License, or
+// the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
 // Front Porch AI is distributed in the hope that it will be useful,
@@ -58,6 +58,11 @@ class NeedsSimulation {
   final bool Function() getNeedsSimEnabled;
   final Map<String, int>? Function()? getCustomDecayRates;
 
+  /// The card's Needs delta strength (1–5). Optional: absent means 1x, which
+  /// is what every existing test harness and the group-member path assume.
+  /// Read only by [sceneDepletionCap].
+  final int Function()? getNeedsSimStrength;
+
   /// Today's story weather, or null when the feature is off. Optional so
   /// existing construction sites/tests are untouched; the weather decay
   /// modifiers below no-op on null. Per-chat shared state → both the 1:1 and
@@ -82,6 +87,7 @@ class NeedsSimulation {
     required this.setGroupNeeds,
     required this.getEnjoysLowHygiene,
     required this.getNeedsSimEnabled,
+    this.getNeedsSimStrength,
     this.getCustomDecayRates,
     this.getWeather,
   });
@@ -369,6 +375,71 @@ class NeedsSimulation {
     _lastSceneReason = null;
   }
 
+  /// How far ONE exchange may push a need DOWN, at strength 1x.
+  ///
+  /// How far ONE exchange may push each need DOWN, at strength 1x.
+  ///
+  /// THE RULE: a described EVENT must visibly beat a standard turn's drift.
+  /// Maintainer, 2026-08-08: "I would like needs to be variable still. For
+  /// example drinking a soda would cause bladder to drop… more than on a
+  /// standard turn." Every number here is at least 2x — usually 3x — that
+  /// need's entry in [needDecay], so narrating something always outpaces
+  /// ambient decline. A first draft set bladder to 6, exactly its decay rate,
+  /// which would have made drinking a soda indistinguishable from nothing
+  /// happening. That is the flatness this table exists to avoid, and
+  /// needs_depletion_cap_test asserts the margin rather than trusting it.
+  ///
+  /// PER-NEED, because a single number is either too tight for the needs whose
+  /// mechanism IS events or too loose for the ones decay already owns:
+  ///   * bladder (decay 6) gets the widest bite. It is a fast clock AND the
+  ///     need most obviously moved by a described act — drinking, a long
+  ///     drive, holding it. 18 is about three turns of normal build.
+  ///   * hygiene (decay 1) barely drifts at all; sex, mud and rain are the
+  ///     only things that move it, so it needs room despite the tiny decay.
+  ///   * hunger, energy, comfort sit at 12 — a real cost, not a cliff.
+  ///   * social and fun move most through RESTORATION (company, play), which
+  ///     is unbounded, so their depletion bite is the smallest.
+  ///
+  /// What this is NOT: a licence for the eval to drive the simulation. Decay
+  /// still owns the ambient slide, and the prompt now tells the eval to report
+  /// a negative ONLY for something the scene explicitly describes costing her.
+  /// These are the ceiling on a real event, not a per-turn expectation.
+  static const Map<String, int> sceneDepletionAt1x = {
+    'hunger': 12,
+    'bladder': 18,
+    'energy': 12,
+    'social': 10,
+    'fun': 10,
+    'hygiene': 15,
+    'comfort': 12,
+  };
+
+  /// Fallback for a key not in the table (there is none today; a future need
+  /// gets a middling number until someone chooses one for it).
+  static const int sceneDepletionFallback = 10;
+
+  /// [key]'s depletion bound at the card's Needs strength (1–5).
+  ///
+  /// `base + 2 per notch above 1x`, so every notch does something and the
+  /// widest bite tops out at 26 — still under the old fixed −30, so no strength
+  /// setting is worse off than before this change. A multiplicative scale would
+  /// have put bladder at 54 and reintroduced exactly the cliff being fixed.
+  int sceneDepletionCapFor(String key) {
+    final base = sceneDepletionAt1x[key] ?? sceneDepletionFallback;
+    final strength = (getNeedsSimStrength?.call() ?? 1).clamp(1, 5);
+    return base + (strength - 1) * 2;
+  }
+
+  /// Apply a scene's deltas. A PURE MUTATOR — it does not judge magnitude.
+  ///
+  /// The depletion policy deliberately does NOT live here, and that was worth
+  /// getting wrong once to learn. Putting it on this method bounded the whole
+  /// vector, which broke two tests that use it merely to ARRANGE a state (a
+  /// composer test making a character hungry, and the raw-clamp golden) — the
+  /// bound was reaching past the bug. What needs limiting is what a MODEL
+  /// proposes about a scene, not what the simulation is allowed to hold.
+  /// See [sceneDepletionCap] and its single application point in
+  /// needs_impact_evaluator.
   void applySceneImpact(NeedsImpact impact) {
     if (impact.deltas.isNotEmpty) {
       for (final entry in impact.deltas.entries) {
@@ -535,12 +606,21 @@ class NeedsSimulation {
     int value, {
     bool? enjoysLowHygieneOverride,
   }) {
-    int step = getNeedStep(need, value);
     final enjoysLow = enjoysLowHygieneOverride ?? getEnjoysLowHygiene();
     if (enjoysLow && need == 'hygiene') {
-      step = (5 - step).clamp(0, 5);
+      // VALUE inversion, not index inversion. The step bands are asymmetric
+      // (widths 1/15/15/15/20/35 over [0,15,30,45,65]), so the old `5 - step`
+      // mapped the wide sated band onto "catastrophic" and the 1-point band
+      // onto "sated": a filthy character (value 10) read as mildly
+      // freshly-washed and NEVER reached the silent sated state, while a
+      // merely clean one (value 90) was described as scrubbed-raw
+      // catastrophic. Walking the same bands from the other end
+      // (100 - value) is what the hygieneSteppedTextWhenEnjoysLow doc has
+      // always described. Golden regenerated with maintainer approval
+      // 2026-08-15.
+      return getNeedStep(need, 100 - value);
     }
-    return step;
+    return getNeedStep(need, value);
   }
 
   /// Returns the lowest (worst) needs that should receive background state

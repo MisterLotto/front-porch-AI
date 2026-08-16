@@ -164,9 +164,17 @@ class UiSettings with SettingsBase {
         _customBackgrounds = [];
       }
     }
-    // Force token throttle OFF for all users (existing preference deleted)
-    prefs?.remove(k('display_buffer_enabled'));
-    _displayBufferEnabled = false;
+    // One-time (df57bb0d): force the throttle off for users who had it on.
+    // Must stay guarded — the old unconditional remove ran on EVERY launch,
+    // so the Settings switch ("Smooth Output Buffer") could never survive a
+    // restart, which is not what that change intended ("users can re-enable
+    // via UI if desired").
+    if (prefs?.getBool(k('display_buffer_reset_done')) != true) {
+      prefs?.remove(k('display_buffer_enabled'));
+      prefs?.setBool(k('display_buffer_reset_done'), true);
+    }
+    _displayBufferEnabled =
+        prefs?.getBool(k('display_buffer_enabled')) ?? false;
     _targetDisplayTps = prefs?.getDouble(k('target_display_tps')) ?? 30.0;
     _bufferDurationSeconds =
         prefs?.getDouble(k('buffer_duration_seconds')) ?? 3.0;

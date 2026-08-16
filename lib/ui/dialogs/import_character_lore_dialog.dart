@@ -63,6 +63,23 @@ class _ImportCharacterLoreDialogState extends State<_ImportCharacterLoreDialog> 
     ];
   }
 
+  // Memoized per open dialog: the tile's avatar check ran per row per rebuild,
+  // and this list rebuilds on every search keystroke (and every hover, via the
+  // tile's own MouseRegion) — N existsSync per keypress is the io-lint bug
+  // class (same fix as scene_guest_picker_dialog).
+  final Map<String, ImageProvider?> _avatarCache = {};
+
+  ImageProvider? _avatar(CharacterCard c) {
+    final path = c.imagePath;
+    if (path == null || path.isEmpty) return null;
+    return _avatarCache.putIfAbsent(
+      path,
+      () => File(path).existsSync() // io-ok: memoized per dialog
+          ? FileImage(File(path))
+          : null,
+    );
+  }
+
   void _pick(CharacterCard c) {
     final clones = c.lorebook!.entries.map((e) => e.clone()).toList();
     Navigator.pop(context, clones);
@@ -208,6 +225,7 @@ class _ImportCharacterLoreDialogState extends State<_ImportCharacterLoreDialog> 
                             return _CharacterLoreTile(
                               character: c,
                               entryCount: count,
+                              avatar: _avatar(c),
                               onTap: () => _pick(c),
                             );
                           },
@@ -248,11 +266,13 @@ class _ImportCharacterLoreDialogState extends State<_ImportCharacterLoreDialog> 
 class _CharacterLoreTile extends StatefulWidget {
   final CharacterCard character;
   final int entryCount;
+  final ImageProvider? avatar;
   final VoidCallback onTap;
 
   const _CharacterLoreTile({
     required this.character,
     required this.entryCount,
+    required this.avatar,
     required this.onTap,
   });
 
@@ -266,8 +286,7 @@ class _CharacterLoreTileState extends State<_CharacterLoreTile> {
   @override
   Widget build(BuildContext context) {
     final c = widget.character;
-    final path = c.imagePath;
-    final hasFile = path != null && path.isNotEmpty && File(path).existsSync();
+    final avatar = widget.avatar;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
@@ -297,8 +316,8 @@ class _CharacterLoreTileState extends State<_CharacterLoreTile> {
                   radius: 20,
                   backgroundColor:
                       AppColors.formMasterAccent.withValues(alpha: 0.18),
-                  backgroundImage: hasFile ? FileImage(File(path)) : null,
-                  child: hasFile
+                  backgroundImage: avatar,
+                  child: avatar != null
                       ? null
                       : Text(
                           c.name.isNotEmpty ? c.name[0].toUpperCase() : '?',

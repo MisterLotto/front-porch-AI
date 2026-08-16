@@ -274,8 +274,32 @@ void main() {
       group: 'dialogs_remaining',
       name: 'image_crop',
       surface: const Size(700, 700),
-      // CropController animation tickers.
+      // The loading spinner animates until the real-async image decode
+      // lands — settle would time out on it; afterPump waits it out so the
+      // capture is the LOADED stage, not the spinner. (Harness updated
+      // 2026-08-14 with the blank-slate crop rewrite: the old
+      // crop_your_image CropController tickers are gone.)
       settle: false,
+      afterPump: (tester) async {
+        for (var i = 0; i < 100; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 20)),
+          );
+          await tester.pump();
+          if (find.byType(CircularProgressIndicator).evaluate().isEmpty) {
+            break;
+          }
+        }
+        // The dims decode gates the spinner; Image.memory rasters on its
+        // own async track — give it a few real-async cycles too, so the
+        // capture shows the grey test image, not a pre-frame blank.
+        for (var i = 0; i < 5; i++) {
+          await tester.runAsync(
+            () => Future<void>.delayed(const Duration(milliseconds: 20)),
+          );
+          await tester.pump();
+        }
+      },
     );
   });
 

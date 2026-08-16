@@ -58,6 +58,8 @@ export function ChatComposer({
   canMic,
   onDraftChange,
   cast,
+  impersonateFill,
+  onImpersonate,
 }: {
   onSend: (text: string) => void;
   onStop: () => void;
@@ -68,6 +70,10 @@ export function ChatComposer({
   /** Present cast for the "@" autocomplete (host + guests, or group members).
    *  Omit / a lone host disables the popup. */
   cast?: { name: string; isHost: boolean; isLite: boolean }[];
+  /** Live Impersonate fill from the server — REPLACE the draft, do not append. */
+  impersonateFill?: string | null;
+  /** Desktop wand: AI writes the user's next line from the current draft. */
+  onImpersonate?: (prefix: string) => void;
 }) {
   const [draft, setDraftState] = useState('');
   const setDraft = (v: string | ((d: string) => string)) => {
@@ -134,6 +140,19 @@ export function ChatComposer({
       bd.scrollTop = ta.scrollTop;
     }
   }, [draft]);
+
+  // Server-driven Impersonate fill (full snapshot each tick, not a delta).
+  useEffect(() => {
+    if (impersonateFill == null) return;
+    setDraft(impersonateFill);
+    setCaret(impersonateFill.length);
+    requestAnimationFrame(() => {
+      const ta = taRef.current;
+      if (!ta) return;
+      ta.focus();
+      ta.setSelectionRange(impersonateFill.length, impersonateFill.length);
+    });
+  }, [impersonateFill]);
 
   // Keep the coloured backdrop scrolled in lock-step with the textarea.
   const syncScroll = () => {
@@ -249,6 +268,18 @@ export function ChatComposer({
           rows={1}
         />
       </div>
+      {onImpersonate && (
+        <button
+          type="button"
+          className="icon-btn impersonate-btn"
+          title="Impersonate (AI writes your message)"
+          aria-label="Impersonate"
+          disabled={isGenerating}
+          onClick={() => onImpersonate(draft)}
+        >
+          ✦
+        </button>
+      )}
       {canMic && (
         <MicButton
           disabled={isGenerating}

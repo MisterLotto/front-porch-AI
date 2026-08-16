@@ -34,6 +34,28 @@ import 'package:uuid/uuid.dart';
 /// PNG rewrites/reimports so that library dbId and chat history are never lost
 /// on realism/needs edits (import path now updates in place for stable matches).
 
+/// Coerce an untrusted JSON value into a list of non-blank trimmed phrases.
+///
+/// Every authored phrase list on a card (ambitions, likes, dislikes, the
+/// intimate pair) parses through here. `is List` rather than `as List?` on
+/// purpose: a card can arrive from ANYWHERE — a PNG someone mailed you, a
+/// Stoop download, a hand-edited JSON — so a field that is present but the
+/// wrong type must yield an empty list rather than throw and fail the whole
+/// import. The same cast bug was caught in review on the Stoop card panel
+/// (2026-08-07); this is the one place it can now be got wrong.
+List<String> _phrases(Object? raw) => [
+  for (final v in raw is List ? raw : const [])
+    if (v is String && v.trim().isNotEmpty) v.trim(),
+];
+
+/// The nested `intimate_preferences` object, or an empty map when absent or
+/// malformed. Nested (rather than two flat keys) so the 18+ pair travels as
+/// one strippable object.
+Map<String, dynamic> _intimate(Map<String, dynamic> realism) {
+  final v = realism['intimate_preferences'];
+  return v is Map ? Map<String, dynamic>.from(v) : const {};
+}
+
 class FrontPorchExtensions {
   bool realismEnabled;
   int shortTermBond; // -300 to 300
@@ -62,6 +84,37 @@ class FrontPorchExtensions {
   /// not story state: they travel with the card; per-chat PROGRESS lives in
   /// journal cards (Living Time §6). Authored in the character editor.
   List<String> ambitions;
+
+  /// What this character is drawn to, and what puts them off — short phrases,
+  /// authored on the card. Identity like [ambitions]: they travel with it.
+  ///
+  /// The precedent already in-tree is [enjoysLowHygiene]: ONE hardcoded
+  /// preference that flips needs behaviour. These make that pattern
+  /// author-editable data instead of a single boolean somebody had to write
+  /// code for. Two consumers: the behavioural injection (so the character
+  /// ACTS on them, which needs no engine) and the realism eval prompts (so
+  /// bond/trust/emotion deltas become character-specific, which does).
+  List<String> likes;
+  List<String> dislikes;
+
+  /// The 18+ half of the same idea. Kept as its own pair rather than mixed
+  /// into [likes]/[dislikes] so it can be hidden, or stripped from a share,
+  /// with one decision instead of phrase-by-phrase judgement. Surfaces in
+  /// editors ONLY when NSFW is enabled. Transported nested under
+  /// `intimate_preferences: {into: [], not_into: []}`.
+  List<String> intimateInto;
+  List<String> intimateNotInto;
+
+  /// Starting Pockets & Wardrobe — what the character already has when a chat
+  /// opens: `{worn: [...], carrying: [...]}`, entries either plain strings or
+  /// `{name, state}`. Optional and additive, so older apps and The Stoop
+  /// ignore it and a card without one simply starts empty.
+  ///
+  /// Kept as a raw map rather than a typed Pockets: this is the MODEL layer and
+  /// it must not depend on a chat service leaf. The one place that reads it
+  /// (chat_service_pockets.dart) parses it through Pockets.fromJson, which
+  /// already tolerates both shapes.
+  Map<String, dynamic> inventory;
 
   // Optional director/verifier thread for Realism Engine + Needs (ingests full latent context + deltas JSON;
   // rules + optional reprocess with corrections up to full per-eval clamp limits; per-char in Optional Features).
@@ -159,6 +212,11 @@ class FrontPorchExtensions {
     // Never mutated in place — always replaced wholesale (copyWith/editor),
     // so the const default is safe.
     this.ambitions = const [],
+    this.likes = const [],
+    this.dislikes = const [],
+    this.intimateInto = const [],
+    this.intimateNotInto = const [],
+    this.inventory = const {},
 
     // Realism Verification (Director/Verifier) — optional, off by default (zero cost when off)
     this.realismVerificationEnabled = false,
@@ -232,6 +290,14 @@ class FrontPorchExtensions {
         'needs_sim_enabled': needsSimEnabled,
         'enjoys_low_hygiene': enjoysLowHygiene,
         'ambitions': ambitions,
+        'likes': likes,
+        'dislikes': dislikes,
+        // Nested so the 18+ pair can be stripped from a share as one object.
+        'intimate_preferences': {
+          'into': intimateInto,
+          'not_into': intimateNotInto,
+        },
+        if (inventory.isNotEmpty) 'inventory': inventory,
         'realism_verification_enabled': realismVerificationEnabled,
         'realism_verification_max_reprocesses':
             realismVerificationMaxReprocesses,
@@ -276,7 +342,15 @@ class FrontPorchExtensions {
   }
 
   factory FrontPorchExtensions.fromJson(Map<String, dynamic> json) {
-    final realism = json['realism_engine'] as Map<String, dynamic>? ?? {};
+    // `is Map` + copy rather than `as Map<String, dynamic>?`: jsonDecode always
+    // hands back Map<String, dynamic>, but a card map BUILT IN DART (a group
+    // member seed, a test fixture, anything assembled from literals) can be
+    // Map<dynamic, dynamic>, and the old cast threw on it — failing the entire
+    // card import over a type argument nobody chose deliberately.
+    final raw = json['realism_engine'];
+    final realism = raw is Map
+        ? Map<String, dynamic>.from(raw)
+        : <String, dynamic>{};
     return FrontPorchExtensions(
       stableId: realism['stable_id'] as String?,
       realismEnabled: realism['enabled'] as bool? ?? false,
@@ -294,10 +368,14 @@ class FrontPorchExtensions {
       chaosModeEnabled: realism['chaos_mode_enabled'] as bool? ?? false,
       needsSimEnabled: realism['needs_sim_enabled'] as bool? ?? false,
       enjoysLowHygiene: realism['enjoys_low_hygiene'] as bool? ?? false,
-      ambitions: [
-        for (final a in realism['ambitions'] as List? ?? const [])
-          if (a is String && a.trim().isNotEmpty) a.trim(),
-      ],
+      ambitions: _phrases(realism['ambitions']),
+      likes: _phrases(realism['likes']),
+      dislikes: _phrases(realism['dislikes']),
+      intimateInto: _phrases(_intimate(realism)['into']),
+      intimateNotInto: _phrases(_intimate(realism)['not_into']),
+      inventory: realism['inventory'] is Map
+          ? Map<String, dynamic>.from(realism['inventory'] as Map)
+          : const {},
       realismVerificationEnabled:
           realism['realism_verification_enabled'] as bool? ?? false,
       realismVerificationMaxReprocesses:
@@ -370,6 +448,11 @@ class FrontPorchExtensions {
     bool? needsSimEnabled,
     bool? enjoysLowHygiene,
     List<String>? ambitions,
+    List<String>? likes,
+    List<String>? dislikes,
+    List<String>? intimateInto,
+    List<String>? intimateNotInto,
+    Map<String, dynamic>? inventory,
     bool? realismVerificationEnabled,
     int? realismVerificationMaxReprocesses,
     int? realismVerificationStrictness,
@@ -424,6 +507,11 @@ class FrontPorchExtensions {
       needsSimEnabled: needsSimEnabled ?? this.needsSimEnabled,
       enjoysLowHygiene: enjoysLowHygiene ?? this.enjoysLowHygiene,
       ambitions: ambitions ?? this.ambitions,
+      likes: likes ?? this.likes,
+      dislikes: dislikes ?? this.dislikes,
+      intimateInto: intimateInto ?? this.intimateInto,
+      intimateNotInto: intimateNotInto ?? this.intimateNotInto,
+      inventory: inventory ?? this.inventory,
       realismVerificationEnabled:
           realismVerificationEnabled ?? this.realismVerificationEnabled,
       realismVerificationMaxReprocesses:
@@ -503,6 +591,10 @@ class CharacterCard {
   /// (e.g. 'af_heart' for Kokoro, 'en_US-lessac-medium' for Piper, etc.).
   /// The UI now prevents (and warns about) cross-engine assignments.
   String? ttsVoice;
+  /// V2 spec credits — round-trip so Stoop/Chub author names survive import.
+  String creator;
+  String creatorNotes;
+  String characterVersion;
   String? dbId; // UUID primary key (runtime only, not serialized)
   DateTime? createdAt; // library "date added" from DB (runtime only, not serialized)
   FrontPorchExtensions? frontPorchExtensions; // V2.5 Realism Engine defaults
@@ -512,6 +604,10 @@ class CharacterCard {
   int primeAvatarIndex = 1; // 1-based index of the prime (default) avatar
 
   CharacterCard({
+    this.dbId,
+    this.creator = '',
+    this.creatorNotes = '',
+    this.characterVersion = '',
     required this.name,
     this.description = '',
     this.personality = '',
@@ -568,6 +664,9 @@ class CharacterCard {
       'character_book': lorebook == null ? null : encodeCharacterBook(lorebook!),
       'world_names': worldNames,
       if (ttsVoice != null) 'tts_voice': ttsVoice,
+      if (creator.isNotEmpty) 'creator': creator,
+      if (creatorNotes.isNotEmpty) 'creator_notes': creatorNotes,
+      if (characterVersion.isNotEmpty) 'character_version': characterVersion,
       'extensions': ?extensions,
     };
   }

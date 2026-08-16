@@ -71,18 +71,18 @@ extension ChatServiceCast on ChatService {
         .where((c) => _getCharacterIdFromCard(c) != memberId)
         .toList();
     _groupManager?.refreshCharacters(remaining);
-    _pendingMemberExit = member;
+    _sceneGuest.pendingMemberExit = member;
     // 3. Arm the UNDO snackbar; the just-generated goodbye turn is what undo
     //    deletes (its realism rollback included). Mirrors armSceneGuestExitUndo
-    //    but without the lite `_exitUndoGuest` marker so undoLastExit takes the
+    //    but without the lite `_sceneGuest.exitUndoGuest` marker so undoLastExit takes the
     //    group branch.
-    _exitUndoMessage =
+    _sceneGuest.exitUndoMessage =
         (_messages.isNotEmpty &&
             !_messages.last.isUser &&
             _messages.last.sender != 'System')
         ? _messages.last
         : null;
-    _exitUndoOfferName = member.name;
+    _sceneGuest.exitUndoOfferName = member.name;
     await _saveChat();
     notifyListeners();
     return true;
@@ -93,8 +93,8 @@ extension ChatServiceCast on ChatService {
   /// is pending. The goodbye turn was already narrated at exit time, so this only
   /// does the destructive half via the shared removal path.
   Future<void> _commitPendingMemberExit() async {
-    final member = _pendingMemberExit;
-    _pendingMemberExit = null;
+    final member = _sceneGuest.pendingMemberExit;
+    _sceneGuest.pendingMemberExit = null;
     if (member == null) return;
     final repo = _groupChatRepository;
     if (repo == null || _activeGroup == null) return;
@@ -140,6 +140,9 @@ extension ChatServiceCast on ChatService {
     // member instance id, so this never touches another character's rings).
     if (_currentSessionId != null) {
       await _growthStore.deleteAllFor(_currentSessionId!, charId);
+      // Same reasoning for the diary: the removed member's journal cards are
+      // keyed by this instance id, so nothing would ever read them again.
+      await _moveJournalCards(_currentSessionId!, charId, null);
       await _refreshGrowthCache();
     }
   }
@@ -225,8 +228,14 @@ extension ChatServiceCast on ChatService {
     // per-speaker load only ran above when realism is on; reading the live nsfw
     // scalar otherwise could pick up a stale impersonated value).
     final bool soleNsfwEnabled =
-        (_groupRealism[soleId]?['nsfwCooldownEnabled'] as bool?) ??
+        _groupRealism[soleId]?.nsfwCooldownEnabled ??
         _nsfwService.nsfwCooldownEnabled;
+    // Same reasoning for her Pockets record, and read here for the same reason:
+    // step 4 re-enters as a 1:1, which clears _groupRealism. Carried regardless
+    // of realism because Pockets does not depend on it — the pass is gated on
+    // pocketsEnabled alone, so a survivor can be holding her keys with the
+    // engine off. Dropping this is how a collapse would empty her hands.
+    final Pockets? solePockets = _groupRealism[soleId]?.pockets;
     final bool solePassageEnabled = _timeService.passageOfTimeEnabled;
     final bool soleChaosEnabled = _chaosModeService.chaosModeEnabled;
     final int soleChaosPressure = _chaosModeService.chaosPressure;
@@ -287,6 +296,12 @@ extension ChatServiceCast on ChatService {
         originId,
         chatId: sessionId,
       );
+      // The diary re-keys with everything else. Journal cards (memories, item
+      // placements, promises) are stored under the MEMBER instance id, and the
+      // collapsed 1:1 reads them under originId — without this the survivor
+      // keeps her quests and rings but opens with an empty Journal while the
+      // rows sit unreachable in the very same session.
+      await _moveJournalCards(sessionId, soleId, originId);
       await _db.deleteDataBankEntriesForCharacter(soleId);
     } catch (e) {
       debugPrint('[Cast] state re-key (non-fatal): $e');
@@ -307,8 +322,6 @@ extension ChatServiceCast on ChatService {
       _realismEnabled = true;
       _needsSimEnabled = wasNeedsOn;
       _relationshipService.restoreFromMessageState(snapshot);
-      _moodDecayCounter =
-          (snapshot['moodDecayCounter'] as int?) ?? _moodDecayCounter;
       _characterEmotion =
           (snapshot['characterEmotion'] as String?) ?? _characterEmotion;
       _emotionIntensity =
@@ -332,6 +345,7 @@ extension ChatServiceCast on ChatService {
     // Enable-flags + author note (persisted by _doSaveChat below) — carry
     // regardless of realism so the NSFW toggle, passage-of-time, chaos, and the
     // note are not reset to defaults on collapse.
+    _pockets = solePockets;
     _nsfwService.setNsfwCooldownEnabled(soleNsfwEnabled);
     _timeService.setPassageOfTimeEnabled(solePassageEnabled);
     _chaosModeService.loadScalars(
@@ -360,6 +374,33 @@ extension ChatServiceCast on ChatService {
     notifyListeners();
     debugPrint('[Cast] collapsed group "${group.name}" → 1:1 with ${origin.name}');
     return true;
+  }
+
+  /// Move one owner's journal cards inside a chat: re-key them to [toCharacterId]
+  /// (cast collapse — the diary follows its owner), or DELETE them when that is
+  /// null (hard member removal — mirrors the growth-ring/objective deletes, so a
+  /// removed member leaves no unreadable rows behind). Row-by-row on purpose:
+  /// a per-owner diary is capped at a few dozen cards, and this keeps the
+  /// re-key on the existing public store/db surface.
+  Future<void> _moveJournalCards(
+    String sessionId,
+    String fromCharacterId,
+    String? toCharacterId,
+  ) async {
+    final cards = await _journalStore.cardsFor(sessionId, fromCharacterId);
+    for (final card in cards) {
+      if (toCharacterId == null) {
+        await _db.deleteJournalCard(card.id);
+      } else {
+        await _db.updateJournalCard(
+          card.id,
+          JournalMemoriesCompanion(
+            characterId: drift.Value(toCharacterId),
+            updatedAt: drift.Value(DateTime.now()),
+          ),
+        );
+      }
+    }
   }
 
   /// Carry the host's full captured 1:1 [state] (taken before the fork switched
@@ -397,8 +438,6 @@ extension ChatServiceCast on ChatService {
     if (realismOn) {
       _realismEnabled = true;
       _relationshipService.restoreFromMessageState(state);
-      _moodDecayCounter =
-          (state['moodDecayCounter'] as int?) ?? _moodDecayCounter;
       _characterEmotion =
           (state['characterEmotion'] as String?) ?? _characterEmotion;
       _emotionIntensity =
@@ -477,6 +516,41 @@ extension ChatServiceCast on ChatService {
             injectionDepth: drift.Value(o.injectionDepth),
           ),
         );
+      }
+      // Journal cards -> the host MEMBER instance id in the new group session,
+      // the diary twin of the growth carry above. The fork copies EVERY message
+      // into the new session (so no card can cite a message that no longer
+      // happened) and carries the recap cursor with it, meaning a skipped diary
+      // could never be rebuilt: the host would open the conversation she is
+      // visibly mid-way through with an empty Journal. Copy, not move — the
+      // preserved 1:1 stays the revert snapshot.
+      try {
+        for (final card in await _journalStore.cardsFor(
+          hostSessionId,
+          originalCharId,
+        )) {
+          await _db.insertJournalCard(
+            JournalMemoriesCompanion(
+              sessionId: drift.Value(_currentSessionId!),
+              characterId: drift.Value(hostId),
+              content: drift.Value(card.content),
+              category: drift.Value(card.category),
+              emotionLabel: drift.Value(card.emotionLabel),
+              emotionIntensity: drift.Value(card.emotionIntensity),
+              originalEmotionLabel: drift.Value(card.originalEmotionLabel),
+              sourceMessageIds: drift.Value(card.sourceMessageIds),
+              metadata: drift.Value(card.metadata),
+              heat: drift.Value(card.heat),
+              pinned: drift.Value(card.pinned),
+              accessCount: drift.Value(card.accessCount),
+              embedding: drift.Value(card.embedding),
+              dimensions: drift.Value(card.dimensions),
+              lastAccessedAt: drift.Value(card.lastAccessedAt),
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint('[Cast] host journal carry-on-fork (non-fatal): $e');
       }
       // RAG memory -> the GROUP's shared pool (keyed 'group_<id>' via
       // _getCharacterId, not per-member) so the cast can recall pre-conversion

@@ -21,6 +21,7 @@ import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/chat/chat.dart';
 import 'package:front_porch_ai/services/story/faithful_mode.dart';
+import 'package:front_porch_ai/services/web/facade/journal_web_surface.dart';
 import 'package:front_porch_ai/services/web/streaming/stream_hub.dart';
 
 /// Thin adapter for the chat *tools* sidebar — the memory/summary/chaos/NSFW/
@@ -63,17 +64,32 @@ class ChatToolsFacade {
     return {
       'realismEnabled': _chat.realismEnabled,
       'needsEnabled': _chat.needsSimEnabled,
-      // Global One-Shot Eval flag (fuses the multi-call realism evals into one
-      // LLM call). A single StorageService flag — identical in 1:1 and group, so
-      // no per-character/group branch is needed (parity inherited).
+      // Global One-Shot Eval setting (fuses the multi-call realism evals into
+      // one LLM call). A single StorageService setting — identical in 1:1 and
+      // group, so no per-character/group branch is needed (parity inherited).
+      // The bool stays for additive-contract discipline (old readers keep
+      // working: true == explicitly ON); the tri-state mode is the real
+      // control since 2026-08-10.
       'realismOneShotEval': _storage.realismOneShotEval,
+      'realismOneShotMode': _storage.oneShotMode.name,
       'focusedId': focused?.id,
       'memory': {
         'ragEnabled': _storage.ragEnabled,
         'ragRetrievalCount': _storage.ragRetrievalCount,
         'ragWindowSize': _storage.ragWindowSize,
+        // The last reply's retrieval receipt (rag_injection.dart wire
+        // shape) — the same anti-black-box surface the desktop sidebar
+        // shows. Additive + nullable per the API compatibility rules.
+        'lastRagReceipt': _chat.lastRagReceipt,
+        // Embedding-engine status (desktop RagEngineCard parity). Model
+        // download only runs on the host desktop; web surfaces progress
+        // and tells the user to use desktop if setup is needed.
+        'embedding':
+            _chat.memoryService?.embeddingService.statusSnapshot,
         'journalEnabled': _storage.journalEnabled,
         'journalInterval': _storage.journalInterval,
+        // Review-first (audit P2.12) — parks proposals until Apply/Discard.
+        'journalReviewFirst': _storage.journalReviewFirst,
         'importLlmertaPorchMemories': _storage.importLlmertaPorchMemories,
         'growthEnabled': _storage.characterEvolutionEnabled,
         'growthInterval': _storage.growthInterval,
@@ -114,16 +130,57 @@ class ChatToolsFacade {
       },
       // Ambitions (Living Time §6) for the focused participant — additive;
       // same ChatService.ambitionsFor merge the desktop sidebar reads.
-      'ambitions': focusedCard == null || (focused?.isLite ?? false)
+      // Objectives off ⇒ empty, matching the desktop sidebar row: quest
+      // completion is the only thing that moves progress, so the web would
+      // otherwise show a stage word frozen for the life of the chat.
+      // Standing Mood — the same string the desktop sidebar puts under the
+      // portrait, from the same getter, so the two can never disagree about
+      // what she walked in carrying. '' when the feature is off or the day is
+      // unremarkable.
+      'standingMood': _chat.standingMoodSummary,
+      'ambitions':
+          focusedCard == null ||
+              (focused?.isLite ?? false) ||
+              !_chat.objectivesActive
           ? const []
-          : [
-              for (final a in _chat.ambitionsFor(focusedCard))
-                {
-                  'text': a.text,
-                  'progress': a.progress,
-                  'stage': AmbitionService.stageWord(a.progress),
-                },
-            ],
+          : () {
+              // The quest climbing each ambition (v46) — the same
+              // AmbitionService merge the desktop sidebar row uses, over the
+              // same accessor, so web and desktop cannot disagree about which
+              // step belongs to which mountain. Computed once per block
+              // rather than per ambition.
+              final steps = AmbitionService.activeStepsFrom(
+                _chat.getObjectivesForGroupCharacter(focusedCard),
+              );
+              return [
+                for (final a in _chat.ambitionsFor(focusedCard))
+                  {
+                    'text': a.text,
+                    'progress': a.progress,
+                    'stage': AmbitionService.stageWord(a.progress),
+                    // Additive + nullable: older bundles ignore it.
+                    'step': steps[a.text],
+                  },
+              ];
+            }(),
+      // Pockets & Wardrobe for the focused participant. Same record and same
+      // per-character resolution the desktop sidebar reads, so the two
+      // surfaces cannot disagree about what she is holding. Absent (null)
+      // when the switch is off or nothing is focused, so the web panel
+      // vanishes rather than going stale. Feature ON with no record sends an
+      // EMPTY record instead of null (2026-08-13, add-by-hand parity): the
+      // panel must render its add row so the FIRST item can be added — the
+      // same off-absent / on-even-when-empty gate the desktop sidebar got.
+      // toJsonOn, not toJson: set-aside clothing expired by the story day,
+      // so the PWA never shows yesterday's outfit in the window before the
+      // next pass rewrites the stored record.
+      'pockets':
+          focusedCard == null ||
+              !_chat.pocketsFeatureEnabled ||
+              _isGuestFocus(focused)
+          ? null
+          : (_chat.pocketsFor(_chat.characterIdFor(focusedCard)) ?? Pockets())
+                .toJsonOn(_chat.storyDayCount),
       'time': {
         'timeOfDay': time.timeOfDay,
         'dayCount': time.dayCount,
@@ -210,6 +267,15 @@ class ChatToolsFacade {
     return null;
   }
 
+  /// A focused Scene Guest (1:1 non-host cast entry). Guests carry NO pockets
+  /// record — but the 1:1 record accessors ignore the character id (there is
+  /// only `_pockets`, the host's), so a guest-focused pocket surface would
+  /// silently read AND WRITE the host's kit under the guest's name (hostile
+  /// self-review, 2026-08-13; the ✕ had the same hole). In a group every
+  /// participant is a real member, so this is 1:1-only by construction.
+  bool _isGuestFocus(ChatParticipant? focused) =>
+      focused != null && !focused.isHost && !_chat.isGroupMode;
+
   /// Objectives block for [card] (split primary/secondary). Empty when null.
   Map<String, dynamic> _objectivesBlock(CharacterCard? card) {
     if (card == null) {
@@ -217,6 +283,7 @@ class ChatToolsFacade {
         'primary': null,
         'secondary': const [],
         'isChecking': _chat.isCheckingCompletion,
+        'enabled': _chat.objectivesActive,
       };
     }
     Objective? primary;
@@ -229,6 +296,7 @@ class ChatToolsFacade {
       }
     }
     return {
+      'enabled': _chat.objectivesActive,
       'primary': _objJson(primary),
       'secondary': secondary.map(_objJson).whereType<Map>().toList(),
       'isChecking': _chat.isCheckingCompletion,
@@ -268,11 +336,82 @@ class ChatToolsFacade {
       'isPrimary': o.isPrimary,
       'checkFrequency': o.checkFrequency,
       'tasks': _chat.tasksForObjective(o),
+      // The ambition this quest is a step toward (schema v46). Additive and
+      // nullable — older web bundles ignore the key, and every objective
+      // created before v46 legitimately has none.
+      'servedAmbition': o.servedAmbition,
     };
   }
 
   // ── Toggles (chat-scoped; delegate to the same ChatService methods the
   //    desktop sidebar calls, which persist + handle group parity) ──────────
+  /// Strike one pocket item by hand from the web panel — the same eraser the
+  /// desktop chips have. The extraction bet's whole defense is "a wrong entry
+  /// is one tap from corrected", and the PWA had zero taps (hostile review
+  /// 2026-08-11). Delegates to the SAME [ChatService.removePocketItem] the
+  /// desktop rows call; the section strings mirror the snapshot's JSON keys.
+  /// Unknown section or missing chat is a silent no-op — a stale bundle must
+  /// never turn a tap into a 500.
+  Future<void> removePocketItem({
+    String? participantId,
+    required String section,
+    required int index,
+  }) async {
+    final focused = _focusedParticipant(participantId);
+    // Guests have no record — without this, the strike lands on the HOST's
+    // kit (see _isGuestFocus). The panel is hidden for a guest focus, but
+    // the endpoint must hold the same line a stale bundle could cross.
+    if (_isGuestFocus(focused)) return;
+    final card = focused?.card ?? _chat.activeCharacter;
+    if (card == null) return;
+    final target = switch (section) {
+      'worn' => PocketSection.worn,
+      'carrying' => PocketSection.carrying,
+      'set_aside' => PocketSection.setAside,
+      _ => null,
+    };
+    if (target == null || index < 0) return;
+    await _chat.removePocketItem(
+      _chat.characterIdFor(card),
+      section: target,
+      index: index,
+    );
+    _notify();
+  }
+
+  /// Add one pocket item by hand from the web panel — the other half of the
+  /// eraser, delegating to the SAME [ChatService.addPocketItem] the desktop
+  /// dialog calls (gift → her hands + she knows it came from the user;
+  /// otherwise the surprise Easter egg). Same section strings, same
+  /// silent-no-op contract for a stale bundle.
+  Future<void> addPocketItem({
+    String? participantId,
+    required String section,
+    required String name,
+    bool gift = false,
+  }) async {
+    final focused = _focusedParticipant(participantId);
+    // Same guest guard as the eraser — an add would otherwise write the
+    // HOST's record under the guest's name.
+    if (_isGuestFocus(focused)) return;
+    final card = focused?.card ?? _chat.activeCharacter;
+    if (card == null) return;
+    final target = switch (section) {
+      'worn' => PocketSection.worn,
+      'carrying' => PocketSection.carrying,
+      'set_aside' => PocketSection.setAside,
+      _ => null,
+    };
+    if (target == null || name.trim().isEmpty) return;
+    await _chat.addPocketItem(
+      _chat.characterIdFor(card),
+      section: target,
+      name: name,
+      gift: gift,
+    );
+    _notify();
+  }
+
   Future<void> setRealismEnabled(bool v) async {
     await _chat.setRealismEnabled(v);
     _notify();
@@ -286,12 +425,21 @@ class ChatToolsFacade {
     _notify();
   }
 
-  /// Global One-Shot Eval toggle (experimental). Flips the same
-  /// [StorageService.realismOneShotEval] flag the desktop realism sidebar drives.
-  /// One-shot must produce 1:1-equivalent realism/needs deltas to the multi-call
-  /// path (engine contract), so the web only flips the flag — never branches.
+  /// Legacy bool One-Shot toggle — kept so an older PWA bundle's toggle keeps
+  /// working (additive contract). An explicit toggle maps to On/Off, never
+  /// Auto, the same rule the storage shim applies.
   Future<void> setOneShotEval(bool v) async {
     await _storage.setRealismOneShotEval(v);
+    _notify();
+  }
+
+  /// Tri-state One-Shot mode (Auto / On / Off) — the same
+  /// [StorageService.oneShotMode] the desktop realism sidebar drives. Auto
+  /// resolves per turn against the live backend (resolveOneShotMode); the web
+  /// only stores the choice — never branches — so one-shot/multi-call parity
+  /// is inherited exactly as it was for the bool.
+  Future<void> setOneShotMode(OneShotMode v) async {
+    await _storage.setOneShotMode(v);
     _notify();
   }
 
@@ -524,6 +672,84 @@ class ChatToolsFacade {
     };
   }
 
+  /// Belongings / item-memory cards (web panel — desktop Journal "Belongings"
+  /// tab parity). Placement notes only (`category == item`). Owner defaults
+  /// like [calendar]. Additive endpoint; old clients never call it.
+  Future<Map<String, dynamic>> belongings(String? ownerId) async {
+    final sessionId = _chat.currentSessionId;
+    final owners = _chat.cast.where((p) => !p.isLite).toList();
+    final owner =
+        owners.where((p) => p.id == ownerId).firstOrNull ?? owners.firstOrNull;
+    final rows = <Map<String, dynamic>>[];
+    if (sessionId != null && owner != null) {
+      for (final card in await _chat.journalStore.cardsFor(
+        sessionId,
+        owner.id,
+      )) {
+        if (card.category != 'item') continue;
+        final (day, _) = JournalStore.stampOf(card);
+        rows.add({
+          'id': card.id,
+          'content': card.content,
+          'pinned': card.pinned,
+          'storyDay': day,
+          'item': JournalPhysics.itemOf(card),
+        });
+      }
+    }
+    return {
+      'owner': owner?.id,
+      'ownerName': owner?.name,
+      'belongings': rows,
+    };
+  }
+
+  /// Promise ledger read (web Promises panel — desktop Journal "Promises"
+  /// tab parity). Owner defaults to the first diary owner like [calendar].
+  /// Additive endpoint; old clients never call it.
+  Future<Map<String, dynamic>> promises(String? ownerId) async {
+    final sessionId = _chat.currentSessionId;
+    final owners = _chat.cast.where((p) => !p.isLite).toList();
+    final owner =
+        owners.where((p) => p.id == ownerId).firstOrNull ?? owners.firstOrNull;
+    final rows = <Map<String, dynamic>>[];
+    if (sessionId != null && owner != null) {
+      for (final card in await _chat.journalStore.cardsFor(
+        sessionId,
+        owner.id,
+      )) {
+        final meta = PromiseDebtService.metaOf(card.metadata);
+        if (meta['kind'] != 'promise') continue;
+        final desc = meta['description'];
+        rows.add({
+          'id': card.id,
+          'text': desc is String && desc.isNotEmpty ? desc : card.content,
+          'party': (meta['party'] as String?) == 'char' ? 'char' : 'user',
+          'status': (meta['status'] as String?) ?? 'open',
+        });
+      }
+      // Open commitments first, then the kept/broken history.
+      rows.sort(
+        (a, b) => (a['status'] == 'open' ? 0 : 1).compareTo(
+          b['status'] == 'open' ? 0 : 1,
+        ),
+      );
+    }
+    return {'owner': owner?.id, 'ownerName': owner?.name, 'promises': rows};
+  }
+
+  /// Manual kept/broken — the SAME applier as automatic detection
+  /// (trust/bond deltas, milestone card, cache refresh).
+  Future<bool> resolvePromise({
+    required String ownerId,
+    required String cardId,
+    required bool kept,
+  }) => _chat.resolvePromiseManually(
+    characterId: ownerId,
+    cardId: cardId,
+    kept: kept,
+  );
+
   /// "Our Story" milestones timeline (Living Time §7) — the same read-model
   /// the desktop journal dialog's timeline tab uses (ChatService.milestoneFeed),
   /// so the two surfaces cannot drift. Additive endpoint; owner defaults to
@@ -626,6 +852,7 @@ class ChatToolsFacade {
     await ifBool('journalEnabled', _storage.setJournalEnabled);
     await ifInt('journalInterval', _storage.setJournalInterval);
     await ifInt('journalMaxCards', _storage.setJournalMaxCards);
+    await ifBool('journalReviewFirst', _storage.setJournalReviewFirst);
     await ifBool(
       'importLlmertaPorchMemories',
       _storage.setImportLlmertaPorchMemories,
@@ -636,6 +863,14 @@ class ChatToolsFacade {
     _notify();
   }
 
+  /// Web Journal diary (audit P2.12) — Growth twin for cards + review-first.
+  JournalWebSurface get journalWeb => JournalWebSurface(
+        chat: _chat,
+        storage: _storage,
+        notify: _notify,
+        resolveOwner: _growthOwner,
+      );
+
   // ── Objectives (per-character; scoped to the focused cast participant so a
   //    new goal attaches to whoever the sidebar is focused on) ───────────────
   Future<void> setObjective(
@@ -643,6 +878,7 @@ class ChatToolsFacade {
     bool isPrimary = true,
     String? participantId,
   }) async {
+    if (!_chat.objectivesActive) return;
     await _chat.setObjective(
       goal,
       isPrimary: isPrimary,
@@ -657,6 +893,7 @@ class ChatToolsFacade {
     int taskCount = 5,
     bool nsfw = false,
   }) {
+    if (!_chat.objectivesActive) return Future.value(false);
     return _withObjective(id, (o) async {
       await _chat.generateObjectiveTasks(o, taskCount: taskCount, nsfw: nsfw);
     });

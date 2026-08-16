@@ -261,6 +261,17 @@ void main() {
           'Bex $bexBefore->${chatService.getAffectionForGroupCharacter(bex)})',
     );
 
+    // The bond moves in memory during turn 3's PRE-GEN eval, long before the
+    // turn is over: generation, the post-gen checks, and the settling section
+    // — which is what PERSISTS _groupRealism to the DB — are all still
+    // running at this point. Capturing and reloading without this barrier
+    // raced that persist, and on slower Windows runners the reload read the
+    // previous turn's numbers (the "expected 26, got 13" CI flake that fired
+    // on two consecutive days, including on a docs-only commit). waitSendable
+    // insists the whole turn — isSettlingTurn included — is finished before
+    // any state below is trusted.
+    await d.waitSendable();
+
     final adaBond = chatService.getAffectionForGroupCharacter(ada);
     final bexBond = chatService.getAffectionForGroupCharacter(bex);
     final adaMoved = adaBond != adaBefore;
@@ -303,6 +314,20 @@ void main() {
         );
       }
     }
+
+    // THE BARRIER (added 2026-08-03, maintainer-approved): the turn is not
+    // over when the bond moves in memory. The pre-generation eval moves the
+    // scalar and fires a fire-and-forget save; the AWAITED save runs at the
+    // end of the turn's post-generation bookkeeping. Reloading before that
+    // settles reads the previous save — which is exactly what happened on the
+    // Windows CI runner ("Ada's bond must survive a group session reload:
+    // Expected 26, Actual 13" — one turn's worth, half the total): fast Macs
+    // won the race, slow runners lost it. waitSendable() blocks on
+    // !isSettlingTurn, the same barrier realism_off_test documents, so the
+    // reload below samples a genuinely finished turn instead of racing the
+    // very persistence it exists to prove. Tightens the test; changes no
+    // assertion.
+    await d.waitSendable();
 
     // ── Persistence: the group map must reach SQLite ─────────────────────
     // _saveScalarsIntoGroupRealism is the critical persist; if it is skipped

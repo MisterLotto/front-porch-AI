@@ -7,9 +7,32 @@
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
-  // Attach to console when present (e.g., 'flutter run') or create a
-  // new console when running with a debugger.
-  if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent()) {
+  // Production builds are a WINDOWS-subsystem GUI app. The stock Flutter
+  // template only AllocConsole() under a debugger, so launching
+  // front_porch_ai.exe from cmd/PowerShell attached the parent console but
+  // never rebound stdout/stderr — the prompt looked idle and RAG/engine
+  // logs never appeared. Fix:
+  //   1) Attach to parent console when launched from a terminal, and rebind
+  //      stdout/stderr there — but ONLY when the process arrived without a
+  //      usable stdout. The flutter tool (flutter run / flutter test
+  //      -d windows) launches this exe with stdout/stderr bound to pipes it
+  //      reads — the Dart VM service URI travels over that pipe, so
+  //      rebinding it to CONOUT$ starves the tool and it waits forever
+  //      (CI's Windows E2E leg hung to its job timeout exactly this way).
+  //      A direct cmd/PowerShell launch of a GUI-subsystem exe gets NULL
+  //      std handles, which is the case the redirect exists for.
+  //   2) --console forces a dedicated console (double-click / shortcuts).
+  //   3) Debugger still gets a console (Flutter default).
+  const bool force_console =
+      command_line != nullptr && wcsstr(command_line, L"--console") != nullptr;
+  const HANDLE inherited_stdout = ::GetStdHandle(STD_OUTPUT_HANDLE);
+  const bool stdout_already_bound =
+      inherited_stdout != nullptr && inherited_stdout != INVALID_HANDLE_VALUE;
+  if (::AttachConsole(ATTACH_PARENT_PROCESS)) {
+    if (!stdout_already_bound) {
+      RedirectIoToConsole();
+    }
+  } else if (force_console || ::IsDebuggerPresent()) {
     CreateAndAttachConsole();
   }
 

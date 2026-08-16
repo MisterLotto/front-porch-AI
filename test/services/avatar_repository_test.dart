@@ -54,7 +54,28 @@ void main() {
       // v40: Living Worlds (worlds columns + chat_worlds + chat_biome_spans).
       // v41: worlds.place_traits (atmosphere/gravity JSON).
       // v42: groups.folder_id (groups movable through folders).
-      expect(db.schemaVersion, 43);
+      // v45: sessions.objectives_enabled (the Objectives switch). Bumped with
+      //      the maintainer's explicit sign-off on the schema change
+      //      (2026-08-07); this assertion tracks schemaVersion by definition,
+      //      so it is provably wrong at 44 rather than merely inconvenient.
+      // v46: objectives.served_ambition (which ambition a quest is a step
+      //      toward — docs/design/pockets-and-preferences.md Part 3). Same
+      //      reasoning as v45: this assertion exists to track schemaVersion,
+      //      so once the version really is 46 the old value is false, not
+      //      merely failing. The column itself is guarded by
+      //      test/database/served_ambition_migration_test.dart, which checks
+      //      the Table, the ladder and the repair path agree — that is the
+      //      test that would catch a BAD schema change; this one only notices
+      //      that a change happened at all.
+      // v47: sessions.pockets — the 1:1 Pockets record. Same reasoning again:
+      //      this assertion tracks schemaVersion by definition, so once the
+      //      version really is 47 the old value is false rather than merely
+      //      failing. The column itself is guarded by
+      //      test/database/pockets_persist_migration_test.dart, which checks
+      //      the Table/ladder/repair trio AND that the save and load wires
+      //      exist — the wires being the part that was actually missing and
+      //      that made 1:1 chats forget her pockets on every reload.
+      expect(db.schemaVersion, 47);
     });
 
     test('journal_memories table exists and round-trips (v35)', () async {

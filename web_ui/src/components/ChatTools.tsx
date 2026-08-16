@@ -13,8 +13,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { GroupSettings, type GroupBlock } from './GroupSettings';
 import { GrowthPanel } from './GrowthPanel';
+import { JournalPanel } from './JournalPanel';
 import { MilestonesPanel } from './MilestonesPanel';
+import { BelongingsPanel } from './BelongingsPanel';
+import { PromisesPanel } from './PromisesPanel';
 import { StoryCalendarModal } from './StoryCalendarModal';
+import { ContextBudgetModal } from './ContextBudgetModal';
 
 interface ObjectiveTask {
   description: string;
@@ -26,21 +30,53 @@ interface ObjectiveView {
   isPrimary: boolean;
   checkFrequency: number;
   tasks: ObjectiveTask[];
+  // The ambition this quest is a step toward (schema v46). Optional: absent on
+  // older facades, and null for a situational quest that serves no ambition.
+  servedAmbition?: string | null;
 }
 interface ToolsState {
   realismEnabled: boolean;
   needsEnabled: boolean;
   realismOneShotEval: boolean;
+  // Tri-state One-Shot mode (2026-08-10). Optional: absent on an older
+  // facade, in which case the legacy bool still tells us on-vs-not.
+  realismOneShotMode?: 'auto' | 'on' | 'off';
   memory: {
     ragEnabled: boolean;
     ragRetrievalCount: number;
     ragWindowSize: number;
     journalEnabled: boolean;
     journalInterval: number;
+    journalReviewFirst?: boolean;
     importLlmertaPorchMemories?: boolean;
     growthEnabled: boolean;
     growthInterval: number;
     growthReviewFirst: boolean;
+    // Host embedding-engine status (additive). Download only runs on desktop.
+    embedding?: {
+      available?: boolean;
+      modelOnDisk?: boolean;
+      settingUp?: boolean;
+      setupProgress?: number;
+      setupStatus?: string;
+      setupError?: string | null;
+      lastEngineError?: string | null;
+    } | null;
+    // The last reply's retrieval receipt (additive, 2026-08-10 — absent on
+    // older facades; null when that reply needed no retrieval). Desktop
+    // sidebar parity: what memory found / dropped / actually injected.
+    lastRagReceipt?: {
+      status?: 'ok' | 'error' | 'not_operational';
+      found: number;
+      journal_deduped: number;
+      budget_trimmed: number;
+      injected: Array<{
+        pos: number;
+        day?: number | null;
+        other_chat: boolean;
+        preview: string;
+      }>;
+    } | null;
   };
   // The Journal's per-chat recap ("Where we are") — key kept as `summary`
   // to match the facade block name.
@@ -53,7 +89,17 @@ interface ToolsState {
   chaos: { enabled: boolean; nsfwEnabled: boolean; pressure: number; hasPendingEvent: boolean };
   nsfw: { cooldownEnabled: boolean; cooldownTurnsRemaining: number; arousalLevel: number; arousalTier: string };
   // Ambitions (Living Time §6, additive — absent on older facades).
-  ambitions?: Array<{ text: string; progress: number; stage: string }>;
+  // `step` is the open quest climbing this ambition (v46); null when none.
+  standingMood?: string;
+  ambitions?: Array<{ text: string; progress: number; stage: string; step?: string | null }>;
+  // Pockets & Wardrobe (additive, null when the switch is off). set_aside:
+  // parked in the scene, still theirs — clothing entries expire at the next
+  // story morning server-side, so what arrives here is always current.
+  pockets?: {
+    worn?: Array<{ name: string; state?: string }>;
+    carrying?: Array<{ name: string; state?: string }>;
+    set_aside?: Array<{ name: string; state?: string; clothing?: boolean; day?: number }>;
+  } | null;
   time: {
     timeOfDay: string;
     dayCount: number;
@@ -93,7 +139,13 @@ interface ToolsState {
     storyClock?: string;
     storyStartDate?: string;
   };
-  objectives: { primary: ObjectiveView | null; secondary: ObjectiveView[]; isChecking: boolean };
+  objectives: {
+    primary: ObjectiveView | null;
+    secondary: ObjectiveView[];
+    isChecking: boolean;
+    // Additive: absent on older hosts — treat missing as on (legacy always-on).
+    enabled?: boolean;
+  };
   focusedId?: string | null;
   group?: GroupBlock | null;
 }
@@ -138,6 +190,86 @@ function NumField({
   );
 }
 
+/** Free-text field that commits on blur, keeping the half-typed draft alive
+ *  across a refetch. The tools sidebar reloads its WHOLE snapshot on every
+ *  chat refresh (a finished journal pass, a message from another device, a
+ *  socket reconnect), so binding a textarea straight to that object threw away
+ *  everything typed since the last blur. Syncing on the primitive text — the
+ *  NumField rule — means an identical refetch is a no-op. */
+export function TextField({
+  value,
+  rows,
+  placeholder,
+  onCommit,
+}: {
+  value: string;
+  rows: number;
+  placeholder?: string;
+  onCommit: (v: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  return (
+    <textarea
+      className="note-input"
+      rows={rows}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => draft !== value && onCommit(draft)}
+      placeholder={placeholder}
+    />
+  );
+}
+
+/** Hand-add row for Pockets & Wardrobe (desktop dialog parity, 2026-08-13).
+ *  "Give" hands the item over in-scene — it lands in her hands and she knows
+ *  it came from you. "Add" is the quiet drop (the Easter egg): it lands in
+ *  the chosen section and her next reply is surprised to find it. Item text
+ *  follows the same "name (state)" convention as everywhere else. */
+function PocketAddRow({
+  onAdd,
+}: {
+  onAdd: (section: string, name: string, gift: boolean) => void;
+}) {
+  const [name, setName] = useState('');
+  const [section, setSection] = useState('carrying');
+  const submit = (gift: boolean) => {
+    const n = name.trim();
+    if (!n) return;
+    // A gift lands in her hands regardless of the selected section — you
+    // hand someone a sweater, you don't dress them in it (desktop rule).
+    onAdd(gift ? 'carrying' : section, n, gift);
+    setName('');
+  };
+  return (
+    <div className="pocket-add">
+      <input
+        value={name}
+        placeholder="brass key (scuffed)"
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && submit(false)}
+      />
+      <select value={section} onChange={(e) => setSection(e.target.value)}>
+        <option value="worn">Wearing</option>
+        <option value="carrying">Carrying</option>
+        <option value="set_aside">Set aside</option>
+      </select>
+      <button
+        title="Slip it in quietly — she'll be surprised to find it"
+        onClick={() => submit(false)}
+      >
+        Add
+      </button>
+      <button
+        title="Hand it over in-scene — she'll know it came from you"
+        onClick={() => submit(true)}
+      >
+        Give
+      </button>
+    </div>
+  );
+}
+
 /** Scene-time periods + their single-letter dot labels (mirror the desktop
  *  realism_section _timeDotLabel exactly: D / M / LM / A / E / N). */
 const TIME_DOTS: [string, string][] = [
@@ -165,6 +297,7 @@ export function ChatTools({
   const [storyMsg, setStoryMsg] = useState<string | null>(null);
   const [goal, setGoal] = useState('');
   const [showCalendar, setShowCalendar] = useState(false);
+  const [showBudget, setShowBudget] = useState(false);
 
   // Scope every tools call to the focused cast participant so objectives/arousal
   // (and the snapshot returned by mutations) follow the focus.
@@ -182,6 +315,17 @@ export function ChatTools({
     void load();
   }, [load, reloadKey]);
 
+  // While the host is downloading the embedding model, poll tools state so the
+  // progress bar moves (desktop listens to EmbeddingService; web only has GET).
+  const embeddingBusy = Boolean(t?.memory?.ragEnabled && t?.memory?.embedding?.settingUp);
+  useEffect(() => {
+    if (!embeddingBusy) return;
+    const id = window.setInterval(() => {
+      void load();
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [embeddingBusy, load]);
+
   // Every mutation endpoint returns the fresh (focus-scoped) tools state.
   const apply = (p: Promise<ToolsState>) => {
     void p.then(setT).catch(() => {});
@@ -190,6 +334,21 @@ export function ChatTools({
     apply(api.post<ToolsState>(`/api/chat/tools/settings${q}`, fields));
   const toggle = (name: string, value: boolean) =>
     apply(api.post<ToolsState>(`/api/chat/tools/toggle${q}`, { name, value }));
+  // The eraser: strike one wardrobe entry by hand — the same ✕ the desktop
+  // chips have (a wrong entry must be one tap from corrected on every
+  // surface). The endpoint answers with the fresh snapshot.
+  const pocketRemove = (section: string, index: number) =>
+    apply(api.post<ToolsState>(`/api/chat/tools/pocket-remove${q}`, { section, index }));
+  // The other half of the eraser: hand-add an item (desktop dialog parity,
+  // 2026-08-13). gift=true is handed over in-scene (she knows it came from
+  // you); gift=false is the Easter egg (she's surprised to find it).
+  const pocketAdd = (section: string, name: string, gift: boolean) =>
+    apply(api.post<ToolsState>(`/api/chat/tools/pocket-add${q}`, { section, name, gift }));
+  // Same endpoint, string value — the one tri-state control (see the route's
+  // oneShotMode case). Falls back to the legacy bool on an older facade.
+  const oneShotMode = t?.realismOneShotMode ?? (t?.realismOneShotEval ? 'on' : 'auto');
+  const setOneShotMode = (value: 'auto' | 'on' | 'off') =>
+    apply(api.post<ToolsState>(`/api/chat/tools/toggle${q}`, { name: 'oneShotMode', value }));
 
   if (!t) return null;
 
@@ -200,18 +359,36 @@ export function ChatTools({
     <div className="chat-tools">
       <Toggle label="Realism engine" value={t.realismEnabled} onChange={(v) => toggle('realism', v)} />
       <Toggle label="Needs simulation" value={t.needsEnabled} onChange={(v) => toggle('needs', v)} />
+      <div className="tool-row">
+        <button className="link-btn" onClick={() => setShowBudget(true)}>
+          📊 Context budget — what the model was sent
+        </button>
+      </div>
 
       <details className="tool-section">
         <summary>Realism performance</summary>
         <div className="tool-body">
-          <Toggle
-            label="One-Shot Eval (Experimental)"
-            value={t.realismOneShotEval}
-            onChange={(v) => toggle('oneShotEval', v)}
-          />
+          <div className="tool-toggle">
+            <span>One-Shot Eval</span>
+            <span className="mode-seg" role="radiogroup" aria-label="One-Shot Eval mode">
+              {(['auto', 'on', 'off'] as const).map((m) => (
+                <button
+                  key={m}
+                  role="radio"
+                  aria-checked={oneShotMode === m}
+                  className={`mode-seg-btn${oneShotMode === m ? ' selected' : ''}`}
+                  onClick={() => setOneShotMode(m)}
+                >
+                  {m === 'auto' ? 'Auto' : m === 'on' ? 'On' : 'Off'}
+                </button>
+              ))}
+            </span>
+          </div>
           <p className="muted small">
-            Fuses relationship + scene evals into a single LLM call to double the processing speed.
-            May be less accurate on &lt; 8B param models.
+            Fuses the realism evals into a single LLM call for roughly double the processing speed.
+            Auto uses it on remote AI services that support tool calls, and keeps the safer
+            multi-call path on local models, where small models can struggle with the combined
+            prompt.
           </p>
         </div>
       </details>
@@ -223,13 +400,116 @@ export function ChatTools({
           <Toggle label="Use memory (RAG)" value={t.memory.ragEnabled} onChange={(v) => settings({ ragEnabled: v })} />
           {t.memory.ragEnabled && (
             <>
-              <NumField label="Retrieve count" value={t.memory.ragRetrievalCount} onCommit={(v) => settings({ ragRetrievalCount: v })} />
-              <NumField label="Window size" value={t.memory.ragWindowSize} onCommit={(v) => settings({ ragWindowSize: v })} />
+              {(() => {
+                const e = t.memory.embedding;
+                if (!e) {
+                  return (
+                    <p className="muted small">
+                      Memory setup runs on the desktop app (one ~550&nbsp;MB local model).
+                    </p>
+                  );
+                }
+                if (e.available) {
+                  return <p className="muted small">Memory engine ready — private on this computer.</p>;
+                }
+                if (e.settingUp) {
+                  const pct =
+                    typeof e.setupProgress === 'number' && e.setupProgress >= 0
+                      ? Math.round(e.setupProgress * 100)
+                      : null;
+                  return (
+                    <div className="rag-engine-status">
+                      <p className="muted small">{e.setupStatus || 'Setting up memory…'}</p>
+                      <div className="rag-progress-track" aria-hidden>
+                        <div
+                          className="rag-progress-fill"
+                          style={pct == null ? { width: '30%', opacity: 0.5 } : { width: `${pct}%` }}
+                        />
+                      </div>
+                      {pct != null && <p className="muted small">{pct}%</p>}
+                    </div>
+                  );
+                }
+                if (e.setupError || e.lastEngineError) {
+                  return (
+                    <p className="muted small rag-engine-error">
+                      Setup failed: {e.setupError || e.lastEngineError}. Use the desktop app to
+                      retry the download.
+                    </p>
+                  );
+                }
+                if (!e.modelOnDisk) {
+                  return (
+                    <p className="muted small">
+                      Memory model not installed yet. Open this chat on the desktop app and turn
+                      Memory on to download it (~550&nbsp;MB, one time).
+                    </p>
+                  );
+                }
+                return <p className="muted small">Starting memory engine…</p>;
+              })()}
+              <NumField
+                label="Past moments per reply"
+                value={t.memory.ragRetrievalCount}
+                onCommit={(v) => settings({ ragRetrievalCount: v })}
+              />
+              <p className="muted small">How many old moments to weave into each reply (0 = all strong matches).</p>
+              <NumField
+                label="Messages per moment"
+                value={t.memory.ragWindowSize}
+                onCommit={(v) => settings({ ragWindowSize: v })}
+              />
+              <p className="muted small">How much of each past scene to keep (3–10 messages).</p>
+              {/* What memory just did — desktop RagReceiptView parity. */}
+              {(() => {
+                const r = t.memory.lastRagReceipt;
+                const status = r?.status ?? 'ok';
+                const counts = r
+                  ? [
+                      r.budget_trimmed > 0 ? `${r.budget_trimmed} trimmed for space` : null,
+                      r.journal_deduped > 0 ? `${r.journal_deduped} already covered by the journal` : null,
+                    ].filter(Boolean)
+                  : [];
+                const suffix = counts.length ? ` (${counts.join(', ')})` : '';
+                let summary: string;
+                if (!r) {
+                  summary = 'Last reply: nothing had scrolled out of view — no lookup needed.';
+                } else if (status === 'error') {
+                  summary =
+                    'Last reply: tried to search the archive but the memory engine hit an error — nothing was brought back.';
+                } else if (status === 'not_operational') {
+                  summary =
+                    'Last reply: older messages had scrolled out of view, but the memory engine is not ready — install/start Memory on the desktop host to look them up.';
+                } else if (r.injected.length === 0) {
+                  summary = `Last reply: searched the archive — nothing relevant enough to bring back.${suffix}`;
+                } else {
+                  summary = `Last reply: ${r.injected.length} ${r.injected.length === 1 ? 'memory' : 'memories'} woven in.${suffix}`;
+                }
+                return (
+                  <div className="rag-receipt">
+                    <p className="muted small">{summary}</p>
+                    {status === 'ok' && r?.injected.map((line, i) => (
+                      <p key={i} className="muted small rag-receipt-line">
+                        <strong>{line.other_chat ? 'another chat' : line.day != null ? `Day ${line.day}` : ''}</strong>{' '}
+                        {line.preview}
+                      </p>
+                    ))}
+                  </div>
+                );
+              })()}
             </>
           )}
           <Toggle label="Journal (memories + recap)" value={t.memory.journalEnabled} onChange={(v) => settings({ journalEnabled: v })} />
           {t.memory.journalEnabled ? (
-            <NumField label="Every (msgs)" value={t.memory.journalInterval} onCommit={(v) => settings({ journalInterval: v })} />
+            <>
+              <NumField label="Every (msgs)" value={t.memory.journalInterval} onCommit={(v) => settings({ journalInterval: v })} />
+              <Toggle
+                label="Review journal before it applies"
+                value={t.memory.journalReviewFirst ?? false}
+                onChange={(v) => settings({ journalReviewFirst: v })}
+              />
+              <JournalPanel focusedId={focusedId} reloadKey={reloadKey} />
+            </>
           ) : (
             <p className="muted small">
               Journal off: long-term memory AND the &quot;Where we are&quot; recap are
@@ -273,6 +553,14 @@ export function ChatTools({
         </div>
       </details>
 
+      {/* What she walked in carrying, before you said anything. Reads
+          "Came in …" so it can never be mistaken for a reaction to something
+          the user did — which is the entire point of the feature. */}
+      {!!t.standingMood && (
+        <p className="muted small" style={{ margin: '0 0 10px', fontStyle: 'italic' }}>
+          🌤️ Came in {t.standingMood}
+        </p>
+      )}
       {(t.ambitions?.length ?? 0) > 0 && (
         <details className="tool-section" open>
           <summary>Ambitions</summary>
@@ -289,11 +577,92 @@ export function ChatTools({
                     style={{ width: `${Math.min(100, Math.max(0, a.progress))}%` }}
                   />
                 </div>
+                {a.step?.trim() && <div className="ambition-step">↳ {a.step.trim()}</div>}
               </div>
             ))}
           </div>
         </details>
       )}
+
+      {(() => {
+        // `pockets` is null when the feature is OFF (panel absent) and an
+        // EMPTY object when it is on with nothing recorded — the panel still
+        // renders then, so the first item can be hand-added (desktop parity).
+        if (!t.pockets) return null;
+        const worn = t.pockets.worn ?? [];
+        const carrying = t.pockets.carrying ?? [];
+        // Parked in the scene, still theirs — greyed so "not on her" reads
+        // at a glance (the desktop sidebar's Set aside group, same rules;
+        // the server already filtered out clothing that expired overnight).
+        const setAside = t.pockets.set_aside ?? [];
+        const label = (i: { name: string; state?: string }) =>
+          i.state ? `${i.name} (${i.state})` : i.name;
+        return (
+          <details className="tool-section" open>
+            <summary>Pockets &amp; Wardrobe</summary>
+            <div className="tool-body">
+              {worn.length > 0 && (
+                <>
+                  <div className="muted small side-quest-label">Wearing</div>
+                  <div className="pocket-items">
+                    {worn.map((i, n) => (
+                      <span className="pocket-item" key={`w${n}`}>
+                        {label(i)}
+                        <button
+                          className="pocket-x"
+                          title="Remove from the record"
+                          onClick={() => pocketRemove('worn', n)}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
+              {carrying.length > 0 && (
+                <>
+                  <div className="muted small side-quest-label">Carrying</div>
+                  <div className="pocket-items">
+                    {carrying.map((i, n) => (
+                      <span className="pocket-item" key={`c${n}`}>
+                        {label(i)}
+                        <button
+                          className="pocket-x"
+                          title="Remove from the record"
+                          onClick={() => pocketRemove('carrying', n)}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
+              {setAside.length > 0 && (
+                <>
+                  <div className="muted small side-quest-label">Set aside</div>
+                  <div className="pocket-items">
+                    {setAside.map((i, n) => (
+                      <span className="pocket-item pocket-item-aside" key={`s${n}`}>
+                        {label(i)}
+                        <button
+                          className="pocket-x"
+                          title="Remove from the record"
+                          onClick={() => pocketRemove('set_aside', n)}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
+              <PocketAddRow onAdd={pocketAdd} />
+            </div>
+          </details>
+        );
+      })()}
 
       <details className="tool-section">
         <summary>Our story</summary>
@@ -322,6 +691,20 @@ export function ChatTools({
       </details>
 
       <details className="tool-section">
+        <summary>Promises 🤝</summary>
+        <div className="tool-body">
+          <PromisesPanel focusedId={focusedId} reloadKey={reloadKey} />
+        </div>
+      </details>
+
+      <details className="tool-section">
+        <summary>Belongings 🎒</summary>
+        <div className="tool-body">
+          <BelongingsPanel focusedId={focusedId} reloadKey={reloadKey} />
+        </div>
+      </details>
+
+      <details className="tool-section">
         <summary>Chaos mode{t.chaos.enabled ? ` · ${t.chaos.pressure}%` : ''}</summary>
         <div className="tool-body">
           <Toggle label="Chaos mode" value={t.chaos.enabled} onChange={(v) => toggle('chaos', v)} />
@@ -334,7 +717,7 @@ export function ChatTools({
         </div>
       </details>
 
-      <details className="tool-section" open={checking}>
+      {t.objectives.enabled !== false && <details className="tool-section" open={checking}>
         <summary>
           Objectives{obj || t.objectives.secondary.length > 0 ? '' : ' (none)'}
           {checking && <span className="obj-checking-tag"> · checking…</span>}
@@ -346,6 +729,13 @@ export function ChatTools({
           {obj ? (
             <>
               <div className="stat-line"><strong>{obj.objective}</strong></div>
+              {/* trim(), matching desktop AmbitionServedChip: a whitespace-only
+                  tag is truthy in JS and would render an empty 🧭 row. */}
+              {obj.servedAmbition?.trim() && (
+                <div className="obj-ambition" title={`A step toward: ${obj.servedAmbition.trim()}`}>
+                  🧭 {obj.servedAmbition.trim()}
+                </div>
+              )}
               {obj.tasks.length > 0 && (
                 <ul className="task-list">
                   {obj.tasks.map((task, i) => (
@@ -400,6 +790,11 @@ export function ChatTools({
                       <strong>{sq.objective}</strong>
                       {sq.tasks.length > 0 && <span className="muted">{doneCount}/{sq.tasks.length}</span>}
                     </div>
+                    {sq.servedAmbition?.trim() && (
+                      <div className="obj-ambition" title={`A step toward: ${sq.servedAmbition.trim()}`}>
+                        🧭 {sq.servedAmbition.trim()}
+                      </div>
+                    )}
                     {sq.tasks.length > 0 && (
                       <ul className="task-list">
                         {sq.tasks.map((task, i) => (
@@ -429,18 +824,16 @@ export function ChatTools({
             </>
           )}
         </div>
-      </details>
+      </details>}
 
       <details className="tool-section">
         <summary>Where we are</summary>
         <div className="tool-body">
-          <textarea
-            className="note-input"
-            rows={4}
+          <TextField
             value={t.summary.text}
-            onChange={(e) => setT({ ...t, summary: { ...t.summary, text: e.target.value } })}
-            onBlur={() => apply(api.post<ToolsState>(`/api/chat/tools/summary${q}`, { text: t.summary.text }))}
+            rows={4}
             placeholder="The character's recap of where things stand…"
+            onCommit={(text) => apply(api.post<ToolsState>(`/api/chat/tools/summary${q}`, { text }))}
           />
           <div className="tool-row">
             <button
@@ -503,9 +896,21 @@ export function ChatTools({
               </div>
             ))}
           </div>
+          {/* Disabled with realism off. The server's nudgeTimePeriod returns
+              immediately in that state, so these used to be dead clicks: a 200
+              response and a clock that never moved. Desktop hides them; the
+              calendar modal below already gated on the same flag. */}
           <div className="tool-row">
-            <button onClick={() => apply(api.post<ToolsState>(`/api/chat/tools/time${q}`, { delta: -1 }))}>◀ Earlier</button>
-            <button onClick={() => apply(api.post<ToolsState>(`/api/chat/tools/time${q}`, { delta: 1 }))}>Later ▶</button>
+            <button
+              disabled={!t.realismEnabled}
+              title={t.realismEnabled ? undefined : 'Realism Mode is off, so the story clock is paused'}
+              onClick={() => apply(api.post<ToolsState>(`/api/chat/tools/time${q}`, { delta: -1 }))}
+            >◀ Earlier</button>
+            <button
+              disabled={!t.realismEnabled}
+              title={t.realismEnabled ? undefined : 'Realism Mode is off, so the story clock is paused'}
+              onClick={() => apply(api.post<ToolsState>(`/api/chat/tools/time${q}`, { delta: 1 }))}
+            >Later ▶</button>
           </div>
           <Toggle label="Auto passage of time" value={t.time.passageEnabled} onChange={(v) => toggle('passageOfTime', v)} />
         </div>
@@ -539,6 +944,8 @@ export function ChatTools({
           onChanged={load}
         />
       )}
+
+      {showBudget && <ContextBudgetModal onClose={() => setShowBudget(false)} />}
     </div>
   );
 }

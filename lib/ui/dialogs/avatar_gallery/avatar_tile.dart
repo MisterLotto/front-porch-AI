@@ -50,6 +50,7 @@ class AvatarTile extends StatelessWidget {
     this.onAction,
     this.onCaptionTap,
     this.imageVersion = 0,
+    this.deleteTooltip = 'Delete',
   });
 
   /// The image to display (already resolved to its `looks/` or `avatars/` file).
@@ -70,6 +71,10 @@ class AvatarTile extends StatelessWidget {
 
   /// Remove this tile. Null → no ✕ (the portrait can't be deleted).
   final VoidCallback? onDelete;
+
+  /// Tooltip for the ✕ — the portrait tile passes "Swap portrait" (its ✕
+  /// swaps a look into the slot rather than deleting anything).
+  final String deleteTooltip;
 
   /// Body tap — "use in this chat" (looks) or "set default emotion"
   /// (expressions). Null → the body isn't interactive.
@@ -171,7 +176,7 @@ class AvatarTile extends StatelessWidget {
                 right: 5,
                 child: _circleButton(
                   icon: Icons.close_rounded,
-                  tooltip: 'Delete',
+                  tooltip: deleteTooltip,
                   onTap: onDelete!,
                   bg: scrim,
                   fg: onScrim,

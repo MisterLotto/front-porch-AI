@@ -143,6 +143,23 @@ extension ChatServiceGroupMembership on ChatService {
           swipes: drift.Value(jsonEncode(m.swipes)),
           swipeIndex: drift.Value(m.swipeIndex),
           swipeDurations: drift.Value(jsonEncode(m.swipeDurations)),
+          // Metadata is NOT optional bookkeeping: a generated image is an
+          // empty-text message whose only content is metadata['image_path'],
+          // and realism_state / needs_pre_turn_vector / pockets_before are the
+          // baseline every later regen, swipe and delete rewinds to. Omitting
+          // these two columns inserted NULLs, and setActiveGroup below then
+          // re-hydrates _messages from exactly these rows — so the converted
+          // group lost every image and every stamp on the whole transcript.
+          // Encoded identically to _replaceSessionMessages (the other copy
+          // path) so both write the same shape.
+          metadata: drift.Value(
+            m.metadata != null ? jsonEncode(m.metadata) : null,
+          ),
+          swipeMetadata: drift.Value(
+            m.swipeMetadata.any((e) => e != null)
+                ? jsonEncode(m.swipeMetadata)
+                : null,
+          ),
         ),
       );
     }

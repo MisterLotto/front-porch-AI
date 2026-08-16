@@ -35,6 +35,8 @@ import 'package:front_porch_ai/ui/widgets/widgets.dart';
 // Specific pages, dialogs, and internal services not in barrels
 import 'package:front_porch_ai/ui/pages/chat_page.dart';
 import 'package:front_porch_ai/ui/pages/home/dialogs/session_picker_dialog.dart';
+import 'package:front_porch_ai/ui/pages/home/enhance/enhance_wizard_page.dart';
+import 'package:front_porch_ai/ui/pages/home/widgets/home_mode_toggle.dart';
 import 'package:front_porch_ai/ui/pages/edit_character_page.dart';
 import 'package:front_porch_ai/ui/pages/edit_group_page.dart';
 import 'package:front_porch_ai/services/group_card_importer.dart';
@@ -85,6 +87,11 @@ class _HomePageState extends State<HomePage> {
   // Porch Stories mode toggle
   bool _showStories = false;
 
+  /// Blocks stacked open-chat taps while setActiveCharacter / loadSession
+  /// runs (can take seconds). Without this, multi-tap after exit→reenter
+  /// races dispose and throws "State no longer has a context".
+  bool _openingChat = false;
+
   // Scroll controller for the character grid (visible scrollbar)
   final ScrollController _gridScrollController = ScrollController();
 
@@ -123,30 +130,44 @@ class _HomePageState extends State<HomePage> {
     return storage.resolveCharacterImage(c.imagePath ?? '');
   }
 
+  // The notifiers we subscribed to, held so dispose() can unsubscribe: they
+  // are app-scoped providers, MainLayout swaps HomePage out of the tree on
+  // every sidebar navigation, and a Provider.of lookup is no longer legal
+  // once the element is defunct — so the reference has to be captured here.
+  KoboldService? _koboldListened;
+  CharacterRepository? _charRepoListened;
+  AppState? _appStateListened;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Listen for model-ready events from KoboldService
     try {
       final kobold = Provider.of<KoboldService>(context, listen: false);
+      _koboldListened?.removeListener(_onKoboldUpdate);
       kobold.removeListener(_onKoboldUpdate);
       kobold.addListener(_onKoboldUpdate);
+      _koboldListened = kobold;
     } catch (_) {
       // KoboldService might not be in the provider tree
     }
     // Listen for CharacterRepository changes to refresh cache after characters load
     try {
       final charRepo = Provider.of<CharacterRepository>(context, listen: false);
+      _charRepoListened?.removeListener(_onCharactersChanged);
       charRepo.removeListener(_onCharactersChanged);
       charRepo.addListener(_onCharactersChanged);
+      _charRepoListened = charRepo;
     } catch (_) {}
     // Re-tapping the sidebar's Home entry bumps AppState.homeResetTick —
     // treat it as "take me back to the main screen" (library top level).
     try {
       final appState = Provider.of<AppState>(context, listen: false);
       _lastHomeResetTick ??= appState.homeResetTick;
+      _appStateListened?.removeListener(_onAppStateChanged);
       appState.removeListener(_onAppStateChanged);
       appState.addListener(_onAppStateChanged);
+      _appStateListened = appState;
     } catch (_) {}
   }
 
@@ -339,12 +360,9 @@ class _HomePageState extends State<HomePage> {
     _activityRefreshDebounce?.cancel();
     _searchController.dispose();
     _gridScrollController.dispose();
-    try {
-      Provider.of<AppState>(
-        context,
-        listen: false,
-      ).removeListener(_onAppStateChanged);
-    } catch (_) {}
+    _koboldListened?.removeListener(_onKoboldUpdate);
+    _charRepoListened?.removeListener(_onCharactersChanged);
+    _appStateListened?.removeListener(_onAppStateChanged);
     super.dispose();
   }
 
@@ -356,91 +374,108 @@ class _HomePageState extends State<HomePage> {
           return const Center(child: CircularProgressIndicator());
         }
 
-        if (repo.characters.isEmpty && groupRepo.groups.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  'Get started by creating a new character!',
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: Theme.of(
-                      context,
-                    ).textTheme.titleLarge?.color?.withValues(alpha: 0.7),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: () => Provider.of<AppState>(
-                        context,
-                        listen: false,
-                      ).setIndex(1),
-                      icon: const Icon(Icons.add_circle_outline),
-                      label: const Text('Create New'),
-                      style: _buttonStyle(),
-                    ),
-                    const SizedBox(width: 16),
-                    ElevatedButton.icon(
-                      onPressed: () => _importCharacter(context),
-                      icon: const Icon(Icons.download),
-                      label: const Text('Import Card'),
-                      style: _buttonStyle(),
-                    ),
-                    const SizedBox(width: 16),
-                    ElevatedButton.icon(
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const CharacterCreatorPage(),
-                        ),
-                      ),
-                      icon: const Icon(Icons.auto_awesome),
-                      label: const Text('AI Create'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.porchAmberOf(context),
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    ElevatedButton.icon(
-                      onPressed: () => _folderImportCharacters(context),
-                      icon: const Icon(Icons.library_add),
-                      label: const Text('Bulk Import'),
-                      style: _buttonStyle(),
-                    ),
-                    const SizedBox(width: 16),
-                    ElevatedButton.icon(
-                      onPressed: () => _importByaf(context),
-                      icon: const Icon(Icons.archive_outlined),
-                      label: const Text('Import BYAF'),
-                      style: _buttonStyle(),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        }
-
-        // If Porch Stories mode is active, show the stories view
+        // Porch Stories BEFORE the empty-library check: a story needs no
+        // characters, so stories mode has to win over the "create your first
+        // character" panel. Checked after it, tapping the toggle on a fresh
+        // install set _showStories but still fell into the empty branch, so
+        // the view never opened.
         if (_showStories) {
           return _wrapWithStatusBar(
             context,
             Column(
               children: [
                 // Radio toggle
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24.0,
-                    vertical: 16.0,
-                  ),
-                  child: Row(children: [_buildModeToggle(), const Spacer()]),
-                ),
+                _modeToggleBar(),
                 const Expanded(child: StoryHomeView()),
               ],
             ),
+          );
+        }
+
+        if (repo.characters.isEmpty && groupRepo.groups.isEmpty) {
+          // The mode toggle rides ABOVE the empty state: Porch Stories needs
+          // no characters, so a brand-new library must still be able to reach
+          // it. Without this the toggle simply did not exist on a fresh
+          // install and Stories was unreachable (found by the E2E suite).
+          return Column(
+            children: [
+              _modeToggleBar(),
+              Expanded(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Get started by creating a new character!',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(
+                                color: Theme.of(context)
+                                    .textTheme
+                                    .titleLarge
+                                    ?.color
+                                    ?.withValues(alpha: 0.7),
+                              ),
+                        ),
+                        const SizedBox(height: 24),
+                        Wrap(
+                          alignment: WrapAlignment.center,
+                          spacing: 16,
+                          runSpacing: 12,
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: () => Provider.of<AppState>(
+                                context,
+                                listen: false,
+                              ).setIndex(1),
+                              icon: const Icon(Icons.add_circle_outline),
+                              label: const Text('Create New'),
+                              style: _buttonStyle(),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: () => _importCharacter(context),
+                              icon: const Icon(Icons.download),
+                              label: const Text('Import Card'),
+                              style: _buttonStyle(),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const CharacterCreatorPage(),
+                                ),
+                              ),
+                              icon: const Icon(Icons.auto_awesome),
+                              label: const Text('AI Create'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.porchAmberOf(
+                                  context,
+                                ),
+                                foregroundColor: AppColors.onChaosAccent,
+                              ),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: () =>
+                                  _folderImportCharacters(context),
+                              icon: const Icon(Icons.library_add),
+                              label: const Text('Bulk Import'),
+                              style: _buttonStyle(),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: () => _importByaf(context),
+                              icon: const Icon(Icons.archive_outlined),
+                              label: const Text('Import BYAF'),
+                              style: _buttonStyle(),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           );
         }
 

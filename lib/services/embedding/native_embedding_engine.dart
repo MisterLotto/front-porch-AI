@@ -141,6 +141,14 @@ class NativeEmbeddingEngine {
   String? _loadedModelPath;
   Future<void> _jobChain = Future.value();
 
+  /// Bumped by every [shutdown]. Load takes seconds, and for all of it
+  /// `_worker` is still null — so a shutdown landing inside that window has
+  /// nothing to send its stop message to, and the spawn that finishes
+  /// afterwards would publish a session the caller explicitly released
+  /// (~550MB resident for the rest of the process). The spawn compares the
+  /// epoch it started under and releases the isolate instead.
+  int _epoch = 0;
+
   /// Embeds [text] (raw, unprefixed — the task prefix is added here).
   /// Returns the 768-dim normalized vector. Throws on failure — the caller
   /// owns the sidecar fallback and health reporting.
@@ -152,7 +160,13 @@ class NativeEmbeddingEngine {
     final result = _jobChain.then((_) async {
       if (_worker == null || _loadedModelPath != modelPath) {
         shutdown();
-        _worker = await _spawn(modelPath, vocabPath);
+        final epoch = _epoch;
+        final spawned = await _spawn(modelPath, vocabPath);
+        if (epoch != _epoch) {
+          spawned.send(null); // release the session nobody wants any more
+          throw StateError('embedding engine shut down during model load');
+        }
+        _worker = spawned;
         _loadedModelPath = modelPath;
       }
       final reply = ReceivePort();
@@ -169,6 +183,7 @@ class NativeEmbeddingEngine {
   /// Releases the worker (and with it the loaded session). Safe to call
   /// repeatedly; the next [embed] respawns.
   void shutdown() {
+    _epoch++;
     _worker?.send(null);
     _worker = null;
     _loadedModelPath = null;

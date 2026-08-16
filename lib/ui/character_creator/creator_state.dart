@@ -261,7 +261,23 @@ class CreatorState extends ChangeNotifier {
   bool realismChaosMode = false;
   bool realismNeedsSim = false;
   bool realismEnjoysLowHygiene = false;
-  String realismCurrentTask = '';
+
+  /// Long-term ambitions authored in the creator's realism step (approved
+  /// sketch §4). Card-resident like the rest of this state.
+  List<String> realismAmbitions = const [];
+
+  /// Likes & Dislikes and the 18+ pair — same card-resident identity lists,
+  /// authored in the same step.
+  List<String> realismLikes = const [];
+  List<String> realismDislikes = const [];
+  List<String> realismIntimateInto = const [];
+  List<String> realismIntimateNotInto = const [];
+
+  /// Starting Pockets & Wardrobe as chip text (`sundress (rain-soaked)`).
+  /// Notify-only like the identity lists above — saveState() persists none of
+  /// them, and a half-persisted wardrobe would be worse than none.
+  List<String> realismWorn = const [];
+  List<String> realismCarrying = const [];
 
   // Needs simulation tuning — custom per-character baselines (0-100 starting
   // levels) and decay rates (drop per tick). Mirrors the character editor so
@@ -414,10 +430,16 @@ class CreatorState extends ChangeNotifier {
     backstoryNotesController.text = prefs.getString(_prefBackstoryNotes) ?? '';
     conceptGenerated = prefs.getBool(_prefConceptGenerated) ?? false;
 
+    // Stored as the enum's own name so every mode round-trips. Quick Create
+    // used to collapse to 'automated' on BOTH sides of this pair, so picking
+    // it and reopening the wizard silently put the user back on the automated
+    // form. Unknown/legacy values still fall back to automated.
     final savedMode = prefs.getString(_prefCreatorMode) ?? 'automated';
-    _creatorMode = savedMode == 'guided'
-        ? CreatorMode.guided
-        : CreatorMode.automated;
+    _creatorMode = switch (savedMode) {
+      'guided' => CreatorMode.guided,
+      'quick' => CreatorMode.quick,
+      _ => CreatorMode.automated,
+    };
     guidedVisionController.text = prefs.getString(_prefGuidedVision) ?? '';
     guidedAppearanceController.text =
         prefs.getString(_prefGuidedAppearance) ?? '';
@@ -514,10 +536,7 @@ class CreatorState extends ChangeNotifier {
     await prefs.setString(_prefBackstoryEra, backstoryEra);
     await prefs.setString(_prefBackstoryNotes, backstoryNotesController.text);
     await prefs.setBool(_prefConceptGenerated, conceptGenerated);
-    await prefs.setString(
-      _prefCreatorMode,
-      _creatorMode == CreatorMode.guided ? 'guided' : 'automated',
-    );
+    await prefs.setString(_prefCreatorMode, _creatorMode.name);
     await prefs.setString(_prefGuidedVision, guidedVisionController.text);
     await prefs.setString(
       _prefGuidedAppearance,

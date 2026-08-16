@@ -6,6 +6,16 @@ import { api, ApiError } from '../api/client';
 import { PersonaManager } from '../components/PersonaManager';
 import { ModelPicker } from '../components/ModelPicker';
 import { ChatColorsSettings } from '../components/ChatColorsSettings';
+import { PorchLifeSettings } from '../components/PorchLifeSettings';
+import { spellCheckLabel, sortedByLabel } from '../spellCheckLabels';
+import { applySpellCheckLang } from '../spellCheckLang';
+import {
+  reasoningEffortBlurb,
+  reasoningEffortChipsFor,
+  reasoningEffortDisplayedSelection,
+  reasoningEffortMappingCaption,
+  reasoningEffortTitle,
+} from '../utils/reasoningEffort';
 
 // A single backend picker (replacing the old Backend + Provider dropdowns,
 // which overlapped). Each entry maps to a real BackendType; the OpenAI-compatible
@@ -29,6 +39,12 @@ const BACKEND_OPTIONS: BackendOption[] = [
   { id: 'custom', label: 'Custom API (OpenAI-compatible)', backend: 'openRouter', url: '', kind: 'api' },
 ];
 
+interface SanitizerRule {
+  id: number;
+  find: string;
+  replace: string;
+  stop_after_match?: boolean;
+}
 interface Gen {
   temperature: number;
   minP: number;
@@ -43,6 +59,9 @@ interface Gen {
   dynamicResponseInterval: number;
   /** Away pace (Living Time, additive): story periods per AFK scene. */
   dynamicResponsePacePeriods?: number;
+  /** Host-side find/replace on model output (audit P2.13). */
+  outputSanitizerEnabled?: boolean;
+  outputSanitizerRules?: SanitizerRule[];
 }
 interface Settings {
   backend: string;
@@ -55,7 +74,19 @@ interface Settings {
   contextSize: number;
   reasoningEnabled: boolean;
   reasoningEffort: string;
+  reasoningMandatory?: boolean;
+  reasoningEfforts?: string[];
+  // KoboldCpp / oMLX / LM Studio template verdict: what this model actually
+  // supports — 'graded' | 'toggle' | 'always' | 'none'. Absent on remote
+  // hosted backends and until the template has been read, which is the
+  // signal to fall back to the generic chips instead of claiming knowledge
+  // we do not have.
+  reasoningLocalSupport?: string;
   generation: Gen;
+  /** Dictionary tag ('en_US') or 'off'. Optional for the same reason. */
+  spellCheckLanguage?: string;
+  /** Dictionary tags the host can check. Optional for the same reason. */
+  spellCheckLanguages?: string[];
 }
 
 // Legacy-engine model files still on the host (desktop parity: the Reclaim
@@ -110,8 +141,12 @@ export function SettingsPage() {
 
   if (!s) return <div className="centered"><div className="spinner" /></div>;
 
-  const patch = (p: Partial<Settings>) => setS({ ...s, ...p });
-  const patchGen = (p: Partial<Gen>) => setS({ ...s, generation: { ...s.generation, ...p } });
+  const patch = (p: Partial<Settings>) =>
+    setS((prev) => (prev ? { ...prev, ...p } : prev));
+  const patchGen = (p: Partial<Gen>) =>
+    setS((prev) =>
+      prev ? { ...prev, generation: { ...prev.generation, ...p } } : prev,
+    );
 
   const save = async () => {
     setSaving(true);
@@ -127,9 +162,14 @@ export function SettingsPage() {
         reasoningEffort: s.reasoningEffort,
         generation: s.generation,
       };
+      if (s.spellCheckLanguage !== undefined) {
+        body.spellCheckLanguage = s.spellCheckLanguage;
+      }
       if (apiKey.trim()) body.apiKey = apiKey.trim();
       const next = await api.post<Settings>('/api/settings', body);
       setS(next);
+      // Take effect on this device immediately rather than at next reload.
+      applySpellCheckLang(next.spellCheckLanguage);
       setApiKey('');
       setSaved(true);
       setTimeout(() => setSaved(false), 1800);
@@ -195,6 +235,8 @@ export function SettingsPage() {
 
       <ChatColorsSettings />
 
+      <PorchLifeSettings />
+
       <section className="card">
         <h3>Model &amp; backend</h3>
         <label>
@@ -232,7 +274,34 @@ export function SettingsPage() {
                 apiUrl={s.remoteApiUrl}
                 apiKey={apiKey}
                 value={s.remoteModelName}
-                onChange={(id) => patch({ remoteModelName: id })}
+                onChange={(id) => {
+                  patch({ remoteModelName: id })
+                  void (async () => {
+                    try {
+                      const menu = await api.post<{
+                        efforts?: string[]
+                        mandatory?: boolean
+                        localSupport?: string
+                      }>('/api/backend/reasoning-menu', {
+                        model: id,
+                        apiUrl: s.remoteApiUrl,
+                        ...(apiKey.trim() ? { apiKey: apiKey.trim() } : {}),
+                      })
+                      setS((prev) =>
+                        prev && prev.remoteModelName === id
+                          ? {
+                              ...prev,
+                              reasoningEfforts: menu.efforts ?? [],
+                              reasoningMandatory: Boolean(menu.mandatory),
+                              reasoningLocalSupport: menu.localSupport,
+                            }
+                          : prev,
+                      )
+                    } catch {
+                      /* family-hint chips stay until Save */
+                    }
+                  })()
+                }}
               />
             </label>
             {showKeyField && (
@@ -292,28 +361,113 @@ export function SettingsPage() {
             onChange={(e) => patchGen({ dynamicTempEnabled: e.target.checked })}
           />
         </label>
-        <label className="row-label">
-          <span>Reasoning / thinking</span>
-          <input
-            type="checkbox"
-            checked={s.reasoningEnabled}
-            onChange={(e) => patch({ reasoningEnabled: e.target.checked })}
-          />
-        </label>
-        {s.reasoningEnabled && (
+        {s.spellCheckLanguage !== undefined && (
           <label>
-            Reasoning effort
-            <select value={s.reasoningEffort} onChange={(e) => patch({ reasoningEffort: e.target.value })}>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
+            Spell check language
+            <select
+              value={s.spellCheckLanguage}
+              onChange={(e) => patch({ spellCheckLanguage: e.target.value })}
+            >
+              <option value="off">Off</option>
+              {sortedByLabel([
+                ...(s.spellCheckLanguages ?? []),
+                // Keep the saved value selectable even if the host no longer
+                // reports it, or the select would show a value not in its list.
+                ...(s.spellCheckLanguage !== 'off' ? [s.spellCheckLanguage] : []),
+              ]).map((tag) => (
+                <option key={tag} value={tag}>{spellCheckLabel(tag)}</option>
+              ))}
             </select>
+            <p className="muted small">
+              The language you write in — not your device's language. If your phone or
+              computer is set to one language but you chat with characters in another,
+              set this to the one you chat in.
+            </p>
           </label>
         )}
-        <p className="muted small">
-          Turn on for reasoning models (e.g. GLM-*:thinking) so their thinking is captured and shown
-          as a collapsible block under each reply. Off discards the reasoning.
-        </p>
+        <label className="row-label">
+          <span>Request thinking</span>
+          <input
+            type="checkbox"
+            checked={Boolean(s.reasoningEnabled) || Boolean(s.reasoningMandatory)}
+            disabled={Boolean(s.reasoningMandatory) || s.reasoningLocalSupport === 'none'}
+            onChange={(e) => {
+              if (!s.reasoningMandatory && s.reasoningLocalSupport !== 'none') {
+                patch({ reasoningEnabled: e.target.checked })
+              }
+            }}
+          />
+        </label>
+        {Boolean(s.reasoningMandatory) && (
+          <p className="muted small">This model always thinks — Off is not available.</p>
+        )}
+        {s.reasoningLocalSupport === 'none' && (
+          <p className="muted small">
+            This model has no thinking mode — its chat template never produces
+            think-steps, so this switch would do nothing.
+          </p>
+        )}
+        {s.reasoningLocalSupport === 'toggle' && (
+          <p className="muted small">
+            This model thinks on or off only — it has no strength levels, so
+            there are no chips to pick.
+          </p>
+        )}
+        {(s.reasoningEnabled || Boolean(s.reasoningMandatory)) &&
+          s.reasoningLocalSupport !== 'none' &&
+          ((s.reasoningEfforts?.length ?? 0) > 0 ||
+            !s.reasoningLocalSupport) && (
+          <div className="thinking-strength">
+            <div className="thinking-strength-label">Thinking strength</div>
+            <div className="thinking-strength-chips" role="group" aria-label="Thinking strength">
+              {(s.reasoningEfforts?.length
+                ? s.reasoningEfforts
+                : s.reasoningLocalSupport
+                  ? []
+                  : reasoningEffortChipsFor(s.isLocal ? '' : (s.remoteModelName ?? ''))
+              ).map((id) => {
+                const model = s.isLocal ? '' : (s.remoteModelName ?? '')
+                const row = s.reasoningEfforts?.length
+                  ? s.reasoningEfforts
+                  : undefined
+                const on = reasoningEffortDisplayedSelection(
+                  model,
+                  s.reasoningEffort || 'medium',
+                  row,
+                ) === id
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    className={`thinking-strength-chip${on ? ' on' : ''}`}
+                    onClick={() => patch({ reasoningEffort: id })}
+                  >
+                    <span className="thinking-strength-chip-title">
+                      {reasoningEffortTitle(id)}
+                    </span>
+                    <span className="thinking-strength-chip-sub">
+                      {reasoningEffortBlurb(id)}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            <p className="muted small thinking-strength-caption">
+              {reasoningEffortMappingCaption(
+                s.isLocal ? '' : (s.remoteModelName ?? ''),
+                s.reasoningEffort || 'medium',
+                s.reasoningEfforts,
+                s.reasoningMandatory,
+              )}
+            </p>
+          </div>
+        )}
+        {!s.reasoningEnabled && !s.reasoningMandatory && (
+          <p className="muted small">
+            Turn on for reasoning models so their think-steps are captured under each reply.
+            The chips then show this model's real levels.
+          </p>
+        )}
         <label className="row-label">
           <span>Provide periodic responses when user is AFK?</span>
           <input
@@ -339,6 +493,31 @@ export function SettingsPage() {
                 <option value={6}>a full day</option>
               </select>
             </label>
+          </>
+        )}
+        {/* Output Sanitizer (audit P2.13) — host-side find/replace before
+            chat history is saved. Desktop Generation tab parity. */}
+        {s.generation.outputSanitizerEnabled !== undefined && (
+          <>
+            <h4 style={{ marginTop: 16, marginBottom: 4 }}>Output Sanitizer</h4>
+            <p className="muted small">
+              Replace specific character sequences in model output before saving
+              to chat history (e.g. em dash → &quot; - &quot;).
+            </p>
+            <label className="row-label">
+              <span>Enable Output Sanitizer</span>
+              <input
+                type="checkbox"
+                checked={!!s.generation.outputSanitizerEnabled}
+                onChange={(e) => patchGen({ outputSanitizerEnabled: e.target.checked })}
+              />
+            </label>
+            {s.generation.outputSanitizerEnabled && (
+              <SanitizerRulesEditor
+                rules={s.generation.outputSanitizerRules ?? []}
+                onChange={(rules) => patchGen({ outputSanitizerRules: rules })}
+              />
+            )}
           </>
         )}
       </section>
@@ -441,6 +620,67 @@ function SliderField({
         max={max}
         onChange={(e) => onChange(Number(e.target.value))}
       />
+    </div>
+  );
+}
+
+/** Compact find/replace rule list for Output Sanitizer (desktop parity). */
+function SanitizerRulesEditor({
+  rules,
+  onChange,
+}: {
+  rules: SanitizerRule[];
+  onChange: (rules: SanitizerRule[]) => void;
+}) {
+  const nextId = () =>
+    rules.reduce((m, r) => Math.max(m, r.id), -1) + 1;
+  const patch = (i: number, p: Partial<SanitizerRule>) => {
+    const next = rules.map((r, idx) => (idx === i ? { ...r, ...p } : r));
+    onChange(next);
+  };
+  return (
+    <div className="sanitizer-rules" style={{ marginTop: 8 }}>
+      {rules.map((r, i) => (
+        <div key={r.id} className="tool-row" style={{ gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
+          <input
+            style={{ flex: 1, minWidth: 80 }}
+            placeholder="Find"
+            value={r.find}
+            onChange={(e) => patch(i, { find: e.target.value })}
+          />
+          <span className="muted small">→</span>
+          <input
+            style={{ flex: 1, minWidth: 80 }}
+            placeholder="Replace"
+            value={r.replace}
+            onChange={(e) => patch(i, { replace: e.target.value })}
+          />
+          <label className="muted small" title="Stop applying later rules after this one changes the text">
+            <input
+              type="checkbox"
+              checked={!!r.stop_after_match}
+              onChange={(e) => patch(i, { stop_after_match: e.target.checked })}
+            />{' '}
+            stop
+          </label>
+          <button
+            className="icon-btn"
+            title="Remove rule"
+            onClick={() => onChange(rules.filter((_, idx) => idx !== i))}
+          >
+            🗑
+          </button>
+        </div>
+      ))}
+      <button
+        className="small"
+        type="button"
+        onClick={() =>
+          onChange([...rules, { id: nextId(), find: '', replace: '', stop_after_match: false }])
+        }
+      >
+        Add rule
+      </button>
     </div>
   );
 }

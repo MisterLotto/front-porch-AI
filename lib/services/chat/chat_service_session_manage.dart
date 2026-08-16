@@ -150,7 +150,10 @@ extension ChatServiceSessionManage on ChatService {
     _sessionGenSettings = _sessionGenSettings
         .copy(); // inherit parent's overrides
     _summary = '';
-    _summaryLastIndex = 0;
+    // Cards were copied for the kept prefix; start the cursor at the
+    // fork tip so the next pass does not re-digest those same messages
+    // (import uses the same rule).
+    _summaryLastIndex = _messages.length;
     _selectedLooks
         .clear(); // fork starts with no per-chat look selection (keep reset blocks in sync)
     _summaryPaused =
@@ -160,9 +163,12 @@ extension ChatServiceSessionManage on ChatService {
     _isGrowthPassRunning =
         false; // growth-pass flag zero on fork (new branch hygiene; keep reset blocks in sync)
 
-    // Time-Travel Restoration
+    // Time-travel: restore from nearest realism_state in the kept prefix.
+    // Stamp-less (legacy/ST): rewind bond/time/emotion/arousal from the card
+    // but keep per-chat feature toggles (Realism/Needs/Objectives/Chaos) and
+    // fork lineage — never tip-of-chat scalar bleed, never toggle wipe.
     if (_messages.isNotEmpty) {
-      _restoreRealismStateFromMessage(_messages.last);
+      await _restoreRealismStateWalkingBack(fromIndex: _messages.length - 1);
     }
 
     await _saveChat();
@@ -170,6 +176,11 @@ extension ChatServiceSessionManage on ChatService {
     // history (the old evolved text carried the same way). Runs after
     // _saveChat so the new session row exists for the legacy-blob copy.
     await _growthStore.copySessionTo(
+      oldSessionId,
+      _currentSessionId!,
+      cursor: _messages.length,
+    );
+    await _journalStore.copySessionTo(
       oldSessionId,
       _currentSessionId!,
       cursor: _messages.length,
@@ -183,12 +194,11 @@ extension ChatServiceSessionManage on ChatService {
   /// the web library card menu both land here, so the ordering below exists
   /// once).
   ///
-  /// **The order is load-bearing.** `setActiveCharacter`/`setActiveGroup` load
-  /// that cast's most recent session, and loading a session restores THAT
-  /// session's persona (see `_loadSessionInto`) — so applying the chosen
-  /// persona first would be silently overwritten by the previous chat's. It is
-  /// applied after entry and before [startNewChat], whose session write stamps
-  /// whatever persona is active.
+  /// The chosen persona rides all the way into [startNewChat] rather than being
+  /// applied here: entering a cast loads its most recent session, and that
+  /// restores the OTHER chat's persona, so anything set before the entry call
+  /// is overwritten. Handing it to the session-creating step removes the
+  /// ordering trap instead of documenting it.
   Future<void> startFreshChatWith({
     CharacterCard? character,
     GroupChat? group,
@@ -202,14 +212,32 @@ extension ChatServiceSessionManage on ChatService {
     } else {
       return;
     }
-    if (personaId.isNotEmpty) {
-      await _userPersonaService.setActivePersona(personaId);
-    }
-    await startNewChat();
+    await startNewChat(personaId: personaId.isEmpty ? null : personaId);
   }
 
-  Future<void> startNewChat() async {
+  /// Write the currently-active persona onto the open session right now.
+  ///
+  /// The in-chat switcher (desktop composer avatar, web chat menu) changes who
+  /// you are speaking as; every `_saveChat` stamps that onto the session row, so
+  /// the binding would normally land with the next message. This makes it land
+  /// immediately, so switching and then closing the app is not silently
+  /// forgotten. No-op when no chat is open.
+  Future<void> persistSessionPersona() async {
+    if (_currentSessionId == null) return;
+    await _saveChat();
+  }
+
+  /// [personaId] is the explicitly-picked persona ("Start New Chat"). Omitted —
+  /// the ordinary "tap a character" path — the chat starts as the DEFAULT
+  /// persona, never as whoever the previously-open chat happened to be. That
+  /// inheritance is exactly what showPersonaPickerDialog exists to prevent, and
+  /// it used to leak in through here whenever the picker was skipped.
+  Future<void> startNewChat({String? personaId}) async {
     if (_activeCharacter == null && _activeGroup == null) return;
+
+    await _userPersonaService.setActivePersona(
+      personaId ?? _userPersonaService.defaultPersonaId,
+    );
 
     // Reset AFK idle state when starting a new chat
     _cancelIdleTimer();
@@ -298,25 +326,28 @@ extension ChatServiceSessionManage on ChatService {
     debugPrint(
       '[ChatService] 🟡 startNewChat: clearing messages (had ${_messages.length})',
     );
+    // The open session's last exchange may still be memory-only.
+    await flushPendingSaves();
     _messages.clear();
     _greetingIndex = 0;
     // A fresh chat starts with no Scene Guests (they don't carry across sessions).
-    _sceneGuestIds.clear();
-    _sceneGuestCards.clear();
-    _pendingGuestDeparture = null;
-    _pendingGuestPickerFilter = null;
+    _sceneGuest.ids.clear();
+    _sceneGuest.cards.clear();
+    _sceneGuest.pendingDeparture = null;
+    _sceneGuest.pendingPickerFilter = null;
     _resetGuestActivityState();
     // Phase 2 cast detection: reset the scan cadence + pending/debounce state
     // for the new 1:1 context (kept in sync with the Scene Guest clears).
-    _userMessagesSinceLastCastScan = 0;
-    _pendingGuestDetection = null;
-    _offeredOrIgnoredGuestNames.clear();
+    _sceneGuest.turnsSinceCastScan = 0;
+    _sceneGuest.pendingDetection = null;
+    _sceneGuest.offeredOrIgnoredNames.clear();
     _summary = '';
     _summaryLastIndex = 0;
     _selectedLooks
         .clear(); // fresh 1:1: drop prior chat's per-chat look selection (keep reset blocks in sync)
     _sessionGenSettings =
         ChatGenerationSettings(); // fresh chat: drop prior chat's per-chat gen overrides — forkSession is the ONE path that inherits them on purpose (keep reset blocks in sync)
+    _clearContextBudget();
     _summaryPaused =
         false; // explicit secondary zero for _summaryPaused (symmetric; startNew 1:1/ext-seed branch + incomplete zeroing ... now complete)
     _isSummaryGenerating =
@@ -433,8 +464,21 @@ extension ChatServiceSessionManage on ChatService {
             extSeed.nsfwCooldownEnabled ||
             _storageService.realismSettings.nsfwCooldownDefault,
       );
-      _chaosModeService.seedFromGroupOrExt(extSeed.chaosModeEnabled, false);
-      _needsSimEnabled = extSeed.needsSimEnabled;
+      // Seeded from the CARD or-ed with the Porch Life global, exactly as the
+      // chat_entry twin does. Deliberately NOT hoisted below the if/else next
+      // to the Pockets re-seed: down there `extSeed` is out of scope and the
+      // only readable value is the service's own, which still holds the
+      // PREVIOUS chat's chaos state — hoisting it would trade a missing
+      // re-seed for a bleed, which is worse.
+      _chaosModeService.seedFromGroupOrExt(
+        extSeed.chaosModeEnabled ||
+            _storageService.realismSettings.chaosModeDefault,
+        false,
+      );
+      // AND-gated by the global Needs switch (see chat_entry twin).
+      _needsSimEnabled =
+          extSeed.needsSimEnabled &&
+          _storageService.realismSettings.needsSimDefault;
       _enjoysLowHygiene = extSeed.enjoysLowHygiene;
       if (_needsSimEnabled) {
         // Fresh chat / new session: seed from card baselines (falls back to
@@ -452,6 +496,10 @@ extension ChatServiceSessionManage on ChatService {
         _needsSimulation.clearVector();
       }
       _needsSimulation.resetBuffers();
+      // v47: the 1:1 Pockets record is per-chat and re-seeds from the card on
+      // the first pass, so a fresh chat must start empty. See the chat_entry
+      // twin — now that the record persists, a bleed here would be saved.
+      _pockets = null;
       // needs_impact_evaluator is stateless/prompt-only (no reset calls needed on it;
       // see full list in "keep reset blocks in sync" comments + cross-ref setActiveCharacter:1572 + evolution_service (stateless or prompt-only; no reset calls needed) + realism_verification (stateless or prompt-only; no reset calls needed) + " ; read live from ext on active/group speaker; incomplete zeroing... now complete (see CLAUDE.md) (no extra scalar)") + "needsSimulation. (reason support kept for Director chips) ; cleared via sim initializeFresh/clearVector/resetBuffers on all paths; now complete)".
 
@@ -475,21 +523,10 @@ extension ChatServiceSessionManage on ChatService {
         '[startNewChat] After reset: arousal=${_nsfwService.arousalLevel}, fixation=${_relationshipService.activeFixation}/${_relationshipService.fixationLifespan}',
       );
 
-      // Recalculate tiers from seeded scores (only needed for realism-enabled chars)
-      if (_realismEnabled) {
-        // Tiers are maintained inside service after seed; no direct _calculate here.
-      }
+      // Tiers are maintained inside RelationshipService after the seed, so
+      // there is nothing to recalculate here.
 
-      // Seed initial quest/task as a primary objective
-      if (extSeed.currentTask.isNotEmpty) {
-        // Defer so the session ID is ready before the DB write
-        Future.microtask(() async {
-          await setObjective(extSeed.currentTask, isPrimary: true);
-          debugPrint(
-            '[ChatService] V2.5 seeded initial task: ${extSeed.currentTask}',
-          );
-        });
-      }
+      _importAuthoredTask(extSeed);
     } else {
       // Group mode or no active character: reset to defaults but preserve existing extensions-based values
       // (pending covered by service.resetForFreshChat below)
@@ -536,6 +573,9 @@ extension ChatServiceSessionManage on ChatService {
         _enjoysLowHygiene = false;
         _needsSimulation.clearVector();
         _needsSimulation.resetBuffers();
+        // v47: same as the ext-seed branch above — a fresh chat starts with
+        // empty hands and re-seeds from the card on the first pass.
+        _pockets = null;
         // Fresh group chat: reset each member's per-character realism (bond/trust/
         // emotion/needs/FIXATION) back to the group's default member baselines so
         // the previous session's evolved state — most visibly an active fixation
@@ -551,6 +591,46 @@ extension ChatServiceSessionManage on ChatService {
         if (_activeGroup != null) {
           _groupRealism = parseGroupRealismSeeds(
             _activeGroup!.defaultMemberRealismState,
+          ).map((k, v) => MapEntry(k, GroupMemberRealism.fromJson(v)));
+          // Re-derive Needs from those seeds, exactly as FRESH GROUP ENTRY
+          // does (chat_service_group_entry.dart — presence-inference: the
+          // creator omits the per-member 'needs' sub-map when Needs was off
+          // in the wizard). The zeroing above is the right starting point for
+          // the no-group path, but for a group it was the FINAL word: "New
+          // Chat" inside a group hard-disabled Needs, saved false onto the new
+          // session row, and every reload read it back — blank needs grids and
+          // no decay for the rest of that conversation, while first entry into
+          // the same group worked. The 1:1 branch re-seeds from the card for
+          // the same reason.
+          _needsSimEnabled = _groupRealism.values.any((state) {
+            final n = state.needs;
+            return n != null && n.isNotEmpty;
+          });
+          if (_needsSimEnabled) {
+            // Placeholder vector only — the first per-speaker
+            // _loadGroupRealismIntoScalars replaces it with that member's own
+            // needs. Same flat baseline the group-entry twin uses.
+            _needsSimulation.initializeFreshWithDefaults(const {
+              'hunger': 80,
+              'bladder': 80,
+              'energy': 80,
+              'social': 80,
+              'fun': 80,
+              'hygiene': 80,
+              'comfort': 80,
+            });
+          }
+          // The group's twin of the 1:1 chaos seed above, which this branch
+          // never had. A fresh chat inside a group simply inherited whatever
+          // setActiveGroup had left in the service — usually the right answer,
+          // which is why nobody noticed, but wrong the moment the Porch Life
+          // global changes while a group is open. "New Chat" is exactly when a
+          // user expects their defaults re-applied. Source is the GROUP's own
+          // flags rather than a card's, matching setActiveGroup.
+          _chaosModeService.seedFromGroupOrExt(
+            _activeGroup!.chaosModeEnabled ||
+                _storageService.realismSettings.chaosModeDefault,
+            _activeGroup!.chaosNsfwEnabled,
           );
         }
         _activeObjectives = [];
@@ -565,6 +645,18 @@ extension ChatServiceSessionManage on ChatService {
             false; // growth-pass flag zero in startNew non-ext/group/0-session path (both branches; keep reset blocks in sync)
       }
     }
+
+    // Both branches above cleared the record; put back what the CARDS say she
+    // starts with, so the fresh chat's greeting is drawn with her wardrobe
+    // already in the sidebar rather than empty until the first message.
+    //
+    // Placed HERE, after the if/else closes, and that placement is the whole
+    // trick: the group branch nulls `_pockets` and then rebuilds `_groupRealism`
+    // from the group's member baselines a dozen lines later, so seeding beside
+    // the null would have been wiped for every group and silently worked for
+    // every 1:1 — the shape of bug that looks fixed until somebody opens a
+    // group. One call after both branches cannot go half-right.
+    seedPocketsFromCards();
 
     // Drop the previous session's growth cache so the new chat starts with
     // the original (ungrown) personality. A fresh session has no rings and
@@ -660,6 +752,18 @@ extension ChatServiceSessionManage on ChatService {
     // Skip if character already has pre-seeded V2.5 extensions — those baseline
     // values are intentional and should not be overwritten by auto-eval.
     // (See also: setActiveCharacter 0-session path comment for why direct imports rely on retro path.)
+    //
+    // THE OPENING POSITION DOES NOT RIDE THIS GATE, and must never be wired to
+    // it. Both conditions below are about AUTHORED baselines — bond, trust,
+    // emotion, the numbers a creator set on the card — which is why an
+    // extensions-bearing card is excluded and why a group (whose baselines live
+    // in defaultMemberRealismState, not on a card) is too. Spatial stance is
+    // not authored anywhere: no card, group or Stoop download carries one, so
+    // there is nothing here to protect and these gates only ever hid the seed
+    // from the majority of real chats. It lives in the pre-turn dance instead
+    // (_seedOpeningPosture), which reaches every card shape, every group
+    // member, all four ways a conversation can start, and a reload — the seed
+    // this baseline fires is a head start for the sidebar, not the mechanism.
     if (_activeGroup == null &&
         _messages.isNotEmpty &&
         _activeCharacter!.frontPorchExtensions == null) {

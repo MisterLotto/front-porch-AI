@@ -53,56 +53,15 @@ class _GenerationTabState extends State<GenerationTab> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Reasoning (thinking models — local KoboldCpp & remote) ─────
-          const SectionHeader('Reasoning'),
+          const SectionHeader('Thinking'),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Text(
-                'Request Reasoning',
-                style: TextStyle(color: AppColors.textPrimary(context)),
-              ),
-              const Spacer(),
-              Switch(
-                value: storage.reasoningEnabled,
-                onChanged: (val) => storage.setReasoningEnabled(val),
-              ),
-            ],
+          ThinkingSettingsBlock(
+            enabled: storage.reasoningEnabled,
+            onEnabledChanged: storage.setReasoningEnabled,
+            effort: storage.reasoningEffort,
+            onEffortChanged: storage.setReasoningEffort,
+            modelId: storage.remoteModelName,
           ),
-          if (storage.reasoningEnabled)
-            Row(
-              children: [
-                Text(
-                  'Effort Level',
-                  style: TextStyle(color: AppColors.textSecondary(context)),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: AppColors.cardOf(context),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: storage.reasoningEffort,
-                      dropdownColor: AppColors.cardOf(context),
-                      style: TextStyle(color: AppColors.textPrimary(context)),
-                      items: const [
-                        DropdownMenuItem(value: 'low', child: Text('Low')),
-                        DropdownMenuItem(
-                          value: 'medium',
-                          child: Text('Medium'),
-                        ),
-                        DropdownMenuItem(value: 'high', child: Text('High')),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) storage.setReasoningEffort(val);
-                      },
-                    ),
-                  ),
-                ),
-              ],
-            ),
           const SizedBox(height: 24),
 
           // ── Generation Parameters ──────────────────────────────────────

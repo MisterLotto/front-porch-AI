@@ -55,7 +55,7 @@ extension ChatServiceSceneGuest on ChatService {
   CharacterCard? _sceneGuestForMessage(ChatMessage m) {
     if (!_isGuestAuthoredMessage(m)) return null;
     final cid = m.characterId;
-    for (final g in _sceneGuestCards) {
+    for (final g in _sceneGuest.cards) {
       if (_getCharacterIdFromCard(g) == cid) return g;
     }
     return null; // authored by a guest who is no longer present
@@ -94,7 +94,7 @@ extension ChatServiceSceneGuest on ChatService {
       }
       return null;
     }
-    if (_sceneGuestCards.isEmpty) return null;
+    if (_sceneGuest.cards.isEmpty) return null;
     final guest = _ensureSceneGuestDirector().directlyAddressedGuest(
       promptText,
     );
@@ -121,7 +121,7 @@ extension ChatServiceSceneGuest on ChatService {
   /// `/join`, and the cast-detection accept flow so there is exactly ONE enter
   /// path (no duplicated add/resolve/save/generate logic).
   Future<void> _enterSceneGuest(CharacterCard guest) async {
-    if (guest.dbId != null) _sceneGuestIds.add(guest.dbId!);
+    if (guest.dbId != null) _sceneGuest.ids.add(guest.dbId!);
     await _resolveSceneGuestCards();
     await _saveChat();
     await generateGuestTurn(guest);
@@ -135,15 +135,15 @@ extension ChatServiceSceneGuest on ChatService {
     bool isError = false,
     bool sticky = false,
   }) {
-    _guestStatusClearTimer?.cancel();
-    _guestStatusClearTimer = null;
-    _guestActivityStatus = msg;
-    _guestActivityIsError = isError;
+    _sceneGuest.statusClearTimer?.cancel();
+    _sceneGuest.statusClearTimer = null;
+    _sceneGuest.activityStatus = msg;
+    _sceneGuest.activityIsError = isError;
     notifyListeners();
     if (msg != null && !sticky) {
-      _guestStatusClearTimer = Timer(Duration(seconds: isError ? 6 : 3), () {
-        _guestActivityStatus = null;
-        _guestActivityIsError = false;
+      _sceneGuest.statusClearTimer = Timer(Duration(seconds: isError ? 6 : 3), () {
+        _sceneGuest.activityStatus = null;
+        _sceneGuest.activityIsError = false;
         notifyListeners();
       });
     }
@@ -153,12 +153,12 @@ extension ChatServiceSceneGuest on ChatService {
   /// scene-guest reset site (context switch / new chat / group) and on dispose
   /// so nothing leaks across chats. Does not notify (callers already do).
   void _resetGuestActivityState() {
-    _guestStatusClearTimer?.cancel();
-    _guestStatusClearTimer = null;
-    _guestActivityStatus = null;
-    _guestActivityIsError = false;
-    _guestBusy = false;
-    _guestAvatarEvictPath = null;
+    _sceneGuest.statusClearTimer?.cancel();
+    _sceneGuest.statusClearTimer = null;
+    _sceneGuest.activityStatus = null;
+    _sceneGuest.activityIsError = false;
+    _sceneGuest.busy = false;
+    _sceneGuest.avatarEvictPath = null;
     _clearExitUndo();
   }
 
@@ -174,7 +174,7 @@ extension ChatServiceSceneGuest on ChatService {
   }) async {
     // Don't race another creation OR an in-flight turn (the mint runs a separate
     // LLM call that doesn't set _isGenerating).
-    if (_guestBusy || _isTurnBusy) {
+    if (_sceneGuest.busy || _isTurnBusy) {
       _setGuestStatus('Busy — try again in a moment.', isError: true);
       return;
     }
@@ -183,7 +183,7 @@ extension ChatServiceSceneGuest on ChatService {
     // the host "do not voice: X, X" injection ambiguous.
     if (existing == null) {
       final wanted = displayName.trim().toLowerCase();
-      if (_sceneGuestCards.any((g) => g.name.trim().toLowerCase() == wanted)) {
+      if (_sceneGuest.cards.any((g) => g.name.trim().toLowerCase() == wanted)) {
         _setGuestStatus(
           '"$displayName" is already in the scene.',
           isError: true,
@@ -192,7 +192,7 @@ extension ChatServiceSceneGuest on ChatService {
       }
     }
     final token = _currentSessionId;
-    _guestBusy = true;
+    _sceneGuest.busy = true;
     notifyListeners();
     try {
       CharacterCard card;
@@ -228,7 +228,7 @@ extension ChatServiceSceneGuest on ChatService {
       // Only clear busy if we still own this scene — a context switch already
       // reset it (and may have started new work we must not clobber).
       if (!_sceneChanged(token)) {
-        _guestBusy = false;
+        _sceneGuest.busy = false;
         notifyListeners();
       }
     }
@@ -256,7 +256,7 @@ extension ChatServiceSceneGuest on ChatService {
         // Image gen is slow: don't bake art for a guest that has since left the
         // scene / had its card deleted, or into a chat the user already left.
         if (_sceneChanged(token)) return;
-        if (dbId != null && !_sceneGuestIds.contains(dbId)) return;
+        if (dbId != null && !_sceneGuest.ids.contains(dbId)) return;
         // saveCardAsPng takes a SOURCE IMAGE PATH (not bytes), so stage the
         // generated art to a per-invocation temp file (unique so two portrait
         // generations can't corrupt each other mid-write), then bake it in.
@@ -268,7 +268,7 @@ extension ChatServiceSceneGuest on ChatService {
         await File(tmpPath).writeAsBytes(bytes);
         await V2CardService().saveCardAsPng(card, cardPath, tmpPath);
         if (_sceneChanged(token)) return; // re-check after the slow write
-        _guestAvatarEvictPath = cardPath; // UI evicts the stale cached image
+        _sceneGuest.avatarEvictPath = cardPath; // UI evicts the stale cached image
         notifyListeners();
       } catch (e) {
         debugPrint('[SceneGuest] portrait generation failed: $e');
@@ -287,21 +287,21 @@ extension ChatServiceSceneGuest on ChatService {
   /// bypassing the auto chime-in heuristic + LLM gate. Parity-safe — it runs the
   /// same `generateGuestTurn` (zero Realism/Needs). Busy-guarded like the create
   /// flow so it can't race a user turn / another guest creation, and
-  /// context-guarded so a chat switch mid-turn can't leave `_guestBusy` stuck.
+  /// context-guarded so a chat switch mid-turn can't leave `_sceneGuest.busy` stuck.
   Future<void> speakGuestNow(CharacterCard guest) async {
     if (_activeGroup != null) return;
-    if (_isTurnBusy || _guestBusy) {
+    if (_isTurnBusy || _sceneGuest.busy) {
       _setGuestStatus('Busy — try again in a moment.', isError: true);
       return;
     }
     final token = _currentSessionId;
-    _guestBusy = true;
+    _sceneGuest.busy = true;
     notifyListeners();
     try {
       await generateGuestTurn(guest);
     } finally {
       if (!_sceneChanged(token)) {
-        _guestBusy = false;
+        _sceneGuest.busy = false;
         notifyListeners();
       }
     }
@@ -319,4 +319,58 @@ extension ChatServiceSceneGuest on ChatService {
     // different chat — recalls what happened.
     _maybeEmbedMessages(characterIdOverride: _getCharacterIdFromCard(guest));
   }
+
+  // ── Small Scene Guest read/consume accessors (moved verbatim from the god
+  // file's field block; zero behaviour change) ──
+
+  /// The persistent Scene Guests currently in this 1:1 scene (resolved cards).
+  List<CharacterCard> get sceneGuestCards =>
+      List.unmodifiable(_sceneGuest.cards);
+
+  /// Initial filter for a pending `/join` picker, or null when none is pending.
+  String? get pendingGuestPickerFilter => _sceneGuest.pendingPickerFilter;
+
+  /// Whether the pending picker should add the picked character as a FULL member
+  /// (group member / 1:1->group convert) vs a lite Scene Guest.
+  bool get pendingGuestPickerFull => _sceneGuest.pendingPickerFull;
+
+  /// Transient Scene Guest create/join status line (null when idle).
+  String? get guestActivityStatus => _sceneGuest.activityStatus;
+
+  /// Whether [guestActivityStatus] is an error (drives the banner styling).
+  bool get guestActivityIsError => _sceneGuest.activityIsError;
+
+  /// True while a Scene Guest is being created/entered (input is disabled).
+  bool get isGuestBusy => _sceneGuest.busy;
+
+  /// True while forked-in character entrances are still playing. Exposed so the
+  /// composer can mirror sendMessage's `_entrancesInFlight` early-return and
+  /// avoid consuming (saving/clearing) an attached photo for a turn that
+  /// sendMessage would silently drop. See _sendCurrentMessage.
+  bool get entrancesInFlight => _entrancesInFlight;
+
+  /// True from the start of a photo turn's captioning through the end of its
+  /// send flow. Because the offline caption await (and the post-gen vision
+  /// caption) run while `_isGenerating` is false, this is the guard that keeps
+  /// a second sendMessage from interleaving during those windows — the UI and
+  /// sendMessage entry both check it. Photo turns only; text turns are
+  /// unaffected (they are covered by `_isGenerating`).
+  bool get isPhotoTurnInFlight => _photoTurnInFlight;
+
+  /// A guest card image path whose cache the UI should evict (then call
+  /// [consumeGuestAvatarEvict]); null when there is nothing to refresh.
+  String? get guestAvatarEvictPath => _sceneGuest.avatarEvictPath;
+
+  /// Clear the pending avatar-evict signal after the UI has evicted the path.
+  void consumeGuestAvatarEvict() => _sceneGuest.avatarEvictPath = null;
+
+  /// Name to show in the UNDO SnackBar (null = nothing to offer).
+  String? get exitUndoOfferName => _sceneGuest.exitUndoOfferName;
+
+  /// Consume the one-shot UNDO offer (the SnackBar was shown); the undo itself
+  /// stays available via [undoLastExit] until invalidated.
+  void consumeExitUndoOffer() => _sceneGuest.exitUndoOfferName = null;
+
+  /// The candidate the popup should show (null = nothing pending).
+  DetectedCharacter? get pendingGuestDetection => _sceneGuest.pendingDetection;
 }

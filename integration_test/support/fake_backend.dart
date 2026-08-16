@@ -28,12 +28,19 @@ import 'dart:convert';
 import 'dart:io';
 
 class FakeBackendServer {
-  FakeBackendServer._(this._server, this.replyPieces);
+  FakeBackendServer._(this._server, this.replyPieces, this.chatChunkDelay);
 
   final HttpServer _server;
 
   /// The chat reply, streamed one SSE chunk per element.
   final List<String> replyPieces;
+
+  /// Pause before EACH chat-reply chunk (including the first — that is what
+  /// actually opens a cancel window; a between-chunks-only delay lets chunk 1
+  /// land instantly). Applies ONLY to conversation turns: evals, journal,
+  /// growth and story stages stay instant, so a paced suite doesn't multiply
+  /// every background call by the delay and blow its own waits.
+  final Duration chatChunkDelay;
 
   /// Non-eval chat completions served (the actual conversation turns).
   int chatRequests = 0;
@@ -44,11 +51,31 @@ class FakeBackendServer {
   /// Journal maintenance passes served (XML transport exchanges).
   int journalPassRequests = 0;
 
+  /// Growth passes served (the `<ring>` XML transport). Without this branch a
+  /// growth prompt fell through to the CHAT handler: chatRequests bumped,
+  /// lastChatBody clobbered, and the canned reply had no `<ring>` tags — an
+  /// honest "no growth" that silently advanced the cursor forever.
+  int growthPassRequests = 0;
+
   /// Objective task-generation requests served (numbered-list format).
   int objectiveTaskRequests = 0;
 
+  /// Story pipeline stages served, in order (architect / acts / scenes /
+  /// beats / prose) — the story suite asserts the exact sequence.
+  final List<String> storyStagesServed = [];
+
   /// Tool-transport probes refused (forces the text eval fallback).
   int toolProbeRequests = 0;
+
+  /// Manual needs-reprocess hook. A completion whose prompt carries
+  /// [reprocessMarker] is answered with [reprocessDeltas] instead of the
+  /// standard canned needs set. Set the deltas to something DIFFERENT on every
+  /// key: a scoped pass can then be proven to move only the needs it was given
+  /// and leave the rest exactly where the turn put them — with one shared reply
+  /// you cannot tell "correctly ignored" from "happened to match".
+  String? reprocessMarker;
+  Map<String, int> reprocessDeltas = const {};
+  int reprocessRequests = 0;
 
   /// Body of the most recent NON-eval chat completion — lets the test prove
   /// the user's message actually reached the outbound prompt.
@@ -82,9 +109,18 @@ class FakeBackendServer {
 
   static Future<FakeBackendServer> start({
     required List<String> replyPieces,
+    Duration chatChunkDelay = Duration.zero,
   }) async {
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final fake = FakeBackendServer._(server, replyPieces);
+    // Always own a growable copy. Suites pass const lists (or want to
+    // clear/replace mid-test for Continue), and mutating a const/unmodifiable
+    // list throws UnsupportedError mid-suite — that is exactly how
+    // continue_path_test red'd macOS + Windows CI (2026-08-11).
+    final fake = FakeBackendServer._(
+      server,
+      List<String>.of(replyPieces),
+      chatChunkDelay,
+    );
     server.listen(fake._handle);
     return fake;
   }
@@ -198,6 +234,174 @@ class FakeBackendServer {
       ]);
       return;
     }
+    // Growth pass — its prompt teaches the <ring> tag (buildGrowthPrompt's
+    // XML transport). Same precedence rationale as the journal branch. The
+    // src receipt points at message position 1 so the receipts-jump E2E has
+    // a real target to seek.
+    if (lastContent.contains('<ring')) {
+      growthPassRequests++;
+      await _streamSse(req, [
+        '<ring action="add" category="stance" src="1">'
+            'Has started saving the porch swing for their favorite guest.'
+            '</ring>',
+      ]);
+      return;
+    }
+    // ── Story pipeline stages ──────────────────────────────────────────
+    // Each stage prompt opens with a distinctive role sentence (verified
+    // against story_pipeline_service.dart's prompt builders); none of them
+    // carry the eval JSON keys below, so precedence here only guards against
+    // the CHAT fallthrough (whose canned replyPieces would fail the
+    // pipeline's JSON parse). The fake returns a MINIMAL story — 1 act,
+    // 1 scene, 1 beat — so the full concept→prose journey is 5 LLM calls.
+    if (lastContent.contains('You are a Lead Narrative Designer.') ||
+        lastContent.contains('Create a story bible from the concept.')) {
+      storyStagesServed.add('architect');
+      await _streamSse(req, [
+        jsonEncode({
+          'concept': 'A porch light that never goes out.',
+          'status_quo': 'Wren tends the porch alone each evening.',
+          'inciting_incident': 'One night the light flickers a message.',
+          'themes': 'Belonging, small kindnesses',
+          'style': {
+            'genre': 'Cozy fantasy',
+            'mood': 'Warm',
+            'writing_guide': 'Short sentences. Concrete detail.',
+          },
+          'threads': [
+            {
+              'id': 't1',
+              'name': 'The flickering light',
+              'description': 'What the porch light is trying to say.',
+            },
+          ],
+          'protagonist': {
+            'name': 'Wren',
+            'role': 'Protagonist',
+            'description': 'Keeper of the porch light.',
+          },
+          'world_lore': [
+            {'topic': 'The Porch', 'detail': 'It remembers every guest.'},
+          ],
+        }),
+      ]);
+      return;
+    }
+    if (lastContent.contains('You are an author developing story structure.')) {
+      storyStagesServed.add('acts');
+      await _streamSse(req, [
+        jsonEncode({
+          'acts': [
+            {
+              'number': 1,
+              'title': 'The Message in the Light',
+              'description': 'Wren decodes the flicker and answers it.',
+              'focus_thread_ids': ['t1'],
+              'knots': [],
+            },
+          ],
+        }),
+      ]);
+      return;
+    }
+    if (lastContent.contains('You are an author creating scenes for ACT')) {
+      storyStagesServed.add('scenes');
+      await _streamSse(req, [
+        jsonEncode({
+          'scenes': [
+            {
+              'number': 1,
+              'title': 'Reading the Flicker',
+              'description': 'Wren counts the pulses and writes them down.',
+              'active_thread_ids': ['t1'],
+              'location': 'The front porch',
+              'cast_names': ['Wren'],
+              'valence': 2,
+              'causality': {
+                'interaction_type': 'Isolation',
+                'description': 'A quiet solo discovery.',
+              },
+            },
+          ],
+          'new_characters': [],
+        }),
+      ]);
+      return;
+    }
+    if (lastContent.contains(
+      'You are the architect of a single narrative scene.',
+    )) {
+      storyStagesServed.add('beats');
+      await _streamSse(req, [
+        jsonEncode({
+          'beats': [
+            {
+              'number': 1,
+              'type': 'Revelation',
+              'description': 'The flicker spells a single word: stay.',
+              'emotional_shift': 'wary to moved',
+              'valence': 4,
+              'pacing': 1,
+            },
+          ],
+        }),
+      ]);
+      return;
+    }
+    // ── Auto-Write stages (Drafter → Editor → Validator → Archivist) ───
+    // A DIFFERENT path from the 'prose' branch below: generateFullAct writes a
+    // scene in one combined call, while the writer page's Auto-Write runs these
+    // four per beat. Both exist in the app, so both are modeled.
+    if (lastContent.contains(
+      'You are an award-winning author working on your next novel.',
+    )) {
+      storyStagesServed.add('drafter');
+      await _streamSse(req, [
+        'The lamp guttered once. ',
+        'Wren did not move to steady it.',
+      ]);
+      return;
+    }
+    if (lastContent.contains('You are a Ruthless Editor.')) {
+      storyStagesServed.add('editor');
+      await _streamSse(req, [
+        'The lamp guttered once, and Wren let it. Some things keep '
+            'themselves alight.',
+      ]);
+      return;
+    }
+    if (lastContent.contains('You are a Script Doctor.')) {
+      storyStagesServed.add('validator');
+      await _streamSse(req, [
+        jsonEncode({'valid': true, 'reason': '', 'rectified_beats': []}),
+      ]);
+      return;
+    }
+    if (lastContent.contains('You are the Story Archivist.')) {
+      storyStagesServed.add('archivist');
+      // Deliberately empty updates: the archivist's PARSE is what this
+      // exercises; inventing cast edits would couple the suite to its schema.
+      await _streamSse(req, [
+        jsonEncode({'cast_updates': [], 'world_lore': []}),
+      ]);
+      return;
+    }
+    if (lastContent.contains(
+      'You are a skilled novelist writing one section of a larger scene.',
+    )) {
+      storyStagesServed.add('prose');
+      // Multiple chunks on purpose: tokenCount increments once per stream
+      // event, and the running overlay's 'N tokens generated' line is the
+      // suite's streaming assertion.
+      await _streamSse(req, [
+        'The porch light blinked, ',
+        'paused, and blinked again. ',
+        'Wren counted the pulses twice before believing them: ',
+        'stay.',
+      ]);
+      return;
+    }
+
     // Objective task generation — plain numbered-list format, not JSON.
     if (lastContent.contains('numbered list of exactly')) {
       objectiveTaskRequests++;
@@ -207,6 +411,22 @@ class FakeBackendServer {
             '3. Tell the story of the creaky board.\n'
             '4. Ask about their favorite weather.\n'
             '5. Watch the sunset together.',
+      ]);
+      return;
+    }
+
+    // Manual needs reprocess — checked BEFORE the eval keys below, because a
+    // reprocess prompt is a needs-impact prompt and would otherwise be answered
+    // with the same canned set the original turn got.
+    final reprocess = reprocessMarker;
+    if (reprocess != null &&
+        reprocess.isNotEmpty &&
+        lastContent.contains(reprocess)) {
+      reprocessRequests++;
+      await _streamSse(req, [
+        jsonEncode({
+          for (final e in reprocessDeltas.entries) '${e.key}_delta': e.value,
+        }),
       ]);
       return;
     }
@@ -228,6 +448,27 @@ class FakeBackendServer {
       eval['social_delta'] = 5;
       eval['bladder_delta'] = -3;
       eval['comfort_delta'] = 2;
+    }
+    // Climax detection. Its OWN eval since Afterglow was decoupled from Needs
+    // (e943ba2) — it used to ride the needs-impact eval, which is why the
+    // verdict was produced in the hunger_delta branch above.
+    //
+    // Without this branch the standalone call matches nothing, falls through to
+    // the CHAT branch, is answered with prose, and detection silently fails —
+    // which is exactly how it reached CI. Worse, it also incremented
+    // chatRequests, the counter the scene-time comment below is careful to keep
+    // trustworthy.
+    //
+    // TRUE only when the scene the eval quotes contains the marker phrase 'the
+    // wave crests', which only climax_refractory_test.dart ever sends, so every
+    // other suite keeps its existing behavior. Note the phrase arrives in the
+    // "Recent exchange for context" section, not the reply: the user narrates
+    // the climax and the character answers with aftermath, which is the common
+    // shape in roleplay and the reason that context is in the prompt at all.
+    if (lastContent.contains('"is_climax"')) {
+      final climax = lastContent.contains('the wave crests');
+      eval['is_climax'] = climax;
+      eval['refractory_turns'] = climax ? 6 : 0;
     }
     if (lastContent.contains('emotion_intensity')) {
       eval['emotion'] = 'happy';
@@ -282,12 +523,26 @@ class FakeBackendServer {
 
     chatRequests++;
     lastChatBody = body;
-    await _streamSse(req, replyPieces);
+    await _streamSse(req, replyPieces, delay: chatChunkDelay);
   }
 
-  Future<void> _streamSse(HttpRequest req, List<String> pieces) async {
+  Future<void> _streamSse(
+    HttpRequest req,
+    List<String> pieces, {
+    Duration delay = Duration.zero,
+  }) async {
     req.response.headers.set('Content-Type', 'text/event-stream');
+    // MANDATORY for a real stream, and flush() alone is NOT enough: Dart's
+    // HttpResponse buffers output by default and only hands the buffer to the
+    // socket when the response CLOSES, so every "paced" chunk below arrived at
+    // the client in one burst at the end. The app then saw zero tokens for the
+    // whole generation and the full reply in a single step — which is exactly
+    // why the cancel-mid-regenerate phase could never observe a partial. Proven
+    // in isolation: with bufferOutput left true, chunk 1 lands at +1676ms
+    // (stream end); with it false, at +405ms.
+    req.response.bufferOutput = false;
     for (final piece in pieces) {
+      if (delay > Duration.zero) await Future<void>.delayed(delay);
       req.response.write(
         'data: ${jsonEncode({
           'choices': [

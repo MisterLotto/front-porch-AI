@@ -114,6 +114,34 @@ class PromiseDebtService {
   final Map<String, List<OpenPromise>> _openCache = {};
   final Set<String> _warming = {};
 
+  /// Anti-nag injection cadence (maintainer report 2026-08-04: with any open
+  /// promise the injection line rode EVERY prompt, so characters brought
+  /// promises up every single turn — and a stuck-open promise made them
+  /// DENY ever keeping it, which the next eval then read as confirmation).
+  /// Ledger activity (plant/resolve) injects for the next [kFreshBuilds]
+  /// prompt builds so it colors the immediate scene; after that the line
+  /// goes quiet and resurfaces every [kReminderEvery]th build as background
+  /// weight, not a nag.
+  static const int kFreshBuilds = 2;
+  static const int kReminderEvery = 5;
+  final Map<String, int> _injectCountdown = {};
+
+  /// Called once per prompt build by the injection builder. Mutating —
+  /// advances this diary's cadence counter.
+  bool shouldInjectNow(String sessionId, String characterId) {
+    final key = '$sessionId|$characterId';
+    final c = _injectCountdown[key] ?? 0;
+    if (c <= 0) {
+      _injectCountdown[key] = c < 0 ? c + 1 : kReminderEvery - 1;
+      return true;
+    }
+    _injectCountdown[key] = c - 1;
+    return false;
+  }
+
+  void _markLedgerActivity(String sessionId, String characterId) =>
+      _injectCountdown['$sessionId|$characterId'] = -(kFreshBuilds - 1);
+
   List<OpenPromise>? cachedOpen(String sessionId, String characterId) =>
       _openCache['$sessionId|$characterId'];
 
@@ -156,6 +184,30 @@ class PromiseDebtService {
       r")\b",
       caseSensitive: false,
     ).hasMatch(t);
+  }
+
+  /// Token-overlap duplicate check for NEW plants (field incident,
+  /// 2026-08-04: the eval re-planted already-KEPT commitments as new every
+  /// few turns — 9 promise cards for one chat, several the same pledge —
+  /// saturating the journal with promise talk). Pure + exposed for testing.
+  static bool isDuplicatePromise(String candidate, Iterable<String> existing) {
+    const stop = {'promised', 'promise', 'word', 'their', 'they', 'will'};
+    Set<String> toks(String s) => s
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+        .split(RegExp(r'\s+'))
+        .where((w) => w.length > 2 && !stop.contains(w))
+        .toSet();
+    final c = toks(candidate);
+    if (c.isEmpty) return false;
+    for (final e in existing) {
+      final t = toks(e);
+      if (t.isEmpty) continue;
+      final inter = c.intersection(t).length;
+      final smaller = c.length < t.length ? c.length : t.length;
+      if (inter / smaller >= 0.6) return true;
+    }
+    return false;
   }
 
   /// Parse one-line verdict. Returns [PromiseNone] on garbage (local floor).
@@ -254,13 +306,32 @@ class PromiseDebtService {
                     '${open[i].text}',
             ].join('\n');
 
+      // Already-settled commitments — shown to the model so it stops
+      // re-reporting them as new, and used by the code-side dedup guard
+      // below (field incident: the same pledge planted 4x in one evening).
+      final settled = <String>[];
+      for (final card in await journalStore.cardsFor(sessionId, characterId)) {
+        final meta = metaOf(card.metadata);
+        if (meta['kind'] != 'promise') continue;
+        if ((meta['status'] as String?) == 'open') continue;
+        final desc = meta['description'];
+        settled.add(desc is String && desc.isNotEmpty ? desc : card.content);
+      }
+      final settledBlock = settled.isEmpty
+          ? ''
+          : '\nAlready settled — do NOT report these as new:\n'
+                '${settled.reversed.take(5).map((s) => '- $s').join('\n')}\n';
+
       final raw = await fireEval(
         'You track PROMISES and commitments between $characterName and '
         '$userName — things someone gave their word about, not casual plans.\n\n'
-        'Open commitments (character diary):\n$numbered\n\n'
+        'Open commitments (character diary):\n$numbered\n$settledBlock\n'
         'Recent exchange:\n$recentExchange\n\n'
         'Did this exchange create ONE clear new commitment, or clearly keep/'
         'break ONE open commitment above?\n'
+        'A listed commitment being carried out IN this exchange — the '
+        'promised thing actually happening or being delivered — counts as '
+        'KEPT even if nobody says the word "promise".\n'
         'Strict: most turns do NOTHING. Vague plans, flirting, "maybe later", '
         'and ordinary politeness are NONE.\n'
         'Answer with EXACTLY one line, nothing else:\n'
@@ -278,6 +349,13 @@ class PromiseDebtService {
         case PromiseNew(:final party, :final text):
           if (open.length >= kMaxOpen) {
             debugPrint('[PromiseDebt] at cap ($kMaxOpen open) — skip NEW');
+            return;
+          }
+          if (isDuplicatePromise(text, [
+            for (final p in open) p.text,
+            ...settled,
+          ])) {
+            debugPrint('[PromiseDebt] duplicate of an existing card — skip');
             return;
           }
           await _plantOpen(
@@ -306,6 +384,37 @@ class PromiseDebtService {
     } catch (e) {
       debugPrint('[PromiseDebt] evaluateTurn skipped: $e');
     }
+  }
+
+  /// Manual "Mark kept / broken" from the diary's Promises tab — the escape
+  /// hatch for fulfillments the post-turn eval missed (2026-08-04 report:
+  /// once the moment scrolls out of the eval window it can never be
+  /// re-detected). Routes through the SAME [_resolve] applier as automatic
+  /// detection, so the trust/bond deltas, the milestone card, salience kick,
+  /// and cache refresh are identical. Returns false if [cardId] is not an
+  /// open promise of this diary.
+  Future<bool> resolveManually({
+    required String sessionId,
+    required String characterId,
+    required String cardId,
+    required bool kept,
+    int? storyDay,
+    String? storyClock,
+  }) async {
+    final open = await listOpen(sessionId, characterId);
+    for (final item in open) {
+      if (item.cardId != cardId) continue;
+      await _resolve(
+        sessionId: sessionId,
+        characterId: characterId,
+        item: item,
+        kept: kept,
+        storyDay: storyDay,
+        storyClock: storyClock,
+      );
+      return true;
+    }
+    return false;
   }
 
   Future<void> _plantOpen({
@@ -349,6 +458,7 @@ class PromiseDebtService {
       }
     }
     await listOpen(sessionId, characterId); // refresh cache
+    _markLedgerActivity(sessionId, characterId);
     onCacheWarmed?.call();
     debugPrint('[PromiseDebt] NEW $party: $text');
   }
@@ -426,6 +536,7 @@ class PromiseDebtService {
     }
 
     await listOpen(sessionId, characterId);
+    _markLedgerActivity(sessionId, characterId);
     onSalienceKick?.call();
     onCacheWarmed?.call();
     debugPrint('[PromiseDebt] $status (${item.party}): ${item.text}');

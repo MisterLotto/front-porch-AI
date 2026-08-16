@@ -2,23 +2,78 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Renders chat message text with:
-//  - inline markdown images (![alt](url)) shown as actual images (parity with
-//    the desktop's ExternalImageWidget), and
+//  - inline markdown images (![alt](https://...)) shown as actual images after
+//    session consent (parity with the desktop ExternalImageWidget), and
 //  - RP text coloring (parity with the desktop AppColors): "quoted dialogue" →
 //    amber, *actions* → italic blue, **emphasis** → bold blue. The coloring
 //    itself lives in the shared renderRpInline (also used by the composer).
-// No HTML injection — only image src/alt are extracted, and the colored spans
-// carry plain text content, never markup.
+// No HTML injection — only https?:// image src/alt are extracted, and the
+// colored spans carry plain text content, never markup. img src is never set
+// until the user consents (session flag).
 
-import { memo } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { renderRpInline } from './rpText';
 
-const IMAGE_RE = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
+// Desktop only matches http(s) — data:/javascript:/relative stay as text.
+const IMAGE_RE = /!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g;
+
+const CONSENT_KEY = 'fpai_external_image_consent';
+
+function readConsent(): boolean {
+  try {
+    return sessionStorage.getItem(CONSENT_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+let sessionConsent = readConsent();
+const consentListeners = new Set<() => void>();
+
+function grantExternalImageConsent() {
+  sessionConsent = true;
+  try {
+    sessionStorage.setItem(CONSENT_KEY, '1');
+  } catch {
+    /* memory flag still covers this tab */
+  }
+  consentListeners.forEach((l) => l());
+}
+
+function useExternalImageConsent() {
+  const [allowed, setAllowed] = useState(sessionConsent);
+  useEffect(() => {
+    const onGrant = () => setAllowed(true);
+    consentListeners.add(onGrant);
+    return () => {
+      consentListeners.delete(onGrant);
+    };
+  }, []);
+  return { allowed, allow: grantExternalImageConsent };
+}
+
+/** Placeholder until session consent; never sets img src beforehand. */
+function ExternalChatImage({ url, alt }: { url: string; alt: string }) {
+  const { allowed, allow } = useExternalImageConsent();
+  if (allowed) {
+    return <img className="chat-image" src={url} alt={alt} loading="lazy" />;
+  }
+  const label = alt && alt !== 'image' ? ` (${alt})` : '';
+  return (
+    <div className="chat-image-consent">
+      <span>External image{label}</span>
+      <button type="button" onClick={allow}>
+        Load external image?
+      </button>
+    </div>
+  );
+}
 
 // Memoised: the chat refreshes its whole state on every WS event (token / done /
 // chat_updated / realism processing), which re-renders the message list. Skipping
 // re-render for messages whose text is unchanged stops the transcript re-parsing
-// every bubble (and prevents inline <img> from flashing/refetching) on each tick.
+// every bubble. ExternalChatImage owns consent state so a grant still updates
+// already-mounted placeholders without busting this memo.
 function MessageContentImpl({ text }: { text: string }) {
   const parts: React.ReactNode[] = [];
   let last = 0;
@@ -32,7 +87,7 @@ function MessageContentImpl({ text }: { text: string }) {
     const alt = match[1] || 'image';
     const url = match[2];
     parts.push(
-      <img key={`img-${match.index}-${url}`} className="chat-image" src={url} alt={alt} loading="lazy" />,
+      <ExternalChatImage key={`img-${match.index}-${url}`} url={url} alt={alt} />,
     );
     last = match.index + match[0].length;
   }

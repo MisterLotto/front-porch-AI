@@ -5,7 +5,31 @@
 // source/pack gating, the CTA matrix, upload plumbing (looks vs tagged
 // expressions), and the one-shot run orchestration — card-first, portrait →
 // switch stage → pack (edit-first vs img2img) → QC hold-back → import.
+//
+// WHY THE LONGER TIMEOUT. These tests drive whole eight-slot expression packs:
+// each slot encodes a real PNG, writes it to disk, and inserts a DB row, and the
+// run tests do that several times over. Locally the file finishes in about ten
+// seconds. On a GitHub runner it does not: ci.yml went from --concurrency=1 to 4
+// in ce11fee1, and on a contended two-core runner this file no longer gets a
+// core to itself — everything in it runs several times slower and the
+// heaviest test, "cancel keeps completed images", crossed the 30-second default
+// and has failed EVERY run since 43fd422a.
+//
+// It is starvation, not a hang, and the distinction is the whole reason this is
+// the right fix rather than a mask: the failure is a flat TimeoutException with
+// no assertion ever reached, it is perfectly reproducible on CI rather than
+// flaky, and the same suite passes at --concurrency=4 both on macOS and inside
+// the Linux CI container (2992 tests green). Nothing here is waiting on
+// something that never arrives; it is waiting on a CPU.
+//
+// Per the rollback rule ce11fee1 wrote into ci.yml — do not re-pin the whole
+// suite to concurrency 1 to rescue one slow file — this raises the ceiling for
+// this file alone. No assertion is weakened; a test that needs 40 seconds on a
+// starved runner simply stops being reported as a failure.
+@Timeout(Duration(minutes: 3))
+library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -52,6 +76,23 @@ class _FakeImageGen extends ChangeNotifier implements ImageGenService {
   bool failPortrait = false;
   int comfyNudges = 0;
 
+  /// Slot generations allowed to finish immediately; every one after that
+  /// awaits [slotGate]. This is what makes stopping the pack at an exact slot
+  /// boundary deterministic.
+  ///
+  /// Without it the fake returns instantly, so the whole eight-slot pack can
+  /// finish inside one microtask burst before a listener's cancel() is even
+  /// observed. That is why "cancel keeps completed images" passed on a quiet
+  /// machine and failed on every CI run from 43fd422a onward, when ci.yml went
+  /// from --concurrency=1 to 4 and the runner got busier. The product was never
+  /// wrong; the test was asserting a race it had no way to win.
+  ///
+  /// Per the rollback rule written into ce11fee1: do not re-pin concurrency to
+  /// 1 to hide one racy file — fix the file.
+  int freeSlots = 0;
+  Completer<void>? slotGate;
+  int _slotCalls = 0;
+
   @override
   bool get isConfigured => configured;
 
@@ -90,6 +131,9 @@ class _FakeImageGen extends ChangeNotifier implements ImageGenService {
     }
     // Slot generation: marker bytes carrying the emotion (prompt leads with
     // the emotion modifier; the first comma-token is unique enough per slot).
+    _slotCalls++;
+    final gate = slotGate;
+    if (gate != null && _slotCalls > freeSlots) await gate.future;
     return Uint8List.fromList(utf8.encode('IMG:$prompt'));
   }
 
@@ -472,12 +516,22 @@ void main() {
 
     test('cancel keeps completed images', () async {
       final c = controller();
+      // Hold the pack at the slot-1 boundary so the cancel below is GUARANTEED
+      // to land mid-run rather than racing an already-finished pack. See
+      // _FakeImageGen.slotGate for why this is not merely tidier: the old
+      // version asserted a race, passed locally, and failed every CI run once
+      // the suite started running four-wide.
+      final gate = Completer<void>();
+      gen.freeSlots = 1;
+      gen.slotGate = gate;
       c.addListener(() {
         // Cancel as soon as the pack starts: slot 1 finishes, the rest stay
         // pending, and what finished is still imported.
         if (c.stage == AvatarRunStage.pack && !c.session!.isRunning) return;
         if (c.stage == AvatarRunStage.pack && c.session!.doneCount == 1) {
           c.cancel();
+          // Release the held slot so the run can unwind under cancellation.
+          if (!gate.isCompleted) gate.complete();
         }
       });
       await c.run();

@@ -1832,6 +1832,17 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _pocketsMeta = const VerificationMeta(
+    'pockets',
+  );
+  @override
+  late final GeneratedColumn<String> pockets = GeneratedColumn<String>(
+    'pockets',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _evolvedPersonalityMeta =
       const VerificationMeta('evolvedPersonality');
   @override
@@ -1925,6 +1936,44 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _themeOverridesMeta = const VerificationMeta(
+    'themeOverrides',
+  );
+  @override
+  late final GeneratedColumn<String> themeOverrides = GeneratedColumn<String>(
+    'theme_overrides',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _contextBudgetJsonMeta = const VerificationMeta(
+    'contextBudgetJson',
+  );
+  @override
+  late final GeneratedColumn<String> contextBudgetJson =
+      GeneratedColumn<String>(
+        'context_budget_json',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _objectivesEnabledMeta = const VerificationMeta(
+    'objectivesEnabled',
+  );
+  @override
+  late final GeneratedColumn<bool> objectivesEnabled = GeneratedColumn<bool>(
+    'objectives_enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("objectives_enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
   static const VerificationMeta _groupRealismStateMeta = const VerificationMeta(
     'groupRealismState',
   );
@@ -2017,6 +2066,7 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     chaosPressure,
     needsSimEnabled,
     needsVector,
+    pockets,
     evolvedPersonality,
     evolvedScenario,
     evolutionCount,
@@ -2025,6 +2075,9 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     generationSettings,
     userPersonaId,
     selectedLookAvatarId,
+    themeOverrides,
+    contextBudgetJson,
+    objectivesEnabled,
     groupRealismState,
     createdAt,
     updatedAt,
@@ -2389,6 +2442,12 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         ),
       );
     }
+    if (data.containsKey('pockets')) {
+      context.handle(
+        _pocketsMeta,
+        pockets.isAcceptableOrUnknown(data['pockets']!, _pocketsMeta),
+      );
+    }
     if (data.containsKey('evolved_personality')) {
       context.handle(
         _evolvedPersonalityMeta,
@@ -2458,6 +2517,33 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         selectedLookAvatarId.isAcceptableOrUnknown(
           data['selected_look_avatar_id']!,
           _selectedLookAvatarIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('theme_overrides')) {
+      context.handle(
+        _themeOverridesMeta,
+        themeOverrides.isAcceptableOrUnknown(
+          data['theme_overrides']!,
+          _themeOverridesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('context_budget_json')) {
+      context.handle(
+        _contextBudgetJsonMeta,
+        contextBudgetJson.isAcceptableOrUnknown(
+          data['context_budget_json']!,
+          _contextBudgetJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('objectives_enabled')) {
+      context.handle(
+        _objectivesEnabledMeta,
+        objectivesEnabled.isAcceptableOrUnknown(
+          data['objectives_enabled']!,
+          _objectivesEnabledMeta,
         ),
       );
     }
@@ -2665,6 +2751,10 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         DriftSqlType.string,
         data['${effectivePrefix}needs_vector'],
       ),
+      pockets: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pockets'],
+      ),
       evolvedPersonality: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}evolved_personality'],
@@ -2697,6 +2787,18 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         DriftSqlType.string,
         data['${effectivePrefix}selected_look_avatar_id'],
       ),
+      themeOverrides: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}theme_overrides'],
+      ),
+      contextBudgetJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}context_budget_json'],
+      ),
+      objectivesEnabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}objectives_enabled'],
+      )!,
       groupRealismState: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}group_realism_state'],
@@ -2771,6 +2873,22 @@ class Session extends DataClass implements Insertable<Session> {
   final int chaosPressure;
   final bool needsSimEnabled;
   final String? needsVector;
+
+  /// v47 — the 1:1 speaker's Pockets record, as `{worn: [...], carrying: [...]}`.
+  ///
+  /// The mirror of [needsVector], and it exists for the same reason. Group
+  /// chats persist their per-member pockets inside `group_realism_state`, so
+  /// they always survived a reload; a 1:1 chat had NO home for the record at
+  /// all. It lived in memory, snapshotted into each message's `realism_state`
+  /// — but that snapshot is only restored on regen, swipe and delete, never on
+  /// session load. So closing a 1:1 chat and reopening it emptied her pockets,
+  /// while the feature's own description promised the opposite. Straight
+  /// 1:1-vs-group parity break.
+  ///
+  /// Nullable with no default: NULL means "nothing recorded", which is the
+  /// honest value both for every chat that predates this column and for any
+  /// chat where Pockets is switched off.
+  final String? pockets;
   final String evolvedPersonality;
   final String evolvedScenario;
   final int evolutionCount;
@@ -2781,9 +2899,21 @@ class Session extends DataClass implements Insertable<Session> {
 
   /// The gallery "look" (avatar) selected for THIS chat, or null → show the
   /// character's library face (`imagePath`). Per-chat selection over the global
-  /// look collection. Nullable + additive; the external card tool (Character
-  /// Card Forge) simply omits it (NULL).
+  /// look collection. Nullable + additive.
   final String? selectedLookAvatarId;
+
+  /// Per-chat theme overrides JSON. Was repair-only until 2026-08-04 — fresh
+  /// createAll() DBs (unit tests) lacked it. No schemaVersion bump: live DBs
+  /// get it from the always-on repair before open() returns. Raw-SQL access.
+  final String? themeOverrides;
+  final String? contextBudgetJson;
+
+  /// Per-chat Objectives switch (v45). Defaults TRUE because objectives have
+  /// always run unconditionally — every existing row must keep behaving
+  /// exactly as it did, so the migration's default is the no-op value.
+  /// AND-gated against the global `objectivesEnabled` the same way
+  /// [needsSimEnabled] is gated against `needsSimDefault`.
+  final bool objectivesEnabled;
 
   /// Live per-character realism/needs state for group sessions.
   /// JSON map: { charId: { emotion, needs, affection, trust, fixation, relationships, ... } }
@@ -2836,6 +2966,7 @@ class Session extends DataClass implements Insertable<Session> {
     required this.chaosPressure,
     required this.needsSimEnabled,
     this.needsVector,
+    this.pockets,
     required this.evolvedPersonality,
     required this.evolvedScenario,
     required this.evolutionCount,
@@ -2844,6 +2975,9 @@ class Session extends DataClass implements Insertable<Session> {
     this.generationSettings,
     this.userPersonaId,
     this.selectedLookAvatarId,
+    this.themeOverrides,
+    this.contextBudgetJson,
+    required this.objectivesEnabled,
     required this.groupRealismState,
     required this.createdAt,
     required this.updatedAt,
@@ -2916,6 +3050,9 @@ class Session extends DataClass implements Insertable<Session> {
     if (!nullToAbsent || needsVector != null) {
       map['needs_vector'] = Variable<String>(needsVector);
     }
+    if (!nullToAbsent || pockets != null) {
+      map['pockets'] = Variable<String>(pockets);
+    }
     map['evolved_personality'] = Variable<String>(evolvedPersonality);
     map['evolved_scenario'] = Variable<String>(evolvedScenario);
     map['evolution_count'] = Variable<int>(evolutionCount);
@@ -2932,6 +3069,13 @@ class Session extends DataClass implements Insertable<Session> {
     if (!nullToAbsent || selectedLookAvatarId != null) {
       map['selected_look_avatar_id'] = Variable<String>(selectedLookAvatarId);
     }
+    if (!nullToAbsent || themeOverrides != null) {
+      map['theme_overrides'] = Variable<String>(themeOverrides);
+    }
+    if (!nullToAbsent || contextBudgetJson != null) {
+      map['context_budget_json'] = Variable<String>(contextBudgetJson);
+    }
+    map['objectives_enabled'] = Variable<bool>(objectivesEnabled);
     map['group_realism_state'] = Variable<String>(groupRealismState);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -3005,6 +3149,9 @@ class Session extends DataClass implements Insertable<Session> {
       needsVector: needsVector == null && nullToAbsent
           ? const Value.absent()
           : Value(needsVector),
+      pockets: pockets == null && nullToAbsent
+          ? const Value.absent()
+          : Value(pockets),
       evolvedPersonality: Value(evolvedPersonality),
       evolvedScenario: Value(evolvedScenario),
       evolutionCount: Value(evolutionCount),
@@ -3019,6 +3166,13 @@ class Session extends DataClass implements Insertable<Session> {
       selectedLookAvatarId: selectedLookAvatarId == null && nullToAbsent
           ? const Value.absent()
           : Value(selectedLookAvatarId),
+      themeOverrides: themeOverrides == null && nullToAbsent
+          ? const Value.absent()
+          : Value(themeOverrides),
+      contextBudgetJson: contextBudgetJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(contextBudgetJson),
+      objectivesEnabled: Value(objectivesEnabled),
       groupRealismState: Value(groupRealismState),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
@@ -3086,6 +3240,7 @@ class Session extends DataClass implements Insertable<Session> {
       chaosPressure: serializer.fromJson<int>(json['chaosPressure']),
       needsSimEnabled: serializer.fromJson<bool>(json['needsSimEnabled']),
       needsVector: serializer.fromJson<String?>(json['needsVector']),
+      pockets: serializer.fromJson<String?>(json['pockets']),
       evolvedPersonality: serializer.fromJson<String>(
         json['evolvedPersonality'],
       ),
@@ -3104,6 +3259,11 @@ class Session extends DataClass implements Insertable<Session> {
       selectedLookAvatarId: serializer.fromJson<String?>(
         json['selectedLookAvatarId'],
       ),
+      themeOverrides: serializer.fromJson<String?>(json['themeOverrides']),
+      contextBudgetJson: serializer.fromJson<String?>(
+        json['contextBudgetJson'],
+      ),
+      objectivesEnabled: serializer.fromJson<bool>(json['objectivesEnabled']),
       groupRealismState: serializer.fromJson<String>(json['groupRealismState']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -3158,6 +3318,7 @@ class Session extends DataClass implements Insertable<Session> {
       'chaosPressure': serializer.toJson<int>(chaosPressure),
       'needsSimEnabled': serializer.toJson<bool>(needsSimEnabled),
       'needsVector': serializer.toJson<String?>(needsVector),
+      'pockets': serializer.toJson<String?>(pockets),
       'evolvedPersonality': serializer.toJson<String>(evolvedPersonality),
       'evolvedScenario': serializer.toJson<String>(evolvedScenario),
       'evolutionCount': serializer.toJson<int>(evolutionCount),
@@ -3168,6 +3329,9 @@ class Session extends DataClass implements Insertable<Session> {
       'generationSettings': serializer.toJson<String?>(generationSettings),
       'userPersonaId': serializer.toJson<String?>(userPersonaId),
       'selectedLookAvatarId': serializer.toJson<String?>(selectedLookAvatarId),
+      'themeOverrides': serializer.toJson<String?>(themeOverrides),
+      'contextBudgetJson': serializer.toJson<String?>(contextBudgetJson),
+      'objectivesEnabled': serializer.toJson<bool>(objectivesEnabled),
       'groupRealismState': serializer.toJson<String>(groupRealismState),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -3218,6 +3382,7 @@ class Session extends DataClass implements Insertable<Session> {
     int? chaosPressure,
     bool? needsSimEnabled,
     Value<String?> needsVector = const Value.absent(),
+    Value<String?> pockets = const Value.absent(),
     String? evolvedPersonality,
     String? evolvedScenario,
     int? evolutionCount,
@@ -3226,6 +3391,9 @@ class Session extends DataClass implements Insertable<Session> {
     Value<String?> generationSettings = const Value.absent(),
     Value<String?> userPersonaId = const Value.absent(),
     Value<String?> selectedLookAvatarId = const Value.absent(),
+    Value<String?> themeOverrides = const Value.absent(),
+    Value<String?> contextBudgetJson = const Value.absent(),
+    bool? objectivesEnabled,
     String? groupRealismState,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -3282,6 +3450,7 @@ class Session extends DataClass implements Insertable<Session> {
     chaosPressure: chaosPressure ?? this.chaosPressure,
     needsSimEnabled: needsSimEnabled ?? this.needsSimEnabled,
     needsVector: needsVector.present ? needsVector.value : this.needsVector,
+    pockets: pockets.present ? pockets.value : this.pockets,
     evolvedPersonality: evolvedPersonality ?? this.evolvedPersonality,
     evolvedScenario: evolvedScenario ?? this.evolvedScenario,
     evolutionCount: evolutionCount ?? this.evolutionCount,
@@ -3297,6 +3466,13 @@ class Session extends DataClass implements Insertable<Session> {
     selectedLookAvatarId: selectedLookAvatarId.present
         ? selectedLookAvatarId.value
         : this.selectedLookAvatarId,
+    themeOverrides: themeOverrides.present
+        ? themeOverrides.value
+        : this.themeOverrides,
+    contextBudgetJson: contextBudgetJson.present
+        ? contextBudgetJson.value
+        : this.contextBudgetJson,
+    objectivesEnabled: objectivesEnabled ?? this.objectivesEnabled,
     groupRealismState: groupRealismState ?? this.groupRealismState,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -3416,6 +3592,7 @@ class Session extends DataClass implements Insertable<Session> {
       needsVector: data.needsVector.present
           ? data.needsVector.value
           : this.needsVector,
+      pockets: data.pockets.present ? data.pockets.value : this.pockets,
       evolvedPersonality: data.evolvedPersonality.present
           ? data.evolvedPersonality.value
           : this.evolvedPersonality,
@@ -3440,6 +3617,15 @@ class Session extends DataClass implements Insertable<Session> {
       selectedLookAvatarId: data.selectedLookAvatarId.present
           ? data.selectedLookAvatarId.value
           : this.selectedLookAvatarId,
+      themeOverrides: data.themeOverrides.present
+          ? data.themeOverrides.value
+          : this.themeOverrides,
+      contextBudgetJson: data.contextBudgetJson.present
+          ? data.contextBudgetJson.value
+          : this.contextBudgetJson,
+      objectivesEnabled: data.objectivesEnabled.present
+          ? data.objectivesEnabled.value
+          : this.objectivesEnabled,
       groupRealismState: data.groupRealismState.present
           ? data.groupRealismState.value
           : this.groupRealismState,
@@ -3494,6 +3680,7 @@ class Session extends DataClass implements Insertable<Session> {
           ..write('chaosPressure: $chaosPressure, ')
           ..write('needsSimEnabled: $needsSimEnabled, ')
           ..write('needsVector: $needsVector, ')
+          ..write('pockets: $pockets, ')
           ..write('evolvedPersonality: $evolvedPersonality, ')
           ..write('evolvedScenario: $evolvedScenario, ')
           ..write('evolutionCount: $evolutionCount, ')
@@ -3502,6 +3689,9 @@ class Session extends DataClass implements Insertable<Session> {
           ..write('generationSettings: $generationSettings, ')
           ..write('userPersonaId: $userPersonaId, ')
           ..write('selectedLookAvatarId: $selectedLookAvatarId, ')
+          ..write('themeOverrides: $themeOverrides, ')
+          ..write('contextBudgetJson: $contextBudgetJson, ')
+          ..write('objectivesEnabled: $objectivesEnabled, ')
           ..write('groupRealismState: $groupRealismState, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -3554,6 +3744,7 @@ class Session extends DataClass implements Insertable<Session> {
     chaosPressure,
     needsSimEnabled,
     needsVector,
+    pockets,
     evolvedPersonality,
     evolvedScenario,
     evolutionCount,
@@ -3562,6 +3753,9 @@ class Session extends DataClass implements Insertable<Session> {
     generationSettings,
     userPersonaId,
     selectedLookAvatarId,
+    themeOverrides,
+    contextBudgetJson,
+    objectivesEnabled,
     groupRealismState,
     createdAt,
     updatedAt,
@@ -3613,6 +3807,7 @@ class Session extends DataClass implements Insertable<Session> {
           other.chaosPressure == this.chaosPressure &&
           other.needsSimEnabled == this.needsSimEnabled &&
           other.needsVector == this.needsVector &&
+          other.pockets == this.pockets &&
           other.evolvedPersonality == this.evolvedPersonality &&
           other.evolvedScenario == this.evolvedScenario &&
           other.evolutionCount == this.evolutionCount &&
@@ -3621,6 +3816,9 @@ class Session extends DataClass implements Insertable<Session> {
           other.generationSettings == this.generationSettings &&
           other.userPersonaId == this.userPersonaId &&
           other.selectedLookAvatarId == this.selectedLookAvatarId &&
+          other.themeOverrides == this.themeOverrides &&
+          other.contextBudgetJson == this.contextBudgetJson &&
+          other.objectivesEnabled == this.objectivesEnabled &&
           other.groupRealismState == this.groupRealismState &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
@@ -3670,6 +3868,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
   final Value<int> chaosPressure;
   final Value<bool> needsSimEnabled;
   final Value<String?> needsVector;
+  final Value<String?> pockets;
   final Value<String> evolvedPersonality;
   final Value<String> evolvedScenario;
   final Value<int> evolutionCount;
@@ -3678,6 +3877,9 @@ class SessionsCompanion extends UpdateCompanion<Session> {
   final Value<String?> generationSettings;
   final Value<String?> userPersonaId;
   final Value<String?> selectedLookAvatarId;
+  final Value<String?> themeOverrides;
+  final Value<String?> contextBudgetJson;
+  final Value<bool> objectivesEnabled;
   final Value<String> groupRealismState;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -3726,6 +3928,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.chaosPressure = const Value.absent(),
     this.needsSimEnabled = const Value.absent(),
     this.needsVector = const Value.absent(),
+    this.pockets = const Value.absent(),
     this.evolvedPersonality = const Value.absent(),
     this.evolvedScenario = const Value.absent(),
     this.evolutionCount = const Value.absent(),
@@ -3734,6 +3937,9 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.generationSettings = const Value.absent(),
     this.userPersonaId = const Value.absent(),
     this.selectedLookAvatarId = const Value.absent(),
+    this.themeOverrides = const Value.absent(),
+    this.contextBudgetJson = const Value.absent(),
+    this.objectivesEnabled = const Value.absent(),
     this.groupRealismState = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -3783,6 +3989,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.chaosPressure = const Value.absent(),
     this.needsSimEnabled = const Value.absent(),
     this.needsVector = const Value.absent(),
+    this.pockets = const Value.absent(),
     this.evolvedPersonality = const Value.absent(),
     this.evolvedScenario = const Value.absent(),
     this.evolutionCount = const Value.absent(),
@@ -3791,6 +3998,9 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.generationSettings = const Value.absent(),
     this.userPersonaId = const Value.absent(),
     this.selectedLookAvatarId = const Value.absent(),
+    this.themeOverrides = const Value.absent(),
+    this.contextBudgetJson = const Value.absent(),
+    this.objectivesEnabled = const Value.absent(),
     this.groupRealismState = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -3840,6 +4050,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Expression<int>? chaosPressure,
     Expression<bool>? needsSimEnabled,
     Expression<String>? needsVector,
+    Expression<String>? pockets,
     Expression<String>? evolvedPersonality,
     Expression<String>? evolvedScenario,
     Expression<int>? evolutionCount,
@@ -3848,6 +4059,9 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Expression<String>? generationSettings,
     Expression<String>? userPersonaId,
     Expression<String>? selectedLookAvatarId,
+    Expression<String>? themeOverrides,
+    Expression<String>? contextBudgetJson,
+    Expression<bool>? objectivesEnabled,
     Expression<String>? groupRealismState,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -3904,6 +4118,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       if (chaosPressure != null) 'chaos_pressure': chaosPressure,
       if (needsSimEnabled != null) 'needs_sim_enabled': needsSimEnabled,
       if (needsVector != null) 'needs_vector': needsVector,
+      if (pockets != null) 'pockets': pockets,
       if (evolvedPersonality != null) 'evolved_personality': evolvedPersonality,
       if (evolvedScenario != null) 'evolved_scenario': evolvedScenario,
       if (evolutionCount != null) 'evolution_count': evolutionCount,
@@ -3915,6 +4130,9 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       if (userPersonaId != null) 'user_persona_id': userPersonaId,
       if (selectedLookAvatarId != null)
         'selected_look_avatar_id': selectedLookAvatarId,
+      if (themeOverrides != null) 'theme_overrides': themeOverrides,
+      if (contextBudgetJson != null) 'context_budget_json': contextBudgetJson,
+      if (objectivesEnabled != null) 'objectives_enabled': objectivesEnabled,
       if (groupRealismState != null) 'group_realism_state': groupRealismState,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -3966,6 +4184,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Value<int>? chaosPressure,
     Value<bool>? needsSimEnabled,
     Value<String?>? needsVector,
+    Value<String?>? pockets,
     Value<String>? evolvedPersonality,
     Value<String>? evolvedScenario,
     Value<int>? evolutionCount,
@@ -3974,6 +4193,9 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Value<String?>? generationSettings,
     Value<String?>? userPersonaId,
     Value<String?>? selectedLookAvatarId,
+    Value<String?>? themeOverrides,
+    Value<String?>? contextBudgetJson,
+    Value<bool>? objectivesEnabled,
     Value<String>? groupRealismState,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
@@ -4026,6 +4248,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       chaosPressure: chaosPressure ?? this.chaosPressure,
       needsSimEnabled: needsSimEnabled ?? this.needsSimEnabled,
       needsVector: needsVector ?? this.needsVector,
+      pockets: pockets ?? this.pockets,
       evolvedPersonality: evolvedPersonality ?? this.evolvedPersonality,
       evolvedScenario: evolvedScenario ?? this.evolvedScenario,
       evolutionCount: evolutionCount ?? this.evolutionCount,
@@ -4036,6 +4259,9 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       generationSettings: generationSettings ?? this.generationSettings,
       userPersonaId: userPersonaId ?? this.userPersonaId,
       selectedLookAvatarId: selectedLookAvatarId ?? this.selectedLookAvatarId,
+      themeOverrides: themeOverrides ?? this.themeOverrides,
+      contextBudgetJson: contextBudgetJson ?? this.contextBudgetJson,
+      objectivesEnabled: objectivesEnabled ?? this.objectivesEnabled,
       groupRealismState: groupRealismState ?? this.groupRealismState,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -4181,6 +4407,9 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     if (needsVector.present) {
       map['needs_vector'] = Variable<String>(needsVector.value);
     }
+    if (pockets.present) {
+      map['pockets'] = Variable<String>(pockets.value);
+    }
     if (evolvedPersonality.present) {
       map['evolved_personality'] = Variable<String>(evolvedPersonality.value);
     }
@@ -4210,6 +4439,15 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       map['selected_look_avatar_id'] = Variable<String>(
         selectedLookAvatarId.value,
       );
+    }
+    if (themeOverrides.present) {
+      map['theme_overrides'] = Variable<String>(themeOverrides.value);
+    }
+    if (contextBudgetJson.present) {
+      map['context_budget_json'] = Variable<String>(contextBudgetJson.value);
+    }
+    if (objectivesEnabled.present) {
+      map['objectives_enabled'] = Variable<bool>(objectivesEnabled.value);
     }
     if (groupRealismState.present) {
       map['group_realism_state'] = Variable<String>(groupRealismState.value);
@@ -4274,6 +4512,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
           ..write('chaosPressure: $chaosPressure, ')
           ..write('needsSimEnabled: $needsSimEnabled, ')
           ..write('needsVector: $needsVector, ')
+          ..write('pockets: $pockets, ')
           ..write('evolvedPersonality: $evolvedPersonality, ')
           ..write('evolvedScenario: $evolvedScenario, ')
           ..write('evolutionCount: $evolutionCount, ')
@@ -4282,6 +4521,9 @@ class SessionsCompanion extends UpdateCompanion<Session> {
           ..write('generationSettings: $generationSettings, ')
           ..write('userPersonaId: $userPersonaId, ')
           ..write('selectedLookAvatarId: $selectedLookAvatarId, ')
+          ..write('themeOverrides: $themeOverrides, ')
+          ..write('contextBudgetJson: $contextBudgetJson, ')
+          ..write('objectivesEnabled: $objectivesEnabled, ')
           ..write('groupRealismState: $groupRealismState, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -5669,13 +5911,11 @@ class Group extends DataClass implements Insertable<Group> {
   /// travels in the exported Group Card and is preserved on import, so a shared
   /// group can be UPDATED in place on The Stoop (no duplicate) and re-associated
   /// after switching devices — the group analogue of a character's stable id.
-  /// Nullable + additive; groups is outside the Character Card Forge external-
-  /// writer set, so adding it cannot break CCF. Generated lazily in code.
+  /// Nullable + additive. Generated lazily in code.
   final String? stableId;
 
   /// Home-screen folder membership (schema v42), the group analogue of
-  /// Characters.folderId. Null = top level. Nullable + additive; groups is
-  /// outside the Character Card Forge external-writer set.
+  /// Characters.folderId. Null = top level. Nullable + additive.
   final String? folderId;
   final DateTime updatedAt;
   final DateTime? deletedAt;
@@ -12113,6 +12353,17 @@ class $ObjectivesTable extends Objectives
     requiredDuringInsert: false,
     defaultValue: const Constant(4),
   );
+  static const VerificationMeta _servedAmbitionMeta = const VerificationMeta(
+    'servedAmbition',
+  );
+  @override
+  late final GeneratedColumn<String> servedAmbition = GeneratedColumn<String>(
+    'served_ambition',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -12136,6 +12387,7 @@ class $ObjectivesTable extends Objectives
     isPrimary,
     checkFrequency,
     injectionDepth,
+    servedAmbition,
     createdAt,
   ];
   @override
@@ -12216,6 +12468,15 @@ class $ObjectivesTable extends Objectives
         ),
       );
     }
+    if (data.containsKey('served_ambition')) {
+      context.handle(
+        _servedAmbitionMeta,
+        servedAmbition.isAcceptableOrUnknown(
+          data['served_ambition']!,
+          _servedAmbitionMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -12267,6 +12528,10 @@ class $ObjectivesTable extends Objectives
         DriftSqlType.int,
         data['${effectivePrefix}injection_depth'],
       )!,
+      servedAmbition: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}served_ambition'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -12290,6 +12555,23 @@ class Objective extends DataClass implements Insertable<Objective> {
   final bool isPrimary;
   final int checkFrequency;
   final int injectionDepth;
+
+  /// v46 — the ambition this objective is a step toward, stored as the
+  /// ambition's TEXT (the same string the card authors and the journal
+  /// progress cards key on), or NULL for a situational quest that serves no
+  /// long-term goal.
+  ///
+  /// Nullable with no default on purpose: NULL is a real, common answer, not
+  /// a missing value. Ambition (the mountain) → Objectives (the switchbacks)
+  /// → Tasks (the steps); most switchbacks are on the mountain, but life
+  /// happens and some are not.
+  ///
+  /// Text and not an index: ambitions live in the card's `ambitions` list,
+  /// which the author can reorder or edit at any time, so a stored index
+  /// would silently start pointing at a different goal. The text is what
+  /// AmbitionService already keys progress on, so the two agree by
+  /// construction.
+  final String? servedAmbition;
   final DateTime createdAt;
   const Objective({
     required this.id,
@@ -12301,6 +12583,7 @@ class Objective extends DataClass implements Insertable<Objective> {
     required this.isPrimary,
     required this.checkFrequency,
     required this.injectionDepth,
+    this.servedAmbition,
     required this.createdAt,
   });
   @override
@@ -12317,6 +12600,9 @@ class Objective extends DataClass implements Insertable<Objective> {
     map['is_primary'] = Variable<bool>(isPrimary);
     map['check_frequency'] = Variable<int>(checkFrequency);
     map['injection_depth'] = Variable<int>(injectionDepth);
+    if (!nullToAbsent || servedAmbition != null) {
+      map['served_ambition'] = Variable<String>(servedAmbition);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -12334,6 +12620,9 @@ class Objective extends DataClass implements Insertable<Objective> {
       isPrimary: Value(isPrimary),
       checkFrequency: Value(checkFrequency),
       injectionDepth: Value(injectionDepth),
+      servedAmbition: servedAmbition == null && nullToAbsent
+          ? const Value.absent()
+          : Value(servedAmbition),
       createdAt: Value(createdAt),
     );
   }
@@ -12353,6 +12642,7 @@ class Objective extends DataClass implements Insertable<Objective> {
       isPrimary: serializer.fromJson<bool>(json['isPrimary']),
       checkFrequency: serializer.fromJson<int>(json['checkFrequency']),
       injectionDepth: serializer.fromJson<int>(json['injectionDepth']),
+      servedAmbition: serializer.fromJson<String?>(json['servedAmbition']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -12369,6 +12659,7 @@ class Objective extends DataClass implements Insertable<Objective> {
       'isPrimary': serializer.toJson<bool>(isPrimary),
       'checkFrequency': serializer.toJson<int>(checkFrequency),
       'injectionDepth': serializer.toJson<int>(injectionDepth),
+      'servedAmbition': serializer.toJson<String?>(servedAmbition),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -12383,6 +12674,7 @@ class Objective extends DataClass implements Insertable<Objective> {
     bool? isPrimary,
     int? checkFrequency,
     int? injectionDepth,
+    Value<String?> servedAmbition = const Value.absent(),
     DateTime? createdAt,
   }) => Objective(
     id: id ?? this.id,
@@ -12394,6 +12686,9 @@ class Objective extends DataClass implements Insertable<Objective> {
     isPrimary: isPrimary ?? this.isPrimary,
     checkFrequency: checkFrequency ?? this.checkFrequency,
     injectionDepth: injectionDepth ?? this.injectionDepth,
+    servedAmbition: servedAmbition.present
+        ? servedAmbition.value
+        : this.servedAmbition,
     createdAt: createdAt ?? this.createdAt,
   );
   Objective copyWithCompanion(ObjectivesCompanion data) {
@@ -12413,6 +12708,9 @@ class Objective extends DataClass implements Insertable<Objective> {
       injectionDepth: data.injectionDepth.present
           ? data.injectionDepth.value
           : this.injectionDepth,
+      servedAmbition: data.servedAmbition.present
+          ? data.servedAmbition.value
+          : this.servedAmbition,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -12429,6 +12727,7 @@ class Objective extends DataClass implements Insertable<Objective> {
           ..write('isPrimary: $isPrimary, ')
           ..write('checkFrequency: $checkFrequency, ')
           ..write('injectionDepth: $injectionDepth, ')
+          ..write('servedAmbition: $servedAmbition, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -12445,6 +12744,7 @@ class Objective extends DataClass implements Insertable<Objective> {
     isPrimary,
     checkFrequency,
     injectionDepth,
+    servedAmbition,
     createdAt,
   );
   @override
@@ -12460,6 +12760,7 @@ class Objective extends DataClass implements Insertable<Objective> {
           other.isPrimary == this.isPrimary &&
           other.checkFrequency == this.checkFrequency &&
           other.injectionDepth == this.injectionDepth &&
+          other.servedAmbition == this.servedAmbition &&
           other.createdAt == this.createdAt);
 }
 
@@ -12473,6 +12774,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
   final Value<bool> isPrimary;
   final Value<int> checkFrequency;
   final Value<int> injectionDepth;
+  final Value<String?> servedAmbition;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const ObjectivesCompanion({
@@ -12485,6 +12787,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
     this.isPrimary = const Value.absent(),
     this.checkFrequency = const Value.absent(),
     this.injectionDepth = const Value.absent(),
+    this.servedAmbition = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -12498,6 +12801,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
     this.isPrimary = const Value.absent(),
     this.checkFrequency = const Value.absent(),
     this.injectionDepth = const Value.absent(),
+    this.servedAmbition = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -12513,6 +12817,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
     Expression<bool>? isPrimary,
     Expression<int>? checkFrequency,
     Expression<int>? injectionDepth,
+    Expression<String>? servedAmbition,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -12526,6 +12831,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
       if (isPrimary != null) 'is_primary': isPrimary,
       if (checkFrequency != null) 'check_frequency': checkFrequency,
       if (injectionDepth != null) 'injection_depth': injectionDepth,
+      if (servedAmbition != null) 'served_ambition': servedAmbition,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -12541,6 +12847,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
     Value<bool>? isPrimary,
     Value<int>? checkFrequency,
     Value<int>? injectionDepth,
+    Value<String?>? servedAmbition,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -12554,6 +12861,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
       isPrimary: isPrimary ?? this.isPrimary,
       checkFrequency: checkFrequency ?? this.checkFrequency,
       injectionDepth: injectionDepth ?? this.injectionDepth,
+      servedAmbition: servedAmbition ?? this.servedAmbition,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -12589,6 +12897,9 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
     if (injectionDepth.present) {
       map['injection_depth'] = Variable<int>(injectionDepth.value);
     }
+    if (servedAmbition.present) {
+      map['served_ambition'] = Variable<String>(servedAmbition.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -12610,6 +12921,7 @@ class ObjectivesCompanion extends UpdateCompanion<Objective> {
           ..write('isPrimary: $isPrimary, ')
           ..write('checkFrequency: $checkFrequency, ')
           ..write('injectionDepth: $injectionDepth, ')
+          ..write('servedAmbition: $servedAmbition, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -13916,6 +14228,18 @@ class $GroupMembersTable extends GroupMembers
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<int> createdAt = GeneratedColumn<int>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -13938,6 +14262,7 @@ class $GroupMembersTable extends GroupMembers
     rawExtensions,
     memberState,
     updatedAt,
+    createdAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -14104,6 +14429,12 @@ class $GroupMembersTable extends GroupMembers
         updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
       );
     }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
     return context;
   }
 
@@ -14193,6 +14524,10 @@ class $GroupMembersTable extends GroupMembers
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}created_at'],
+      )!,
     );
   }
 
@@ -14235,6 +14570,10 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
   /// This column keeps the member rows free of "the card" blobs while still self-contained.
   final String memberState;
   final DateTime updatedAt;
+
+  /// IntColumn (not DateTime) DEFAULT 0 — byte-matches the repaired physical
+  /// shape. Was repair-only until 2026-08-04; see Sessions.themeOverrides.
+  final int createdAt;
   const GroupMemberRow({
     required this.id,
     required this.groupId,
@@ -14256,6 +14595,7 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
     this.rawExtensions,
     required this.memberState,
     required this.updatedAt,
+    required this.createdAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -14292,6 +14632,7 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
     }
     map['member_state'] = Variable<String>(memberState);
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['created_at'] = Variable<int>(createdAt);
     return map;
   }
 
@@ -14327,6 +14668,7 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
           : Value(rawExtensions),
       memberState: Value(memberState),
       updatedAt: Value(updatedAt),
+      createdAt: Value(createdAt),
     );
   }
 
@@ -14362,6 +14704,7 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
       rawExtensions: serializer.fromJson<String?>(json['rawExtensions']),
       memberState: serializer.fromJson<String>(json['memberState']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      createdAt: serializer.fromJson<int>(json['createdAt']),
     );
   }
   @override
@@ -14390,6 +14733,7 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
       'rawExtensions': serializer.toJson<String?>(rawExtensions),
       'memberState': serializer.toJson<String>(memberState),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'createdAt': serializer.toJson<int>(createdAt),
     };
   }
 
@@ -14414,6 +14758,7 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
     Value<String?> rawExtensions = const Value.absent(),
     String? memberState,
     DateTime? updatedAt,
+    int? createdAt,
   }) => GroupMemberRow(
     id: id ?? this.id,
     groupId: groupId ?? this.groupId,
@@ -14442,6 +14787,7 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
         : this.rawExtensions,
     memberState: memberState ?? this.memberState,
     updatedAt: updatedAt ?? this.updatedAt,
+    createdAt: createdAt ?? this.createdAt,
   );
   GroupMemberRow copyWithCompanion(GroupMembersCompanion data) {
     return GroupMemberRow(
@@ -14489,6 +14835,7 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
           ? data.memberState.value
           : this.memberState,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
 
@@ -14514,13 +14861,14 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
           ..write('frontPorchExtensions: $frontPorchExtensions, ')
           ..write('rawExtensions: $rawExtensions, ')
           ..write('memberState: $memberState, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     groupId,
     name,
@@ -14541,7 +14889,8 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
     rawExtensions,
     memberState,
     updatedAt,
-  );
+    createdAt,
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -14565,7 +14914,8 @@ class GroupMemberRow extends DataClass implements Insertable<GroupMemberRow> {
           other.frontPorchExtensions == this.frontPorchExtensions &&
           other.rawExtensions == this.rawExtensions &&
           other.memberState == this.memberState &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.createdAt == this.createdAt);
 }
 
 class GroupMembersCompanion extends UpdateCompanion<GroupMemberRow> {
@@ -14589,6 +14939,7 @@ class GroupMembersCompanion extends UpdateCompanion<GroupMemberRow> {
   final Value<String?> rawExtensions;
   final Value<String> memberState;
   final Value<DateTime> updatedAt;
+  final Value<int> createdAt;
   final Value<int> rowid;
   const GroupMembersCompanion({
     this.id = const Value.absent(),
@@ -14611,6 +14962,7 @@ class GroupMembersCompanion extends UpdateCompanion<GroupMemberRow> {
     this.rawExtensions = const Value.absent(),
     this.memberState = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   GroupMembersCompanion.insert({
@@ -14634,6 +14986,7 @@ class GroupMembersCompanion extends UpdateCompanion<GroupMemberRow> {
     this.rawExtensions = const Value.absent(),
     this.memberState = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        groupId = Value(groupId),
@@ -14659,6 +15012,7 @@ class GroupMembersCompanion extends UpdateCompanion<GroupMemberRow> {
     Expression<String>? rawExtensions,
     Expression<String>? memberState,
     Expression<DateTime>? updatedAt,
+    Expression<int>? createdAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -14684,6 +15038,7 @@ class GroupMembersCompanion extends UpdateCompanion<GroupMemberRow> {
       if (rawExtensions != null) 'raw_extensions': rawExtensions,
       if (memberState != null) 'member_state': memberState,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -14709,6 +15064,7 @@ class GroupMembersCompanion extends UpdateCompanion<GroupMemberRow> {
     Value<String?>? rawExtensions,
     Value<String>? memberState,
     Value<DateTime>? updatedAt,
+    Value<int>? createdAt,
     Value<int>? rowid,
   }) {
     return GroupMembersCompanion(
@@ -14733,6 +15089,7 @@ class GroupMembersCompanion extends UpdateCompanion<GroupMemberRow> {
       rawExtensions: rawExtensions ?? this.rawExtensions,
       memberState: memberState ?? this.memberState,
       updatedAt: updatedAt ?? this.updatedAt,
+      createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -14804,6 +15161,9 @@ class GroupMembersCompanion extends UpdateCompanion<GroupMemberRow> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (createdAt.present) {
+      map['created_at'] = Variable<int>(createdAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -14833,6 +15193,7 @@ class GroupMembersCompanion extends UpdateCompanion<GroupMemberRow> {
           ..write('rawExtensions: $rawExtensions, ')
           ..write('memberState: $memberState, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -16622,6 +16983,7 @@ typedef $$SessionsTableCreateCompanionBuilder =
       Value<int> chaosPressure,
       Value<bool> needsSimEnabled,
       Value<String?> needsVector,
+      Value<String?> pockets,
       Value<String> evolvedPersonality,
       Value<String> evolvedScenario,
       Value<int> evolutionCount,
@@ -16630,6 +16992,9 @@ typedef $$SessionsTableCreateCompanionBuilder =
       Value<String?> generationSettings,
       Value<String?> userPersonaId,
       Value<String?> selectedLookAvatarId,
+      Value<String?> themeOverrides,
+      Value<String?> contextBudgetJson,
+      Value<bool> objectivesEnabled,
       Value<String> groupRealismState,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -16680,6 +17045,7 @@ typedef $$SessionsTableUpdateCompanionBuilder =
       Value<int> chaosPressure,
       Value<bool> needsSimEnabled,
       Value<String?> needsVector,
+      Value<String?> pockets,
       Value<String> evolvedPersonality,
       Value<String> evolvedScenario,
       Value<int> evolutionCount,
@@ -16688,6 +17054,9 @@ typedef $$SessionsTableUpdateCompanionBuilder =
       Value<String?> generationSettings,
       Value<String?> userPersonaId,
       Value<String?> selectedLookAvatarId,
+      Value<String?> themeOverrides,
+      Value<String?> contextBudgetJson,
+      Value<bool> objectivesEnabled,
       Value<String> groupRealismState,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -16914,6 +17283,11 @@ class $$SessionsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get pockets => $composableBuilder(
+    column: $table.pockets,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get evolvedPersonality => $composableBuilder(
     column: $table.evolvedPersonality,
     builder: (column) => ColumnFilters(column),
@@ -16951,6 +17325,21 @@ class $$SessionsTableFilterComposer
 
   ColumnFilters<String> get selectedLookAvatarId => $composableBuilder(
     column: $table.selectedLookAvatarId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get themeOverrides => $composableBuilder(
+    column: $table.themeOverrides,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get contextBudgetJson => $composableBuilder(
+    column: $table.contextBudgetJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get objectivesEnabled => $composableBuilder(
+    column: $table.objectivesEnabled,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -17194,6 +17583,11 @@ class $$SessionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get pockets => $composableBuilder(
+    column: $table.pockets,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get evolvedPersonality => $composableBuilder(
     column: $table.evolvedPersonality,
     builder: (column) => ColumnOrderings(column),
@@ -17231,6 +17625,21 @@ class $$SessionsTableOrderingComposer
 
   ColumnOrderings<String> get selectedLookAvatarId => $composableBuilder(
     column: $table.selectedLookAvatarId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get themeOverrides => $composableBuilder(
+    column: $table.themeOverrides,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get contextBudgetJson => $composableBuilder(
+    column: $table.contextBudgetJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get objectivesEnabled => $composableBuilder(
+    column: $table.objectivesEnabled,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -17460,6 +17869,9 @@ class $$SessionsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get pockets =>
+      $composableBuilder(column: $table.pockets, builder: (column) => column);
+
   GeneratedColumn<String> get evolvedPersonality => $composableBuilder(
     column: $table.evolvedPersonality,
     builder: (column) => column,
@@ -17497,6 +17909,21 @@ class $$SessionsTableAnnotationComposer
 
   GeneratedColumn<String> get selectedLookAvatarId => $composableBuilder(
     column: $table.selectedLookAvatarId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get themeOverrides => $composableBuilder(
+    column: $table.themeOverrides,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get contextBudgetJson => $composableBuilder(
+    column: $table.contextBudgetJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get objectivesEnabled => $composableBuilder(
+    column: $table.objectivesEnabled,
     builder: (column) => column,
   );
 
@@ -17585,6 +18012,7 @@ class $$SessionsTableTableManager
                 Value<int> chaosPressure = const Value.absent(),
                 Value<bool> needsSimEnabled = const Value.absent(),
                 Value<String?> needsVector = const Value.absent(),
+                Value<String?> pockets = const Value.absent(),
                 Value<String> evolvedPersonality = const Value.absent(),
                 Value<String> evolvedScenario = const Value.absent(),
                 Value<int> evolutionCount = const Value.absent(),
@@ -17593,6 +18021,9 @@ class $$SessionsTableTableManager
                 Value<String?> generationSettings = const Value.absent(),
                 Value<String?> userPersonaId = const Value.absent(),
                 Value<String?> selectedLookAvatarId = const Value.absent(),
+                Value<String?> themeOverrides = const Value.absent(),
+                Value<String?> contextBudgetJson = const Value.absent(),
+                Value<bool> objectivesEnabled = const Value.absent(),
                 Value<String> groupRealismState = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -17641,6 +18072,7 @@ class $$SessionsTableTableManager
                 chaosPressure: chaosPressure,
                 needsSimEnabled: needsSimEnabled,
                 needsVector: needsVector,
+                pockets: pockets,
                 evolvedPersonality: evolvedPersonality,
                 evolvedScenario: evolvedScenario,
                 evolutionCount: evolutionCount,
@@ -17649,6 +18081,9 @@ class $$SessionsTableTableManager
                 generationSettings: generationSettings,
                 userPersonaId: userPersonaId,
                 selectedLookAvatarId: selectedLookAvatarId,
+                themeOverrides: themeOverrides,
+                contextBudgetJson: contextBudgetJson,
+                objectivesEnabled: objectivesEnabled,
                 groupRealismState: groupRealismState,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -17699,6 +18134,7 @@ class $$SessionsTableTableManager
                 Value<int> chaosPressure = const Value.absent(),
                 Value<bool> needsSimEnabled = const Value.absent(),
                 Value<String?> needsVector = const Value.absent(),
+                Value<String?> pockets = const Value.absent(),
                 Value<String> evolvedPersonality = const Value.absent(),
                 Value<String> evolvedScenario = const Value.absent(),
                 Value<int> evolutionCount = const Value.absent(),
@@ -17707,6 +18143,9 @@ class $$SessionsTableTableManager
                 Value<String?> generationSettings = const Value.absent(),
                 Value<String?> userPersonaId = const Value.absent(),
                 Value<String?> selectedLookAvatarId = const Value.absent(),
+                Value<String?> themeOverrides = const Value.absent(),
+                Value<String?> contextBudgetJson = const Value.absent(),
+                Value<bool> objectivesEnabled = const Value.absent(),
                 Value<String> groupRealismState = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -17755,6 +18194,7 @@ class $$SessionsTableTableManager
                 chaosPressure: chaosPressure,
                 needsSimEnabled: needsSimEnabled,
                 needsVector: needsVector,
+                pockets: pockets,
                 evolvedPersonality: evolvedPersonality,
                 evolvedScenario: evolvedScenario,
                 evolutionCount: evolutionCount,
@@ -17763,6 +18203,9 @@ class $$SessionsTableTableManager
                 generationSettings: generationSettings,
                 userPersonaId: userPersonaId,
                 selectedLookAvatarId: selectedLookAvatarId,
+                themeOverrides: themeOverrides,
+                contextBudgetJson: contextBudgetJson,
+                objectivesEnabled: objectivesEnabled,
                 groupRealismState: groupRealismState,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -21496,6 +21939,7 @@ typedef $$ObjectivesTableCreateCompanionBuilder =
       Value<bool> isPrimary,
       Value<int> checkFrequency,
       Value<int> injectionDepth,
+      Value<String?> servedAmbition,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -21510,6 +21954,7 @@ typedef $$ObjectivesTableUpdateCompanionBuilder =
       Value<bool> isPrimary,
       Value<int> checkFrequency,
       Value<int> injectionDepth,
+      Value<String?> servedAmbition,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -21565,6 +22010,11 @@ class $$ObjectivesTableFilterComposer
 
   ColumnFilters<int> get injectionDepth => $composableBuilder(
     column: $table.injectionDepth,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get servedAmbition => $composableBuilder(
+    column: $table.servedAmbition,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -21628,6 +22078,11 @@ class $$ObjectivesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get servedAmbition => $composableBuilder(
+    column: $table.servedAmbition,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -21676,6 +22131,11 @@ class $$ObjectivesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get servedAmbition => $composableBuilder(
+    column: $table.servedAmbition,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 }
@@ -21720,6 +22180,7 @@ class $$ObjectivesTableTableManager
                 Value<bool> isPrimary = const Value.absent(),
                 Value<int> checkFrequency = const Value.absent(),
                 Value<int> injectionDepth = const Value.absent(),
+                Value<String?> servedAmbition = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ObjectivesCompanion(
@@ -21732,6 +22193,7 @@ class $$ObjectivesTableTableManager
                 isPrimary: isPrimary,
                 checkFrequency: checkFrequency,
                 injectionDepth: injectionDepth,
+                servedAmbition: servedAmbition,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -21746,6 +22208,7 @@ class $$ObjectivesTableTableManager
                 Value<bool> isPrimary = const Value.absent(),
                 Value<int> checkFrequency = const Value.absent(),
                 Value<int> injectionDepth = const Value.absent(),
+                Value<String?> servedAmbition = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ObjectivesCompanion.insert(
@@ -21758,6 +22221,7 @@ class $$ObjectivesTableTableManager
                 isPrimary: isPrimary,
                 checkFrequency: checkFrequency,
                 injectionDepth: injectionDepth,
+                servedAmbition: servedAmbition,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -22405,6 +22869,7 @@ typedef $$GroupMembersTableCreateCompanionBuilder =
       Value<String?> rawExtensions,
       Value<String> memberState,
       Value<DateTime> updatedAt,
+      Value<int> createdAt,
       Value<int> rowid,
     });
 typedef $$GroupMembersTableUpdateCompanionBuilder =
@@ -22429,6 +22894,7 @@ typedef $$GroupMembersTableUpdateCompanionBuilder =
       Value<String?> rawExtensions,
       Value<String> memberState,
       Value<DateTime> updatedAt,
+      Value<int> createdAt,
       Value<int> rowid,
     });
 
@@ -22538,6 +23004,11 @@ class $$GroupMembersTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -22650,6 +23121,11 @@ class $$GroupMembersTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$GroupMembersTableAnnotationComposer
@@ -22744,6 +23220,9 @@ class $$GroupMembersTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
 }
 
 class $$GroupMembersTableTableManager
@@ -22797,6 +23276,7 @@ class $$GroupMembersTableTableManager
                 Value<String?> rawExtensions = const Value.absent(),
                 Value<String> memberState = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => GroupMembersCompanion(
                 id: id,
@@ -22819,6 +23299,7 @@ class $$GroupMembersTableTableManager
                 rawExtensions: rawExtensions,
                 memberState: memberState,
                 updatedAt: updatedAt,
+                createdAt: createdAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -22843,6 +23324,7 @@ class $$GroupMembersTableTableManager
                 Value<String?> rawExtensions = const Value.absent(),
                 Value<String> memberState = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => GroupMembersCompanion.insert(
                 id: id,
@@ -22865,6 +23347,7 @@ class $$GroupMembersTableTableManager
                 rawExtensions: rawExtensions,
                 memberState: memberState,
                 updatedAt: updatedAt,
+                createdAt: createdAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

@@ -23,11 +23,23 @@ import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'growth_ops.dart';
 import 'growth_physics.dart';
+import 'salience_kick_gate.dart';
 import 'growth_prompt.dart';
 import 'growth_review.dart';
 import 'growth_store.dart';
 import 'journal_physics.dart';
 import 'pass_support.dart';
+
+/// Pass-window start index: clamp [cursor] into [messageCount], then cap the
+/// open window at [JournalPhysics.kFirstPassCap] (audit P1.9 — Journal twin).
+/// Pure so the unit test calls the same function the pass uses.
+int growthPassWindowStart(int cursor, int messageCount) {
+  var start = cursor.clamp(0, messageCount);
+  if (messageCount - start > JournalPhysics.kFirstPassCap) {
+    start = messageCount - JournalPhysics.kFirstPassCap;
+  }
+  return start;
+}
 
 /// Growth Rings — the growth pass + effective-personality layering
 /// (docs/design/growth-rings.md). Replaces EvolutionService's monolithic
@@ -134,6 +146,14 @@ class GrowthService {
   /// completion). Consumed by ChatService's post-generation trigger.
   bool eventKickPending = false;
 
+  /// The shared salient-kick rate limiter (salience_kick_gate.dart),
+  /// consulted by BOTH kick origins in the god wiring before either this
+  /// service's or the Journal's [eventKickPending] is set. HOSTED here for
+  /// storage only — the ChatService shell sits at the god-file ratchet's
+  /// edge and cannot take a field, and this leaf had the headroom. The
+  /// throttle is upstream of both features and gates neither on the other.
+  final salienceKickGate = SalienceKickGate();
+
   // ── Layering (the injection payoff, §4.5) ────────────────────────────
 
   /// The effective personality for [card]: original description +
@@ -194,15 +214,14 @@ class GrowthService {
       await refreshCache();
 
       final messages = getMessages();
-      var start = (await store.cursorFor(sessionToken)).clamp(
-        0,
+      // THE WINDOW IS CAPPED ON EVERY PASS (audit P1.9) — Journal twin.
+      // Gating on `start == 0` only protected a virgin growth record; a
+      // stuck non-zero cursor on a long chat reopened an unbounded window
+      // after one failed pass. Same trap Journal fixed in journal_maintenance.
+      var start = growthPassWindowStart(
+        await store.cursorFor(sessionToken),
         messages.length,
       );
-      if (start == 0 && messages.length > JournalPhysics.kFirstPassCap) {
-        // Virgin growth record on a long chat: read the recent tail only
-        // (the legacy blob distill carries the older growth forward).
-        start = messages.length - JournalPhysics.kFirstPassCap;
-      }
       if (start >= messages.length) {
         if (!force) return;
         start = (messages.length - kForceWindowFallback).clamp(
@@ -212,6 +231,11 @@ class GrowthService {
       }
       final window = messages.sublist(start);
       if (window.isEmpty) return;
+      // Snapshot-derived cursor target — Journal twin (journal_maintenance).
+      // `messages` is the god's live `_messages`; a turn taken while this pass
+      // awaits its LLM call would otherwise land BEHIND the advanced cursor
+      // and never be read for a ring, with no path that rewinds it.
+      final cursorTarget = start + window.length;
 
       final owners = resolvePassOwners(
         window: window,
@@ -314,12 +338,12 @@ class GrowthService {
           review.park(
             GrowthReviewBatch(
               sessionId: sessionToken,
-              cursorTarget: messages.length,
+              cursorTarget: cursorTarget,
               owners: parked,
             ),
           );
         } else {
-          await store.setCursor(sessionToken, messages.length);
+          await store.setCursor(sessionToken, cursorTarget);
         }
         await refreshCache();
       }

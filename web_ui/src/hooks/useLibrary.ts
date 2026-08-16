@@ -126,22 +126,47 @@ export function useLibrary() {
     api.get<{ groups: LibGroup[] }>('/api/groups').then((r) => setGroups(r.groups)).catch(() => {});
   }, [reloadKey]);
 
+  // The search box updates `search` on every keystroke; only this debounced
+  // mirror drives the fetch, so typing a word costs one request instead of one
+  // per letter (the same slow-uplink reasoning as the `library_changed`
+  // debounce below). Folder / sort / scope are single events and stay instant.
+  const [searchTerm, setSearchTerm] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchTerm(search), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   // Characters reload on folder / search / sort / scope change. We always pass
   // the folder + scope so a search stays folder-scoped unless scope=All.
+  // Every run invalidates the one before it: overlapping requests can complete
+  // out of order (the server re-scans the library per call, and a broad term
+  // returns a far bigger body than a narrow one), and without this the slower
+  // earlier response would land last and render results for a query the user
+  // has already moved past — with the spinner already cleared.
   useEffect(() => {
+    let cancelled = false;
     setLoading(true);
     const params = new URLSearchParams();
-    const term = search.trim();
+    const term = searchTerm.trim();
     if (term) params.set('search', term);
     if (folderId) params.set('folder', folderId);
     if (sort !== 'name') params.set('sort', sort);
     if (term) params.set('scope', scope);
     api
       .get<LibChar[]>(`/api/characters?${params.toString()}`)
-      .then(setChars)
-      .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load characters'))
-      .finally(() => setLoading(false));
-  }, [folderId, search, sort, scope, reloadKey]);
+      .then((r) => {
+        if (!cancelled) setChars(r);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load characters');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [folderId, searchTerm, sort, scope, reloadKey]);
 
   // Live sync: the server broadcasts `library_changed` whenever characters /
   // folders / groups change anywhere (the desktop app or another browser).

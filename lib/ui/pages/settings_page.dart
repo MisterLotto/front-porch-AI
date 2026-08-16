@@ -35,11 +35,7 @@ import 'package:front_porch_ai/services/web/web_server_host.dart';
 import 'package:front_porch_ai/ui/dialogs/dialogs.dart';
 
 import 'package:front_porch_ai/ui/settings/widgets/widgets.dart';
-import 'package:front_porch_ai/ui/settings/tabs/general_tab.dart';
-import 'package:front_porch_ai/ui/settings/tabs/generation_tab.dart';
-import 'package:front_porch_ai/ui/settings/tabs/backend_tab.dart';
-
-import 'package:front_porch_ai/ui/settings/tabs/voice_media_tab.dart';
+import 'package:front_porch_ai/ui/settings/tabs/tabs.dart';
 import 'package:front_porch_ai/utils/utils.dart';
 // Note: Image Generation *config* options (backend / model / LoRAs) live in a first-class
 // tab-like panel inside the Image Studio (see generation_options_tab.dart + studio integration).
@@ -56,6 +52,25 @@ part 'settings_page.advanced.dart';
 part 'settings_page.hardware.dart';
 part 'settings_page.gpu.dart';
 part 'settings_page.launch.dart';
+
+/// Which OpenAI-compatible endpoint the Settings model list is fetched from.
+///
+/// oMLX always serves at its own fixed local URL (the same literal
+/// `LLMProvider` configures it with), never at the Remote API URL — the two
+/// backends share one `remote_model_name` pref, so a list fetched from the
+/// wrong server lets the picker write a model the active backend cannot load.
+String modelListApiUrl(BackendType backend, String remoteApiUrl) =>
+    backend == BackendType.omlx ? 'http://localhost:8000/v1' : remoteApiUrl;
+
+/// A web-server port typed into the Advanced tab, or null when the text is
+/// not a usable port. Null means "leave the saved port alone" — the field
+/// commits on focus loss as well as Enter, so half-typed or cleared text
+/// must never silently overwrite a working port.
+int? parseWebServerPort(String raw) {
+  final port = int.tryParse(raw.trim());
+  if (port == null || port < 1 || port > 65535) return null;
+  return port;
+}
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -105,6 +120,20 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<int?>? _kvBytesFuture;
   String? _kvBytesFuturePath;
 
+  // Latest text typed into the Web Server port field (settings_page.advanced):
+  // it commits on focus loss too, and this has to outlive the rebuilds that
+  // storage/web-server notifications trigger while the field is being edited.
+  String? _pendingWebServerPort;
+
+  // Memoized "is the launch model still on disk" answer for the Advanced
+  // Launch restart button (settings_page.launch.dart). Its Builder listens to
+  // KoboldService, which notifies once per backend log line while a model
+  // loads — stat-ing the GGUF on each of those rebuilds is the io-lint-banned
+  // per-frame sync I/O pattern (cheap on APFS, a Defender round-trip on
+  // Windows). Resolved once per model path instead.
+  bool _launchModelExistsCache = false;
+  String? _launchModelExistsForPath;
+
   // Local Preset state
   List<File> _localPresets = [];
 
@@ -138,6 +167,17 @@ class _SettingsPageState extends State<SettingsPage> {
     _useCublas = storage.useCublas == true;
     _useVulkan = storage.useVulkan == true;
     _useMetal = storage.useMetal == true;
+    _useRocm = storage.useRocm == true;
+    // Mirror the persisted launch values into the controllers HERE, not only
+    // inside _applyHardwareDefaults: that runs only once HardwareService has
+    // detected a GPU, and detection failures leave hardwareInfo null forever.
+    // Start Backend persists whatever the controllers hold, so on a box where
+    // probing fails the construction placeholders ('0' / '16384') — and a
+    // ROCm user's unmirrored acceleration flag — were written over the user's
+    // saved settings the moment they pressed the button.
+    _gpuLayersController.text = storage.gpuLayers.toString();
+    _contextSizeController.text = storage.backendSettings.contextSize
+        .toString();
     // Apply hardware-based defaults once hardware info is available.
     // HardwareService.detectHardware() is already called in its constructor,
     // so we just use the cached result. If detection is still in progress,
@@ -184,16 +224,25 @@ class _SettingsPageState extends State<SettingsPage> {
   /// Fetch available models from the configured API on startup.
   void _autoFetchModels() async {
     final storage = Provider.of<StorageService>(context, listen: false);
+    // The fetched list feeds the ACTIVE backend's model pickers (the Backend
+    // tab's oMLX/Remote section and the voice-call picker), so it has to be
+    // fetched FROM that backend. oMLX serves its own models at its fixed
+    // local URL; filling its picker from the Remote API offered models oMLX
+    // does not have, and picking one wrote that id into the shared
+    // remote_model_name pref both backends read.
+    final apiUrl = modelListApiUrl(
+      Provider.of<LLMProvider>(context, listen: false).activeBackend,
+      storage.remoteApiUrl,
+    );
     // Allow empty API key for local backends (LM Studio, vLLM, etc.)
     final isLocal =
-        storage.remoteApiUrl.contains('localhost') ||
-        storage.remoteApiUrl.contains('127.0.0.1');
-    if (storage.remoteApiUrl.isEmpty) return; // No API URL configured
+        apiUrl.contains('localhost') || apiUrl.contains('127.0.0.1');
+    if (apiUrl.isEmpty) return; // No API URL configured
     if (storage.remoteApiKey.isEmpty && !isLocal) return; // no API configured
 
     // Instant dropdown from the last successful fetch for this URL; the
     // network refresh below still replaces it when it lands.
-    if (_modelsCache != null && _modelsCacheKey == storage.remoteApiUrl) {
+    if (_modelsCache != null && _modelsCacheKey == apiUrl) {
       setState(() => _availableModels = _modelsCache!);
     }
 
@@ -203,12 +252,12 @@ class _SettingsPageState extends State<SettingsPage> {
     // Remote API provider until the next storage sync).
     try {
       final models = await openRouter.fetchAvailableModels(
-        apiUrl: storage.remoteApiUrl,
+        apiUrl: apiUrl,
         apiKey: storage.remoteApiKey,
       );
       if (mounted && models.isNotEmpty) {
         _modelsCache = models;
-        _modelsCacheKey = storage.remoteApiUrl;
+        _modelsCacheKey = apiUrl;
         setState(() => _availableModels = models);
       }
     } catch (_) {
@@ -238,7 +287,7 @@ class _SettingsPageState extends State<SettingsPage> {
     return Stack(
       children: [
         DefaultTabController(
-          length: 5,
+          length: 6,
           child: Scaffold(
             backgroundColor: AppColors.backgroundOf(
               context,
@@ -261,6 +310,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 splashFactory: NoSplash.splashFactory,
                 tabs: const [
                   Tab(text: 'General'),
+                  Tab(text: 'Porch Life'),
                   Tab(text: 'Generation'),
                   Tab(text: 'Voice & Media'),
                   Tab(text: 'Backend'),
@@ -271,6 +321,7 @@ class _SettingsPageState extends State<SettingsPage> {
             body: TabBarView(
               children: [
                 GeneralTab(systemPromptController: _systemPromptController),
+                const PorchLifeTab(),
                 GenerationTab(
                   bannedPhrasesController: _bannedPhrasesController,
                 ),

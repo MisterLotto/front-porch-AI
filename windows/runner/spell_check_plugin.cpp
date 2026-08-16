@@ -11,6 +11,7 @@
 #include <spellcheck.h>
 #include <wrl/client.h>
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <string>
@@ -82,6 +83,27 @@ class SpellCheckPluginImpl {
   void HandleMethodCall(
       const flutter::MethodCall<flutter::EncodableValue>& method_call,
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result) {
+    // Every language the OS can check, for the Settings picker. The chat
+    // language is a user choice — it is NOT the system locale, because plenty
+    // of people run a German or Polish desktop and role-play in English, and
+    // checking their English against a German dictionary underlines every
+    // single word.
+    if (method_call.method_name().compare("availableLanguages") == 0) {
+      flutter::EncodableList languages;
+      if (factory_) {
+        ComPtr<IEnumString> supported;
+        if (factory_->get_SupportedLanguages(&supported) == S_OK) {
+          LPOLESTR language;
+          while (supported->Next(1, &language, nullptr) == S_OK) {
+            languages.push_back(flutter::EncodableValue(Utf16ToUtf8(language)));
+            CoTaskMemFree(language);
+          }
+        }
+      }
+      result->Success(flutter::EncodableValue(languages));
+      return;
+    }
+
     if (method_call.method_name().compare("spellCheck") == 0) {
       if (!factory_) {
         result->Success(flutter::EncodableValue());
@@ -95,6 +117,15 @@ class SpellCheckPluginImpl {
       }
 
       std::string language_tag = std::get<std::string>((*args_list)[0]);
+      // The Windows spell-check API is BCP-47 and wants a HYPHEN ("en-US").
+      // The app's stored setting is a dictionary tag with an underscore
+      // ("en_US"), because that is what hunspell files are named on Linux and
+      // what NSSpellChecker uses on macOS. Normalise here, exactly as the
+      // Swift plugin normalises the other way — each platform converts to its
+      // own convention so the Dart side can keep one canonical form.
+      // Without this, IsSupported() rejects every tag and spell check is
+      // silently dead on Windows.
+      std::replace(language_tag.begin(), language_tag.end(), '_', '-');
       std::string text = std::get<std::string>((*args_list)[1]);
 
       std::wstring w_language = Utf8ToUtf16(language_tag);

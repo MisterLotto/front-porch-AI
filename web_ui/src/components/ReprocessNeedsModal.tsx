@@ -7,18 +7,29 @@
 
 import { useState } from 'react';
 import { ApiError } from '../api/client';
+import { NEED_LABELS } from './chatTypes';
 
 export function ReprocessNeedsModal({
   onSubmit,
   onClose,
 }: {
   /** Resolves on success (the parent then unmounts this modal); throws on failure. */
-  onSubmit: (critique: string) => Promise<void>;
+  onSubmit: (critique: string, onlyNeeds: string[]) => Promise<void>;
   onClose: () => void;
 }) {
   const [critique, setCritique] = useState('');
+  // Empty = every need, which is what this modal always did. Ticking narrows
+  // the pass: a full-set reprocess makes the model re-emit all seven needs
+  // against the same scene text, so a critique about energy would quietly
+  // re-roll hunger, hygiene and comfort too.
+  const [onlyNeeds, setOnlyNeeds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  const toggleNeed = (need: string) =>
+    setOnlyNeeds((prev) =>
+      prev.includes(need) ? prev.filter((n) => n !== need) : [...prev, need],
+    );
 
   const submit = async () => {
     const c = critique.trim();
@@ -26,7 +37,7 @@ export function ReprocessNeedsModal({
     setBusy(true);
     setError('');
     try {
-      await onSubmit(c);
+      await onSubmit(c, onlyNeeds);
       // Success: the parent clears the index and this modal unmounts.
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Reprocess failed');
@@ -52,6 +63,26 @@ export function ReprocessNeedsModal({
           placeholder="e.g. They just devoured a huge meal — hunger should jump up, not drop."
           autoFocus
         />
+        <p className="reprocess-scope-title">Limit to these needs</p>
+        <p className="muted small">
+          {onlyNeeds.length === 0
+            ? 'Nothing selected — every need is re-evaluated.'
+            : 'Only the selected needs change. The rest keep their current deltas.'}
+        </p>
+        <div className="reprocess-needs">
+          {Object.entries(NEED_LABELS).map(([need, label]) => (
+            <button
+              key={need}
+              type="button"
+              className={`need-chip${onlyNeeds.includes(need) ? ' on' : ''}`}
+              aria-pressed={onlyNeeds.includes(need)}
+              onClick={() => toggleNeed(need)}
+              disabled={busy}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         {error && <p className="error">{error}</p>}
         <div className="modal-actions">
           <button onClick={onClose} disabled={busy}>Cancel</button>

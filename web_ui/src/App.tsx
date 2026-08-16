@@ -1,11 +1,13 @@
 // Copyright (C) 2026 Front Porch AI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { Layout } from './components/Layout';
 import { SetupPage } from './pages/SetupPage';
 import { LoginPage } from './pages/LoginPage';
+import { UnreachablePage } from './pages/UnreachablePage';
 import { CharactersPage } from './pages/CharactersPage';
 import { ChatPage } from './pages/ChatPage';
 import { RemoteAccessPage } from './pages/RemoteAccessPage';
@@ -24,9 +26,19 @@ import { StoryReaderPage } from './pages/StoryReaderPage';
 import { ModelsPage } from './pages/ModelsPage';
 import { AccountPage } from './pages/AccountPage';
 import { StoopSection } from './pages/stoop/StoopSection';
+import { restoreSpellCheckLang, syncSpellCheckLang } from './spellCheckLang';
+
+restoreSpellCheckLang();
 
 export function App() {
-  const { loading, setupRequired, authenticated } = useAuth();
+  const { loading, setupRequired, authenticated, unreachable } = useAuth();
+
+  // Pull the desktop's spell check language once we can actually reach it.
+  // The cached value from restoreSpellCheckLang() is already applied, so this
+  // only corrects a change made on the desktop since the last visit.
+  useEffect(() => {
+    if (authenticated) void syncSpellCheckLang();
+  }, [authenticated]);
 
   if (loading) {
     return (
@@ -35,6 +47,10 @@ export function App() {
       </div>
     );
   }
+  // Before the login branch: a dead server used to render as a working-looking
+  // login form (the service worker serves the shell from cache) — say so
+  // honestly instead.
+  if (unreachable) return <UnreachablePage />;
   if (setupRequired) return <SetupPage />;
   if (!authenticated) return <LoginPage />;
 

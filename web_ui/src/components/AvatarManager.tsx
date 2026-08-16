@@ -78,21 +78,22 @@ export function AvatarManager({ characterId }: { characterId: string }) {
   const toggleFavorite = (a: AvatarItem) =>
     run(api.post(`${base}/favorite?avatarId=${a.isFavorite ? '' : a.id}`));
 
-  // Desktop parity: delete the portrait — the ★ (else first) look is
-  // promoted in its place. Only offered when a look exists to take over.
-  const deletePortrait = () => {
-    if (
-      !window.confirm(
-        'Delete the portrait? A gallery look becomes the new portrait — ' +
-          'the ★ one when a look is starred, otherwise the first.',
-      )
-    )
-      return;
-    run(api.post(`${base}/portrait/delete`));
-  };
-
   const looks = avatars.filter((a) => a.isLook);
   const expressions = avatars.filter((a) => !a.isLook);
+
+  // Desktop parity: the portrait ✕ is a SWAP — the ★ (else first) look
+  // promotes into the portrait slot and the old portrait demotes into the
+  // gallery (2026-08-14: nothing is destroyed any more). The confirm shows
+  // the actual image that takes over, same as the desktop dialog.
+  const [confirmSwap, setConfirmSwap] = useState<AvatarItem | null>(null);
+  const requestSwapPortrait = () => {
+    const candidate = looks.find((l) => l.isFavorite) ?? looks[0];
+    if (candidate) setConfirmSwap(candidate);
+  };
+  const doSwapPortrait = () => {
+    setConfirmSwap(null);
+    run(api.post(`${base}/portrait/delete`));
+  };
 
   const tile = (a: AvatarItem, withPrime: boolean) => (
     <div
@@ -140,8 +141,8 @@ export function AvatarManager({ characterId }: { characterId: string }) {
         <span className="section-label">Looks</span>
         <div className="tool-row">
           {looks.length > 0 && (
-            <button className="ghost" disabled={busy} onClick={deletePortrait}>
-              🗑 Delete portrait
+            <button className="ghost" disabled={busy} onClick={requestSwapPortrait}>
+              ⇄ Swap portrait
             </button>
           )}
           <button className="ghost" disabled={busy} onClick={() => lookRef.current?.click()}>
@@ -206,6 +207,34 @@ export function AvatarManager({ characterId }: { characterId: string }) {
           onCancel={() => setPending(null)}
           onCropped={(blob) => void uploadExpression(blob)}
         />
+      )}
+      {confirmSwap && (
+        <div className="drawer-backdrop center" onClick={() => setConfirmSwap(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="drawer-head">
+              <span>Swap the portrait?</span>
+              <button className="link-btn" onClick={() => setConfirmSwap(null)}>
+                Close
+              </button>
+            </div>
+            <div className="swap-preview">
+              <img src={`${base}/avatars/${confirmSwap.id}/image?w=256`} alt="promoted look" />
+              <p className="muted">
+                This image — {confirmSwap.isFavorite ? 'your ★ starred look' : 'your first gallery look'} —
+                becomes the new portrait, and the old portrait moves into the gallery as a look.
+                Nothing is deleted; swap back any time.
+              </p>
+            </div>
+            <div className="modal-actions">
+              <button className="ghost" onClick={() => setConfirmSwap(null)}>
+                Cancel
+              </button>
+              <button className="primary" onClick={doSwapPortrait}>
+                Swap portrait
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

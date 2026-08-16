@@ -65,7 +65,7 @@ reproduces there.
 | Version | Supported |
 |---|---|
 | Latest stable release | ✅ |
-| Current beta / nightly | ✅ |
+| Current nightly | ✅ |
 | Anything older | ❌ — please update first |
 
 ## Disclosure

@@ -15,6 +15,24 @@ export class ApiError extends Error {
   }
 }
 
+/** Parse a failed JSON `{ error }` body. Used by JSON and blob downloads. */
+export function parseApiErrorBody(text: string, status: number): ApiError {
+  try {
+    const data = JSON.parse(text) as unknown;
+    const payload =
+      typeof data === 'object' && data !== null
+        ? (data as Record<string, unknown>)
+        : {};
+    const message =
+      typeof payload.error === 'string' && payload.error.length > 0
+        ? payload.error
+        : `Request failed (${status})`;
+    return new ApiError(status, message, payload);
+  } catch {
+    return new ApiError(status, text || `Request failed (${status})`, {});
+  }
+}
+
 async function handle<T>(res: Response): Promise<T> {
   const text = await res.text();
   let data: unknown = undefined;
@@ -26,14 +44,22 @@ async function handle<T>(res: Response): Promise<T> {
     }
   }
   if (!res.ok) {
-    const payload = (typeof data === 'object' && data !== null ? data : {}) as Record<
-      string,
-      unknown
-    >;
-    const message = (payload.error as string) || `Request failed (${res.status})`;
-    throw new ApiError(res.status, message, payload);
+    throw parseApiErrorBody(text, res.status);
   }
   return data as T;
+}
+
+// Reads (GET) are never legitimately long, but they hang forever when the
+// desktop's engine is busy — which read as a frozen app on the iPad. Bound
+// them at 30s so a stall surfaces as an ApiError instead of dead air. POSTs
+// stay unbounded on purpose: several (journal regen, objective task-gen,
+// growth pass) legitimately await minutes of local-LLM work.
+const READ_TIMEOUT_MS = 30_000;
+
+function readSignal(): AbortSignal | undefined {
+  return typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal
+    ? AbortSignal.timeout(READ_TIMEOUT_MS)
+    : undefined;
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -42,6 +68,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     credentials: 'include',
     headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    signal: method === 'GET' ? readSignal() : undefined,
   });
   return handle<T>(res);
 }
@@ -65,8 +92,7 @@ export const api = {
   getForBlob: async (path: string): Promise<Blob> => {
     const res = await fetch(path, { method: 'GET', credentials: 'include' });
     if (!res.ok) {
-      const text = await res.text();
-      throw new ApiError(res.status, text || `Request failed (${res.status})`, {});
+      throw parseApiErrorBody(await res.text(), res.status);
     }
     return res.blob();
   },
@@ -79,8 +105,7 @@ export const api = {
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
     if (!res.ok) {
-      const text = await res.text();
-      throw new ApiError(res.status, text || `Request failed (${res.status})`, {});
+      throw parseApiErrorBody(await res.text(), res.status);
     }
     return res.blob();
   },

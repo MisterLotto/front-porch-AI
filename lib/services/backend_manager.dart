@@ -25,7 +25,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:front_porch_ai/services/kobold_binary_version.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/update_service.dart';
-import 'package:front_porch_ai/utils/cpu_features.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 class BackendManager extends ChangeNotifier {
   final StorageService _storageService;
@@ -318,7 +318,16 @@ class BackendManager extends ChangeNotifier {
       final executableName = _getExecutableName();
       final downloadUrl = _getDownloadUrl();
       final savePath = path.join(binDir.path, executableName);
-      print('AG_DEBUG: Download target: $savePath');
+      // Stage into a sibling `.part` and swap it onto the live path only after
+      // the size checks pass. Writing straight onto `savePath` meant a stream
+      // that died mid-download (app quit, power loss, dropped link) left a
+      // TRUNCATED binary where the engine lives — and
+      // checkBackendAvailability() only tests existence, so the app reported
+      // "Ready" and Start spawned a corrupt executable. Matches the staging
+      // every other downloader in the app already does (model_fetch,
+      // download_task, caption, thumbnails).
+      final partPath = '$savePath.part';
+      print('AG_DEBUG: Download target: $savePath (staging at $partPath)');
       print('AG_DEBUG: Download URL: $downloadUrl');
 
       _statusMessage = 'Connecting to GitHub...';
@@ -343,8 +352,9 @@ class BackendManager extends ChangeNotifier {
       print('AG_DEBUG: Content length: $contentLength');
 
       int received = 0;
-      final file = File(savePath);
+      final file = File(partPath);
       final sink = file.openWrite();
+      bool streamFailed = false;
 
       _statusMessage = 'Downloading...';
       notifyListeners();
@@ -392,10 +402,7 @@ class BackendManager extends ChangeNotifier {
         print('AG_DEBUG: Stream verified complete. Received: $received bytes.');
       } catch (e) {
         print('AG_DEBUG: Stream error: $e');
-        // Clean up partial download on error
-        try {
-          await file.delete();
-        } catch (_) {}
+        streamFailed = true;
         rethrow;
       } finally {
         print('AG_DEBUG: Closing file sink...');
@@ -403,6 +410,14 @@ class BackendManager extends ChangeNotifier {
         await sink.close();
         client.close();
         print('AG_DEBUG: File sink closed.');
+        // Delete AFTER the handle is closed: Dart runs `finally` after the
+        // catch body, so deleting there raced the still-open sink and failed
+        // outright on Windows (sharing violation).
+        if (streamFailed) {
+          try {
+            await file.delete();
+          } catch (_) {}
+        }
       }
 
       // Verify download integrity
@@ -419,19 +434,21 @@ class BackendManager extends ChangeNotifier {
       }
 
       // Verify the file actually exists and has content
-      final downloadedFile = File(savePath);
-      final fileSize = await downloadedFile.length();
+      final fileSize = await file.length();
       print('AG_DEBUG: Final file size on disk: $fileSize bytes');
       if (fileSize < 1024 * 1024) {
         // Sanity check: backend should be > 1MB
         print('AG_DEBUG: File suspiciously small ($fileSize bytes), deleting.');
         try {
-          await downloadedFile.delete();
+          await file.delete();
         } catch (_) {}
         throw Exception(
           'Downloaded file is too small ($fileSize bytes). The download may have failed.',
         );
       }
+
+      // Only now does the complete binary become the live executable.
+      await swapStagedBinary(file, savePath);
 
       if (_remoteVersion != null) {
         await KoboldBinaryVersion.write(
@@ -464,6 +481,35 @@ class BackendManager extends ChangeNotifier {
       notifyListeners();
       print('AG_DEBUG: Download fatal error: $e');
       print('AG_DEBUG: Stack: $stack');
+    }
+  }
+
+  /// Move a fully-downloaded staging file onto the live executable path. The
+  /// rename is atomic on all three desktop platforms, so [livePath] only ever
+  /// holds a whole binary — never the truncated remains of an interrupted
+  /// download. A locked target (Windows keeps a RUNNING .exe open; Linux
+  /// returns ETXTBSY) is retried once after unlinking and, failing that,
+  /// reported in words a non-technical user can act on instead of a raw
+  /// sharing-violation string. The staged file is left in place on failure so
+  /// the download is not thrown away.
+  @visibleForTesting
+  static Future<void> swapStagedBinary(File staged, String livePath) async {
+    try {
+      await staged.rename(livePath);
+      return;
+    } on FileSystemException catch (e) {
+      print('AG_DEBUG: Direct rename onto $livePath failed ($e) — retrying');
+    }
+    try {
+      final live = File(livePath);
+      if (await live.exists()) await live.delete();
+      await staged.rename(livePath);
+    } catch (e) {
+      print('AG_DEBUG: Could not replace $livePath: $e');
+      throw Exception(
+        'Could not replace the engine file — it looks like KoboldCpp is still '
+        'running. Press Stop on this page, then start the download again.',
+      );
     }
   }
 

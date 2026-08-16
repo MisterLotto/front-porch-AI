@@ -127,4 +127,49 @@ void main() {
       reason: 'cleanup must still do its actual job',
     );
   });
+
+  // audit P2.20 — growth / dead-chat objectives / chat_worlds GC
+  test('growth rings for a missing session are orphans and get cleaned',
+      () async {
+    await db.into(db.growthRings).insert(
+          GrowthRingsCompanion.insert(
+            id: 'ring-orphan',
+            sessionId: 'gone-session',
+            characterId: 'someone',
+            content: 'Started humming under stress',
+            category: const Value('habit'),
+          ),
+        );
+
+    final report = await DatabaseCleanup.checkOrphans(db);
+    expect(report.orphanCounts['growth_rings'], 1);
+
+    final cleaned = await DatabaseCleanup.cleanOrphans(db);
+    expect(cleaned.removedCounts['growth_rings'], 1);
+    expect(await db.select(db.growthRings).get(), isEmpty);
+  });
+
+  test('objectives whose chat_id points at a missing session are cleaned',
+      () async {
+    final sgid = await addCharacter(
+      id: 'live-uuid',
+      name: 'Nora',
+      imagePath: '/library/Nora_1780304424982.png',
+    );
+    await db.into(db.objectives).insert(
+          ObjectivesCompanion.insert(
+            id: 'obj-dead-chat',
+            characterId: sgid,
+            objective: 'Quest for a deleted chat',
+            chatId: const Value('deleted-chat-id'),
+          ),
+        );
+
+    final report = await DatabaseCleanup.checkOrphans(db);
+    expect(report.orphanCounts['dead_chat_objectives'], 1);
+
+    final cleaned = await DatabaseCleanup.cleanOrphans(db);
+    expect(cleaned.removedCounts['dead_chat_objectives'], 1);
+    expect(await db.select(db.objectives).get(), isEmpty);
+  });
 }

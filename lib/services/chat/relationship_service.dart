@@ -5,7 +5,7 @@
 //
 // Front Porch AI is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
-// the Software Foundation, either version 3 of the License, or
+// the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
 // Front Porch AI is distributed in the hope that it will be useful,
@@ -19,6 +19,17 @@
 import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/services/chat/relationship_milestones.dart';
+
+import 'relationship_tiers.dart';
+
+part 'relationship_service.persistence.dart';
+part 'relationship_service.dynamics.dart';
+part 'relationship_service.rewind.dart';
+
+/// Bond applies between long-term growth checks. Going forward only —
+/// stored session counters and [RelationshipService.longTermScore] are
+/// never recomputed from chat history when this number changes.
+const int kLongTermCheckEvery = 3;
 
 /// Plain (non-ChangeNotifier) domain service owning relationship / affection /
 /// trust / fixation / inter-character feelings state and logic (scores, bond+trust
@@ -77,6 +88,13 @@ import 'package:front_porch_ai/services/chat/relationship_milestones.dart';
 ///
 /// 0 new private methods added to ChatService as part of this step (thins + delegations only;
 /// deletions of moved code are mandatory part of the task).
+///
+/// This library was split 2026-08 (god-file elimination campaign) into this shell
+/// plus three `part` files (`relationship_service.persistence.dart`,
+/// `.dynamics.dart`, `.rewind.dart`) and one pure leaf (`relationship_tiers.dart`,
+/// which holds the tier/percent scale statics this class still exposes via the
+/// six one-line delegating statics below for source compatibility). Extraction
+/// is verbatim; see the split map for the full inventory.
 class RelationshipService {
   final VoidCallback onNotify;
   final Future<void> Function() onSaveChat;
@@ -162,7 +180,7 @@ class RelationshipService {
 
   // Armed on each severe trust drop (≥ -20 delta). Consumed on the very next user
   // message, then resets so future drops each get one shot.
-  bool _pendingTrustRepair = false;
+  bool pendingTrustRepair = false;
 
   RelationshipService({
     required this.onNotify,
@@ -209,7 +227,7 @@ class RelationshipService {
   int get longTermTier => _longTermTier;
   int get trustLevel => _trustLevel;
   int get trustTier => _calculateTier(_trustLevel);
-  bool get pendingTrustRepair => _pendingTrustRepair;
+
   String get activeFixation => _activeFixation;
   int get fixationLifespan => _fixationLifespan;
   String get spatialStance => _spatialStance;
@@ -219,227 +237,62 @@ class RelationshipService {
   int get shortTermDeltasSummary => _shortTermDeltasSummary;
 
   // Progress helpers for relationship bars (UI + tests). Delegate to the pure
-  // static scale helpers (below) so the band math is one source of truth, shared
-  // with read-only per-member consumers (the web group stats panel).
-  int get shortTermProgressTarget => _bondScaleTarget(_affectionScore.abs());
-  int get shortTermProgressBase => _bondScaleBase(_affectionScore.abs());
+  // static scale helpers on [RelationshipTiers] (moved there in the 2026-08
+  // split) so the band math is one source of truth, shared with read-only
+  // per-member consumers (the web group stats panel).
+  int get shortTermProgressTarget =>
+      RelationshipTiers.bondScaleTarget(_affectionScore.abs());
+  int get shortTermProgressBase =>
+      RelationshipTiers.bondScaleBase(_affectionScore.abs());
   double get shortTermProgressPercent => bondScalePercent(_affectionScore);
 
-  int get longTermProgressTarget => _bondScaleTarget(_longTermScore.abs());
-  int get longTermProgressBase => _bondScaleBase(_longTermScore.abs());
+  int get longTermProgressTarget =>
+      RelationshipTiers.bondScaleTarget(_longTermScore.abs());
+  int get longTermProgressBase =>
+      RelationshipTiers.bondScaleBase(_longTermScore.abs());
   double get longTermProgressPercent => bondScalePercent(_longTermScore);
 
-  int get trustProgressBase => _trustScaleBase(_trustLevel.abs());
-  int get trustProgressTarget => _trustScaleTarget(_trustLevel.abs());
+  int get trustProgressBase =>
+      RelationshipTiers.trustScaleBase(_trustLevel.abs());
+  int get trustProgressTarget =>
+      RelationshipTiers.trustScaleTarget(_trustLevel.abs());
   double get trustProgressPercent => trustScalePercent(_trustLevel);
-
-  // ── Pure tier/percent scale helpers — single source of truth, shared by the
-  // live instance getters above AND read-only per-member consumers (the web
-  // group stats panel computes a member's tier/bar from its raw scores). ──────
-  /// 0..1 progress within the current bond / long-term tier band (±300 scale).
-  static double bondScalePercent(int score) {
-    final abs = score.abs();
-    final base = _bondScaleBase(abs);
-    final total = _bondScaleTarget(abs) - base;
-    return total <= 0 ? 0.0 : ((abs - base) / total).clamp(0.0, 1.0);
-  }
-
-  static int _bondScaleBase(int abs) {
-    if (abs < 15) return 0;
-    if (abs < 30) return 15;
-    if (abs < 50) return 30;
-    if (abs < 80) return 50;
-    if (abs < 120) return 80;
-    if (abs < 160) return 120;
-    if (abs < 200) return 160;
-    if (abs < 250) return 200;
-    return 250;
-  }
-
-  static int _bondScaleTarget(int abs) {
-    if (abs < 15) return 15;
-    if (abs < 30) return 30;
-    if (abs < 50) return 50;
-    if (abs < 80) return 80;
-    if (abs < 120) return 120;
-    if (abs < 160) return 160;
-    if (abs < 200) return 200;
-    if (abs < 250) return 250;
-    return 300; // max for ±300 range
-  }
-
-  /// 0..1 progress within the current trust tier band (±100 scale).
-  static double trustScalePercent(int level) {
-    final abs = level.abs();
-    final base = _trustScaleBase(abs);
-    final total = _trustScaleTarget(abs) - base;
-    return total <= 0 ? 0.0 : ((abs - base) / total).clamp(0.0, 1.0);
-  }
-
-  static int _trustScaleBase(int abs) {
-    if (abs < 10) return 0;
-    if (abs < 25) return 10;
-    if (abs < 45) return 25;
-    if (abs < 70) return 45;
-    if (abs < 100) return 70;
-    return 100;
-  }
-
-  static int _trustScaleTarget(int abs) {
-    if (abs < 10) return 10;
-    if (abs < 25) return 25;
-    if (abs < 45) return 45;
-    if (abs < 70) return 70;
-    return 100;
-  }
 
   /// Human-readable tier name for the current relationship level.
   /// Calculate tier for 21-tier system (-10 to +10) for short/long-term bonds
   /// with new range ±300.
   String get shortTermTierName => bondTierLabel(_relationshipTier);
 
-  /// Pure bond/short-term tier name for a tier index (-10..10). Shared by the
-  /// live getter and read-only per-member consumers (web group stats panel).
-  static String bondTierLabel(int tier) {
-    switch (tier) {
-      case 10:
-        return 'Devoted';
-      case 9:
-        return 'Enamored';
-      case 8:
-        return 'Devoted';
-      case 7:
-        return 'Intimate';
-      case 6:
-        return 'Close';
-      case 5:
-        return 'Amiable';
-      case 4:
-        return 'Friendly';
-      case 3:
-        return 'Warm';
-      case 2:
-        return 'Receptive';
-      case 1:
-        return 'Neutral';
-      case 0:
-        return 'Neutral';
-      case -1:
-        return 'Reserved';
-      case -2:
-        return 'Cool';
-      case -3:
-        return 'Unimpressed';
-      case -4:
-        return 'Annoyed';
-      case -5:
-        return 'Disliked';
-      case -6:
-        return 'Hostile';
-      case -7:
-        return 'Adversarial';
-      case -8:
-        return 'Disdain';
-      case -9:
-        return 'Contempt';
-      case -10:
-        return 'Vitriolic';
-      default:
-        return 'Unknown';
-    }
-  }
-
   String get longTermTierName => longTermTierLabel(_longTermTier);
-
-  /// Pure long-term tier name for a tier index (-10..10).
-  static String longTermTierLabel(int tier) {
-    switch (tier) {
-      case 10:
-        return 'Soulmate / Devoted';
-      case 9:
-        return 'Life Partner';
-      case 8:
-        return 'Devoted';
-      case 7:
-        return 'Deeply Attached';
-      case 6:
-        return 'Intimate';
-      case 5:
-        return 'Close';
-      case 4:
-        return 'Friendly';
-      case 3:
-        return 'Warm';
-      case 2:
-        return 'Receptive';
-      case 1:
-        return 'Neutral';
-      case 0:
-        return 'Neutral';
-      case -1:
-        return 'Reserved';
-      case -2:
-        return 'Cool';
-      case -3:
-        return 'Disappointed';
-      case -4:
-        return 'Fractured';
-      case -5:
-        return 'Broken Trust';
-      case -6:
-        return 'Deep Resentment';
-      case -7:
-        return 'Hostile';
-      case -8:
-        return 'Adversarial';
-      case -9:
-        return 'Contempt';
-      case -10:
-        return 'Vitriolic';
-      default:
-        return 'Unknown';
-    }
-  }
 
   String get trustTierName => trustTierLabel(trustTier);
 
-  /// Pure trust tier name for a trust tier index.
-  static String trustTierLabel(int tier) {
-    switch (tier) {
-      case 7:
-        return 'Blind Trust';
-      case 6:
-        return 'Implicit Trust';
-      case 5:
-        return 'Deeply Trusting';
-      case 4:
-        return 'Confident Trust';
-      case 3:
-        return 'Trusting';
-      case 2:
-        return 'Leaning Positive';
-      case 1:
-        return 'Warming';
-      case 0:
-        return 'Neutral';
-      case -1:
-        return 'Cautious';
-      case -2:
-        return 'Guarded';
-      case -3:
-        return 'Skeptical';
-      case -4:
-        return 'Wary';
-      case -5:
-        return 'Suspicious';
-      case -6:
-        return 'Distrustful';
-      case -7:
-        return 'Paranoid';
-      default:
-        return 'Unknown';
-    }
-  }
+  // ── Delegating statics — bodies now live in [RelationshipTiers] (2026-08
+  // split); kept here as one-liners so `RelationshipService.bondTierFor(...)`
+  // etc. keep compiling for every existing call site (group_member_card.dart,
+  // relationship_clamp_and_speaker_roundtrip_test.dart) with zero edits there. ──
+
+  /// See [RelationshipTiers.bondScalePercent].
+  static double bondScalePercent(int score) =>
+      RelationshipTiers.bondScalePercent(score);
+
+  /// See [RelationshipTiers.trustScalePercent].
+  static double trustScalePercent(int level) =>
+      RelationshipTiers.trustScalePercent(level);
+
+  /// See [RelationshipTiers.bondTierLabel].
+  static String bondTierLabel(int tier) => RelationshipTiers.bondTierLabel(tier);
+
+  /// See [RelationshipTiers.longTermTierLabel].
+  static String longTermTierLabel(int tier) =>
+      RelationshipTiers.longTermTierLabel(tier);
+
+  /// See [RelationshipTiers.trustTierLabel].
+  static String trustTierLabel(int tier) =>
+      RelationshipTiers.trustTierLabel(tier);
+
+  /// See [RelationshipTiers.bondTierFor].
+  static int bondTierFor(int score) => RelationshipTiers.bondTierFor(score);
 
   /// Public for any load-site default computation that needs it (e.g. group scalar
   /// fallbacks). Internal logic always prefers provided group tier or computes.
@@ -457,55 +310,39 @@ class RelationshipService {
 
   // ── Core logic (verbatim mechanical extraction) ───────────────────────────
 
-  int _calculateTier(int score) {
-    final absScore = score.abs();
-    if (absScore < 5) return 0;
-    if (absScore < 15) return score > 0 ? 1 : -1;
-    if (absScore < 30) return score > 0 ? 2 : -2;
-    if (absScore < 50) return score > 0 ? 3 : -3;
-    if (absScore < 80) return score > 0 ? 4 : -4;
-    if (absScore < 120) return score > 0 ? 5 : -5;
-    if (absScore < 160) return score > 0 ? 6 : -6;
-    if (absScore < 200) return score > 0 ? 7 : -7;
-    if (absScore < 250) return score > 0 ? 8 : -8;
-    if (absScore < 300) return score > 0 ? 9 : -9;
-    return score > 0 ? 10 : -10;
+  int _calculateTier(int score) => RelationshipTiers.bondTierFor(score);
+
+  // ── Members relocated here from the dynamics/rewind parts (2026-08 split,
+  // hazards H4/H5): both extension parts call these unqualified, which only
+  // reliably resolves for members declared directly on the class body rather
+  // than inside another part's `extension` block. ──────────────────────────
+
+  bool get _perSpeakerDecay =>
+      getIsGroupActive() &&
+      !getObserverMode() &&
+      getGroupCounter != null &&
+      setGroupCounter != null;
+
+  String get _decaySpeakerId => getCurrentSpeakerIdForRealism();
+
+  /// Public inter-character read API. Called from the dynamics part
+  /// ([applyShortTermDecay]) and the rewind part (capture + the seeding/
+  /// heuristic/update methods) — see the note above.
+  Map<String, int> getInterCharacterRelationships(String charId) {
+    if (!getIsGroupRealismActive()) return const {};
+    final raw = getGroupInterCharacterRelationships(charId);
+    if (raw.isNotEmpty) {
+      return raw.map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
+    }
+    return const {};
   }
 
-  // ── Reset / seed / load helpers (support "keep reset blocks in sync" in parent) ──
-
-  void resetForFreshChat() {
-    _affectionScore = 0;
-    _relationshipTier = 0;
-    _longTermScore = 0;
-    _longTermTier = 0;
-    _turnsSinceLongTermCheck = 0;
-    _shortTermDeltasSummary = 0;
-    _turnsSinceDecayCheck = 0;
-    _trustLevel = 0;
-    _activeFixation = '';
-    _fixationLifespan = 0;
-    _spatialStance = '';
-    _pendingTrustRepair = false;
-  }
-
-  /// Card V2/Ext seed path: plain clamp (current ±300 scale authored by V2.5 cards
-  /// and the creator UI). No legacy *2 migration. Tiers computed after. Used by the
-  /// two fresh ext-seed sites in ChatService (setActiveCharacter 0-session path and
-  /// startNewChat 1:1 ext branch). Group paths untouched (never used the doubling).
-  /// See god comments for "card-seed bypass" + cross-refs.
-  void seedFromCardV2OrExt({
-    required int shortTermBond,
-    required int longTermBond,
-    required int trustLevel,
-  }) {
-    _affectionScore = shortTermBond.clamp(-300, 300);
-    _longTermScore = longTermBond.clamp(-300, 300);
-    _trustLevel = trustLevel.clamp(-100, 100);
-    _relationshipTier = _calculateTier(_affectionScore);
-    _longTermTier = _calculateTier(_longTermScore);
-  }
-
+  /// Canonical scalar-restore entry (realism_state load, chip revert, tests).
+  /// Lives on the class body — NOT in the persistence part — because callers
+  /// that reach this service only through `ChatService.relationshipService`
+  /// (e.g. sidebar_golden_test.dart) never import this library, and extension
+  /// members, unlike true instance members, only resolve where the declaring
+  /// library is imported.
   void loadScalars({
     required int affectionScore,
     required int longTermScore,
@@ -524,523 +361,12 @@ class RelationshipService {
     _activeFixation = activeFixation;
     _fixationLifespan = fixationLifespan;
     _spatialStance = spatialStance;
-    _pendingTrustRepair = trustRepairPending;
+    pendingTrustRepair = trustRepairPending;
     _turnsSinceLongTermCheck = turnsSinceLongTermCheck;
     _shortTermDeltasSummary = shortTermDeltasSummary;
     _turnsSinceDecayCheck = turnsSinceDecayCheck;
 
     _relationshipTier = _calculateTier(_affectionScore);
     _longTermTier = _calculateTier(_longTermScore);
-  }
-
-  /// Load per-speaker relationship scalars (affection/trust/fixation/tiers/spatial)
-  /// from the group's _groupRealism map into this service's 1:1-style scalars so
-  /// eval/delta/injection paths can operate on them. Mirrors needs pattern.
-  void loadRelationshipScalarsForSpeaker(String charId) {
-    final aff = getGroupAffectionScore(charId);
-    _affectionScore = aff;
-    _longTermScore = getGroupLongTermScore(charId, defaultValue: aff);
-    _trustLevel = getGroupTrustLevel(charId);
-    _activeFixation = getGroupFixation(charId);
-    _fixationLifespan = getGroupFixationLifespan(charId, defaultValue: 0);
-    _spatialStance = getGroupSpatialStance(charId);
-
-    final relT = getGroupRelationshipTier(charId, defaultValue: 0);
-    _relationshipTier = relT != 0 ? relT : _calculateTier(_affectionScore);
-    final ltT = getGroupLongTermTier(charId, defaultValue: 0);
-    _longTermTier = ltT != 0 ? ltT : _calculateTier(_longTermScore);
-
-    // Per-speaker long-term cadence (parity): each member's growth check runs
-    // on THEIR OWN eval count and THEIR OWN delta history. With the shared
-    // registers, the 5-turn threshold was hit by the whole group's evals and
-    // the long-term bump landed on whichever member happened to be loaded.
-    if (getGroupCounter != null) {
-      _turnsSinceLongTermCheck = getGroupCounter!(
-        charId,
-        'turnsSinceLongTermCheck',
-        defaultValue: 0,
-      );
-      _shortTermDeltasSummary = getGroupCounter!(
-        charId,
-        'shortTermDeltasSummary',
-        defaultValue: 0,
-      );
-    }
-  }
-
-  /// Write current scalars back into the target group character's _groupRealism
-  /// entry (for affection/long/trust/fixation/tiers/spatial). Does not touch needs
-  /// or emotion (owned elsewhere).
-  void saveRelationshipScalarsToGroup(String charId) {
-    setGroupAffectionScore(charId, _affectionScore);
-    setGroupLongTermScore(charId, _longTermScore);
-    setGroupTrustLevel(charId, _trustLevel);
-
-    // Persist fixation/spatial UNCONDITIONALLY (including clears) so the
-    // per-character store is a faithful snapshot of the working registers.
-    // Previously these were guarded behind non-empty checks, which meant a
-    // cleared fixation/spatial never propagated through save/load — fine while
-    // only group members used this path (fixation re-set each turn), but it would
-    // silently break fixation-clearing once the always-loaded 1:1 host is unified
-    // onto the same store. See relationship_service_test round-trip coverage.
-    setGroupFixation(charId, _activeFixation);
-    setGroupFixationLifespan(charId, _fixationLifespan);
-    setGroupSpatialStance(charId, _spatialStance);
-
-    setGroupRelationshipTier(charId, _relationshipTier);
-    setGroupLongTermTier(charId, _longTermTier);
-
-    // Per-speaker long-term cadence counters (see the load-side comment).
-    if (setGroupCounter != null) {
-      setGroupCounter!(
-        charId,
-        'turnsSinceLongTermCheck',
-        _turnsSinceLongTermCheck,
-      );
-      setGroupCounter!(
-        charId,
-        'shortTermDeltasSummary',
-        _shortTermDeltasSummary,
-      );
-    }
-  }
-
-  // ── Deltas, growth, decay, fixation (verbatim) ─────────────────────────────
-
-  /// Apply a short-term bond delta. When the named short-term tier changes
-  /// and [recordMilestone] is true, fires [onTierCrossing] (Living Time
-  /// v1.5). Every 5 applies also runs long-term growth, which may fire a
-  /// separate `long_term` crossing (v1.5.1). Regen/reprocess passes
-  /// [recordMilestone]: false so undoing a rejected reply never invents
-  /// reverse story beats (short- or long-term).
-  void applyScoreDelta(int delta, {bool recordMilestone = true}) {
-    _shortTermDeltasSummary += delta;
-    _turnsSinceLongTermCheck++;
-
-    if (_turnsSinceLongTermCheck >= 5) {
-      _evalLongTermGrowth(recordMilestone: recordMilestone);
-    }
-
-    if (delta == 0) return;
-    final oldScore = _affectionScore;
-    final oldTier = _relationshipTier;
-    final oldLabel = bondTierLabel(oldTier);
-
-    _affectionScore = (_affectionScore + delta).clamp(-300, 300);
-    _relationshipTier = _calculateTier(_affectionScore);
-
-    if (_affectionScore != oldScore || _relationshipTier != oldTier) {
-      debugPrint(
-        '[Realism] Short-Term Bond: $oldScore \u2192 $_affectionScore, '
-        'Tier: $oldTier \u2192 $_relationshipTier ($shortTermTierName)',
-      );
-      onNotify();
-    }
-    if (recordMilestone &&
-        oldTier != _relationshipTier &&
-        onTierCrossing != null) {
-      onTierCrossing!(
-        TierCrossing(
-          axis: 'bond',
-          oldTier: oldTier,
-          newTier: _relationshipTier,
-          oldLabel: oldLabel,
-          newLabel: shortTermTierName,
-        ),
-      );
-    }
-  }
-
-  /// Apply a trust delta. Tier crossings fire [onTierCrossing] when
-  /// [recordMilestone] is true (default). Severe drops still arm repair.
-  void applyTrustDelta(int delta, {bool recordMilestone = true}) {
-    if (delta == 0) return;
-    final oldTier = trustTier;
-    final oldLabel = trustTierLabel(oldTier);
-    _trustLevel = (_trustLevel + delta).clamp(-100, 100);
-    final newTier = trustTier;
-    debugPrint(
-      '[Realism:Relationship] Trust shifted by $delta -> $_trustLevel',
-    );
-    onNotify(); // notify on any trust shift (bond/long/short already do on change) so sidebar live-updates from realism eval results / chips
-    // Arm the repair window on any severe single-turn drop
-    if (delta <= -20) {
-      _pendingTrustRepair = true;
-      debugPrint('[Realism:Trust] Severe drop — repair window armed');
-    }
-    if (recordMilestone && oldTier != newTier && onTierCrossing != null) {
-      onTierCrossing!(
-        TierCrossing(
-          axis: 'trust',
-          oldTier: oldTier,
-          newTier: newTier,
-          oldLabel: oldLabel,
-          newLabel: trustTierLabel(newTier),
-        ),
-      );
-    }
-  }
-
-  void _evalLongTermGrowth({bool recordMilestone = true}) {
-    final oldLTScore = _longTermScore;
-    final oldLTTier = _longTermTier;
-    final oldLabel = longTermTierLabel(oldLTTier);
-
-    // Proportional growth based on average short-term tier over the evaluation window
-    // (use current tier as proxy for recent average)
-    final avgTier = _relationshipTier;
-
-    if (avgTier >= 7) {
-      _longTermScore = (_longTermScore + 3).clamp(-300, 300);
-    } else if (avgTier >= 4) {
-      _longTermScore = (_longTermScore + 2).clamp(-300, 300);
-    } else if (avgTier >= 2) {
-      _longTermScore = (_longTermScore + 1).clamp(-300, 300);
-    } else if (avgTier <= -7) {
-      _longTermScore = (_longTermScore - 3).clamp(-300, 300);
-    } else if (avgTier <= -4) {
-      _longTermScore = (_longTermScore - 2).clamp(-300, 300);
-    } else if (avgTier <= -2) {
-      _longTermScore = (_longTermScore - 1).clamp(-300, 300);
-    }
-    // Between -1 and +1: no long-term change (neutral drift doesn't cement)
-
-    _longTermTier = _calculateTier(_longTermScore);
-    _turnsSinceLongTermCheck = 0;
-    _shortTermDeltasSummary = 0;
-
-    if (_longTermScore != oldLTScore || _longTermTier != oldLTTier) {
-      debugPrint(
-        '[Realism] Long-Term Bond updated: $oldLTScore \u2192 $_longTermScore, '
-        'Tier: $oldLTTier \u2192 $_longTermTier ($longTermTierName)',
-      );
-      onNotify();
-    } else {
-      debugPrint(
-        '[Realism] Long-Term Bond check (No change) - Status: $_longTermScore ($longTermTierName)',
-      );
-    }
-    // Living Time v1.5.1: plant only when the *named* long-term tier moves.
-    // Score ticks inside the same tier stay silent (climate, not weather).
-    if (recordMilestone &&
-        oldLTTier != _longTermTier &&
-        onTierCrossing != null) {
-      onTierCrossing!(
-        TierCrossing(
-          axis: 'long_term',
-          oldTier: oldLTTier,
-          newTier: _longTermTier,
-          oldLabel: oldLabel,
-          newLabel: longTermTierName,
-        ),
-      );
-    }
-  }
-
-  /// Short-term relationship decay (toward 0 by 1 every 10 turns) + hidden
-  /// inter-char decay (when under cap). Extracted from _applyMoodDecay body.
-  ///
-  /// Cadence counter: in a group with the counter callbacks wired, the check
-  /// runs on the SPEAKER's own counter (their map entry) — so it is safe to
-  /// call before the scalar load, and each member decays every 10 of THEIR
-  /// OWN turns, exactly like a 1:1 host. Unwired (tests) falls back to the
-  /// legacy shared register.
-  void applyShortTermDecay() {
-    final isGroup = getIsGroupActive() && !getObserverMode();
-    final perSpeaker =
-        isGroup && getGroupCounter != null && setGroupCounter != null;
-    final speakerId = isGroup ? getCurrentSpeakerIdForRealism() : '';
-    var turns = perSpeaker
-        ? getGroupCounter!(speakerId, 'turnsSinceDecayCheck', defaultValue: 0)
-        : _turnsSinceDecayCheck;
-    turns++;
-    if (turns < 10) {
-      if (perSpeaker) {
-        setGroupCounter!(speakerId, 'turnsSinceDecayCheck', turns);
-      } else {
-        _turnsSinceDecayCheck = turns;
-      }
-      return;
-    }
-    if (perSpeaker) {
-      setGroupCounter!(speakerId, 'turnsSinceDecayCheck', 0);
-    } else {
-      _turnsSinceDecayCheck = 0;
-    }
-    {
-      if (isGroup) {
-        final id = speakerId;
-        final current = getGroupAffectionScore(
-          id,
-          defaultValue: _affectionScore,
-        );
-        final next = current > 0
-            ? (current - 1).clamp(-300, 300)
-            : current < 0
-            ? (current + 1).clamp(-300, 300)
-            : current;
-        setGroupAffectionScore(id, next);
-        if (next != 0) {
-          debugPrint('[Realism] Group short-term decay for $id: $next');
-        }
-
-        // Phase 2/3: Decay hidden inter-character relationships (only when under the 4-char cap)
-        // mirrors outer group non-observer scoping for inter decay (verbatim)
-        if (getShouldTrackInterCharacterRelationships()) {
-          final rels = Map<String, int>.from(
-            getInterCharacterRelationships(id),
-          );
-          if (rels.isNotEmpty) {
-            bool relChanged = false;
-            rels.forEach((otherId, value) {
-              if (value > 0) {
-                rels[otherId] = (value - 1).clamp(-300, 300);
-                relChanged = true;
-              } else if (value < 0) {
-                rels[otherId] = (value + 1).clamp(-300, 300);
-                relChanged = true;
-              }
-            });
-            if (relChanged) {
-              setGroupInterCharacterRelationships(id, rels);
-              debugPrint(
-                '[Realism:Group] Decayed inter-character relationships for $id',
-              );
-            }
-          }
-        }
-      } else {
-        // 1:1 scalar path
-        if (_affectionScore > 0) {
-          _affectionScore = (_affectionScore - 1).clamp(-300, 300);
-        } else if (_affectionScore < 0) {
-          _affectionScore = (_affectionScore + 1).clamp(-300, 300);
-        }
-        if (_affectionScore != 0) {
-          debugPrint('[Realism] Short-term decay applied: $_affectionScore');
-        }
-      }
-      onNotify();
-    }
-  }
-
-  /// Tick fixation lifespan (called every narrative eval turn).
-  void decayFixationOneTurn() {
-    if (_fixationLifespan > 0) {
-      _fixationLifespan--;
-      if (_fixationLifespan == 0) {
-        _activeFixation = '';
-      }
-    }
-  }
-
-  /// Apply fixation topic result from narrative / one-shot eval.
-  /// Debugs are conditioned on isOneShot to match original log tags.
-  void updateFixationFromEvalResult(String rawTopic, {bool isOneShot = false}) {
-    decayFixationOneTurn();
-
-    String f = rawTopic.trim();
-    if (f.toLowerCase() == 'none' || f.isEmpty) {
-      _activeFixation = '';
-      _fixationLifespan = 0;
-      if (isOneShot) {
-        debugPrint('[Realism:OneShot] Fixation decayed and cleared.');
-      }
-    } else if (f != _activeFixation) {
-      _activeFixation = f;
-      _fixationLifespan = 3;
-      if (isOneShot) {
-        debugPrint('[Realism:OneShot] New obsession: $f (3 turns)');
-      }
-    }
-  }
-
-  // ── Inter-character (verbatim) ─────────────────────────────────────────────
-
-  Map<String, int> getInterCharacterRelationships(String charId) {
-    if (!getIsGroupRealismActive()) return const {};
-    final raw = getGroupInterCharacterRelationships(charId);
-    if (raw.isNotEmpty) {
-      return raw.map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
-    }
-    return const {};
-  }
-
-  void updateInterCharacterRelationship(
-    String fromCharId,
-    String toCharId,
-    int delta,
-  ) {
-    if (!getIsGroupActive()) return;
-
-    final currentMap = Map<String, int>.from(
-      getInterCharacterRelationships(fromCharId),
-    );
-    final currentValue = currentMap[toCharId] ?? 0;
-    final newValue = (currentValue + delta).clamp(-300, 300);
-
-    setGroupInterCharacterRelationships(fromCharId, {
-      ...currentMap,
-      toCharId: newValue,
-    });
-  }
-
-  /// Ensures the hidden inter-character 'relationships' map for this speaker
-  /// contains a neutral (0) entry for every other current member of the group.
-  /// Verbatim from original (prune + seed).
-  void ensureInterCharacterRelationshipsSeeded(String charId) {
-    if (!getShouldTrackInterCharacterRelationships()) return;
-    if (!getIsGroupActive() || getObserverMode()) return;
-    if (getGroupCharacterCount() < 2) return;
-
-    final currentRels = Map<String, int>.from(
-      getInterCharacterRelationships(charId),
-    );
-    bool changed = false;
-
-    // Prune relationships to characters who are no longer in the group (membership change handling)
-    final currentMemberIds = getCurrentGroupMemberIds();
-    final stale = currentRels.keys
-        .where((id) => !currentMemberIds.contains(id))
-        .toList();
-    for (final staleId in stale) {
-      currentRels.remove(staleId);
-      changed = true;
-    }
-
-    // Seed neutral 0 for any current members we don't have an entry for yet
-    for (final otherId in getOtherGroupMemberIds(charId)) {
-      if (!currentRels.containsKey(otherId)) {
-        currentRels[otherId] = 0;
-        changed = true;
-      }
-    }
-
-    if (changed) {
-      setGroupInterCharacterRelationships(charId, currentRels);
-      debugPrint(
-        '[Realism:Group] Updated inter-character relationships for $charId (seeded + pruned stale)',
-      );
-    }
-  }
-
-  /// Lightweight heuristic update for hidden inter-character feelings.
-  /// Verbatim from original (recent text scan + sentiment word lists + deltas).
-  void updateInterCharacterFeelingsFromRecentExchange(String speakerId) {
-    if (!getShouldTrackInterCharacterRelationships()) return;
-    if (!getIsGroupActive() || getMessageCount() < 2) return;
-
-    final rels = Map<String, int>.from(
-      getInterCharacterRelationships(speakerId),
-    );
-    if (rels.isEmpty) return;
-
-    final recent = getRecentExchangeLowerText();
-    bool changed = false;
-
-    final otherNames = getOtherGroupMemberIdToLowerName(speakerId);
-    for (final otherId in rels.keys) {
-      if (!otherNames.containsKey(otherId)) continue;
-      final otherName = otherNames[otherId]!;
-      if (!recent.contains(otherName)) continue;
-
-      // Very simple sentiment heuristics
-      int delta = 0;
-      if (recent.contains('love') ||
-          recent.contains('adore') ||
-          recent.contains('wonderful') ||
-          recent.contains('great') ||
-          recent.contains('amazing') ||
-          recent.contains('friend')) {
-        delta = 4;
-      } else if (recent.contains('hate') ||
-          recent.contains('annoying') ||
-          recent.contains('stupid') ||
-          recent.contains('awful') ||
-          recent.contains('dislike') ||
-          recent.contains('enemy')) {
-        delta = -4;
-      } else if (recent.contains('like') ||
-          recent.contains('nice') ||
-          recent.contains('good')) {
-        delta = 2;
-      } else if (recent.contains('bad') ||
-          recent.contains('rude') ||
-          recent.contains('problem')) {
-        delta = -2;
-      }
-
-      if (delta != 0) {
-        final newVal = (rels[otherId]! + delta).clamp(-300, 300);
-        rels[otherId] = newVal;
-        changed = true;
-      }
-    }
-
-    if (changed) {
-      setGroupInterCharacterRelationships(speakerId, rels);
-      debugPrint(
-        '[Realism:Group] Updated hidden inter-char feelings for $speakerId from recent exchange',
-      );
-    }
-  }
-
-  // ── Snapshot / restore support (for message state roundtrips in regen) ─────
-
-  void restoreFromMessageState(Map<dynamic, dynamic> state) {
-    _affectionScore = (state['affectionScore'] as int?) ?? _affectionScore;
-    _relationshipTier =
-        (state['relationshipTier'] as int?) ?? _relationshipTier;
-    _longTermScore = (state['longTermScore'] as int?) ?? _longTermScore;
-    _longTermTier = (state['longTermTier'] as int?) ?? _longTermTier;
-    _turnsSinceLongTermCheck =
-        (state['turnsSinceLongTermCheck'] as int?) ?? _turnsSinceLongTermCheck;
-    _shortTermDeltasSummary =
-        (state['shortTermDeltasSummary'] as int?) ?? _shortTermDeltasSummary;
-
-    _trustLevel = (state['trustLevel'] as int?) ?? _trustLevel;
-    _activeFixation = (state['activeFixation'] as String?) ?? _activeFixation;
-    _fixationLifespan =
-        (state['fixationLifespan'] as int?) ?? _fixationLifespan;
-    _spatialStance = (state['spatialStance'] as String?) ?? _spatialStance;
-  }
-
-  // Minimal surface for regen revert of trust (avoids re-arming the repair window
-  // that applyTrustDelta does for forward deltas).
-  void setTrustLevelForRevert(int v) {
-    _trustLevel = v.clamp(-100, 100);
-  }
-
-  /// Post-load/LLM sanitize for overly long fixation topics (keeps UI/prompts sane).
-  /// Called from parent after message load.
-  void sanitizeFixationIfTooLong() {
-    if (_activeFixation.length > 200) {
-      _activeFixation = _activeFixation.substring(0, 200).trimRight() + '…';
-      if (_fixationLifespan <= 0) _fixationLifespan = 3;
-    }
-  }
-
-  void setSpatialStance(String v) {
-    _spatialStance = (v.toLowerCase() == 'none' || v.isEmpty) ? '' : v;
-  }
-
-  /// Consume the one-shot repair window (called on next user turn after armed severe drop).
-  void consumePendingTrustRepair() {
-    _pendingTrustRepair = false;
-  }
-
-  Map<String, dynamic> buildRelationshipStateSnapshot() {
-    return {
-      'affectionScore': _affectionScore,
-      'relationshipTier': _relationshipTier,
-      'longTermScore': _longTermScore,
-      'longTermTier': _longTermTier,
-      'turnsSinceLongTermCheck': _turnsSinceLongTermCheck,
-      'shortTermDeltasSummary': _shortTermDeltasSummary,
-      'trustLevel': _trustLevel,
-      'activeFixation': _activeFixation,
-      'fixationLifespan': _fixationLifespan,
-      'spatialStance': _spatialStance,
-    };
   }
 }

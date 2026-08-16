@@ -25,11 +25,23 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
-/// Full-screen voice call overlay.
+part 'call_overlay.visuals.dart';
+
+/// Full-screen voice call overlay (warm-porch rework, 2026-08-14).
 ///
-/// Shows character avatar, call timer, waveform visualization,
-/// status text, and mute/end buttons. Manages the continuous
-/// listen → transcribe → send → TTS → listen call loop.
+/// **The overlay's presence in the tree IS the call.** Every teardown path —
+/// the End button, a TTS error hiding the overlay, a chat switch, the page
+/// being disposed — removes this widget, and [dispose] runs the ONE
+/// idempotent teardown: transcription callback detached, TTS stopped, call
+/// session ended (mic released), `callMode` cleared. The old design spread
+/// teardown across three owners, and the paths that only hid the overlay
+/// left a headless call running: mic hot, transcriptions still auto-sending,
+/// the call prompt still latched onto the text chat.
+///
+/// Also owns the turn loop: [CallSession] hands over one committed
+/// transcription per user turn; everything after that — send, stream
+/// sentences into TTS, and the SINGLE resume back to listening — happens
+/// here, strictly in order. No isSpeaking polling anywhere.
 class CallOverlay extends StatefulWidget {
   final CharacterCard character;
   final VoidCallback onEndCall;
@@ -46,89 +58,101 @@ class CallOverlay extends StatefulWidget {
 
 class _CallOverlayState extends State<CallOverlay>
     with TickerProviderStateMixin {
-  late AnimationController _pulseController;
-  late AnimationController _waveController;
+  late final AnimationController _pulseController;
+  late final AnimationController _waveController;
+
+  // Captured in _initCall so dispose can tear down without a context (the
+  // element is already deactivated when dispose runs).
+  SttService? _stt;
+  TtsService? _tts;
+  ChatService? _chat;
+  bool _torndown = false;
 
   @override
   void initState() {
     super.initState();
-
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
-
     _waveController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
     )..repeat();
-
-    // Wire up the call loop
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initCall();
+      if (mounted) _initCall();
     });
   }
 
-  void _initCall() async {
-    final sttService = Provider.of<SttService>(context, listen: false);
-    final chatService = Provider.of<ChatService>(context, listen: false);
-    final ttsService = Provider.of<TtsService>(context, listen: false);
+  void _initCall() {
+    final stt = _stt = Provider.of<SttService>(context, listen: false);
+    final chat = _chat = Provider.of<ChatService>(context, listen: false);
+    final tts = _tts = Provider.of<TtsService>(context, listen: false);
 
     // The session gates silence detection while TTS is audible/generating.
-    sttService.call.attachTtsBusyProbe(
-      () => ttsService.isSpeaking || ttsService.isGenerating,
-    );
+    stt.call.attachTtsBusyProbe(() => tts.isSpeaking || tts.isGenerating);
 
-    // The turn loop. CallSession hands over one committed transcription per
-    // user turn; everything after that — send, stream sentences into TTS,
-    // and the SINGLE resume back to listening — happens here, strictly in
-    // order. There is deliberately no isSpeaking polling anywhere.
-    sttService.call.onTranscription = (text) async {
-      final voiceKey = chatService.activeCharacter?.ttsVoice;
-
-      // Buffer sentences so none are lost between sendMessage starting to
-      // stream and speakStreaming subscribing (broadcast streams drop
-      // events with no listener).
+    // The turn loop. Buffer sentences so none are lost between sendMessage
+    // starting to stream and speakStreaming subscribing (broadcast streams
+    // drop events with no listener).
+    stt.call.onTranscription = (text) async {
+      if (_torndown) return;
+      final voiceKey = chat.activeCharacter?.ttsVoice;
       final sentenceController = StreamController<String>();
-      final sub = chatService.sentenceStream.listen((sentence) {
+      final sub = chat.sentenceStream.listen((sentence) {
         if (sentence == '__DONE__') {
           if (!sentenceController.isClosed) sentenceController.close();
           return;
         }
         sentenceController.add(sentence);
         // First sentence arriving = the reply is being spoken.
-        if (sttService.call.status == CallStatus.thinking) {
-          sttService.call.notifySpeaking();
+        if (stt.call.status == CallStatus.thinking) {
+          stt.call.notifySpeaking();
         }
       });
 
-      chatService.sendMessage(text);
+      chat.sendMessage(text);
 
       try {
-        await ttsService.speakStreaming(
-          sentenceController.stream,
-          voiceKey: voiceKey,
-        );
+        await tts.speakStreaming(sentenceController.stream, voiceKey: voiceKey);
       } finally {
         await sub.cancel();
-        if (!sentenceController.isClosed) {
-          await sentenceController.close();
-        }
+        if (!sentenceController.isClosed) await sentenceController.close();
         // The one and only resume point: TTS is genuinely finished (or
         // failed) — CallSession ignores this if the call ended meanwhile.
-        await sttService.call.resumeAfterTts();
+        await stt.call.resumeAfterTts();
       }
     };
 
-    // Enable call mode (disables reasoning for lower latency)
-    chatService.callMode = true;
+    chat.callMode = true; // disables reasoning; enables the call prompt
+    stt.call.start();
+  }
 
-    // Start the call (begins listening)
-    sttService.call.start();
+  /// The single teardown, idempotent so the End button (snappy stop) and
+  /// [dispose] (the guarantee) can both call it.
+  void _teardown() {
+    if (_torndown) return;
+    _torndown = true;
+    final stt = _stt;
+    final tts = _tts;
+    final chat = _chat;
+    // Plain field write, no notify — synchronous so a late transcription
+    // has nowhere to send even during the microtask gap below.
+    stt?.call.onTranscription = null;
+    // Everything else notifies listeners, which is illegal while the tree
+    // is locked (dispose runs during unmount). One microtask defers past
+    // the lock; the End button path reaches here the same way and a
+    // microtask is imperceptible.
+    scheduleMicrotask(() {
+      unawaited(tts?.stop());
+      unawaited(stt?.call.end());
+      chat?.callMode = false; // also releases a parked call-model swap
+    });
   }
 
   @override
   void dispose() {
+    _teardown();
     _pulseController.dispose();
     _waveController.dispose();
     super.dispose();
@@ -140,61 +164,38 @@ class _CallOverlayState extends State<CallOverlay>
     return '$m:$s';
   }
 
-  String _statusText(CallStatus status) {
-    switch (status) {
-      case CallStatus.listening:
-        return 'Listening...';
-      case CallStatus.transcribing:
-        return 'Transcribing...';
-      case CallStatus.thinking:
-        return 'Thinking...';
-      case CallStatus.speaking:
-        return 'Speaking...';
-      case CallStatus.idle:
-        return 'Calibrating...';
-    }
-  }
+  String _statusText(CallStatus status) => switch (status) {
+    CallStatus.listening => 'Listening…',
+    CallStatus.transcribing => 'Transcribing…',
+    CallStatus.thinking => 'Thinking…',
+    CallStatus.speaking => 'Speaking…',
+    CallStatus.idle => 'Calibrating…',
+  };
 
-  IconData _statusIcon(CallStatus status) {
-    switch (status) {
-      case CallStatus.listening:
-        return Icons.mic;
-      case CallStatus.transcribing:
-        return Icons.text_fields;
-      case CallStatus.thinking:
-        return Icons.psychology;
-      case CallStatus.speaking:
-        return Icons.volume_up;
-      case CallStatus.idle:
-        return Icons.pause;
-    }
-  }
+  IconData _statusIcon(CallStatus status) => switch (status) {
+    CallStatus.listening => Icons.mic,
+    CallStatus.transcribing => Icons.text_fields,
+    CallStatus.thinking => Icons.psychology,
+    CallStatus.speaking => Icons.volume_up,
+    CallStatus.idle => Icons.pause,
+  };
 
-  Color _statusColor(CallStatus status) {
-    switch (status) {
-      case CallStatus.listening:
-        return Colors.greenAccent;
-      case CallStatus.transcribing:
-        return Colors.blueAccent;
-      case CallStatus.thinking:
-        return Colors.amberAccent;
-      case CallStatus.speaking:
-        return Colors.purpleAccent;
-      case CallStatus.idle:
-        return Colors.white38;
-    }
-  }
+  Color _statusColor(BuildContext context, CallStatus status) =>
+      switch (status) {
+        CallStatus.listening => AppColors.porchAmberOf(context),
+        CallStatus.transcribing => AppColors.porchHoneyOf(context),
+        CallStatus.thinking => AppColors.textSecondary(context),
+        CallStatus.speaking => AppColors.porchTerracottaOf(context),
+        CallStatus.idle => AppColors.textTertiary(context),
+      };
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<SttService>(
-      builder: (context, sttService, _) {
-        final status = sttService.call.status;
-        final amplitude = sttService.currentAmplitude;
-        final duration = sttService.call.duration;
-        final isMuted = sttService.call.isMuted;
-        final lastText = sttService.lastTranscription;
-
+    return Consumer3<SttService, TtsService, ChatService>(
+      builder: (context, stt, tts, chat, _) {
+        final status = stt.call.status;
+        final amplitude = stt.currentAmplitude;
+        final bg = AppColors.backgroundOf(context);
         return Material(
           color: Colors.transparent,
           child: Container(
@@ -203,348 +204,72 @@ class _CallOverlayState extends State<CallOverlay>
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  const Color(0xFF0A0E1A).withValues(alpha: 0.97),
-                  const Color(0xFF111827).withValues(alpha: 0.98),
-                  const Color(0xFF1A1040).withValues(alpha: 0.97),
+                  bg.withValues(alpha: 0.98),
+                  AppColors.surfaceOf(context).withValues(alpha: 0.98),
+                  Color.lerp(bg, AppColors.porchAmberOf(context), 0.10)!
+                      .withValues(alpha: 0.98),
                 ],
               ),
             ),
             child: SafeArea(
-              child: Column(
-                children: [
-                  const SizedBox(height: 24),
-
-                  // ── Call header ──
-                  Text(
-                    '📞 Voice Call',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.5),
-                      fontSize: 13,
-                      letterSpacing: 1.5,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _formatDuration(duration),
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.6),
-                      fontSize: 16,
-                      fontWeight: FontWeight.w300,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-
-                  const Spacer(flex: 2),
-
-                  // ── Character Avatar ──
-                  _buildAvatar(status, amplitude),
-
-                  const SizedBox(height: 20),
-
-                  // ── Character Name ──
-                  Text(
-                    widget.character.name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  // ── Status indicator ──
-                  _buildStatusChip(status),
-
-                  const Spacer(flex: 1),
-
-                  // ── Waveform ──
-                  _buildWaveform(amplitude, status),
-
-                  const SizedBox(height: 24),
-
-                  // ── Last transcription ──
-                  if (lastText != null && lastText.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 40),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.08),
-                          ),
-                        ),
-                        child: Text(
-                          '"$lastText"',
-                          textAlign: TextAlign.center,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.6),
-                            fontSize: 13,
-                            fontStyle: FontStyle.italic,
-                          ),
+              child: LayoutBuilder(
+                builder: (context, box) {
+                  // Short windows shrink the avatar instead of overflowing —
+                  // a resized desktop window must never clip the End button.
+                  final avatarSize = min(160.0, box.maxHeight * 0.22);
+                  return Column(
+                    children: [
+                      const SizedBox(height: 20),
+                      Text(
+                        'VOICE CALL',
+                        style: TextStyle(
+                          color: AppColors.textTertiary(context),
+                          fontSize: 12,
+                          letterSpacing: 3,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                    ),
-
-                  const Spacer(flex: 2),
-
-                  // ── Control buttons ──
-                  _buildControls(sttService, isMuted),
-
-                  const SizedBox(height: 48),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildAvatar(CallStatus status, double amplitude) {
-    final isActive =
-        status == CallStatus.listening || status == CallStatus.speaking;
-    final ringColor = _statusColor(status);
-
-    return AnimatedBuilder(
-      animation: _pulseController,
-      builder: (context, child) {
-        final pulseScale = isActive
-            ? 1.0 + (_pulseController.value * 0.04) + (amplitude * 0.08)
-            : 1.0;
-
-        return Transform.scale(
-          scale: pulseScale,
-          child: Container(
-            width: 160,
-            height: 160,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: ringColor.withValues(alpha: isActive ? 0.3 : 0.1),
-                  blurRadius: isActive ? 40 + amplitude * 20 : 20,
-                  spreadRadius: isActive ? 4 + amplitude * 8 : 2,
-                ),
-              ],
-            ),
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [
-                    ringColor.withValues(alpha: 0.6),
-                    ringColor.withValues(alpha: 0.2),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: CircleAvatar(
-                radius: 76,
-                backgroundColor: const Color(0xFF1F2937),
-                backgroundImage: widget.character.imagePath != null
-                    ? FileImage(File(widget.character.imagePath!))
-                    : null,
-                child: widget.character.imagePath == null
-                    ? Text(
-                        widget.character.name.isNotEmpty
-                            ? widget.character.name[0].toUpperCase()
-                            : '?',
-                        style: const TextStyle(
-                          fontSize: 48,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white54,
+                      const SizedBox(height: 8),
+                      Text(
+                        _formatDuration(stt.call.duration),
+                        style: TextStyle(
+                          color: AppColors.textSecondary(context),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w300,
+                          fontFamily: 'monospace',
                         ),
-                      )
-                    : null,
+                      ),
+                      const Spacer(flex: 2),
+                      _buildAvatar(context, status, amplitude, avatarSize),
+                      const SizedBox(height: 18),
+                      Text(
+                        widget.character.name,
+                        style: TextStyle(
+                          color: AppColors.textPrimary(context),
+                          fontSize: 24,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      _buildRealismStrip(context, chat),
+                      const SizedBox(height: 12),
+                      _buildStatusChip(context, status),
+                      const Spacer(flex: 1),
+                      _buildWaveform(context, amplitude, status),
+                      const SizedBox(height: 16),
+                      _buildCaptionArea(context, stt, tts),
+                      const Spacer(flex: 2),
+                      _buildControls(context, stt),
+                      const SizedBox(height: 32),
+                    ],
+                  );
+                },
               ),
             ),
           ),
         );
       },
-    );
-  }
-
-  Widget _buildStatusChip(CallStatus status) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 300),
-      child: Container(
-        key: ValueKey(status),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: _statusColor(status).withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: _statusColor(status).withValues(alpha: 0.3),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(_statusIcon(status), size: 16, color: _statusColor(status)),
-            const SizedBox(width: 8),
-            Text(
-              _statusText(status),
-              style: TextStyle(
-                color: _statusColor(status),
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildWaveform(double amplitude, CallStatus status) {
-    final isListening = status == CallStatus.listening;
-    const barCount = 9;
-
-    return AnimatedBuilder(
-      animation: _waveController,
-      builder: (context, _) {
-        return SizedBox(
-          height: 60,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(barCount, (i) {
-              // Create wave-like pattern
-              final phase =
-                  (i / barCount * 2 * pi) + (_waveController.value * 2 * pi);
-              final waveHeight = isListening
-                  ? 0.3 + (sin(phase) * 0.3 + 0.3) * amplitude
-                  : (status == CallStatus.speaking)
-                  ? 0.2 + sin(phase) * 0.3
-                  : 0.15;
-
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 3),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 100),
-                  width: 4,
-                  height: 8 + (waveHeight * 52),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(2),
-                    gradient: LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                      colors: [
-                        _statusColor(status).withValues(alpha: 0.8),
-                        _statusColor(status).withValues(alpha: 0.3),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildControls(SttService sttService, bool isMuted) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        // ── Mute button ──
-        _buildControlButton(
-          icon: isMuted ? Icons.mic_off : Icons.mic,
-          label: isMuted ? 'Unmute' : 'Mute',
-          color: isMuted ? Colors.orangeAccent : Colors.white70,
-          backgroundColor: isMuted
-              ? Colors.orangeAccent.withValues(alpha: 0.15)
-              : Colors.white.withValues(alpha: 0.08),
-          onTap: () => sttService.call.toggleMute(),
-        ),
-        const SizedBox(width: 32),
-
-        // ── Stop recording / send button (only when listening) ──
-        if (sttService.call.status == CallStatus.listening &&
-            sttService.isRecording)
-          _buildControlButton(
-            icon: Icons.send,
-            label: 'Send',
-            color: AppColors.formMasterAccent,
-            backgroundColor: AppColors.formMasterAccent.withValues(alpha: 0.15),
-            size: 64,
-            onTap: () => sttService.call.sendNow(),
-          ),
-        if (sttService.call.status == CallStatus.listening &&
-            sttService.isRecording)
-          const SizedBox(width: 32),
-
-        // ── End call button ──
-        _buildControlButton(
-          icon: Icons.call_end,
-          label: 'End',
-          color: Colors.redAccent,
-          backgroundColor: Colors.redAccent.withValues(alpha: 0.15),
-          onTap: () async {
-            final chatService = Provider.of<ChatService>(
-              context,
-              listen: false,
-            );
-            final ttsService = Provider.of<TtsService>(context, listen: false);
-            await ttsService.stop(); // immediately stop any ongoing playback
-            await sttService.call.end();
-            chatService.callMode = false;
-            widget.onEndCall();
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildControlButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required Color backgroundColor,
-    required VoidCallback onTap,
-    double size = 56,
-  }) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        GestureDetector(
-          onTap: onTap,
-          child: Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: backgroundColor,
-              border: Border.all(
-                color: color.withValues(alpha: 0.3),
-                width: 1.5,
-              ),
-            ),
-            child: Icon(icon, color: color, size: size * 0.45),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          style: TextStyle(
-            color: color.withValues(alpha: 0.7),
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
     );
   }
 }

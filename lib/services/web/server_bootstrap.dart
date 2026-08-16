@@ -23,22 +23,7 @@ import 'package:front_porch_ai/services/web/middleware/auth_middleware.dart';
 import 'package:front_porch_ai/services/web/middleware/cors_middleware.dart';
 import 'package:front_porch_ai/services/web/middleware/gzip_middleware.dart';
 import 'package:front_porch_ai/services/web/middleware/security_headers.dart';
-import 'package:front_porch_ai/services/web/routes/auth_routes.dart';
-import 'package:front_porch_ai/services/web/routes/backend_routes.dart';
-import 'package:front_porch_ai/services/web/routes/character_routes.dart';
-import 'package:front_porch_ai/services/web/routes/chargen_routes.dart';
-import 'package:front_porch_ai/services/web/routes/chat_routes.dart';
-import 'package:front_porch_ai/services/web/routes/chat_tools_routes.dart';
-import 'package:front_porch_ai/services/web/routes/group_routes.dart';
-import 'package:front_porch_ai/services/web/routes/remote_routes.dart';
-import 'package:front_porch_ai/services/web/routes/settings_routes.dart';
-import 'package:front_porch_ai/services/web/routes/static_routes.dart';
-import 'package:front_porch_ai/services/web/routes/stoop_routes.dart';
-import 'package:front_porch_ai/services/web/routes/story_export_routes.dart';
-import 'package:front_porch_ai/services/web/routes/story_routes.dart';
-import 'package:front_porch_ai/services/web/routes/stream_routes.dart';
-import 'package:front_porch_ai/services/web/routes/voice_routes.dart';
-import 'package:front_porch_ai/services/web/routes/world_routes.dart';
+import 'package:front_porch_ai/services/web/routes/routes.dart';
 import 'package:front_porch_ai/services/web/util/util.dart';
 import 'package:front_porch_ai/services/web/web_server_deps.dart';
 
@@ -78,6 +63,9 @@ shelf.Handler buildWebHandler(WebServerDeps deps) {
   }
   if (deps.chargenFacade != null) WebChargenRoutes(deps.chargenFacade!, router);
   if (deps.chatFacade != null) WebChatRoutes(deps.chatFacade!, router);
+  if (deps.chatPackageFacade != null) {
+    WebChatPackageRoutes(deps.chatPackageFacade!, router);
+  }
   if (deps.chatToolsFacade != null) {
     WebChatToolsRoutes(deps.chatToolsFacade!, router);
   }

@@ -16,6 +16,13 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+// Stage words come from AmbitionService so the eval prompt, the per-turn
+// ambition injection and the journal progress cards all describe the same
+// progress with the same word. A local copy here would drift the first time a
+// band moved.
+import 'package:front_porch_ai/services/chat/ambition_service.dart';
+import 'package:front_porch_ai/services/chat/preference_phrases.dart';
+
 /// Per-eval delta limits for the realism LLM calls (relationship, emotional
 /// state, one-shot). These are the authoritative ranges for what each eval is
 /// allowed to contribute in a single turn. They are used both for .clamp()
@@ -30,6 +37,7 @@ const kMinTrustDelta = -200;
 const kMaxTrustDelta = 50;
 const kMinArousalDelta = -25;
 const kMaxArousalDelta = 25;
+
 
 /// Single source of truth for the Realism Engine judge prompts.
 ///
@@ -154,8 +162,9 @@ class RealismPromptBuilder {
 
   /// One-line snapshot of where the relationship currently stands, so the
   /// judge can tell wanted intimacy from premature intimacy. Used by the
-  /// relationship, emotional, and one-shot prompts (posture only where the
-  /// eval also maintains posture).
+  /// relationship, emotional, and one-shot prompts. [posture] is read-only
+  /// CONTEXT ("where she currently is"); no prompt here asks the judge to
+  /// produce a posture any more — that moved to the post-generation pass.
   static String standingContext({
     required String charName,
     required String userName,
@@ -185,7 +194,88 @@ class RealismPromptBuilder {
 
   // ── Shared judgment fragments ──────────────────────────────────────────────
 
-  static String _subjectivityFrame(String charName, String userName) =>
+  /// The card's authored Likes & Dislikes, as ONE line the judge weighs.
+  ///
+  /// This is the SCORING half of the feature (the behavioural half is
+  /// prompt_injection/preferences_injection.dart, which needs no engine). It
+  /// makes [_subjectivityFrame]'s closing claim concrete: that paragraph
+  /// already tells the model "what genuinely reaches someone is what THEY
+  /// value" and then leaves it to guess what this particular character values.
+  /// Now it does not have to.
+  ///
+  /// Rendered ONCE per turn and handed to all three prompts that carry the
+  /// frame — relationship, emotional state, and the fused one-shot — so
+  /// one-shot/multi-call parity holds by construction rather than by three
+  /// copies that happen to match today (the strict-parity contract in
+  /// CLAUDE.md).
+  ///
+  /// [intimateInto]/[intimateNotInto] are already NSFW-filtered by the caller;
+  /// this builder does not consult a switch, so there is exactly one place
+  /// that decision is made.
+  ///
+  /// Empty in, empty out: a character with no authored preferences costs their
+  /// eval exactly what it cost before this existed — the same contract the
+  /// ambition roster keeps.
+  /// [intimateAgency] mirrors the After Dark "Acts on desires" switch (already
+  /// AND-ed with the engine by the caller). It adds the refusal clause below —
+  /// omitted when off, because a judge told to weigh "she asked and was
+  /// refused" against a character who never asks is being asked to score
+  /// something that did not happen.
+  static String preferencesBlock({
+    required String charName,
+    List<String> likes = const [],
+    List<String> dislikes = const [],
+    List<String> intimateInto = const [],
+    List<String> intimateNotInto = const [],
+    bool intimateAgency = false,
+  }) {
+    // ONE shared cleanup with the behavioural injection (preference_phrases.dart)
+    // so what the judge weighs and what the character was told cannot diverge —
+    // and so a downloaded card's text cannot smuggle newlines into this prompt.
+    final l = sanitizePreferencePhrases(likes);
+    final d = sanitizePreferencePhrases(dislikes);
+    final i = sanitizePreferencePhrases(intimateInto);
+    final n = sanitizePreferencePhrases(intimateNotInto);
+    if (l.isEmpty && d.isEmpty && i.isEmpty && n.isEmpty) return '';
+
+    final parts = [
+      if (l.isNotEmpty) 'drawn to ${l.join(', ')}',
+      if (d.isNotEmpty) 'put off by ${d.join(', ')}',
+      if (i.isNotEmpty) 'warms to ${i.join(', ')}',
+      if (n.isNotEmpty) 'not interested in ${n.join(', ')}',
+    ];
+    return 'Specifically, $charName is ${parts.join('; ')}. '
+        'Weigh the exchange against those: a moment that touches something they '
+        'are drawn to lands harder than the same words otherwise would, and one '
+        'that hits something they are put off by costs more — even when it was '
+        'kindly meant. When one of these is what actually moved a score, SAY SO '
+        'in that score\'s reason, naming it — the user sees those reasons and '
+        'they are how a number stops being arbitrary. Do not invent preferences '
+        'beyond these. '
+        // The other half of "she acts on her desires" (preferences_injection).
+        // She can now ask for what she wants; this is what makes the answer
+        // MATTER. Without it a refusal reads to the judge as an ordinary line
+        // of dialogue, emotion barely moves, and the next turn's mood line
+        // shows a character who shrugged off being turned down — which is not
+        // a character, it is a vending machine.
+        //
+        // Direction follows personality on purpose. "Refused, therefore angry"
+        // would make every character the same character; the whole point of
+        // the maintainer's example is that a DOMINANT one gets angry where a
+        // gentler one goes quiet.
+        '${intimateAgency ? 'When $charName asked for one of these and was refused — or was '
+                  'given it — that is a real moment, not a neutral exchange. Score it '
+                  'as one, and let the direction fit who they are: pressed and turned '
+                  'down reads as anger or cold distance in a dominant character, and '
+                  'as hurt or retreat in a gentler one. ' : ''}'
+        '\n\n';
+  }
+
+  static String _subjectivityFrame(
+    String charName,
+    String userName,
+    String preferences,
+  ) =>
       'Score this exchange as $charName would privately feel it — through their personality, values, '
       'boundaries, and history — never by generic politeness.\n'
       'The same gesture lands differently on different people: affection, gifts, praise, or closeness '
@@ -194,7 +284,8 @@ class RealismPromptBuilder {
       'familiarity or smothering reads as cloying, presumptuous, or suspicious — score it neutral or '
       'negative no matter how kindly it was meant.\n'
       'What genuinely reaches someone is what THEY value: for one person open tenderness; for another, '
-      'respect on their terms, competence, wit, backbone, obedience, patience, or being challenged.\n\n';
+      'respect on their terms, competence, wit, backbone, obedience, patience, or being challenged.\n'
+      '$preferences';
 
   static String _bondSection(String charName, String userName) =>
       '- "relationship_delta": how this exchange shifted $charName\'s genuine warmth toward $userName '
@@ -265,10 +356,12 @@ class RealismPromptBuilder {
               'another advance is normal recovery, not a rejection, so do not score it negative unless '
               'something genuinely upsetting happened.\n' : ''}';
 
-  static String _postureSection(String charName) =>
-      '- "posture": $charName\'s current physical position and location (brief grounded phrase), or "none".\n'
-      '  Match the current scene and emotional state; keep natural continuity within a scene (no location '
-      'jumps); update on scene breaks, time jumps, or when the narrative context clearly shifted.\n';
+  // (There is no posture section here any more. Posture left the fused
+  // one-shot call on 2026-08-08 along with the four-call path's copy: it is a
+  // POST-generation question now — "where did this reply leave her" — and its
+  // one remaining prompt lives with the pass that asks it, in
+  // TimeService.evaluateTimeProgressAndPostureIfNeeded. Keeping a second
+  // rubric here would have been a rubric nobody fires.)
 
   // Scene-time fields ride the fused one-shot call (strict one-shot vs
   // normal parity — the dedicated per-turn scene-time eval asks the same).
@@ -279,29 +372,105 @@ class RealismPromptBuilder {
       '- "new_day": true ONLY if the conversation explicitly transitioned to the next day (slept, woke up, '
       'scene break). false otherwise.\n';
 
+  /// The ambitions a proposal should be steering toward, numbered with their
+  /// stage words. Empty when the character has none — and then the whole
+  /// forward-direction block, `serves_ambition` included, is omitted rather
+  /// than sent as an empty list. A cardless character must cost exactly the
+  /// tokens it did before ambitions existed.
+  static String _ambitionRoster(List<({String text, int progress})> ambitions) {
+    final open = openAmbitions(ambitions);
+    if (open.isEmpty) return '';
+    return 'Long-term ambitions (the mountain; each objective should be one switchback on it):\n'
+        '${[for (var i = 0; i < open.length; i++) '${i + 1}. ${open[i].text} (${AmbitionService.stageWord(open[i].progress)})'].join('\n')}\n\n';
+  }
+
+  /// The ambitions the roster numbers — achieved ones are dropped, because a
+  /// finished mountain has no next switchback and offering it invites the
+  /// model to keep proposing steps toward something already done.
+  ///
+  /// Public because [resolveServedAmbition] is the inverse of the numbering
+  /// this produces, and the two must read the same list. When they didn't,
+  /// "2" would mean a different ambition on the way out than on the way back.
+  static List<({String text, int progress})> openAmbitions(
+    List<({String text, int progress})> ambitions,
+  ) => [
+    for (final a in ambitions)
+      if (a.progress < 100) a,
+  ];
+
+  /// Turn a `serves_ambition` answer back into the ambition's TEXT, against
+  /// the same roster the prompt numbered. Returns null for "none", junk, an
+  /// out-of-range number, or a missing field — all of which mean the same
+  /// thing downstream: this quest serves no ambition.
+  ///
+  /// Forgiving on purpose (local-model floor): a model that answers "2",
+  /// "ambition 2", or "2 — open her own bakery" all resolve the same way.
+  static String? resolveServedAmbition(
+    String? raw,
+    List<({String text, int progress})> ambitions,
+  ) {
+    if (raw == null) return null;
+    final text = raw.trim();
+    if (text.isEmpty || text.toLowerCase().contains('none')) return null;
+    final m = RegExp(r'\d+').firstMatch(text);
+    if (m == null) return null;
+    final idx = int.parse(m.group(0)!);
+    final open = openAmbitions(ambitions);
+    if (idx < 1 || idx > open.length) return null;
+    return open[idx - 1].text;
+  }
+
+  /// The ambition-steering half of the objective instruction. Ambitions drive
+  /// objectives, not the other way around (maintainer ruling 2026-08-07): the
+  /// proposal is asked for the next believable step up one of the mountains
+  /// above, favouring the least-advanced. Situational quests stay legal on
+  /// purpose — a character whose every want serves the arc reads like a
+  /// questgiver, not a person.
+  static String _ambitionSteer(String charName, bool hasAmbitions) =>
+      hasAmbitions
+      ? '  PREFER a concrete next step toward one of the ambitions listed above — the one that is least '
+            'far along and most relevant to what just happened. A goal that serves no ambition is still '
+            'allowed when life genuinely pulls $charName that way, but when both fit, the ambition-serving '
+            'one is the better answer.\n'
+      : '';
+
+  static String _servesAmbitionField(bool hasAmbitions) => hasAmbitions
+      ? '- "serves_ambition": the NUMBER of the ambition the proposed objective is a step toward, or "none" '
+            'if it serves none of them. Always "none" when "proposed_objective" is "none". Do not stretch — '
+            'a quest that merely happens near an ambition does not serve it.\n'
+      : '';
+
   static String _objectiveSection(
     String charName,
     String userName,
     String? primaryObjective,
-  ) => primaryObjective != null
-      ? '- "proposed_objective": a meaningful, emotionally-driven goal $charName independently wants to '
-            'pursue — DISTINCT from their current main quest ("$primaryObjective"), true to who they are, '
-            'and triggered by a STRONG, specific event THIS turn. Not a trivial step, and not a restatement '
-            'of the main quest.\n'
-            '  Default to "none" — the overwhelming majority of turns produce "none". Only propose one if '
-            '$charName would genuinely lose sleep over it.\n'
-      : '- "proposed_objective": an OVERARCHING goal $charName independently wants to pursue — a driving '
-            'want big enough to span many scenes, born from who they are (their ambitions, wounds, '
-            'appetites), e.g. "get $userName to admit their greatest fear" or a personal ambition they\'ve '
-            'been chasing — not a one-scene errand. It becomes $charName\'s main quest and will be broken '
-            'into concrete steps. Triggered by a strong, specific event THIS turn.\n'
-            '  Default to "none" — the overwhelming majority of turns produce "none". Only propose one if '
-            '$charName would genuinely lose sleep over it.\n';
+    List<({String text, int progress})> ambitions,
+  ) {
+    final hasAmbitions = _ambitionRoster(ambitions).isNotEmpty;
+    final body = primaryObjective != null
+        ? '- "proposed_objective": a meaningful, emotionally-driven goal $charName independently wants to '
+              'pursue — DISTINCT from their current main quest ("$primaryObjective"), true to who they are, '
+              'and triggered by a STRONG, specific event THIS turn. Not a trivial step, and not a restatement '
+              'of the main quest.\n'
+              '  Default to "none" — the overwhelming majority of turns produce "none". Only propose one if '
+              '$charName would genuinely lose sleep over it.\n'
+        : '- "proposed_objective": an OVERARCHING goal $charName independently wants to pursue — a driving '
+              'want big enough to span many scenes, born from who they are (their ambitions, wounds, '
+              'appetites), e.g. "get $userName to admit their greatest fear" or a personal ambition they\'ve '
+              'been chasing — not a one-scene errand. It becomes $charName\'s main quest and will be broken '
+              'into concrete steps. Triggered by a strong, specific event THIS turn.\n'
+              '  Default to "none" — the overwhelming majority of turns produce "none". Only propose one if '
+              '$charName would genuinely lose sleep over it.\n';
+    return '$body${_ambitionSteer(charName, hasAmbitions)}${_servesAmbitionField(hasAmbitions)}';
+  }
 
   static String _fixationSection(String charName) =>
       '- "fixation_topic": an intrusive thought $charName cannot stop returning to — it haunts them across '
       'scenes, in their own style (a proud character obsesses over a slight; a lonely one over a moment of '
-      'kindness). Not a temporary reaction. Default: "none".\n';
+      'kindness). Not a temporary reaction. Default: "none".\n'
+      '  Something they are stated to be drawn to, or put off by, is fair game here when the scene keeps '
+      'returning to it — a fixation growing out of a known taste is the most believable kind. It still has '
+      'to have been earned by what actually happened, not proposed because the taste exists.\n';
 
   static String _reasonSection() =>
       '- "reason": one brief sentence naming the key relationship change this turn, or "none".\n';
@@ -321,20 +490,65 @@ class RealismPromptBuilder {
 
   // ── Full prompts (multi-call path + fused one-shot, parity by construction) ─
 
+  /// The byte-identical PREFIX every judge prompt opens with: intro, dossier,
+  /// standing, ambition roster, subjectivity frame. Everything eval-specific
+  /// (the task line, the rubric sections, the recent window, the format ask)
+  /// comes AFTER it.
+  ///
+  /// WHY IT EXISTS (eval review Tier-1 §3.3, maintainer-approved 2026-08-10):
+  /// the three multi-call judges fire back-to-back into KoboldCpp's FIFO
+  /// queue every turn, and each used to open with a DIFFERENT first sentence
+  /// — so fast-forward was defeated from token one and every call re-prefilled
+  /// its full copy of the same dossier/standing/frame. With a byte-identical
+  /// prefix, call one pays the prefill and calls two and three fast-forward
+  /// through it. The dispatch order in `_fireStaggeredRealismEvals` keeps the
+  /// three prefix-sharing judges CONSECUTIVE (scene-time, whose prompt is
+  /// deliberately lean and shares nothing, fires last) — firing order is
+  /// free to change, eval PHASE is not (nothing moved across the generation
+  /// boundary; the guard test pins both).
+  ///
+  /// Byte-identity holds only if the callers hand every judge the same
+  /// inputs, which they do — same dossier/standing/preferences/ambitions
+  /// callbacks, same 4-message window. The one-shot prompt opens with this
+  /// same prefix (its standing additionally carries the posture line —
+  /// irrelevant for caching, since one-shot REPLACES the trio, but the
+  /// shared builder is what keeps the parity rule structural).
+  ///
+  /// The roster and frame render for every judge now (they used to be
+  /// narrative-only and relationship/emotional-only respectively). That is
+  /// deliberate: identical context is the price of a shared prefix, the
+  /// blocks are self-omitting when empty (an ambition-less, preference-less
+  /// card still costs what it did), and each is judge-relevant — the frame
+  /// is the "real person" rule and the roster is who she is trying to
+  /// become.
+  static String judgePrefix({
+    required String charName,
+    required String userName,
+    required String dossier,
+    required String standing,
+    String preferences = '',
+    List<({String text, int progress})> ambitions = const [],
+  }) =>
+      'You are the private inner voice of $charName in a roleplay with '
+      '$userName — the one who knows how each moment truly lands for them, '
+      'what they feel, and what they want.\n\n'
+      '$dossier'
+      '$standing'
+      '${_ambitionRoster(ambitions)}'
+      '${_subjectivityFrame(charName, userName, preferences)}';
+
   static String relationshipEvalPrompt({
     required String charName,
     required String userName,
     required String dossier,
     required String standing,
     required String recent,
+    String preferences = '',
+    List<({String text, int progress})> ambitions = const [],
     bool toolsMode = false,
   }) =>
-      'You are the private inner voice of $charName in a roleplay with $userName, scoring how this '
-      'exchange truly landed for them.\n\n'
-      '$dossier'
-      '$standing'
-      '${_subjectivityFrame(charName, userName)}'
-      'Evaluate:\n'
+      '${judgePrefix(charName: charName, userName: userName, dossier: dossier, standing: standing, preferences: preferences, ambitions: ambitions)}'
+      'Score how this exchange truly landed for $charName. Evaluate:\n'
       '${_bondSection(charName, userName)}'
       '${_trustSection(charName, userName)}'
       '\n'
@@ -351,38 +565,46 @@ class RealismPromptBuilder {
     required int arousalLevel,
     int refractoryTurnsLeft = 0,
     List<String> allowedEmotionLabels = const [],
+    String preferences = '',
+    List<({String text, int progress})> ambitions = const [],
     bool toolsMode = false,
   }) =>
-      'You are the private inner voice of $charName in a roleplay with $userName, naming what they '
-      'truly feel right now.\n\n'
-      '$dossier'
-      '$standing'
-      '${_subjectivityFrame(charName, userName)}'
-      'Evaluate:\n'
+      '${judgePrefix(charName: charName, userName: userName, dossier: dossier, standing: standing, preferences: preferences, ambitions: ambitions)}'
+      'Name what $charName truly feels right now. Evaluate:\n'
       '${_emotionSection(charName, allowedEmotionLabels)}'
       '${arousalEnabled ? _arousalSection(charName, userName, arousalLevel, refractoryTurnsLeft) : ''}'
       '\n'
       '${_recentBlock(recent)}'
-      '${toolsMode ? _toolInstruction('report_emotional_state') : _jsonInstruction(['emotion', 'emotion_intensity', if (arousalEnabled) 'arousal_delta'])}';
+      '${toolsMode ? _toolInstruction('report_emotional_state') : _jsonInstruction([
+        'emotion',
+        'emotion_intensity',
+        if (arousalEnabled) 'arousal_delta',
+      ])}';
 
   static String narrativeEvalPrompt({
     required String charName,
     required String userName,
     required String dossier,
     required String recent,
+    String standing = '',
+    String preferences = '',
     String? primaryObjective,
+    List<({String text, int progress})> ambitions = const [],
     bool toolsMode = false,
   }) =>
-      'You are the autonomous story engine inside $charName\'s head, judging what they now want and '
-      'what lingers with them. Both must fit who $charName is — their ambitions, wounds, and style — '
-      'not generic story beats.\n\n'
-      '$dossier'
-      'Evaluate:\n'
-      '${_objectiveSection(charName, userName, primaryObjective)}'
+      '${judgePrefix(charName: charName, userName: userName, dossier: dossier, standing: standing, preferences: preferences, ambitions: ambitions)}'
+      'Judge what $charName now wants and what lingers with them — both must '
+      'fit who they are (their ambitions, wounds, and style), '
+      'not generic story beats. Evaluate:\n'
+      '${_objectiveSection(charName, userName, primaryObjective, ambitions)}'
       '${_fixationSection(charName)}'
       '\n'
       '${_recentBlock(recent)}'
-      '${toolsMode ? _toolInstruction('report_narrative') : _jsonInstruction(const ['proposed_objective', 'fixation_topic'])}';
+      '${toolsMode ? _toolInstruction('report_narrative') : _jsonInstruction([
+        'proposed_objective',
+        if (_ambitionRoster(ambitions).isNotEmpty) 'serves_ambition',
+        'fixation_topic',
+      ])}';
 
   static String oneShotEvalPrompt({
     required String charName,
@@ -395,21 +617,19 @@ class RealismPromptBuilder {
     int refractoryTurnsLeft = 0,
     List<String> allowedEmotionLabels = const [],
     String? primaryObjective,
+    List<({String text, int progress})> ambitions = const [],
+    String preferences = '',
     bool toolsMode = false,
   }) =>
-      'You are the private inner voice of $charName in a roleplay with $userName, scoring how this '
-      'exchange truly landed for them across every dimension below.\n\n'
-      '$dossier'
-      '$standing'
-      '${_subjectivityFrame(charName, userName)}'
-      'Evaluate ALL of the following at once:\n'
+      '${judgePrefix(charName: charName, userName: userName, dossier: dossier, standing: standing, preferences: preferences, ambitions: ambitions)}'
+      'Score how this exchange truly landed for $charName across every '
+      'dimension below. Evaluate ALL of the following at once:\n'
       '${_bondSection(charName, userName)}'
       '${_trustSection(charName, userName)}'
       '${_emotionSection(charName, allowedEmotionLabels)}'
-      '${_postureSection(charName)}'
       '${_sceneTimeSection()}'
       '${arousalEnabled ? _arousalSection(charName, userName, arousalLevel, refractoryTurnsLeft) : ''}'
-      '${_objectiveSection(charName, userName, primaryObjective)}'
+      '${_objectiveSection(charName, userName, primaryObjective, ambitions)}'
       '${_fixationSection(charName)}'
       '${_reasonSection()}'
       '\n'
@@ -421,11 +641,11 @@ class RealismPromptBuilder {
         'trust_reason',
         'emotion',
         'emotion_intensity',
-        'posture',
         'minutes_elapsed',
         'new_day',
         if (arousalEnabled) 'arousal_delta',
         'proposed_objective',
+        if (_ambitionRoster(ambitions).isNotEmpty) 'serves_ambition',
         'fixation_topic',
         'reason',
       ])}';

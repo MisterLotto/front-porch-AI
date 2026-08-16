@@ -15,6 +15,7 @@ import 'package:front_porch_ai/services/image_gen_service.dart';
 import 'package:front_porch_ai/services/capability/image_reference_role.dart';
 import 'package:front_porch_ai/services/image/model_family.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
+import 'package:front_porch_ai/services/storage/settings/backend_settings.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/storage/settings/image_gen_settings.dart';
 import 'package:front_porch_ai/ui/image_studio/generation_options_tab.dart';
@@ -258,6 +259,79 @@ void main() {
         }
       }
     });
+
+    // The "looked free" report (maintainer, 2026-08-13): the Remote API
+    // panel has no key field of its own — it bills the CHAT backend's
+    // account — and with no key it used to show a working-looking model
+    // menu and nothing else. The panel must now say where the key lives
+    // (no key) or who bills (key present); the two states are mutually
+    // exclusive. Proven red with the apiKey.isEmpty gate inverted.
+    testWidgets('remote panel warns when no API key is configured', (
+      tester,
+    ) async {
+      final fakeStorage = _TabFakeStorage();
+      final fakeSvc = _TabFakeImageGenService();
+      _setupViewport(tester);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MultiProvider(
+            providers: [
+              ChangeNotifierProvider<StorageService>.value(value: fakeStorage),
+              ChangeNotifierProvider<ImageGenService>.value(value: fakeSvc),
+            ],
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 2000),
+              child: const Scaffold(body: GenerationOptionsTab()),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('No Remote API key configured'),
+        findsOneWidget,
+        reason: 'without this the option reads as free and local',
+      );
+      expect(find.textContaining('Bills your Remote API account'), findsNothing);
+    });
+
+    testWidgets('remote panel names the billing account when a key is set', (
+      tester,
+    ) async {
+      final fakeStorage = _TabFakeStorage();
+      await fakeStorage.backendSettings.setRemoteApiKey('nk-test');
+      await fakeStorage.backendSettings.setRemoteApiUrl(
+        'https://nano-gpt.com/api/v1',
+      );
+      final fakeSvc = _TabFakeImageGenService();
+      _setupViewport(tester);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MultiProvider(
+            providers: [
+              ChangeNotifierProvider<StorageService>.value(value: fakeStorage),
+              ChangeNotifierProvider<ImageGenService>.value(value: fakeSvc),
+            ],
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 2000),
+              child: const Scaffold(body: GenerationOptionsTab()),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Bills your Remote API account (nano-gpt.com)'),
+        findsOneWidget,
+        reason: 'a configured account is a paid account — say whose',
+      );
+      expect(
+        find.textContaining('No Remote API key configured'),
+        findsNothing,
+      );
+    });
   });
 }
 
@@ -265,6 +339,13 @@ void main() {
 class _TabFakeStorage extends ChangeNotifier implements StorageService {
   _TabFakeStorage({this.backend = 'remote'});
   final String backend;
+
+  // Real settings object (null prefs = memory-only): the remote panel reads
+  // remoteApiKey/remoteApiUrl for its no-key warning vs billing note
+  // (2026-08-13 — the "looked free" report). Default: no key, so the
+  // long-standing tests exercise the warning state.
+  @override
+  final BackendSettings backendSettings = BackendSettings();
 
   String? lastSetLora;
   bool? lastSetTeaCache;

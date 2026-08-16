@@ -388,7 +388,7 @@ function buildHub() {
   const STOOP_SRC = path.join(SRC, 'stoop');
   const hubNav = absolutizeChrome(NAV).replace('data-nav="stoop"', 'data-nav="stoop" class="active"');
   const hubFooter = absolutizeChrome(FOOTER);
-  const scripts = ['png.js', 'api.js', 'ui.js', 'views-auth.js', 'views-picks.js', 'views-browse.js', 'views-my.js', 'views-inbox.js', 'app.js'];
+  const scripts = ['png.js', 'completeness.js', 'api.js', 'ui.js', 'views-auth.js', 'views-picks.js', 'views-browse.js', 'views-my.js', 'views-inbox.js', 'app.js'];
 
   // self-contained asset tree
   fs.mkdirSync(path.join(DIST_HUB, 'assets/fonts'), { recursive: true });

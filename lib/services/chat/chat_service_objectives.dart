@@ -25,6 +25,21 @@ part of '../chat_service.dart';
 extension ChatServiceObjectives on ChatService {
   // ── Objective System ───────────────────────────────────────────────────
 
+  /// All active objectives for the current character/session (both primary
+  /// and secondary — see [primaryObjective] / [secondaryObjectives] for the
+  /// split views).
+  List<Objective> get activeObjectives => _activeObjectives;
+
+  /// Parses [obj.tasks] (a JSON-encoded list) into task maps for the UI.
+  /// Returns an empty list on any decode failure rather than throwing.
+  List<Map<String, dynamic>> tasksForObjective(Objective obj) {
+    try {
+      return (jsonDecode(obj.tasks) as List).cast<Map<String, dynamic>>();
+    } catch (_) {
+      return [];
+    }
+  }
+
   /// Load the active objectives for the current session from DB.
   Future<void> _loadActiveObjectives() async {
     if (_activeCharacter == null || _currentSessionId == null) {
@@ -86,6 +101,10 @@ extension ChatServiceObjectives on ChatService {
     CharacterCard? targetCharacter,
     bool autoGenerateTasks = false,
     bool recordTurnOps = false,
+    /// v46 — the ambition this quest is a step toward, or null for one that
+    /// serves none. Only the autonomous proposal paths pass it; a quest the
+    /// user typed has no eval behind it to say which mountain it climbs.
+    String? servedAmbition,
   }) async {
     if (goal.trim().isEmpty) return;
     if (_currentSessionId == null) return;
@@ -168,6 +187,7 @@ extension ChatServiceObjectives on ChatService {
         chatId: drift.Value(_currentSessionId),
         active: const drift.Value(true),
         isPrimary: drift.Value(isPrimary),
+        servedAmbition: drift.Value(servedAmbition),
       ),
     );
     if (recordTurnOps) {
@@ -375,25 +395,64 @@ extension ChatServiceObjectives on ChatService {
   /// Check if the current task has been completed (called periodically).
   /// Manually trigger a completion check (called from UI "Check now" button).
   void forceCheckCompletion() {
-    if (_activeObjectives.isEmpty) return;
+    if (!objectivesActive || _activeObjectives.isEmpty) return;
     _checkTaskCompletionInBackground(); // step 11 thin (full in objective_proposal)
     notifyListeners(); // trigger UI to show spinner
   }
 
   /// Synchronous version — awaits the check. Used pre-generation.
   Future<void> _maybeCheckTaskCompletionSync() async {
-    if (_activeObjectives.isEmpty ||
+    // The recurring cost this feature's switch exists to stop: one model call
+    // every `freq` messages, forever, for as long as a quest is open.
+    if (!objectivesActive ||
+        _activeObjectives.isEmpty ||
         _llmProvider == null ||
         _isCheckingCompletion) {
       return;
     }
 
     _messagesSinceLastCheck++;
-    final freq = _realismEnabled
-        ? 1
-        : (primaryObjective?.checkFrequency ??
-              _activeObjectives.first.checkFrequency);
-    if (_messagesSinceLastCheck < freq) return;
+    // The per-objective cadence the UI exposes is the cadence, full stop.
+    // The old realism-on override forced freq to one — a BLOCKING model
+    // call, awaited before every reply — onto every single turn the moment
+    // any quest was open with the engine on, silently ignoring the
+    // checkFrequency the user can see and set (eval review Tier-1 §3.1).
+    final freq =
+        primaryObjective?.checkFrequency ??
+        _activeObjectives.first.checkFrequency;
+    if (_messagesSinceLastCheck < freq) {
+      // Off-interval, the check still fires the moment the scene actually
+      // touches a quest: a completion can only be shown by the exchange, and
+      // the check reads exactly this window — so an exchange sharing none of
+      // a quest's content words is a guaranteed NO not worth a blocking
+      // round trip. A paraphrase the gate misses is caught by the next
+      // interval check, never lost. Cast + user name tokens are excluded or
+      // "get Jennifer to admit her fear" would match every line Jennifer
+      // speaks.
+      final recentLower = _messages.reversed
+          .take(8)
+          .map((m) => m.promptText)
+          .join('\n')
+          .toLowerCase();
+      final quests = <String>[
+        for (final o in _activeObjectives) ...[
+          o.objective,
+          for (final t in tasksForObjective(o))
+            if (t['completed'] != true) (t['description'] as String? ?? ''),
+        ],
+      ];
+      final ignore = <String>{
+        for (final c in [?_activeCharacter, ..._groupCharacters])
+          ...c.name.toLowerCase().split(RegExp(r'[^a-z0-9]+')),
+        ..._userPersonaService.persona.name.toLowerCase().split(
+          RegExp(r'[^a-z0-9]+'),
+        ),
+      }..remove('');
+      if (!objectivesMentionedIn(recentLower, quests, ignore: ignore)) {
+        return;
+      }
+      debugPrint('[Objective] Mention gate: quest touched — checking early');
+    }
     _messagesSinceLastCheck = 0;
 
     // Arm turn-op recording only for THIS turn-path check (see field doc):
@@ -520,6 +579,125 @@ extension ChatServiceObjectives on ChatService {
       await _loadObjectivesForCurrentSpeaker();
     } else {
       await _loadActiveObjectives();
+    }
+  }
+
+  /// Manual "Mark kept / broken" from the diary's Promises tab (desktop) and
+  /// the web Promises panel. Same applier as automatic detection — the
+  /// trust/bond effects apply too, restoring what a missed detection should
+  /// have done.
+  Future<bool> resolvePromiseManually({
+    required String characterId,
+    required String cardId,
+    required bool kept,
+  }) async {
+    final sessionId = _currentSessionId;
+    if (sessionId == null) return false;
+    // Never mid-turn: the scalar dance below would fight the active
+    // speaker's own load/save.
+    if (_isTurnBusy) return false;
+    // Group parity: the service's trust/bond callbacks land on whichever
+    // member's scalars are LOADED. Manual resolution can come from any
+    // member's diary at any time, so run the same load → apply → save
+    // dance the post-gen checks use, scoped to that member.
+    final isGroupMember =
+        _activeGroup != null &&
+        _groupCharacters.any(
+          (c) => _getCharacterIdFromCard(c) == characterId,
+        );
+    if (isGroupMember) _loadGroupRealismIntoScalars(characterId);
+    final ok = await _promiseDebtService.resolveManually(
+      sessionId: sessionId,
+      characterId: characterId,
+      cardId: cardId,
+      kept: kept,
+      storyDay: _timeService.dayCount,
+      storyClock: _timeService.storyClockIso,
+    );
+    if (isGroupMember) _saveScalarsIntoGroupRealism(characterId);
+    if (ok) await _saveChat();
+    return ok;
+  }
+
+  /// Train B — promise/debt ledger pass (fire-and-forget). Detects new
+  /// commitments or kept/broken resolutions for the current speaker's diary.
+  /// (Moved verbatim from chat_service.dart — commitment tracking belongs
+  /// with the objectives part; god-file ratchet.)
+  ///
+  /// Gated on the Journal and its own switch, NOT on the Realism Engine. It
+  /// used to require realism, but nothing here consumes realism state: the pass
+  /// reads the recent exchange text and writes a journal card. The story day
+  /// and clock it stamps are nullable and nothing reads them back, so a frozen
+  /// clock costs nothing. The Journal genuinely is required — a commitment IS a
+  /// journal card — and the separate switch exists because this is one extra
+  /// model call per reply, which a user who turned realism off to save calls
+  /// deserves to opt into rather than inherit.
+  void _maybeRunPromiseDebtPass() {
+    if (!_storageService.realismSettings.promiseLedgerEnabled) return;
+    if (!_storageService.memorySettings.journalEnabled) return;
+    final sessionId = _currentSessionId;
+    if (sessionId == null) return;
+    final charId = _getCurrentSpeakerIdForRealism();
+    if (charId.isEmpty) return;
+
+    String characterName = _activeCharacter?.name ?? 'the character';
+    if (_activeGroup != null && !_observerMode) {
+      final card = _groupCharacters
+          .where((c) => _getCharacterIdFromCard(c) == charId)
+          .firstOrNull;
+      if (card != null) characterName = card.name;
+    }
+
+    // 6, not the judges' 4: a promise often gets fulfilled across a couple
+    // of exchanges, and once the moment scrolls out of this window a missed
+    // KEPT could never be detected again (2026-08-04 report). Through the
+    // ONE window builder since 2026-08-10 — this was the last turn-adjacent
+    // inline window the eval diet missed, and the maintainer's EvalTraffic
+    // line caught it red-handed: 38.3k chars of prompt for a 59-char verdict
+    // on a novella-writing model. recentExchange brings the per-message
+    // clamp, photo markers, and think-stripping in one line.
+    final recent = recentExchange(_messages, take: 6);
+    if (recent.trim().isEmpty) return;
+
+    unawaited(
+      _promiseDebtService.evaluateTurn(
+        sessionId: sessionId,
+        characterId: charId,
+        characterName: characterName,
+        userName: _userPersonaService.persona.name,
+        recentExchange: recent,
+        receiptPosition: _messages.isEmpty ? null : _messages.length - 1,
+        storyDay: _timeService.dayCount,
+        storyClock: _timeService.storyClockIso,
+      ),
+    );
+  }
+
+  // ── Round-4b forwarder bodies (see chat_service_accessors.dart's banner
+  // comment for why these stay one-line forwarders on the class body) ──
+
+  /// Returns the personal objectives for a specific character when in group mode.
+  /// Falls back to the global list for 1:1 or when no per-char data exists yet.
+  List<Objective> _getObjectivesForGroupCharacterImpl(
+    CharacterCard character,
+  ) {
+    if (_activeGroup == null) return _activeObjectives;
+    final id = _getCharacterIdFromCard(character);
+    return _groupObjectives[id] ?? const <Objective>[];
+  }
+
+  /// Loads the active objectives for the given character in the current session.
+  /// Safe to call from group objective UIs — does not mutate global _activeObjectives.
+  Future<List<Objective>> _getActiveObjectivesForImpl(
+    CharacterCard character,
+  ) async {
+    if (_currentSessionId == null) return const [];
+    final charId = _getCharacterIdFromCard(character);
+    try {
+      return await _db.getActiveObjectives(charId, chatId: _currentSessionId!);
+    } catch (e) {
+      debugPrint('[Objective] Failed to load for ${character.name}: $e');
+      return const [];
     }
   }
 }

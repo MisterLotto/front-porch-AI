@@ -24,9 +24,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:front_porch_ai/app_version.dart';
 
-/// Glassmorphic modal overlay shown on first beta launch when a stable DB
+/// Glassmorphic modal overlay shown on first nightly launch when a stable DB
 /// is detected. Gives the user a choice to import their stable data into
-/// the beta installation before any silent copy occurs.
+/// the nightly installation before any silent copy occurs.
 class StableDbImportDialog extends StatelessWidget {
   const StableDbImportDialog({super.key});
 
@@ -109,7 +109,7 @@ class StableDbImportDialog extends StatelessWidget {
 
               // Title
               const Text(
-                'Welcome to Front Porch AI — Beta',
+                'Welcome to Front Porch AI — Nightly',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white,
@@ -122,8 +122,8 @@ class StableDbImportDialog extends StatelessWidget {
 
               // Body
               const Text(
-                'Would you like to import your stable database into this beta '
-                'app to test out the new features with your existing characters '
+                'Would you like to import your stable database into this nightly '
+                'app to try the new features with your existing characters '
                 'and chats?',
                 textAlign: TextAlign.center,
                 style: TextStyle(

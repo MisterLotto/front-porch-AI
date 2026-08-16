@@ -31,11 +31,16 @@
 // Direct imports of individual service files remain fully supported and are
 // the correct choice when only one or two niche services are needed.
 
+export 'desktop_spell_check_service.dart';
 export 'engine_health.dart';
 export 'expression_pack_service.dart';
 export 'model_fetch.dart';
 export 'model_manager.dart';
 export 'storage_service.dart';
+// The one settings TYPE consumers need by name (the sidebar's tri-state
+// control, the web facade/routes, the one-shot resolver). The settings
+// objects themselves are reached through StorageService instances.
+export 'storage/settings/realism_settings.dart' show OneShotMode;
 export 'character_repository.dart';
 export 'group_chat_repository.dart';
 export 'group_card_service.dart';
@@ -53,10 +58,14 @@ export 'kobold_service.dart';
 export 'chat_service.dart';
 export 'backend_manager.dart';
 export 'open_router_service.dart';
+export 'reasoning_effort.dart';
+export 'reasoning_effort_probe.dart';
+export 'reasoning_effort_store.dart';
 
 // Chat domain leaves (curated high-freq per extraction policy; needs impact evaluator
 // for the consolidated eval/impact layer; direct import also supported).
 export 'chat/needs_impact_evaluator.dart';
+export 'chat/context_viewer_snapshot.dart';
 
 // TTS / STT / media
 export 'tts_service.dart';

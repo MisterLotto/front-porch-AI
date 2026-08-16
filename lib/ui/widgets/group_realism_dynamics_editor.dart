@@ -12,6 +12,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'package:front_porch_ai/services/chat/chat.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/group_member_realism_editor.dart';
 import 'package:front_porch_ai/ui/widgets/relationship_scale.dart';
@@ -78,15 +79,12 @@ class _GroupRealismDynamicsEditorState
   String? _storyStartDate;
   String? _storyStartTime;
 
-  static const _timeOptions = [
-    'dawn',
-    'morning',
-    'noon',
-    'afternoon',
-    'evening',
-    'night',
-    'late night',
-  ];
+  // The offered periods ARE [StoryClock.periods] — the wire format the seed is
+  // stored in and the only list `representativeTime` knows. This picker used to
+  // offer 'noon' and 'late night', which both silently seeded 09:00 morning;
+  // old blobs still carry them, so map each onto the period it plainly meant
+  // rather than re-emitting a string the clock throws away.
+  static const _legacyPeriods = {'noon': 'late_morning', 'late night': 'night'};
 
   @override
   void initState() {
@@ -97,6 +95,14 @@ class _GroupRealismDynamicsEditorState
     // Detect the group-wide needs toggle from the ACTUAL stored seeds (a
     // realism-on/needs-off group has no `needs` sub-map). Fresh/realism-off
     // groups default to needs on, matching the creator.
+    // NOTE: this infers the group-wide Needs toggle from whether a needs map
+    // is PRESENT. That inference is load-bearing — deleting the map (as opposed
+    // to correcting its keys, which is what happened) would silently switch
+    // Needs off for existing groups. Replacing it with an explicit stored flag
+    // was attempted and backed out: the flag is group-wide, and putting it in
+    // the per-member seed breaks the parse(build(x)) == x round trip that
+    // group_realism_blobs_test pins. It belongs at the blob's top level, which
+    // is a schema decision with its own migration question.
     _needsEnabled = parsed.isEmpty
         ? true
         : parsed.values.any((s) {
@@ -131,7 +137,9 @@ class _GroupRealismDynamicsEditorState
       widget.initialBaselineJson,
     );
     if (seed != null) {
-      _timeOfDay = seed.timeOfDay;
+      _timeOfDay = StoryClock.periods.contains(seed.timeOfDay)
+          ? seed.timeOfDay
+          : (_legacyPeriods[seed.timeOfDay] ?? 'morning');
       _dayCount = seed.dayCount;
       _storyStartDate = seed.storyStartDate;
       _storyStartTime = seed.storyStartTime;
@@ -176,10 +184,24 @@ class _GroupRealismDynamicsEditorState
     _emit();
   }
 
+  // Memoized per editor: _avatar runs once per member card, once per source
+  // row and once per source×target pair, and EVERY relationship-slider drag
+  // frame rebuilds the whole editor — N existsSync per frame is the io-lint
+  // bug class (same shape as scene_guest_picker_dialog's cache).
+  final Map<String, ImageProvider?> _avatarCache = {};
+
   Widget _avatar(GroupRealismMember m, double radius) {
     final path = m.avatarPath;
-    if (path != null && path.isNotEmpty && File(path).existsSync()) {
-      return CircleAvatar(radius: radius, backgroundImage: FileImage(File(path)));
+    final image = (path == null || path.isEmpty)
+        ? null
+        : _avatarCache.putIfAbsent(
+            path,
+            () => File(path).existsSync() // io-ok: memoized per editor
+                ? FileImage(File(path))
+                : null,
+          );
+    if (image != null) {
+      return CircleAvatar(radius: radius, backgroundImage: image);
     }
     return CircleAvatar(
       radius: radius,
@@ -262,13 +284,14 @@ class _GroupRealismDynamicsEditorState
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  initialValue: _timeOptions.contains(_timeOfDay)
+                  initialValue: StoryClock.periods.contains(_timeOfDay)
                       ? _timeOfDay
                       : 'morning',
                   decoration: const InputDecoration(labelText: 'Time of day'),
-                  items: _timeOptions
-                      .map((t) => DropdownMenuItem(value: t, child: Text(t)))
-                      .toList(),
+                  items: [
+                    for (final t in StoryClock.periods)
+                      DropdownMenuItem(value: t, child: Text(t.replaceAll('_', ' '))),
+                  ],
                   onChanged: (v) {
                     if (v == null) return;
                     setState(() => _timeOfDay = v);

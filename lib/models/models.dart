@@ -48,3 +48,4 @@ export 'story_project.dart';
 export 'world.dart';
 export 'fp_world_package.dart';
 export 'needs_impact.dart';
+export 'hardware_info.dart';

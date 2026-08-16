@@ -22,15 +22,14 @@ import 'package:front_porch_ai/utils/utils.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/kobold_service.dart';
-import 'package:front_porch_ai/services/chargen/char_macro.dart';
-import 'package:front_porch_ai/services/chargen/lorebook_mechanics.dart';
+import 'package:front_porch_ai/services/chargen/chargen.dart';
 
 part 'chargen/character_gen_llm.dart';
 part 'chargen/character_gen_prompts.dart';
 part 'chargen/character_gen_steps.dart';
 part 'chargen/character_gen_steps2.dart';
 part 'chargen/character_gen_parsing.dart';
-part 'chargen/character_gen_editors.dart';
+part 'chargen/character_gen_enhance.dart';
 
 /// Per-category descriptions for lorebook generation prompts.
 const _loreCategoryDescriptions = {

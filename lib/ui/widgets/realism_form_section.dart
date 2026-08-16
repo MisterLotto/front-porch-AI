@@ -19,7 +19,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/ui/widgets/identity_chip_lists.dart';
 import 'package:front_porch_ai/ui/widgets/story_begins_row.dart';
+import 'package:front_porch_ai/ui/widgets/synced_text_field.dart';
 
 /// Shared Realism Engine configuration form.
 ///
@@ -55,8 +57,35 @@ class RealismFormSection extends StatelessWidget {
   final ValueChanged<bool> onNsfwCooldownChanged;
   final bool chaosModeEnabled;
   final ValueChanged<bool> onChaosModeChanged;
-  final String currentTask;
-  final ValueChanged<String> onCurrentTaskChanged;
+
+  /// Long-term ambitions, edited as chips (approved sketch §4). Optional so
+  /// the surfaces that have no ambitions state yet — the group-member card,
+  /// for one — keep working untouched; absent means the section is simply not
+  /// rendered rather than rendered empty and dead.
+  final List<String>? ambitions;
+  final ValueChanged<List<String>>? onAmbitionsChanged;
+
+  /// Likes & Dislikes, and the 18+ pair — same optional-pair convention as
+  /// [ambitions]: pass values + callback or the section is absent, so surfaces
+  /// that predate these fields keep compiling and rendering unchanged.
+  /// [showIntimate] carries the install's adult-themes switch.
+  final List<String>? likes;
+  final ValueChanged<List<String>>? onLikesChanged;
+  final List<String>? dislikes;
+  final ValueChanged<List<String>>? onDislikesChanged;
+  final List<String>? intimateInto;
+  final ValueChanged<List<String>>? onIntimateIntoChanged;
+  final List<String>? intimateNotInto;
+  final ValueChanged<List<String>>? onIntimateNotIntoChanged;
+  final bool showIntimate;
+
+  /// Starting Pockets & Wardrobe, as chip text (`sundress (rain-soaked)`).
+  /// Same optional-pair convention again — the two group-member editors call
+  /// this widget with no identity params at all.
+  final List<String>? worn;
+  final ValueChanged<List<String>>? onWornChanged;
+  final List<String>? carrying;
+  final ValueChanged<List<String>>? onCarryingChanged;
 
   // Realism Verification (Director/Verifier) toggle — shown under Optional Features like other optionals.
   // Sliders for max reprocesses + strictness live in the Details dialog (right-click edit); form surfaces the toggle for creator/edit flows.
@@ -104,8 +133,21 @@ class RealismFormSection extends StatelessWidget {
     required this.onNsfwCooldownChanged,
     required this.chaosModeEnabled,
     required this.onChaosModeChanged,
-    required this.currentTask,
-    required this.onCurrentTaskChanged,
+    this.ambitions,
+    this.onAmbitionsChanged,
+    this.likes,
+    this.onLikesChanged,
+    this.dislikes,
+    this.onDislikesChanged,
+    this.intimateInto,
+    this.onIntimateIntoChanged,
+    this.intimateNotInto,
+    this.onIntimateNotIntoChanged,
+    this.showIntimate = false,
+    this.worn,
+    this.onWornChanged,
+    this.carrying,
+    this.onCarryingChanged,
     required this.realismVerificationEnabled,
     required this.onRealismVerificationChanged,
     this.showVerificationToggle = true,
@@ -359,14 +401,13 @@ class RealismFormSection extends StatelessWidget {
                               color: AppColors.borderOf(context),
                             ),
                           ),
-                          child: TextField(
-                            controller:
-                                TextEditingController(text: dayCount.toString())
-                                  ..selection = TextSelection.fromPosition(
-                                    TextPosition(
-                                      offset: dayCount.toString().length,
-                                    ),
-                                  ),
+                          // SyncedTextField, not a TextField with an inline
+                          // controller: every caller rebuilds this section on
+                          // each keystroke, and a controller built in build()
+                          // loses the caret (and any IME composition) every
+                          // frame.
+                          child: SyncedTextField(
+                            value: dayCount.toString(),
                             keyboardType: TextInputType.number,
                             inputFormatters: [
                               FilteringTextInputFormatter.digitsOnly,
@@ -498,11 +539,10 @@ class RealismFormSection extends StatelessWidget {
                             color: AppColors.borderOf(context),
                           ),
                         ),
-                        child: TextField(
-                          controller: TextEditingController(text: emotion)
-                            ..selection = TextSelection.fromPosition(
-                              TextPosition(offset: emotion.length),
-                            ),
+                        // See the Day Number field: the controller must be
+                        // owned, or mid-word edits jump to the end of the text.
+                        child: SyncedTextField(
+                          value: emotion,
                           style: TextStyle(
                             color: AppColors.textPrimary(context),
                             fontSize: 14,
@@ -595,7 +635,7 @@ class RealismFormSection extends StatelessWidget {
                 if (showNsfwCooldownToggle) ...[
                   buildToggleRow(
                     icon: Icons.thermostat,
-                    label: 'NSFW Cooldown System',
+                    label: 'Afterglow (intimacy pacing)',
                     subtitle: 'Realistic arousal/refractory mechanics',
                     value: nsfwCooldownEnabled,
                     onChanged: onNsfwCooldownChanged,
@@ -677,72 +717,26 @@ class RealismFormSection extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          // Task / Quest Section
-          _sectionHeader(
-            Icons.flag,
-            'Current Task / Quest',
-            AppColors.taskAccent,
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.cardOf(context),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppColors.borderOf(context)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Task', style: labelStyle),
-                const SizedBox(height: 8),
-                Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceContainerOf(context),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.borderOf(context)),
-                  ),
-                  child: TextField(
-                    controller: TextEditingController(text: currentTask)
-                      ..selection = TextSelection.fromPosition(
-                        TextPosition(offset: currentTask.length),
-                      ),
-                    style: TextStyle(
-                      color: AppColors.textPrimary(context),
-                      fontSize: 14,
-                    ),
-                    maxLines: 3,
-                    minLines: 1,
-                    onChanged: onCurrentTaskChanged,
-                    decoration: InputDecoration(
-                      hintText:
-                          'e.g. Find the missing artifact, Survive the first day at school',
-                      hintStyle: TextStyle(
-                        color: AppColors.textTertiary(
-                          context,
-                        ).withValues(alpha: 0.6),
-                        fontSize: 13,
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Sets the initial quest or objective when a new conversation starts.',
-                  style: TextStyle(
-                    color: AppColors.textTertiary(
-                      context,
-                    ).withValues(alpha: 0.7),
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
+          // The card-authored identity lists — Ambitions, Likes & Dislikes,
+          // and the 18+ pair. All chips, all optional, all in one leaf
+          // (identity_chip_lists.dart) so this file stops growing a section
+          // per field.
+          IdentityChipLists(
+            ambitions: ambitions,
+            onAmbitionsChanged: onAmbitionsChanged,
+            likes: likes,
+            onLikesChanged: onLikesChanged,
+            dislikes: dislikes,
+            onDislikesChanged: onDislikesChanged,
+            intimateInto: intimateInto,
+            onIntimateIntoChanged: onIntimateIntoChanged,
+            intimateNotInto: intimateNotInto,
+            onIntimateNotIntoChanged: onIntimateNotIntoChanged,
+            showIntimate: showIntimate,
+            worn: worn,
+            onWornChanged: onWornChanged,
+            carrying: carrying,
+            onCarryingChanged: onCarryingChanged,
           ),
         ],
       ],

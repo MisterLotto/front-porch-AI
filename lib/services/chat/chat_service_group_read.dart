@@ -32,7 +32,7 @@ extension ChatServiceGroupRead on ChatService {
   String? getEmotionForGroupCharacter(CharacterCard character) {
     if (!isGroupRealismActive) return null;
     final id = _getCharacterIdFromCard(character);
-    final raw = _groupRealism[id]?['emotion'] as String?;
+    final raw = _groupRealism[id]?.emotion;
     return (raw != null && raw.isNotEmpty) ? raw : null;
   }
 
@@ -48,7 +48,9 @@ extension ChatServiceGroupRead on ChatService {
     if (!isGroupRealismActive) return null;
     final id = _getCharacterIdFromCard(character);
     final data = _groupRealism[id];
-    return (data != null && data.isNotEmpty) ? Map.unmodifiable(data) : null;
+    return (data != null && data.isNotEmpty)
+        ? Map.unmodifiable(data.toJson())
+        : null;
   }
 
   // ── Convenient per-character realism accessors for the UI ───────────────
@@ -60,17 +62,12 @@ extension ChatServiceGroupRead on ChatService {
   Map<String, int> getNeedsForGroupCharacter(CharacterCard character) {
     if (!isGroupRealismActive) return const {};
     final id = _getCharacterIdFromCard(character);
-    final raw = _groupRealism[id]?['needs'];
+    final raw = _groupRealism[id]?.needs;
     final result = <String, int>{};
     for (final k in NeedsSimulation.needKeys) {
-      final v = (raw is Map) ? raw[k] : null;
-      if (v is num) {
-        result[k] = v.toInt();
-      } else {
-        // Fill any missing official needs so the UI always shows the complete set.
-        // This handles legacy/incomplete group data after previous cleanups.
-        result[k] = NeedsSimulation.needDefaults[k] ?? 80;
-      }
+      // Fill any missing official needs so the UI always shows the complete
+      // set (legacy/incomplete group data), and drop legacy bad keys.
+      result[k] = raw?[k] ?? (NeedsSimulation.needDefaults[k] ?? 80);
     }
     return result;
   }
@@ -78,32 +75,52 @@ extension ChatServiceGroupRead on ChatService {
   int getAffectionForGroupCharacter(CharacterCard character) {
     if (!isGroupRealismActive) return 0;
     final id = _getCharacterIdFromCard(character);
-    return (_groupRealism[id]?['affection'] as num?)?.toInt() ?? 0;
+    return _groupRealism[id]?.affection ?? 0;
+  }
+
+  /// Long-term bond for one group member.
+  ///
+  /// This accessor was simply missing, and both clients worked around its
+  /// absence by showing something else: the desktop member card passed the
+  /// SHORT-term score to both bond rows, and the web facade hard-coded 0 under
+  /// a comment claiming long-term is not tracked per member. It is — the
+  /// per-speaker load/save pair moves `longTermScore` in and out of the group
+  /// blob on every turn, and it grows on its own cadence, so it genuinely
+  /// diverges from short-term.
+  ///
+  /// Falls back to short-term when the key is absent, matching what
+  /// [RelationshipService.loadRelationshipScalarsForSpeaker] does when it seeds
+  /// a member who predates the key.
+  int getLongTermForGroupCharacter(CharacterCard character) {
+    if (!isGroupRealismActive) return 0;
+    final id = _getCharacterIdFromCard(character);
+    final entry = _groupRealism[id];
+    return entry?.longTermScore ?? entry?.affection ?? 0;
   }
 
   int getTrustForGroupCharacter(CharacterCard character) {
     if (!isGroupRealismActive) return 0;
     final id = _getCharacterIdFromCard(character);
-    return (_groupRealism[id]?['trust'] as num?)?.toInt() ?? 0;
+    return _groupRealism[id]?.trust ?? 0;
   }
 
   String? getFixationForGroupCharacter(CharacterCard character) {
     if (!isGroupRealismActive) return null;
     final id = _getCharacterIdFromCard(character);
-    final raw = _groupRealism[id]?['fixation'] as String?;
+    final raw = _groupRealism[id]?.fixation;
     return (raw != null && raw.isNotEmpty) ? raw : null;
   }
 
   int getArousalForGroupCharacter(CharacterCard character) {
     if (!isGroupRealismActive) return 0;
     final id = _getCharacterIdFromCard(character);
-    return (_groupRealism[id]?['arousal'] as num?)?.toInt() ?? 0;
+    return _groupRealism[id]?.arousal ?? 0;
   }
 
   String? getEmotionIntensityForGroupCharacter(CharacterCard character) {
     if (!isGroupRealismActive) return null;
     final id = _getCharacterIdFromCard(character);
-    final raw = _groupRealism[id]?['emotionIntensity'] as String?;
+    final raw = _groupRealism[id]?.emotionIntensity;
     return (raw != null && raw.isNotEmpty) ? raw : null;
   }
 
@@ -113,8 +130,7 @@ extension ChatServiceGroupRead on ChatService {
   int? getFixationLifespanForGroupCharacter(CharacterCard character) {
     if (!isGroupRealismActive) return null;
     final id = _getCharacterIdFromCard(character);
-    final raw = _groupRealism[id]?['fixationLifespan'] as num?;
-    return raw?.toInt();
+    return _groupRealism[id]?.fixationLifespan;
   }
 
   /// Returns the top N most urgent needs (lowest value first) for the character,
@@ -147,5 +163,57 @@ extension ChatServiceGroupRead on ChatService {
       debugPrint('[GroupRealism] Reset per-character state for $id');
       notifyListeners();
     }
+  }
+
+  // ── Clean delegation layer (GroupTurnManager is the real owner); moved
+  // verbatim from the god file's field block, zero behaviour change ──
+  GroupChat? get _activeGroup => _groupManager?.activeGroup;
+  List<CharacterCard> get _groupCharacters =>
+      _groupManager?.characters ?? const <CharacterCard>[];
+  bool get _observerMode => _groupManager?.observerMode ?? false;
+  set _observerMode(bool value) {
+    _groupManager?.setObserverMode(value);
+  }
+
+  bool get _autoPlayActive => _groupManager?.autoPlayActive ?? false;
+  set _autoPlayActive(bool value) {
+    if (value) {
+      _groupManager?.startAutoPlay();
+    } else {
+      _groupManager?.stopAutoPlay();
+    }
+  }
+
+  double get directorDelaySec => _groupManager?.directorDelaySec ?? 15.0;
+  set directorDelaySec(double value) {
+    if (_groupManager != null) {
+      _groupManager!.directorDelaySec = value;
+    }
+  }
+
+  bool get autoPlayActive => _groupManager?.autoPlayActive ?? false;
+
+  /// The character who will speak next in group mode.
+  /// Fully delegated to GroupTurnManager (supports forced override + both turn orders + Director Mode).
+  CharacterCard? get nextCharacter => _groupManager?.nextSpeaker;
+
+  /// True only for regular (non-Director) group chats where the Realism Engine
+  /// is enabled. Used by the group sidebar to decide whether to show per-character
+  /// emotion / needs indicators.
+  bool get isGroupRealismActive =>
+      _realismEnabled && isGroupMode && !observerMode;
+
+  /// Phase 3: Hard cap for inter-character relationship tracking.
+  /// Per the approved plan, full hidden inter-character dynamics (seeding,
+  /// decay, injection, and updates) are **only** performed when the group has
+  /// 4 or fewer members. This prevents combinatorial explosion and prompt bloat.
+  ///
+  /// When the group has 5+ members:
+  /// - Inter-character 'relationships' maps remain empty / are ignored.
+  /// - All characters still receive full per-speaker realism evaluations for
+  ///   their feelings **toward the user** (visible bars continue to work).
+  bool get _shouldTrackInterCharacterRelationships {
+    if (_activeGroup == null) return false;
+    return _groupCharacters.length <= 4;
   }
 }

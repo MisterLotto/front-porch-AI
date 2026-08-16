@@ -5,7 +5,7 @@
 //
 // Front Porch AI is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
-// the Software Foundation, either version 3 of the License, or
+// the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
 // Front Porch AI is distributed in the hope that it will be useful,
@@ -77,6 +77,11 @@ class AuthorNoteBuilder {
     final activeObjectives = getActiveObjectives();
     if (activeObjectives.isEmpty) return '';
     final sb = StringBuffer();
+    // Set by every branch that names a concrete step, so the staleness hedge
+    // below is written ONCE for the whole block rather than per objective
+    // (docs/design/prompt-state-injection.md §6.1 — one register, each fact
+    // once). See the hedge's own comment for why it is needed at all.
+    var namedAStep = false;
 
     // 1. Primary Objective
     final pObj = getPrimaryObjective();
@@ -94,6 +99,7 @@ class AuthorNoteBuilder {
             .firstOrNull;
 
         if (currentTask != null) {
+          namedAStep = true;
           final depth = (pObj is Map
               ? (pObj['injectionDepth'] as num?)?.toInt() ?? 4
               : pObj.injectionDepth);
@@ -161,6 +167,7 @@ class AuthorNoteBuilder {
             .map((t) => t['description'] as String)
             .firstOrNull;
         if (currentTask != null) {
+          namedAStep = true;
           final sGoal =
               (sObj is Map
                   ? (sObj['objective'] as String?)
@@ -188,6 +195,22 @@ class AuthorNoteBuilder {
       }
     }
 
+    // Staleness hedge (docs/design/prompt-state-injection.md §6.1). Task
+    // completion is checked FIRE-AND-FORGET in the background
+    // (ObjectiveProposal.checkTaskCompletionInBackground), so the step named
+    // above is routinely one the story already walked past — and it is stated
+    // as a flat instruction ("Current step to work toward"). A model that
+    // obeys it literally re-stages a scene that already happened; Kimi 2.6
+    // instead burned its reasoning budget deciding to disregard "the outdated
+    // current task". Neither is what we want: say plainly that the tracker
+    // lags and that the transcript settles it.
+    if (namedAStep) {
+      sb.writeln(
+        '[Progress is tracked in the background and can lag the story: if '
+        'the conversation already shows the current step happening, it is '
+        'done — carry on from there instead of staging it again.]',
+      );
+    }
     if (sb.isNotEmpty) sb.writeln();
     return sb.toString();
   }

@@ -40,6 +40,13 @@ class GenerationParams {
   /// Used by OpenRouter and compatible providers (e.g. Nano-GPT) via the `reasoning.max_tokens` field.
   /// Setting to 0 on Continue generations helps force non-thinking / direct output on models that support budget control (Kimi K2, DeepSeek hybrids, Qwen3 thinking variants, etc.).
   final int? reasoningMaxTokens;
+
+  /// Evals only: keep reasoning-channel tokens so we can parse JSON out of
+  /// them. Mandatory-reasoning models (Kimi :thinking) put the answer there
+  /// and `reasoning.exclude` leaves `content` empty — a 90s think then a
+  /// newline. Chat / Continue leave this false so thoughts stay hidden.
+  final bool salvageReasoning;
+
   final List<String>? bannedPhrases;
 
   /// Top-K cutoff; 0 disables it (KoboldCpp and remote APIs both treat 0 as
@@ -93,6 +100,7 @@ class GenerationParams {
     this.reasoningEnabled = false,
     this.reasoningEffort = 'medium',
     this.reasoningMaxTokens,
+    this.salvageReasoning = false,
     this.bannedPhrases,
     this.systemPrompt,
     this.grammar,

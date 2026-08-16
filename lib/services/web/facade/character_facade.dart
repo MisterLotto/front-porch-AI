@@ -136,6 +136,15 @@ class CharacterFacade {
         characters.sort(byName);
     }
 
+    // One id→card index for the whole page instead of a fresh
+    // `_repo.characters` copy + linear scan per row (that made a 300-card
+    // library 300 list copies and 90k comparisons per refresh).
+    final byDbId = <String, CharacterCard>{};
+    for (final card in _repo?.characters ?? const <CharacterCard>[]) {
+      final id = card.dbId;
+      if (id != null) byDbId[id] = card;
+    }
+
     return characters
         .map(
           (c) => {
@@ -148,7 +157,7 @@ class CharacterFacade {
             // small over a slow uplink.
             'tags': _jsonList(c.tags),
             'hasAvatar': c.imagePath != null && c.imagePath!.isNotEmpty,
-            'avatarVersion': _avatarVersion(c.imagePath, c.id),
+            'avatarVersion': _avatarVersion(c.imagePath, c.id, byDbId),
             'folderId': c.folderId ?? '',
             'messageCount': msgCounts[c.id] ?? 0,
           },
@@ -163,26 +172,59 @@ class CharacterFacade {
   /// gallery avatar when set) so starring a look busts the cache too — the
   /// portrait's mtime alone wouldn't change on a star flip. Returns 0 when
   /// nothing resolves (the client then omits `v` — uncached-by-version).
-  int _avatarVersion(String? imagePath, String characterId) {
-    try {
-      final hydrated = _repo?.characters
-          .where((c) => c.dbId == characterId)
-          .firstOrNull;
-      final cover = hydrated == null ? null : _repo?.coverImageFileFor(hydrated);
-      if (cover != null && cover.existsSync()) {
-        return cover.statSync().modified.millisecondsSinceEpoch;
-      }
-      if (imagePath == null || imagePath.isEmpty) return 0;
-      final f = File(
-        p.join(_storage.charactersDir.path, p.basename(imagePath)),
-      );
-      return f.existsSync()
-          ? f.statSync().modified.millisecondsSinceEpoch
-          : 0;
-    } catch (_) {
-      return 0;
+  ///
+  /// Memoized ([invalidateAvatarVersions] + [_versionTtl]): resolving it costs
+  /// an `existsSync` + `statSync` per character, and `/api/characters` is
+  /// re-fetched by every connected browser on every `library_changed` AND on
+  /// every keystroke in the web search box — which is exactly the "once-per-
+  /// event sync IO reused in a hot loop" regression CLAUDE.md names (it is
+  /// 10-100x costlier on Windows under Defender than on the dev Mac).
+  int _avatarVersion(
+    String? imagePath,
+    String characterId,
+    Map<String, CharacterCard> byDbId,
+  ) {
+    final now = DateTime.now();
+    if (now.difference(_versionsAt) > _versionTtl) {
+      _versions.clear();
+      _versionsAt = now;
     }
+    final memo = _versions[characterId];
+    if (memo != null) return memo;
+    int resolve() {
+      try {
+        final hydrated = byDbId[characterId];
+        final cover = hydrated == null
+            ? null
+            : _repo?.coverImageFileFor(hydrated);
+        if (cover != null && cover.existsSync()) {
+          return cover.statSync().modified.millisecondsSinceEpoch;
+        }
+        if (imagePath == null || imagePath.isEmpty) return 0;
+        final f = File(
+          p.join(_storage.charactersDir.path, p.basename(imagePath)),
+        );
+        return f.existsSync()
+            ? f.statSync().modified.millisecondsSinceEpoch
+            : 0;
+      } catch (_) {
+        return 0;
+      }
+    }
+
+    return _versions[characterId] = resolve();
   }
+
+  /// Memo for [_avatarVersion]. Cleared by [invalidateAvatarVersions] (wired to
+  /// the library-changed notifier, so a swapped portrait produces a new `v=`
+  /// token immediately) with a short TTL as the backstop for any path that
+  /// changes a picture on disk without notifying.
+  final Map<String, int> _versions = {};
+  DateTime _versionsAt = DateTime.fromMillisecondsSinceEpoch(0);
+  static const Duration _versionTtl = Duration(seconds: 5);
+
+  /// Forget the memoized avatar versions — call whenever the library changes.
+  void invalidateAvatarVersions() => _versions.clear();
 
   /// The character folder tree (id, name, parentId) so the web library can show
   /// folder navigation. Character membership is queried separately via
@@ -209,7 +251,7 @@ class CharacterFacade {
   Future<bool> update(String id, Map<String, dynamic> fields) async {
     final repo = _repo;
     if (repo == null) return false;
-    final card = _cardByDbId(id);
+    final card = cardByDbId(id);
     if (card == null) return false;
 
     String pick(String key, String current) => fields.containsKey(key)
@@ -226,6 +268,16 @@ class CharacterFacade {
       'postHistoryInstructions',
       card.postHistoryInstructions,
     );
+    // Per-character TTS voice (2026-08-14). Only touched when the key is
+    // present so a partial edit can't clear it; an explicit empty string
+    // means "follow the global voice" and stores null, matching desktop.
+    // Per-character TTS voice (2026-08-14). Only touched when the key is
+    // present so a partial edit can't clear it; an explicit empty string
+    // means "follow the global voice" and stores null, matching desktop.
+    if (fields.containsKey('ttsVoice')) {
+      final v = fields['ttsVoice']?.toString().trim() ?? '';
+      card.ttsVoice = v.isEmpty ? null : v;
+    }
     final tags = fields['tags'];
     if (tags is List) card.tags = tags.map((e) => e.toString()).toList();
     final greetings = fields['alternateGreetings'];
@@ -265,8 +317,9 @@ class CharacterFacade {
   /// The in-memory [CharacterCard] matching library [id] (its dbId), or null.
   /// Used by [update] and [detail] so both source realism/world state from the
   /// same place the desktop edits (the PNG-backed card, not the realism-less DB
-  /// row).
-  CharacterCard? _cardByDbId(String id) {
+  /// row). Public so [ChargenFacade] can resolve the enhance target without a
+  /// second lookup implementation.
+  CharacterCard? cardByDbId(String id) {
     final repo = _repo;
     if (repo == null) return null;
     for (final c in repo.characters) {
@@ -506,7 +559,7 @@ class CharacterFacade {
       // realism columns), so source them from the in-memory card. Flattened via
       // the shared helper so the edit page's Realism/Needs form sections can
       // round-trip them losslessly.
-      final ext = _cardByDbId(id)?.frontPorchExtensions;
+      final ext = cardByDbId(id)?.frontPorchExtensions;
       return {
         'id': c.id,
         'name': c.name,

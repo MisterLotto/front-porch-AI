@@ -44,6 +44,21 @@ void main() {
       expect(w.finish(), '');
     });
 
+    // UPDATED 2026-08-15 (same-day as the salvage feature itself): salvage
+    // now emits TAGGED think blocks, not raw deltas. Raw pass-through — the
+    // first cut — left stripThinkBlocks unable to separate 15k chars of
+    // Kimi 2.6 deliberation from the final JSON, so firstMatch extractors
+    // fished DRAFT deltas out of mid-think text ("sometimes deltas are not
+    // emitted"). Tagged salvage parses cleanly when content follows, and
+    // every eval call site already falls back to raw when the answer only
+    // exists inside the think channel.
+    test('wrap:false salvage:true tags reasoning so evals can strip it', () {
+      final w = ReasoningTagWrapper(wrap: false, salvage: true);
+      expect(w.onReasoning('{"bond_delta":2}'), '<think>{"bond_delta":2}');
+      expect(w.onContent(''), '');
+      expect(w.finish(), '</think>\n');
+    });
+
     test('empty deltas yield nothing and do not open a block', () {
       final w = ReasoningTagWrapper(wrap: true);
       expect(w.onReasoning(''), '');

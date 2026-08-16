@@ -84,7 +84,7 @@ extension ChatServiceGroupSettings on ChatService {
   bool get isGroupNsfwEnabled {
     if (_activeGroup != null) {
       for (final c in _groupCharacters) {
-        final v = _groupRealism[_getCharacterIdFromCard(c)]?['nsfwCooldownEnabled'];
+        final v = _groupRealism[_getCharacterIdFromCard(c)]?.nsfwCooldownEnabled;
         if (v is bool) return v;
       }
     }

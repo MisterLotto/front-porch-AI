@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -23,6 +24,7 @@ import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/web/facade/chat_realism_read.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 import 'package:front_porch_ai/services/web/streaming/stream_hub.dart';
 import 'package:front_porch_ai/services/web/util/lorebook_json.dart';
 
@@ -53,6 +55,28 @@ class ChatFacade {
   /// Realism-READ leaf (host snapshot + per-member participant realism). Pure
   /// reads of [ChatService]; co-located 1:1/group parity pair lives there.
   late final ChatRealismRead _realism = ChatRealismRead(_chat);
+
+  /// Context Budget payload (desktop ContextViewerDialog parity): per-section
+  /// token estimate + the REAL text each section contributed to the last
+  /// assembled prompt. Additive endpoint — old clients simply never call it.
+  Map<String, dynamic> contextBudget() {
+    final texts = _chat.lastPromptSections;
+    return {
+      'contextLimit': _chat.contextSize,
+      'source': _chat.promptBudgetSource.name,
+      'assembledAt': _chat.promptBudgetAssembledAt?.toIso8601String(),
+      'sections': [
+        for (final e in _chat.lastPromptBudget.entries)
+          {'label': e.key, 'tokens': e.value, 'text': texts[e.key] ?? ''},
+      ],
+    };
+  }
+
+  /// Rebuild a live estimate from the open chat (no model call).
+  Future<Map<String, dynamic>> refreshContextBudget() async {
+    await _chat.estimateContextBudgetNow();
+    return contextBudget();
+  }
 
   /// Full chat state payload (matches legacy `/api/chat/state`).
   Map<String, dynamic> state() {
@@ -143,7 +167,7 @@ class ChatFacade {
       'sessionId': _chat.currentSessionId,
       'sessionName': _chat.sessionName,
       'messages': messages,
-      'isGenerating': _chat.isGenerating,
+      'isGenerating': _chat.isGenerating || _chat.isImporting,
       // Additive (mixed-fleet safe): older web clients ignore it; newer ones
       // can distinguish "streaming tokens" from "still settling".
       'isSettlingTurn': _chat.isSettlingTurn,
@@ -428,13 +452,42 @@ class ChatFacade {
     _notify();
   }
 
+  /// AI writes the user's next line into the composer (desktop wand parity).
+  /// Tokens ride a dedicated `impersonate` WS event — never the `token`
+  /// bubble stream.
+  void impersonate(String prefix) {
+    unawaited(
+      _chat
+          .impersonateUser(
+            prefix: prefix,
+            onToken: (acc) => _hub?.broadcastImpersonate(acc),
+          )
+          .whenComplete(() {
+            _hub?.broadcastImpersonateDone();
+            _notify();
+          }),
+    );
+    _notify();
+  }
+
   /// Director redo: re-evaluate a message's Needs deltas using the user's
   /// written [critique]. Awaited (it runs LLM evals) so the route can report the
   /// outcome; the new deltas + a pre-reprocess stash land in the message's
   /// metadata, which the next state fetch surfaces as chips. Reuses the existing
   /// ChatService flow — no parallel logic.
-  Future<bool> reprocessNeeds(int index, String critique) async {
-    final ok = await _chat.manualReprocessNeeds(index, critique);
+  /// [onlyNeeds] scopes the pass to those needs; empty re-evaluates all of
+  /// them. Additive on the wire — an older PWA that omits it keeps the
+  /// all-needs behaviour it has always had.
+  Future<bool> reprocessNeeds(
+    int index,
+    String critique, {
+    Set<String> onlyNeeds = const <String>{},
+  }) async {
+    final ok = await _chat.manualReprocessNeeds(
+      index,
+      critique,
+      onlyNeeds: onlyNeeds,
+    );
     _notify();
     return ok;
   }
@@ -489,11 +542,17 @@ class ChatFacade {
     _notify();
   }
 
-  /// All user personas (id, label, active flag) for the web persona switcher.
+  /// All user personas for the web persona surfaces.
+  ///
+  /// Two flags, because there are two distinct answers: `default` is who a NEW
+  /// chat starts as (Settings), `active` is who the CURRENT chat is speaking as
+  /// (the in-chat switcher). `active` is kept for older PWA builds that only
+  /// know that key — additive-only, per the API contract.
   List<Map<String, dynamic>> personas() {
     final svc = _personas;
     if (svc == null) return const [];
     final activeId = svc.persona.id;
+    final defaultId = svc.defaultPersonaId;
     return svc.personas
         .map(
           (p) => {
@@ -501,16 +560,30 @@ class ChatFacade {
             'label': p.displayLabel,
             'name': p.name,
             'active': p.id == activeId,
+            'default': p.id == defaultId,
           },
         )
         .toList();
   }
 
-  /// Switch the active user persona. Returns false if personas aren't wired.
+  /// Change which persona NEW chats start as (Settings → Personas). Leaves the
+  /// open chat alone. Returns false if personas aren't wired.
   Future<bool> setPersona(String id) async {
     final svc = _personas;
     if (svc == null) return false;
+    await svc.setDefaultPersona(id);
+    _notify();
+    return true;
+  }
+
+  /// Speak as [id] in the CURRENT chat, and bind the session to it — the web
+  /// counterpart of the desktop composer's persona switcher. Saves immediately
+  /// so the binding survives a reload even if the user says nothing else.
+  Future<bool> setChatPersona(String id) async {
+    final svc = _personas;
+    if (svc == null) return false;
     await svc.setActivePersona(id);
+    await _chat.persistSessionPersona();
     _notify();
     return true;
   }
@@ -588,8 +661,24 @@ class ChatFacade {
   /// first — so the web UI can list past chats and let the user resume any of
   /// them via [session]. Reuses ChatService's own session lister; only adapts
   /// the `date` field to a JSON-safe ISO string.
-  Future<List<Map<String, dynamic>>> sessions() async {
-    final raw = await _chat.getSessions();
+  ///
+  /// With [characterId] (a library dbId), lists that character's 1:1 chats
+  /// WITHOUT touching the active chat — the web AI Enhance flow's "which
+  /// chat?" picker. Additive: absent, behavior is unchanged.
+  Future<List<Map<String, dynamic>>> sessions({String? characterId}) async {
+    List<Map<String, dynamic>> raw;
+    if (characterId != null && characterId.isNotEmpty) {
+      final card = _characters.characters
+          .where((c) => c.dbId == characterId)
+          .firstOrNull;
+      // getSessionsForId keys by imagePath basename (stableGroupId) — a UUID
+      // silently returns [] (the documented fall-through).
+      raw = card == null
+          ? const []
+          : await _chat.getSessionsForId(card.stableGroupId);
+    } else {
+      raw = await _chat.getSessions();
+    }
     return raw.map((s) {
       final date = s['date'];
       return {...s, 'date': date is DateTime ? date.toIso8601String() : date};

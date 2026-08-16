@@ -16,10 +16,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:front_porch_ai/services/chat_service.dart';
+import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/ui/chat_components/chat_components.dart';
+// Sidebar panels are direct-import per the chat_components barrel's policy.
 import 'package:front_porch_ai/ui/chat_components/sidebar/journal_memory/journal_panel.dart';
-import 'package:front_porch_ai/ui/dialogs/journal_dialog.dart';
-import 'package:front_porch_ai/ui/widgets/chance_time_overlay.dart';
+import 'package:front_porch_ai/ui/dialogs/dialogs.dart';
+import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
 import 'e2e_sandbox.dart';
 import 'fake_backend.dart';
@@ -42,6 +45,59 @@ class ChatDriver {
         w is TextField &&
         (w.decoration?.hintText?.contains('Type a message') ?? false),
   );
+
+  /// The bubble showing exactly [msg] — matched by INSTANCE IDENTITY on
+  /// [MessageBubble.message], never by key. Bubbles used to be keyed
+  /// `GlobalObjectKey(msg)` and two suites found them that way; the
+  /// duplicate-GlobalKey crash fix (2026-08-10, page-owned `_bubbleKeys`)
+  /// removed that scheme and the keyed finders went from "the one true
+  /// handle" to "Found 0 widgets" on every platform. Identity matching
+  /// keeps the property the keyed lookup existed for — the fake backend's
+  /// replies share identical text, so text matching is ambiguous — while
+  /// depending only on the bubble's public contract, not the page's
+  /// private key scheme. ChatMessage does not override `==`, so this is
+  /// the same equality the old key used.
+  Finder bubbleFor(ChatMessage msg) => find.byWidgetPredicate(
+    (w) => w is MessageBubble && identical(w.message, msg),
+  );
+
+  /// [bubbleFor], revealed by scrolling. The reversed list VIRTUALIZES, so
+  /// an old message's bubble may not be built at all until dragged into
+  /// view (the macOS leg of message_actions' first CI run). Positive drags
+  /// reveal older messages in the reversed list; the negative tail is
+  /// insurance.
+  Future<Finder> revealBubbleFor(ChatMessage msg) async {
+    final f = bubbleFor(msg);
+    if (f.evaluate().isNotEmpty) return f;
+    final scrollable = find
+        .ancestor(
+          of: find.byType(MessageBubble).first,
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    const drags = [
+      300.0, 300.0, 300.0, 300.0, 300.0, 300.0, //
+      -300.0, -300.0, -300.0, -300.0, -300.0, -300.0,
+    ];
+    for (final dy in drags) {
+      if (f.evaluate().isNotEmpty) break;
+      await tester.drag(scrollable, Offset(0, dy));
+      await tester.pump(const Duration(milliseconds: 250));
+    }
+    // fail(), never an assertion: support/ is harness, not evidence
+    // (e2e_support_has_no_assertions_test bans the assertion marker here,
+    // by substring — comments included). This is the harness giving up,
+    // the same shape as waitFor's timeout, and deleting it can't create a
+    // false pass: callers immediately dead-end on the empty finder and
+    // time out loudly in their own waits.
+    if (f.evaluate().isEmpty) {
+      fail(
+        'the bubble for "${msg.text}" was not reachable by scrolling '
+        'the chat list',
+      );
+    }
+    return f;
+  }
 
   /// If the Chance Time overlay is up, do what a user would: spin, let the
   /// wheel land, dismiss the result card (its single button pops the route).
@@ -122,21 +178,82 @@ class ChatDriver {
   );
 
   /// True when a tap at [finder]'s centre actually reaches [finder] rather
-  /// than something painted over it.
+  /// than something painted over it — or clipped away.
   ///
-  /// Existing in the tree is not the same as being tappable. Chance Time is a
-  /// `showDialog` MODAL: while its overlay is up the send button is still
-  /// found by `find.byTooltip` (finders search the whole tree) but every tap
-  /// lands on the route's barrier instead, silently. That is how a fixed
-  /// attempt budget gets burned tapping through a modal — the exact CI failure
-  /// this driver hit, whose diagnostics read `sendButtons=1` with every guard
-  /// clear and the controller holding the text.
-  bool _hitReaches(Finder finder) {
+  /// Existing in the tree is not the same as being tappable, and finders only
+  /// ever answer the first question. Two ways that bites, both of which cost a
+  /// CI round:
+  ///  * a `showDialog` MODAL (Chance Time) leaves the send button findable by
+  ///    `find.byTooltip` while every tap lands on the route's barrier —
+  ///    diagnostics read `sendButtons=1` with all guards clear;
+  ///  * a collapsed `SizeTransition` (the Model Manager's quant rows) builds
+  ///    its child ANYWAY, so the buttons inside a collapsed card are found,
+  ///    are laid out at full intrinsic size, and are clipped to nothing —
+  ///    taps hit whatever is painted behind them and vanish silently.
+  ///
+  /// Callers must ensure [finder] resolves to exactly one widget: a
+  /// `.first`/`.last`-wrapped finder THROWS on an empty tree rather than
+  /// reporting empty.
+  bool hitReaches(Finder finder) {
     if (finder.evaluate().isEmpty) return false;
     final target = tester.renderObject(finder);
     final result = tester.hitTestOnBinding(tester.getCenter(finder));
     return result.path.any((entry) => identical(entry.target, target));
   }
+
+  /// Tap [targets] in order, repeating the WHOLE sequence until [done] — the
+  /// generic delivery-confirmed tap.
+  ///
+  /// A single `tester.tap` is a coin flip anywhere the target sits in a
+  /// scrollable, a dialog, or a panel that rebuilds: it can land on a
+  /// barrier, on a clipped region, or on the widget's old position. With
+  /// `warnIfMissed: false` (needed everywhere else) that failure is SILENT,
+  /// and the suite dies minutes later at a wait naming a symptom rather than
+  /// the missed tap.
+  ///
+  /// [targets] is a LIST because the retry unit is often more than one tap:
+  /// ticking a checkbox and then pressing the button it enables only works
+  /// as a pair, and retrying just the button would hammer a still-disabled
+  /// control forever. Every finder must be UNWRAPPED — `.first`/`.last`
+  /// throw on an empty tree instead of reporting empty.
+  Future<void> tapUntilTrue(
+    List<Finder> targets,
+    bool Function() done,
+    String Function() describe, {
+    Duration timeout = const Duration(seconds: 30),
+  }) async {
+    for (var attempt = 0; attempt < 8 && !done(); attempt++) {
+      await spinChanceTimeIfAsked();
+      for (final target in targets) {
+        if (target.evaluate().isEmpty) continue;
+        try {
+          await tester.ensureVisible(target.first);
+        } on StateError {
+          // Not inside a scrollable — nothing to scroll, tap where it is.
+        }
+        await tester.pump(const Duration(milliseconds: 200));
+        if (target.evaluate().isEmpty) continue;
+        await tester.tap(target.first, warnIfMissed: false);
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+      for (var i = 0; i < 6 && !done(); i++) {
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+    }
+    await waitFor(done, describe, timeout: timeout);
+  }
+
+  /// [tapUntilTrue] where the confirmation is simply a widget appearing.
+  Future<void> tapUntil(
+    List<Finder> targets,
+    Finder confirmation, {
+    Duration timeout = const Duration(seconds: 30),
+  }) => tapUntilTrue(
+    targets,
+    () => confirmation.evaluate().isNotEmpty,
+    () => '$confirmation to appear after tapping $targets',
+    timeout: timeout,
+  );
 
   /// Delivery-confirmed send. One tap is not enough: guards can flip in the
   /// gap between the sendable check and the tap, and the app deliberately
@@ -175,7 +292,7 @@ class ChatDriver {
       //   * absent  — the composer is `isGenerating ? Stop : Send`, so a
       //               background turn swapped the button out;
       //   * covered — a Chance Time modal (or any dialog) is over it.
-      if (!_hitReaches(sendBtn)) {
+      if (!hitReaches(sendBtn)) {
         await tester.pump(const Duration(milliseconds: 250));
         continue;
       }
@@ -195,7 +312,8 @@ class ChatDriver {
     final input0 = input.evaluate();
     final controllerText = input0.isEmpty
         ? '(input widget not found)'
-        : (tester.widget<TextField>(input).controller?.text ?? '(no controller)');
+        : (tester.widget<TextField>(input).controller?.text ??
+              '(no controller)');
     final sendBtn = find.byTooltip('Send message').evaluate().length;
     fail(
       '"$text" was never accepted by sendMessage after 8 attempts.\n'
@@ -215,35 +333,70 @@ class ChatDriver {
     );
   }
 
-  /// Scroll the sidebar to the Journal & Memory accordion and expand it.
-  /// Retap is gated on PANEL PRESENCE, not card text: an accordion is a
-  /// toggle, and retapping after a successful expand (while content still
-  /// paints) would collapse it again. An edge-of-viewport tap can hit-test
-  /// as a silent miss, hence ensureVisible + retry.
-  Future<void> openJournalAccordion() async {
-    final sidebarScrollable = find
-        .ancestor(
-          of: find.text("Author's Note"),
-          matching: find.byType(Scrollable),
-        )
-        .first;
-    await tester.scrollUntilVisible(
-      find.text('Journal & Memory'),
-      100,
-      scrollable: sidebarScrollable,
-    );
-    final panel = find.byType(JournalPanel);
-    for (var attempt = 0; attempt < 5 && panel.evaluate().isEmpty; attempt++) {
-      await spinChanceTimeIfAsked();
-      await tester.ensureVisible(find.text('Journal & Memory'));
+  /// The sidebar's own ListView. Anchored on the SidebarBody TYPE, never on
+  /// a text inside it: the list builds lazily, so any anchor text (round 4
+  /// used "Author's Note") gets CULLED once scrolled past — and then the
+  /// `.first`-wrapped ancestor finder throws "No element" mid-drag, which is
+  /// exactly how sidebar_sweep died on Linux after its earlier phases had
+  /// scrolled the top of the list away.
+  Finder get _sidebarScrollable => find
+      .descendant(
+        of: find.byType(SidebarBody),
+        matching: find.byType(Scrollable),
+      )
+      .first;
+
+  /// Drag the chat sidebar until [target] is BUILT, tolerating both zero and
+  /// multiple matches — the two states that kill scrollUntilVisible (its
+  /// dragUntilVisible resolves with .single, and a `.first`-wrapped finder
+  /// THROWS on an empty tree instead of reporting it, which is exactly how
+  /// round 2's lorebook suite died on macOS: the sidebar ListView builds
+  /// lazily, so a below-the-fold header has no element until dragged near).
+  /// Downward drags first (the sidebar starts at the top), a short upward
+  /// tail as insurance.
+  Future<void> revealInSidebar(Finder target) async {
+    const drags = [
+      -250.0, -250.0, -250.0, -250.0, -250.0, -250.0, -250.0, -250.0, //
+      250.0, 250.0, 250.0, 250.0,
+    ];
+    for (final dy in drags) {
+      if (target.evaluate().isNotEmpty) break;
+      await tester.drag(_sidebarScrollable, Offset(0, dy));
       await tester.pump(const Duration(milliseconds: 200));
-      await tester.tap(find.text('Journal & Memory'));
-      for (var i = 0; i < 6 && panel.evaluate().isEmpty; i++) {
+    }
+    await waitForWidget(target, timeout: const Duration(seconds: 15));
+  }
+
+  /// Reveal the accordion header labelled [title] and expand it, confirmed
+  /// by [confirmation] (a widget that only exists while the section is open
+  /// — pass an UNWRAPPED finder; .first/.last throw on an empty tree).
+  /// Retap is gated on CONFIRMATION PRESENCE, not on tap success: an
+  /// accordion is a toggle, and retapping after a successful expand (while
+  /// content still paints) would collapse it again. An edge-of-viewport tap
+  /// can hit-test as a silent miss, hence ensureVisible + retry — round 4's
+  /// Windows lorebook leg died on exactly one such unconfirmed tap.
+  Future<void> openSidebarAccordion(String title, Finder confirmation) async {
+    final header = find.text(title);
+    await revealInSidebar(header);
+    for (
+      var attempt = 0;
+      attempt < 5 && confirmation.evaluate().isEmpty;
+      attempt++
+    ) {
+      await spinChanceTimeIfAsked();
+      await tester.ensureVisible(header.first);
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.tap(header.first, warnIfMissed: false);
+      for (var i = 0; i < 6 && confirmation.evaluate().isEmpty; i++) {
         await tester.pump(const Duration(milliseconds: 250));
       }
     }
-    await waitForWidget(panel, timeout: const Duration(seconds: 15));
+    await waitForWidget(confirmation, timeout: const Duration(seconds: 15));
   }
+
+  /// Scroll the sidebar to the Journal & Memory accordion and expand it.
+  Future<void> openJournalAccordion() =>
+      openSidebarAccordion('Journal & Memory', find.byType(JournalPanel));
 
   /// Open the full Journal dialog from the sidebar panel and switch to the
   /// "Our Story" timeline tab, requiring it to RESOLVE — entries, a Chance
@@ -311,7 +464,8 @@ class ChatDriver {
     }
     await waitFor(
       () => find.byType(JournalDialog).evaluate().isEmpty,
-      () => 'the Journal dialog to close so later phases are not tapping '
+      () =>
+          'the Journal dialog to close so later phases are not tapping '
           'through its modal barrier',
       timeout: const Duration(seconds: 15),
     );
