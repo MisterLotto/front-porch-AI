@@ -3,6 +3,17 @@
 
 # Changelog
 
+## 2026-08-16 — ci: restore AUR publish jobs (freeze lifted)
+- **Why:** AUR writes work again (aurweb v6.5.0). We removed the jobs
+  on 2026-08-03 so every nightly/release would not red-X on a frozen
+  remote. Secret AUR_SSH_KEY was left in place.
+- **What:** `publish-aur` back on release.yml (front-porch-ai-bin).
+  `publish-aur-beta` back on nightly.yml (front-porch-ai-beta-bin —
+  leftover name, nightly contents). beta-release.yml left retired.
+  nightly.yml also landed on main so cron actually fires it.
+- **Files:** .github/workflows/release.yml, nightly.yml
+- **Commit:** ff0d8753
+
 ## 2026-08-16 — docs: only Rawhide and main; no beta series, no dev branch
 - **Why:** Beta releases and a third `dev` line meant three installs and
   too much process. Nightly (Rawhide) and stable (main) are the two
