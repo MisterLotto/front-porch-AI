@@ -59,6 +59,20 @@ export function clearStoopSession(): void {
   localStorage.removeItem(REFRESH_KEY);
 }
 
+/** Restore / first-paint of a saved browser session. Wipe the login only
+ *  when it is already gone (tryRefresh cleared a dead refresh token). A
+ *  502, timeout, or TypeError is a hiccup — keep the tokens so the next
+ *  open can retry. A 401 that still has tokens means refresh hiccuped
+ *  after call() already tried; do not undo that keep.
+ *
+ *  StoopContext used to `clearStoopSession()` on ANY `me()` failure, which
+ *  undid the 401-only rule in tryRefresh and signed the phone out over
+ *  one dropped packet (1.3 independent review leftover). */
+export function shouldWipeStoopSessionAfterRestoreError(err: unknown): boolean {
+  if (!(err instanceof StoopError) || err.status !== 401) return false;
+  return !hasStoopSession();
+}
+
 /** RFC-4122 v4 UUID that also works in an INSECURE browsing context.
  *
  *  `crypto.randomUUID()` is secure-context-only, so it is `undefined` when

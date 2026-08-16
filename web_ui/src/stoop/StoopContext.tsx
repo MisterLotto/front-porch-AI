@@ -14,7 +14,13 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { accessToken, clearStoopSession, hasStoopSession, stoop } from './stoopApi';
+import {
+  accessToken,
+  clearStoopSession,
+  hasStoopSession,
+  shouldWipeStoopSessionAfterRestoreError,
+  stoop,
+} from './stoopApi';
 import type { StoopMessage, StoopUser } from './stoopTypes';
 
 export type StoopSocketEvent =
@@ -69,8 +75,12 @@ export function StoopProvider({ children }: { children: ReactNode }) {
         setUser(r.user);
         setPolicyVersion(r.policyVersion);
       })
-      .catch(() => {
-        if (!cancelled) clearStoopSession();
+      .catch((e) => {
+        // Same 401-only wipe as tryRefresh / desktop AuthState. A 502 or
+        // dropped packet must not delete the saved phone login.
+        if (!cancelled && shouldWipeStoopSessionAfterRestoreError(e)) {
+          clearStoopSession();
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

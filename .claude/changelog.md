@@ -3,6 +3,18 @@
 
 # Changelog
 
+## 2026-08-15 — fix(web): phone Stoop restore no longer wipes the login on a hiccup
+- **Why:** tryRefresh was already 401-only. StoopContext's first-paint
+  `me()` catch still `clearStoopSession()` on ANY failure, so a 502 or
+  dropped packet signed the phone out (independent-review leftover).
+- **What:** restore wipe goes through
+  `shouldWipeStoopSessionAfterRestoreError` — 5xx/network never wipe;
+  a 401 that still has tokens (refresh hiccuped) keeps them. Dead
+  refresh is already cleared inside tryRefresh.
+- **Files:** stoopApi.ts, StoopContext.tsx;
+  NEW stoopRestoreSession.test.ts; docs/Rawhide.md
+- **Commit:** (this commit)
+
 ## 2026-08-15 — fix(chat): pocket receipt chips overflowed the bubble by 1086px
 - **Why:** live maintainer repro minutes after the medium wave landed: the
   wave FIXED receipts being silently dropped on realism turns, so
