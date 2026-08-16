@@ -4,6 +4,7 @@
 </picture>
 
 <p align="center">
+  <a href="https://github.com/linux4life1/front-porch-AI/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/linux4life1/front-porch-AI/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="License: AGPL v3" src="https://img.shields.io/badge/License-AGPLv3-B45309?labelColor=2B1B0C">
   <img alt="Made with Flutter" src="https://img.shields.io/badge/Made%20with-Flutter-E8833A?labelColor=2B1B0C&logo=flutter&logoColor=white">
   <img alt="Platform: Windows, Linux, macOS" src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-F4A259?labelColor=2B1B0C">
@@ -12,27 +13,20 @@
 
 **`main` is the stable release branch.** All new features land on `Rawhide` (the rolling development branch) and are promoted here when ready. Nightly cutting-edge builds are available from Rawhide for users who want the latest.
 
-**A local-first AI companion for character chat & roleplay — Windows, macOS, and Linux.** Runs fully offline with local LLMs (KoboldCpp, etc.), driven by a living **Realism Engine** (emotion, trust, needs, and memory) with built-in **TTS and image generation** — and supports remote APIs like OpenRouter, Nano-GPT, and OpenAI with no lock-in when you want them. Open-source (**AGPL-3.0**), and built as a home for **Backyard AI refugees**.
+**A local-first AI companion for character chat & roleplay — Windows, macOS, and Linux.** Runs fully offline with local LLMs (KoboldCpp, oMLX, LM Studio, …), driven by a living **Realism Engine** (emotion, trust, needs, memory, pockets) with built-in **TTS and image generation** — and supports remote APIs like OpenRouter, Nano-GPT, and OpenAI with no lock-in when you want them. Open-source (**AGPL-3.0**). Built as a home for people who lost theirs when Backyard AI killed its desktop app.
 
-> ### 🏡 New in 1.0 — The Stoop: pull up a chair, the neighbours brought characters
-> Every porch is really about who shows up to it. **The Stoop** is a community character hub built right into the app — browse, share, and **download character & group cards without ever leaving Front Porch.** No browser, no separate website, no fragile copy-paste imports. Featured & mod-picked cards, follow the creators you love, upvote/downvote, and one-tap download straight into your library. Whole **group casts** travel too — members, avatars, lorebooks, **and** the pre-seeded realism/needs state all survive the round-trip, not just single cards. It's also on the web at **[hub.frontporchai.app](https://hub.frontporchai.app)** — browse as a guest, no install needed.
-> It's **opt-in, account-gated, strictly 18+** (NSFW hidden by default), and **fully open-source (AGPL-3.0)** — while the rest of the app stays 100% local. Other apps have in-app hubs, but the closed ones eventually go paid-SaaS (Backyard AI killed its desktop app to do exactly that); The Stoop is the open, local-first porch that shares living casts, not just cards. **Come sit a while → [The Stoop](#-the-stoop--built-in-community-character-hub).**
+> ### 🎁 New in 1.3 — Check Your Pockets
+> She has **pockets, clothes, and a set-aside pile**. Hand her something and she actually has it. **AI Enhance** grows a card from a real chat. **Porch Life** is one Settings home for every living-character switch, and Journal / Chaos / the story clock / Pockets / Objectives are **à la carte** — the Realism Engine is no longer the master key. Likes, ambitions that steer quests, a mood that isn't about you, and chats you can take with you. Details below, and in the in-app What's New.
 
 ## 🕯️ Why Does This Exist?
 
-If you've ever played Diablo, this line might sound familiar: **Stay awhile and listen.** 😄
+When Backyard's desktop app shut down, people lost the room they sat in at night — not just an installer. Front Porch is the local-first answer: your characters, on your machine, with a license that stays open even if someone hosts a fork.
 
-After five months and more than 1,600 commits, Front Porch AI is at a place where calling it 1.0 doesn't feel like a lie. Not a victory lap. Just… ready enough.
+From **v0.9.0** the license is **AGPL-3.0** — a modified hosted copy has to publish its changes. Your old Backyard library comes home too: the app imports `.byaf` archives directly.
 
-When Backyard's desktop app went away, a lot of people lost more than software — they lost the room they actually sat in at night. The community didn't vanish so much as it broke into pieces. Some went to SillyTavern. Some stayed through the SaaS churn. Some got tired and left AI RP entirely. That still sits with me. On **February 14, 2026**, I made the first push to this repository because I didn't want that spark to just… end. Front Porch AI is a playful nod to Backyard — not a claim that it can replace what people lost, only that there could still be a warm place to sit with your characters, on your own machine.
+That's the promise. **A home that stays.** Characters that feel like they're there.
 
-I didn't get here alone, and I wouldn't have. When I started, I didn't know how to "vibe code." I didn't know anything about agentic coding. Half the time I was learning out loud in public, breaking things, fixing them, and wondering if any of it was going to matter. The **[DreamersAI Discord](https://discord.gg/e4tET6rpdv)** was there every step of the way — encouragement when it was quiet, guidance when I was lost, help when I was in over my head. A real heartfelt thank you to **PapaOak**, **Pacmanincarnate**, **Vanta**, and every member of that community who showed up. You were there in the hard stretches when I wanted to step away. You were there for the small bright ones too. The first GitHub star landed on February 21, 2026 — one week after the first commit — and it felt bigger than it probably looked from the outside. It never felt like a metric. It felt like someone else sitting on the porch with me. (We're at 49 as I write this.)
-
-I know what a lot of you are hoping for when you show up. Not hype. Not another almost. **A home that stays.** Characters that feel like they're there. A neighborhood that doesn't get locked behind a door you can't open anymore.
-
-That's why the license is part of the promise: from **v0.9.0** on, Front Porch AI is **AGPL-3.0** — anyone who hosts a modified version as a service must open-source their changes, so it stays open even in a world of cloud-hosted forks. And your characters can come home too: the app imports directly from Backyard's `.byaf` archives.
-
-> 🎩 Hat tip to the Backyard AI team for open-sourcing the `.byaf` format on their way out. (v0.8.x and earlier are GPLv3.)
+> 🎩 Hat tip to the Backyard AI team for open-sourcing `.byaf` on their way out. (v0.8.x and earlier are GPLv3.)
 
 ---
 
@@ -49,18 +43,19 @@ If you're evaluating local AI tools, here's an honest breakdown. Every project o
 | Feature | **Front Porch AI** | SillyTavern | Jan.ai | Backyard AI |
 |---|---|---|---|---|
 | **Native desktop app** | ✅ Flutter (Win/Mac/Linux) | ❌ Web-based (local server) | ✅ Electron | ✅ (abandoned) |
-| **Built-in community character hub** | ✅ **The Stoop** — **open-source (AGPL-3.0)**, local-first; browse / share / download in-app, incl. full **group casts** (members + lorebooks + realism/needs state) | ❌ (external sites only) | ❌ | ⚠️ Character Hub — **closed, paid-SaaS**; desktop app killed (2025), web/mobile only; single cards |
+| **Built-in community character hub** | ✅ **The Stoop** — **open-source (AGPL-3.0)**, local-first; browse / share / download in-app, incl. full **group casts** (members + lorebooks + realism/needs/pockets) | ❌ (external sites only) | ❌ | ⚠️ Character Hub — **closed, paid-SaaS**; desktop app killed (2025), web/mobile only; single cards |
 | **Fully offline — no cloud required** | ✅ | ✅ | ✅ | ✅ |
 | **Remote LLM Endpoints** | ✅ Native multi-provider support (OpenRouter, Nano-GPT, custom, etc.) with deep integration | ✅ Strong native support for custom OpenAI-compatible endpoints | ⚠️ Limited | ❌ (service discontinued) |
 | **Built-in TTS (50+ voices)** | ✅ Kokoro + Piper + ElevenLabs + OpenAI | ⚙️ Extension required | ❌ | ❌ |
 | **Speech-to-text (push-to-talk)** | ✅ Whisper, built-in | ⚙️ Extension required | ❌ | ❌ |
-| **Local image generation** | ✅ A1111, Forge, ComfyUI, Draw Things | ⚙️ Extension required | ❌ | ❌ |
-| **Realism Engine** | ✅ Time, trust, emotion, needs, chaos, quests | ❌ | ❌ | ❌ |
+| **Local image generation** | ✅ A1111, Forge, ComfyUI, Draw Things (macOS) | ⚙️ Extension required | ❌ | ❌ |
+| **Realism Engine** | ✅ Time, trust, emotion, needs, chaos, quests, pockets, tastes — each switchable | ❌ | ❌ | ❌ |
 | **Character Expressions** | ✅ ONNX + LLM, live avatar swap | ⚙️ Extension required | ❌ | ❌ |
 | **RAG memory (local)** | ✅ ONNX embeddings, no cloud | ⚙️ Extension required | ❌ | ❌ |
 | **Novel / story generator** | ✅ Porch Stories pipeline | ❌ | ❌ | ❌ |
 | **Character card compatibility** | ✅ V2 spec + Backyard .byaf import | ✅ V2 spec | ❌ | .byaf only |
 | **Group chat** | ✅ | ✅ | ❌ | ❌ |
+| **Web / phone app** | ✅ Installable PWA from the desktop app | ⚙️ Separate | ❌ | ⚠️ Web/mobile only now |
 | **Extension / plugin ecosystem** | ❌ | ⭐ Very large | Moderate | ❌ |
 | **Open source license** | ✅ AGPL-3.0 | ✅ AGPL-3.0 | ✅ MIT | ❌ |
 | **Best for** | Polished AI companion + storytelling | Power users / heavy customization | Simple local chat | — |
@@ -73,59 +68,88 @@ If you're evaluating local AI tools, here's an honest breakdown. Every project o
 
 ### 🏡 The Stoop — Built-In Community Character Hub
 
-A stoop is where the neighbourhood meets — the front step where people swap stories and pass things back and forth. **The Stoop** brings that to Front Porch: a community character hub built right into the app, so you can discover and share characters without ever leaving home, while everything else stays offline. What sets it apart from other in-app hubs (Backyard AI's Character Hub, RisuAI's RisuRealm) is that The Stoop hands over **entire group casts** — not just single character cards — carrying members, lorebooks, **and** the pre-seeded Realism/Needs engine state intact, so a whole living scene arrives ready to play.
+A stoop is where the neighbourhood meets — the front step where people swap stories and pass things back and forth. **The Stoop** brings that to Front Porch: a community character hub built right into the app, so you can discover and share characters without ever leaving home, while everything else stays offline. What sets it apart from other in-app hubs (Backyard AI's Character Hub, RisuAI's RisuRealm) is that The Stoop hands over **entire group casts** — not just single character cards — carrying members, lorebooks, **and** the pre-seeded Realism/Needs/Pockets state intact, so a whole living scene arrives ready to play.
 
-- **Browse & discover** — featured and moderator-picked cards, search, tag filters, and a live feed of what the neighbours are sharing.
+- **Browse & discover** — featured and moderator-picked cards, search, tag filters, and a live feed of what the neighbours are sharing. A card page shows the whole character: ambitions, likes, starting wardrobe — not just the greeting.
 - **One-tap download** — pull any card straight into your library; it lands ready to chat, exactly as the creator tuned it.
-- **Whole casts come over, not just cards** — share a full group and the recipient gets everything: members, avatars, lorebooks, **and** the pre-seeded Realism state, Needs baselines/tick-rates, and intra-group dynamics. Nothing is flattened on the round-trip — no other character hub carries a living cast like this.
-- **Share what you made** — a guided upload wizard with member-avatar montages for groups, comma-formed tag pills, and a clean review flow before anything goes live. Shared a card already? **Update it in place** — downloaders see the new version with votes and history intact. Sharing someone else's work? The **Original creator** field gives them visible credit everywhere.
+- **Whole casts come over, not just cards** — share a full group and the recipient gets everything: members, avatars, lorebooks, **and** the pre-seeded Realism state, Needs baselines, pockets, and intra-group dynamics. Nothing is flattened on the round-trip.
+- **Share what you made** — a guided upload wizard with member-avatar montages for groups, comma-formed tag pills, and a clean review flow before anything goes live. Shared a card already? **Update it in place**. Sharing someone else's work? The **Original creator** field gives them visible credit. **18+ is not a checkbox the uploader ticks** — the hub derives it from what's actually on the card.
+- **Creator profiles** — a real profile (picture, bio, links, art grid) behind a confirmed email, so drive-by accounts can't post avatars.
 - **Follow creators & vote** — follow the people whose characters you love, upvote/downvote (counts update live), and report anything that breaks the house rules.
 - **On the web too** — [hub.frontporchai.app](https://hub.frontporchai.app) works from any browser, including guest browsing with no account at all.
-- **Open porch, not a walled garden** — The Stoop is **open-source (AGPL-3.0)** and local-first. The for-profit hubs tend to drift closed and paywalled (Backyard killed its desktop app and went subscription-SaaS to do exactly that); AGPL exists precisely so The Stoop can't be fenced off the same way. Your app, your characters, your data stay yours.
+- **Open porch, not a walled garden** — The Stoop is **open-source (AGPL-3.0)** and local-first. The for-profit hubs tend to drift closed and paywalled; AGPL exists so The Stoop can't be fenced off the same way.
 - **Safe by design** — **opt-in** and **account-gated**; the rest of the app stays 100% local and offline. Strictly **18+**, with adult content **hidden by default**, optional **two-factor authentication**, and an **opt-out** anonymous device-stats ping (platform / app version / GPU tier — never your chats, characters, or raw IP). See the [Privacy Policy](PRIVACY.md).
+
+### 🎁 Pockets & Wardrobe
+
+New in 1.3. She has pockets, clothes, and a set-aside pile — and the app keeps the record, not just the prose.
+
+- **Hand her something and she has it** — accept a gift, pick it up, put it down, pass it to someone else in a group. An offer she ignores or turns down stays out of her pockets.
+- **Clothes come off into the pile**, not into nowhere. What she set aside lasts the night and is gone at the story's next morning.
+- **Authors can dress her on the card** — starting clothes and carried items seed the first chat. The Stoop card page shows that wardrobe.
+- **The Journal keeps a Belongings tab** of where things went.
+- **Own switch.** Does not need the Realism Engine. If Needs is on too, a hungry character reaches for the food already in her pocket before looking elsewhere.
 
 ### 💬 Chat
 - **Immersive roleplay** with V2-spec character cards — full SillyTavern / Backyard AI compatibility
 - **Smooth output buffer** — text drips at your reading pace, not your GPU's pace
 - **Rich text styling** — dialogue highlighted in amber (straight, curly, and international quotes alike), actions in grey
-- **Regenerate, Continue, Impersonate, Edit** — full message control
+- **Regenerate, Continue, Impersonate, Edit** — full message control. **Impersonate is on the phone too**; a start you already typed is continued as you, not answered as the character
+- **Take a chat with you** — export a conversation as a Front Porch `.fpchat` (history, diary, growth, the lot) or SillyTavern JSONL, and bring it back on desktop or the phone
 - **Photo attachments** — send your character a picture and vision-capable models genuinely see and react to it (with a fully local description fallback for text-only models)
+- **Per-chat visual themes** — ten presets plus full color customization, desktop and web
+- **Output Sanitizer** — automatic find-and-replace on model output (goodbye em-dash tics), with per-chat overrides
 - **Slash commands** — `/image`, `/join`, `/exit`, `/speak`, `/turnorder`, `/afk`, and more, with a `/` helper panel
 - **Persistent sessions** — chat history auto-saved and restored per character
 - **Chat branching** — fork from any message to explore alternate storylines
 
-### 🧠 Realism Engine
+### 🏡 Porch Life & the Realism Engine
+- **Porch Life** — one Settings home for every living-character switch, instead of hunting them across the app
+- **À la carte** — Journal, Chaos / Chance Time, the story clock, Pockets, and Objectives each have their own switch. Turn on what you want. The Realism Engine is no longer the master key
 - **Emotion tracking** — character mood evolves naturally across the conversation, carrying inertia between turns
+- **Likes & Dislikes** — give her tastes (thunderstorms, being interrupted) and she acts on them. Moments that hit what she actually cares about move bond and trust harder
+- **Intimate preferences get said** — not just scored in the background. She can ask for what she wants, and she can turn something down
+- **A bad day that isn't about you** — optional, off by default. She can arrive tired, hungry, or weather-beaten from her own life, and the sidebar says why. Nothing is invented
 - **Relationship & Trust system** — earn a character's trust over time; it shifts how open and vulnerable they allow themselves to be
 - **Sims-style Needs** — hunger, energy, social, fun, hygiene, comfort: they decay on their own, respond to what actually happens in the scene, and bottoming one out has real consequences
-- **Autonomous time progression** — scene time advances deterministically every 6 turns; OOC time-skips (`(OOC: we drive for several hours)`) are auto-detected and applied
-- **Character quests** — self-chosen goals become real main quests with concrete, sequential steps the character actively pursues
+- **Story clock** — time advances every turn from what just happened (not a six-turn gate). It can run with the engine off. If she names 6am, the clock becomes 6am
+- **Weather & dreams** — hour-by-hour story weather, and a short dream when a story night passes
+- **Character quests** — self-chosen goals become real main quests with concrete steps. **Ambitions on the card steer those quests**, and you can set them when you create her
+- **Promises** — commitments land in a Journal tab you can mark kept or broken yourself
 - **Fixation Engine** — active emotional obsessions that subtly color every response
-- **Growth Rings** — visible, receipt-backed character growth: real changes become rings that strengthen into permanence or fade into a viewable past, with a sidebar timeline you can pin, edit, and plant
-- **The Journal** — a living, per-chat memory: characters keep a real diary of what mattered (each entry stamped with its emotion), memories carry *heat* so strong ones linger and faint ones resurface only when relevant, and nothing ever leaks between chats
+- **Growth Rings** — visible, receipt-backed character growth: real changes become rings that strengthen into permanence or fade into a viewable past
+- **The Journal** — a living, per-chat diary (each entry stamped with its emotion). Strong memories linger; faint ones resurface when relevant. Nothing ever leaks between chats
 - **AFK / Dynamic Responses** — characters keep living while you're away, with time and Needs following along
 - **RAG Memory** — local semantic memory powered by a lightweight ONNX embedding engine; the AI recalls past conversations without any cloud
 
 ### 🎭 Character Management
 - **V2 spec support** — fully compatible with the V2 character card specification (PNG & JSON)
-- **One-click import** — any V2 character card PNG/JSON, or grab community cards straight from **The Stoop** (the built-in hub) — no browser needed
-- **Backyard AI (.byaf) importer** — rescue your characters from the archive format Backyard AI left behind when they killed their desktop app
-- **Folder organization**, global search, tag editor, bulk PNG import, mass delete with confirmation
+- **One-click import** — any V2 character card PNG/JSON, or grab community cards straight from **The Stoop** — no browser needed
+- **Backyard AI (.byaf) importer** — rescue your characters from the archive format Backyard AI left behind
+- **AI Enhance** — grow a character from a real chat. Walks you through it, review old-vs-new, and bring those chats along onto the enhanced copy. The original card is never overwritten
+- **Folder organization**, including group casts, global search, tag editor, bulk PNG import, mass delete with confirmation
 - **One-click duplication** — clone any character card for risk-free experiments
 
 ### 🧙 AI Character Creator
 - **Quick Create** — type a name and concept, the AI builds a complete V2 card from scratch
+- **Voice-first interview** — better questions, three-stage lorebook generation, a veto gate on the portrait before an expression pack spends your time
 - **World Lore (RAG-Lite)** — paste a Fandom wiki URL or attach a local `.txt`/`.pdf` and the generator embeds that lore into the character
 - **Editor passes** — Anti-Puppet, Consistency Check, Quality Polish, Truncation Completion
 - **Alternate greetings** — generate up to 5 unique first messages with configurable tone
 - **Lorebook auto-generation** — world-building entries generated alongside the character
+- **Ambitions, likes, and starting wardrobe** are first-class on the card — not buried prose
 
 ### 👥 Group Chat & Director Mode
 - **Multi-character conversations** — 2+ characters interacting with each other and with you
 - **One chat, a changing cast** — turn a solo chat into a group **in place** with `/join --full`, add/remove characters live with `/join` and `/exit` (goodbye + undo), and collapse back to a clean 1:1 with the **original** character — no forking or orphan copies
 - **Macros** — `/turnorder` (set who speaks when, including your own slot), `/speak` (force a character to take a turn now), `/promote` (promote a scene guest to a full member)
 - **Director Mode** — let characters chat autonomously, or manually choose who speaks next
-- **Per-character everything** — realism, needs, expression images, author notes, and growth are tracked per member and carried losslessly when converting between 1:1 and group
+- **Per-character everything** — realism, needs, pockets, expression images, author notes, and growth are tracked per member and carried losslessly when converting between 1:1 and group
+
+### 🌍 Worlds
+- **Author a place** — climates, temperature bands, atmosphere and gravity. Mars does not come with breathable air; characters feel the weather and dress for it
+- **Share a world on The Stoop** like a character. A new chat can inherit its character's world automatically
+- **`.fpworld` packages** — take a place between installs (Front Porch 1.2 or newer)
 
 ### 🧭 Lorebooks & Macros
 - **Full-fidelity imports** — SillyTavern, Chub, NovelAI, AgnAI, and RisuAI books arrive through a preview wizard with every setting honored
@@ -135,13 +159,13 @@ A stoop is where the neighbourhood meets — the front step where people swap st
 - **Perfect round-trips** — exports write genuine SillyTavern-format files; nothing is lost in either direction
 
 ### 🗣️ Text-to-Speech
-- **Four engines**: Kokoro (local, 50+ voices, 9 languages), ElevenLabs (cloud, expressive), OpenAI (cloud, premium), Piper (lightweight fallback)
+- **Four engines**: Kokoro (local, 50+ voices, 9 languages), ElevenLabs (cloud, expressive), OpenAI (cloud, premium), Piper (lightweight fallback, including **bring-your-own** `.onnx` voices)
 - **Parallel generation** — sentences generated concurrently for fast audio output
 - **Narration filters** — dialogue-only or skip action blocks (SillyTavern-style)
-- **Per-character voices** in group chats
+- **Per-character voices** — visible and clearable on the card, so a voice that arrived on an import isn't an invisible override
 
 ### 🖼️ Image Studio & Local Image Generation
-- Natively connects to **A1111, Forge, SDNext, ComfyUI, and Draw Things** — auto-discovery, friendly status cards, no node graphs required
+- Natively connects to **A1111, Forge, SDNext, ComfyUI, and Draw Things** — auto-discovery, friendly status cards, no node graphs required. **Draw Things is macOS-only** (it is macOS-only software) and the chip hides on Windows and Linux
 - **Subject-first Studio** — pick freeform, your character, or your persona and the prompt auto-fills; technical settings tuck away until you want them
 - **Expression packs** — a full matching emotion set from one portrait, with an optional AI vision quality check
 - **`/image` in chat** — paint the current scene (or anything else) as a picture bubble, with live in-progress preview
@@ -155,7 +179,7 @@ A stoop is where the neighbourhood meets — the front step where people swap st
 
 ### 📱 Web & Phone App
 - The whole porch in your browser: an installable web app (PWA) served straight from the desktop app to your home network
-- Chat, characters, stories, image generation, and the full **Stoop** hub — in the same warm-porch look, laid out properly for both desktop browsers and phones
+- Chat, characters, stories, images, Impersonate, chat import/export, and the full **Stoop** hub — in the same warm-porch look, laid out properly for both desktop browsers and phones
 - Fast over slow connections (right-sized thumbnails, smart caching) and self-healing after your phone sleeps
 - Built-in web login management — change or recover it, or sign out all devices, from desktop Settings
 
@@ -173,7 +197,7 @@ A stoop is where the neighbourhood meets — the front step where people swap st
 - Automated download and update of the KoboldCpp backend — including an automatic compatible build for older CPUs without AVX2
 - Hardware detection — Vulkan on PC, Metal on Apple Silicon, Intel ARC support, **Nvidia Blackwell (RTX 50-series) support**
 - Model Hub: search and download GGUF models directly from HuggingFace
-- **Thinking models think** — Request Reasoning works on local models, with the reasoning shown in a collapsible block
+- **Thinking models think** — Request Reasoning works on local models, with the reasoning shown in a collapsible block. Models that have no thinking mode say so instead of showing three chips that do nothing
 - **Honest live status** — real prompt-reading progress and "waiting" reasons on KoboldCpp, oMLX, and LM Studio
 - **Advanced Launch Options** — Flash Attention, Context Shift, mlock, GPU ID selector, prefill batch size, `.kcpps` preset support, and per-model vision (mmproj) attachment
 
@@ -216,7 +240,7 @@ Head to the **[Releases](https://github.com/linux4life1/front-porch-ai/releases)
 
 ## ⚙️ Configuration
 
-1. **Backend** — go to **Settings → Download Backend** to fetch KoboldCpp, or point it at an existing binary.
+1. **Backend** — go to **Settings → Download Backend** to fetch KoboldCpp, or point it at an existing binary. First launch also asks: built-in engine, or do you already have OpenRouter / oMLX / LM Studio / another API?
 2. **Model** — go to **Manage Models → HuggingFace Search**, find a GGUF model (recommended: `Q4_K_M` or `Q5_K_M`), download.
 3. **Optimize** — hit **Auto-Configure** to let the app pick the best GPU layer split and thread count for your hardware.
 
@@ -226,9 +250,9 @@ Head to the **[Releases](https://github.com/linux4life1/front-porch-ai/releases)
 
 Pull requests are welcome! If you're a dev reading this far down, here's what you need to know:
 
-- **Branch workflow:** All new features, experiments, and major work target the **`Rawhide`** branch (the primary rolling development line). Bug fixes for the current stable go to `dev`. Beta stabilization branches (e.g. `0.9.x-Beta`) receive only fixes for that release series. `main` is for final tagged stable releases only. See AGENTS.md for the full current model.
+- **Branch workflow:** All new features, experiments, and major work target the **`Rawhide`** branch (the primary rolling development line). Bug fixes for the current stable go to `dev`. Beta stabilization branches (e.g. `0.9.x-Beta`) receive only fixes for that release series. `main` is for final tagged stable releases only. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full current model.
 - **Nightly / scheduled builds & schedule triggers:** Automatic builds are powered by `.github/workflows/nightly.yml`. GitHub **only** reads `on: schedule:` from the default branch (`main`). A current copy of the workflow (especially the version-patching step) must live on `main`, otherwise nightly compiles will fail. The job typically checks out the active development branch for source, but the workflow definition itself always comes from `main`.
-- **Commit conventions:** Follow the guidelines in [AGENTS.md](AGENTS.md) for commit message format, code style, and naming conventions.
+- **Commit conventions:** Follow the guidelines in [CLAUDE.md](CLAUDE.md) for commit message format, code style, and naming conventions.
 - **Full guide:** See [CONTRIBUTING.md](CONTRIBUTING.md) for build instructions, testing requirements, and the PR template.
 - **Before you PR:** Run `flutter analyze` and `flutter test` locally. The project is now at 0 warnings on the active rules. CI analyzes only changed `.dart` files on PRs (plus a full scheduled lint job). Introducing new warnings will fail CI.
 
@@ -236,7 +260,7 @@ Pull requests are welcome! If you're a dev reading this far down, here's what yo
 
 ## 📝 Note from the Dev
 
-To everyone who has shown up with kind words, bug reports, feature ideas, and genuine enthusiasm — thank you. You've turned what started as a "screw it, I'll build my own" into something worth building every day. Reaching 1.0 is yours as much as mine.
+If you've shown up with bug reports, cards, kind words, or just a night on the porch — thank you. The **[DreamersAI Discord](https://discord.gg/e4tET6rpdv)** carried this from the first push. Particular thanks to **PapaOak**, **Pacmanincarnate**, and **Vanta**.
 
 — **SosukeAizen** on Discord
 
@@ -281,18 +305,7 @@ Front Porch AI is built by [@linux4life1](https://github.com/linux4life1), with 
 | **PacmanIncarnate** | Bug Testing, UI/Feature Suggestions |
 | **SunTzucious** | Beta Testing |
 
-…and [@FrozenKangaroo](https://github.com/FrozenKangaroo) for **Character Card Forge** (see the Community Showcase below). Want to pitch in? Start with [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## 🌟 Community Showcase
-
-Front Porch is growing a small companion ecosystem. Big thanks to community members building tools that integrate deeply.
-
-**Character Card Forge** by [@FrozenKangaroo](https://github.com/FrozenKangaroo) — A companion editor with strong integration, including emotion image export and seeding initial Realism Engine state.
-
-[Check it out →](https://github.com/FrozenKangaroo/Character-Card-Forge)  
-If you use it, a star would mean a lot to the developer.
-
-> **Note:** This community tool uses direct database access for its advanced features. It can be impacted by future schema changes.
+Want to pitch in? Start with [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## 📄 License
 
