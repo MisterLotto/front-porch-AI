@@ -21,7 +21,7 @@
   database.queries.memory, memory_service, tailscale/ngrok providers,
   chat_service + send, ChatPage, generation_options, tts_service + dialog;
   NEW story_clock_claims_copula_test, character_card_credits_test
-- **Commit:** (this commit)
+- **Commit:** 4b219400
 
 ## 2026-08-15 — fix(web): phone Stoop restore no longer wipes the login on a hiccup
 - **Why:** tryRefresh was already 401-only. StoopContext's first-paint
