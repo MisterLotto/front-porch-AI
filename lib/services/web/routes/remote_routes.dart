@@ -16,14 +16,21 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:io' show HttpConnectionInfo;
+
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf_router/shelf_router.dart';
 
+import 'package:front_porch_ai/services/web/auth/auth_service.dart';
 import 'package:front_porch_ai/services/web/tunnels/tunnels.dart';
 import 'package:front_porch_ai/services/web/util/util.dart';
 import 'package:front_porch_ai/services/web/web_server_deps.dart';
 
 /// Remote-access (Tailscale / ngrok / port-forward) status + control endpoints.
+///
+/// Enabling a tunnel publishes the full web surface (chat, library, settings)
+/// beyond the host. That is a credential-grade action: session cookie alone
+/// is not enough — same password step-up as 2FA disable (audit P0.6).
 class WebRemoteRoutes {
   WebRemoteRoutes(this._deps, this._tunnels, Router router) {
     router.get('/api/remote/status', _status);
@@ -65,6 +72,8 @@ class WebRemoteRoutes {
   Future<shelf.Response> _tailscale(shelf.Request request) async {
     final body = await _json(request);
     if (body['enable'] == true) {
+      final denied = await _requireStepUp(body, request);
+      if (denied != null) return denied;
       final result = await _tunnels.enableTailscale();
       if (result.outcome != TailscaleServeOutcome.ok) {
         final message = result.outcome == TailscaleServeOutcome.httpsDisabled
@@ -82,7 +91,10 @@ class WebRemoteRoutes {
   Future<shelf.Response> _ngrok(shelf.Request request) async {
     final body = await _json(request);
     if (body['enable'] == true) {
-      // Persist a provided authtoken; otherwise reuse the stored one.
+      // Step-up first — never persist an authtoken on session-only auth.
+      final denied = await _requireStepUp(body, request);
+      if (denied != null) return denied;
+
       final settings = _deps.storage.webServerSettings;
       final provided = body['authToken']?.toString();
       if (provided != null && provided.isNotEmpty) {
@@ -104,11 +116,56 @@ class WebRemoteRoutes {
     return JsonResponse.ok(await _statusMap());
   }
 
+  /// Null when re-auth passed; otherwise an HTTP error response.
+  Future<shelf.Response?> _requireStepUp(
+    Map<String, dynamic> body,
+    shelf.Request request,
+  ) async {
+    final status = await _deps.auth.verifyStepUp(
+      currentPassword: body['currentPassword']?.toString() ?? '',
+      totpCode: body['totpCode']?.toString(),
+      ip: _clientIp(request),
+    );
+    if (status == CredentialChangeStatus.success) return null;
+    return _stepUpError(status);
+  }
+
+  shelf.Response _stepUpError(CredentialChangeStatus status) {
+    switch (status) {
+      case CredentialChangeStatus.invalidCurrentPassword:
+        return JsonResponse.unauthorized('Current password is incorrect');
+      case CredentialChangeStatus.totpRequired:
+        return JsonResponse.error(
+          401,
+          'Two-factor code required',
+          extra: const {'totpRequired': true},
+        );
+      case CredentialChangeStatus.lockedOut:
+        return JsonResponse.tooManyRequests(
+          'Too many attempts, try again later',
+        );
+      case CredentialChangeStatus.notSetUp:
+        return JsonResponse.error(409, 'Account not configured');
+      case CredentialChangeStatus.alreadyEnabled:
+      case CredentialChangeStatus.invalidInput:
+      case CredentialChangeStatus.success:
+        return JsonResponse.unauthorized('Re-authentication required');
+    }
+  }
+
   Future<Map<String, dynamic>> _json(shelf.Request request) async {
     try {
       return await RequestBody.readJsonMap(request);
     } catch (_) {
       return const {};
     }
+  }
+
+  String? _clientIp(shelf.Request request) {
+    final fwd = request.headers['x-forwarded-for'];
+    if (fwd != null && fwd.isNotEmpty) return fwd.split(',').first.trim();
+    final conn = request.context['shelf.io.connection_info'];
+    if (conn is HttpConnectionInfo) return conn.remoteAddress.address;
+    return null;
   }
 }

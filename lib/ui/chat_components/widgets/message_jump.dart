@@ -25,13 +25,21 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 /// receipts tap-to-jump).
 ///
 /// A builder list only materializes elements near the viewport, so a distant
-/// message can't be located directly. Each bubble is keyed with
-/// `GlobalObjectKey(msg)` by the chat page; this seeks in two moves:
+/// message can't be located directly. The chat page keys each bubble with a
+/// GlobalKey it OWNS and resolves through [keyOf]; this seeks in two moves:
 /// 1. one rough hop to the target's proportional offset (reverse list:
 ///    offset 0 = newest, maxScrollExtent = oldest), then
 /// 2. viewport-sized pages toward the target — comparing its position
 ///    against the currently built range — until its key materializes,
 ///    finishing with an animated `ensureVisible` that centers it.
+///
+/// [keyOf] returns null for a message whose bubble the page has never built
+/// — indistinguishable, on purpose, from "built but currently unmounted":
+/// both mean "keep paging". The keys were previously `GlobalObjectKey(msg)`
+/// minted HERE from the message alone, which made a message's key app-global
+/// — and two chat routes alive in the same frame (push over a live page, or
+/// a route transition) both built the same ChatService messages, one
+/// duplicate-GlobalKey crash per bubble (maintainer repro, 2026-08-10).
 ///
 /// Safe on any history length (steps are viewport-sized and hard-bounded),
 /// resilient to the estimated extents a builder list reports, and a no-op if
@@ -40,12 +48,13 @@ Future<void> jumpToMessage({
   required ScrollController controller,
   required List<ChatMessage> messages,
   required ChatMessage target,
+  required GlobalKey? Function(ChatMessage) keyOf,
 }) async {
   if (!controller.hasClients) return;
   final index = messages.indexWhere((m) => identical(m, target));
   if (index < 0) return;
 
-  if (GlobalObjectKey(target).currentContext == null && messages.length > 1) {
+  if (keyOf(target)?.currentContext == null && messages.length > 1) {
     final position = controller.position;
     final fractionOlder = 1 - index / (messages.length - 1);
     controller.jumpTo(
@@ -58,7 +67,7 @@ Future<void> jumpToMessage({
   }
 
   for (var step = 0; step < 500; step++) {
-    final ctx = GlobalObjectKey(target).currentContext;
+    final ctx = keyOf(target)?.currentContext;
     if (ctx != null) {
       await Scrollable.ensureVisible(
         ctx,
@@ -72,7 +81,7 @@ Future<void> jumpToMessage({
     // Which side of the currently built window is the target on?
     int? lowest, highest;
     for (var p = 0; p < messages.length; p++) {
-      if (GlobalObjectKey(messages[p]).currentContext != null) {
+      if (keyOf(messages[p])?.currentContext != null) {
         lowest ??= p;
         highest = p;
       }
@@ -94,7 +103,7 @@ Future<void> jumpToMessage({
 
 /// Wraps one chat bubble; briefly tints it after a Journal jump lands so the
 /// eye finds the message the memory came from. Carries the bubble's
-/// `GlobalObjectKey` (assigned by the chat page's itemBuilder).
+/// page-owned GlobalKey (assigned by the chat page's itemBuilder).
 class JumpFlash extends StatelessWidget {
   final bool flashed;
   final Widget child;

@@ -19,6 +19,7 @@
 import 'package:shelf/shelf.dart' as shelf;
 import 'package:shelf_router/shelf_router.dart';
 
+import 'package:front_porch_ai/services/services.dart' show OneShotMode;
 import 'package:front_porch_ai/services/web/facade/chat_tools_facade.dart';
 import 'package:front_porch_ai/services/web/util/util.dart';
 
@@ -32,6 +33,11 @@ class WebChatToolsRoutes {
     router.post('/api/chat/tools/time', _time);
     router.get('/api/chat/tools/calendar', _calendar);
     router.get('/api/chat/tools/timeline', _timeline);
+    router.get('/api/chat/tools/promises', _promises);
+    router.get('/api/chat/tools/belongings', _belongings);
+    router.post('/api/chat/tools/promise-resolve', _promiseResolve);
+    router.post('/api/chat/tools/pocket-remove', _pocketRemove);
+    router.post('/api/chat/tools/pocket-add', _pocketAdd);
     router.post('/api/chat/tools/to-story', _toStory);
     router.post('/api/chat/tools/summary', _summary);
     router.post('/api/chat/tools/objective', _objective);
@@ -40,6 +46,11 @@ class WebChatToolsRoutes {
     router.post('/api/chat/tools/growth', _growthPost);
     router.get('/api/chat/tools/growth/review', _growthReviewGet);
     router.post('/api/chat/tools/growth/review', _growthReviewPost);
+    // Journal diary (audit P2.12) — Growth twin: cards + review-first.
+    router.get('/api/chat/tools/journal', _journalGet);
+    router.post('/api/chat/tools/journal', _journalPost);
+    router.get('/api/chat/tools/journal/review', _journalReviewGet);
+    router.post('/api/chat/tools/journal/review', _journalReviewPost);
   }
 
   final ChatToolsFacade _facade;
@@ -57,12 +68,54 @@ class WebChatToolsRoutes {
     return JsonResponse.ok(_snapshot(request));
   }
 
+  /// Strike one pocket item (worn / carrying / set_aside) by index — the web
+  /// half of the desktop chips' ✕ (parity, hostile review 2026-08-11).
+  Future<shelf.Response> _pocketRemove(shelf.Request request) async {
+    final body = await _json(request);
+    await _facade.removePocketItem(
+      participantId: request.url.queryParameters['participant'],
+      section: body['section']?.toString() ?? '',
+      index: (body['index'] as num?)?.toInt() ?? -1,
+    );
+    return JsonResponse.ok(_snapshot(request));
+  }
+
+  /// Add one pocket item by hand — the web half of the desktop add dialog
+  /// (parity, 2026-08-13). `gift: true` = handed over in-scene; otherwise the
+  /// surprise Easter egg fires on the next reply.
+  Future<shelf.Response> _pocketAdd(shelf.Request request) async {
+    final body = await _json(request);
+    await _facade.addPocketItem(
+      participantId: request.url.queryParameters['participant'],
+      section: body['section']?.toString() ?? '',
+      name: body['name']?.toString() ?? '',
+      gift: body['gift'] == true,
+    );
+    return JsonResponse.ok(_snapshot(request));
+  }
+
   /// Flip one chat-scoped boolean toggle: realism / needs / oneShotEval /
   /// chaos / chaosNsfw / nsfwCooldown / passageOfTime / summaryPaused / director.
   Future<shelf.Response> _toggle(shelf.Request request) async {
     final body = await _json(request);
     final name = body['name']?.toString();
     final value = body['value'];
+    // The one tri-state control rides the same endpoint with a string value
+    // (additive: every bool case below is unchanged, and the old
+    // 'oneShotEval' bool alias keeps working for older bundles).
+    if (name == 'oneShotMode') {
+      final mode = switch (value) {
+        'auto' => OneShotMode.auto,
+        'on' => OneShotMode.on,
+        'off' => OneShotMode.off,
+        _ => null,
+      };
+      if (mode == null) {
+        return JsonResponse.badRequest('value must be auto, on or off');
+      }
+      await _facade.setOneShotMode(mode);
+      return JsonResponse.ok(_snapshot(request));
+    }
     if (name == null || value is! bool) {
       return JsonResponse.badRequest('name and bool value are required');
     }
@@ -132,6 +185,27 @@ class WebChatToolsRoutes {
   Future<shelf.Response> _calendar(shelf.Request request) async {
     final owner = request.url.queryParameters['owner'];
     return JsonResponse.ok(await _facade.calendar(owner));
+  }
+
+  Future<shelf.Response> _promises(shelf.Request request) async {
+    final owner = request.url.queryParameters['owner'];
+    return JsonResponse.ok(await _facade.promises(owner));
+  }
+
+  /// Belongings / item-memory cards (desktop Journal "Belongings" tab parity).
+  Future<shelf.Response> _belongings(shelf.Request request) async {
+    final owner = request.url.queryParameters['owner'];
+    return JsonResponse.ok(await _facade.belongings(owner));
+  }
+
+  Future<shelf.Response> _promiseResolve(shelf.Request request) async {
+    final body = await RequestBody.readJsonMap(request);
+    final ok = await _facade.resolvePromise(
+      ownerId: body['owner'] as String? ?? '',
+      cardId: body['cardId'] as String? ?? '',
+      kept: body['kept'] == true,
+    );
+    return JsonResponse.ok({'ok': ok});
   }
 
   /// "Our Story" milestones timeline (Living Time §7) for one diary owner.
@@ -299,6 +373,49 @@ class WebChatToolsRoutes {
       ],
     );
     return JsonResponse.ok(_facade.growthReviewBatch());
+  }
+
+  /// Journal cards for the focused participant (audit P2.12).
+  Future<shelf.Response> _journalGet(shelf.Request request) async =>
+      JsonResponse.ok(
+        await _facade.journalWeb.list(
+          request.url.queryParameters['participant'],
+        ),
+      );
+
+  /// Journal mutation (`action`: plant/edit/pin/retire/check).
+  Future<shelf.Response> _journalPost(shelf.Request request) async {
+    final body = await _json(request);
+    final action = body['action']?.toString() ?? '';
+    final participant =
+        body['participant']?.toString() ??
+        request.url.queryParameters['participant'];
+    const known = {'plant', 'edit', 'pin', 'retire', 'check'};
+    if (!known.contains(action)) {
+      return JsonResponse.badRequest('Unknown journal action: $action');
+    }
+    return JsonResponse.ok(
+      await _facade.journalWeb.action(participant, action, body),
+    );
+  }
+
+  shelf.Response _journalReviewGet(shelf.Request request) =>
+      JsonResponse.ok(_facade.journalWeb.reviewBatch());
+
+  Future<shelf.Response> _journalReviewPost(shelf.Request request) async {
+    final body = await _json(request);
+    return JsonResponse.ok(
+      await _facade.journalWeb.settleReview(
+        apply: body['apply'] == true,
+        rejected: [
+          if (body['rejected'] is List)
+            for (final r in body['rejected'] as List) r.toString(),
+        ],
+        recapAccepted: body['recapAccepted'] is bool
+            ? body['recapAccepted'] as bool
+            : null,
+      ),
+    );
   }
 
   Future<Map<String, dynamic>> _json(shelf.Request request) async {

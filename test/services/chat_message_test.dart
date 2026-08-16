@@ -120,6 +120,76 @@ void main() {
     });
   });
 
+  group('toPromptHistoryLine (generation history — think stripped)', () {
+    // THE BUG (Nina chat, 2026-08-11): history used raw m.text, so every
+    // prior <think> plan re-entered the next generation prompt. Rerolls
+    // re-executed the previous scene. Guard: line must be think-free and
+    // must equal the promptText form evals already use.
+    test('strips completed think blocks from character turns', () {
+      final msg = ChatMessage(
+        text: '<think>\nplan the massage scene again\n</think>\n*She settles into the hot tub.*',
+        sender: 'Nina',
+        isUser: false,
+      );
+      final line = msg.toPromptHistoryLine();
+      expect(line, 'Nina: *She settles into the hot tub.*');
+      expect(line.contains('<think>'), isFalse);
+      expect(line.contains('massage scene'), isFalse);
+    });
+
+    test('strips unclosed (streaming) think blocks', () {
+      final msg = ChatMessage(
+        text: '<think>\nstill planning the entryway\n',
+        sender: 'Nina',
+        isUser: false,
+      );
+      expect(msg.toPromptHistoryLine(), 'Nina: ');
+      expect(msg.toPromptHistoryLine().contains('<think>'), isFalse);
+    });
+
+    test('photo turns carry the same shared-a-photo marker as promptText', () {
+      final msg = ChatMessage(
+        text: '',
+        sender: 'You',
+        isUser: true,
+        metadata: {
+          'is_user_image': true,
+          'image_caption': 'a red kite over the bay',
+        },
+      );
+      expect(
+        msg.toPromptHistoryLine(),
+        'You: [shared a photo: a red kite over the bay]',
+      );
+    });
+
+    test('director notes stay bracketed', () {
+      final msg = ChatMessage(
+        text: 'nudge: lean into the quiet',
+        sender: 'Director',
+        isUser: false,
+        characterId: '__director__',
+      );
+      expect(msg.toPromptHistoryLine(), '[Director: nudge: lean into the quiet]');
+    });
+
+    test('generated-image shares describe the prompt when prose is empty', () {
+      final msg = ChatMessage(
+        text: '',
+        sender: 'Studio',
+        isUser: false,
+        metadata: {
+          'is_generated_image': true,
+          'image_prompt': 'Nina by a lantern stall',
+        },
+      );
+      expect(
+        msg.toPromptHistoryLine(),
+        'Studio: [shares a generated image: Nina by a lantern stall]',
+      );
+    });
+  });
+
   group('displayText', () {
     test('preserves text without thinking tags', () {
       final msg = ChatMessage(text: 'Hello!', sender: 'Luna', isUser: false);

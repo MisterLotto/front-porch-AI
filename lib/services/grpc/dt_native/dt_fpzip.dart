@@ -23,8 +23,11 @@ import 'dart:typed_data';
 import 'package:ffi/ffi.dart';
 import 'package:path/path.dart' as p;
 
-/// Thrown when libfpzip is not present — the caller (native DT client) falls
-/// back to the Python sidecar, so a missing library degrades gracefully.
+/// Thrown when libfpzip is not present. The Draw Things path pre-flights on
+/// [DtFpzip.isAvailable] and fails the generation before any render, so the
+/// message here is what the user is eventually told — keep it true on every
+/// platform (there is no sidecar fallback any more; that was retired with
+/// the rest of the helpers).
 class DtFpzipUnavailableException implements Exception {
   final String message;
   DtFpzipUnavailableException(this.message);
@@ -69,8 +72,14 @@ typedef _ReadCloseD = void Function(Pointer<_FPZ>);
 /// FFI binding to libfpzip (LLNL predictive float compressor) — decode only.
 /// Build the dylib on macOS with `scripts/build-fpzip-macos.sh`; in release
 /// bundles it ships in Contents/Frameworks/. Lazily loaded; all callers get
-/// [DtFpzipUnavailableException] when no library can be found so they can
-/// fall back to the Python sidecar path.
+/// [DtFpzipUnavailableException] when no library can be found.
+///
+/// macOS ONLY, and that is a shipping fact, not a lookup accident: nothing
+/// in scripts/ or .github/workflows/ ever builds `fpzip.dll` or
+/// `libfpzip.so`, so on Windows/Linux [isAvailable] is always false — a
+/// Draw Things server on the LAN will connect and list models there and
+/// then fail at decode time. The load error below has to say so plainly;
+/// "run the macOS build script" is useless advice to a Windows user.
 class DtFpzip {
   DtFpzip._();
   static final DtFpzip instance = DtFpzip._();
@@ -119,10 +128,13 @@ class DtFpzip {
         _loadError = 'Failed to load $path: $e';
       }
     }
-    _loadError ??=
-        'libfpzip not found (looked in FP_FPZIP_LIB, app Frameworks, '
-        'executable dir, tools/fpzip). Build it with '
-        'scripts/build-fpzip-macos.sh for native Draw Things decode.';
+    _loadError ??= Platform.isMacOS
+        ? 'libfpzip not found (looked in FP_FPZIP_LIB, app Frameworks, '
+              'executable dir, tools/fpzip). Build it with '
+              'scripts/build-fpzip-macos.sh for native Draw Things decode.'
+        : 'libfpzip is not shipped for ${Platform.operatingSystem} — Draw '
+              'Things image decoding is macOS-only, so generation cannot '
+              'succeed on this platform.';
     throw DtFpzipUnavailableException(_loadError!);
   }
 

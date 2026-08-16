@@ -56,11 +56,18 @@ Future<String?> publishStoopWorld({
   // place you authored here has none, and every re-share would pile up another
   // duplicate in the moderation queue.
   final card = repo.fpWorldJson(world);
-  final meta = Map<String, dynamic>.from(
-    (card['meta'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{},
-  );
+  final rawMeta = card['meta'];
+  final meta = <String, dynamic>{
+    if (rawMeta is Map)
+      for (final e in rawMeta.entries) e.key.toString(): e.value,
+  };
   meta['sourceId'] = world.sourceId ?? world.id;
   card['meta'] = meta;
+
+  final completeness = StoopCardCompleteness.assess(card, 'WORLD');
+  if (completeness.incomplete) {
+    return completeness.message;
+  }
 
   await api.uploadCharacter(
     accessToken: accessToken,

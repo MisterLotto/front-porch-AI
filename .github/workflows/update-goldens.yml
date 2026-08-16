@@ -39,7 +39,7 @@ jobs:
         run: flutter pub get
 
       - name: Regenerate goldens
-        run: flutter test --concurrency=1 --tags golden --update-goldens
+        run: flutter test --concurrency=4 --tags golden --update-goldens
 
       - name: Collect changed goldens
         id: collect

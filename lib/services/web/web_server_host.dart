@@ -67,6 +67,15 @@ class WebServerHost extends ChangeNotifier {
   TunnelManager? _tunnelManager;
   String? _lanIp;
 
+  /// Bumped by every [start] and every [stop]. `startSafely` time-boxes start
+  /// with `Future.timeout`, which does NOT cancel the awaited work — it only
+  /// completes the caller's future early. Without this counter a start that
+  /// timed out (or was stopped mid-bind) would go on to publish a live socket
+  /// AFTER the caller had already persisted "disabled" and reported failure,
+  /// leaving the app listening with the UI insisting it is off. A run that
+  /// finds the generation moved on closes what it just opened and exits.
+  int _startGeneration = 0;
+
   // Realism-eval overlay streaming: a ChatService listener that pushes the
   // accumulating eval text over the hub while the Realism Engine is thinking, so
   // the web shows the same live "processing" overlay the desktop does. Stored so
@@ -75,6 +84,15 @@ class WebServerHost extends ChangeNotifier {
   bool _wasEvaluatingRealism = false;
   bool _wasAwaitingChanceTime = false;
   bool _wasPendingImageReview = false;
+  // Throttle/dedupe state for the processing broadcast: during evals every
+  // ChatService notify (≤150ms apart) used to re-send the FULL accumulated
+  // eval text — O(n²) bytes over the socket and a client re-render per frame,
+  // which is a big part of the reported iPad stalls. Transitions always send;
+  // text growth is rate-limited and unchanged payloads are skipped.
+  DateTime _lastProcessingSent = DateTime.fromMillisecondsSinceEpoch(0);
+  int _lastProcessingTextLen = -1;
+  bool _lastProcessingVerifying = false;
+  bool _lastProcessingObjective = false;
 
   // Image-gen progress relay (see the imageGen listener in start()).
   VoidCallback? _imageProgressListener;
@@ -112,6 +130,38 @@ class WebServerHost extends ChangeNotifier {
   bool get isRunning => _server != null;
   int get port => _server?.port ?? _storage.webServerSettings.webServerPort;
   String? get lanIp => _lanIp;
+
+  /// Human-readable reason the last [startSafely] attempt failed, so the
+  /// Settings toggle can tell the user WHY instead of a bare "failed" toast
+  /// (release builds have no visible logs, which made these reports
+  /// undiagnosable). Null after a successful start.
+  String? get lastStartError => _lastStartError;
+  String? _lastStartError;
+
+  /// True when the last failure was a socket/bind problem — the class where
+  /// "use a different port" is the one-tap fix the failure dialog offers.
+  bool get lastStartPortConflict => _lastStartPortConflict;
+  bool _lastStartPortConflict = false;
+
+  /// Probe loopback for a free port near [port] so the failure dialog can
+  /// offer "Use port N instead" without the user knowing what a port is.
+  /// Best-effort: a later bind on all interfaces can still fail and will be
+  /// reported through the same dialog.
+  Future<int?> findFreePortNear(int port) async {
+    for (var candidate = port + 1; candidate <= port + 20; candidate++) {
+      try {
+        final probe = await ServerSocket.bind(
+          InternetAddress.loopbackIPv4,
+          candidate,
+        );
+        await probe.close();
+        return candidate;
+      } catch (_) {
+        // Taken or reserved — keep walking.
+      }
+    }
+    return null;
+  }
   bool get hasActiveClient => _hasActiveClient;
   String? get connectedClientIp => _connectedClientIp;
   String? get connectedClientInfo => _connectedClientInfo;
@@ -135,8 +185,44 @@ class WebServerHost extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Injected from main.dart (mirrors the legacy setX wiring style).
-  void setDatabase(AppDatabase db) => _db = db;
+  /// Injected from main.dart (mirrors the legacy setX wiring style), and again
+  /// by `reopenAndRebindDatabase` after a database SWAP (backup restore,
+  /// storage-root move, beta stable-DB import) — which CLOSES the old instance.
+  ///
+  /// Swapping the field alone was not enough: `start()` copies the handle into
+  /// the shelf handler, every facade and the memoized [AuthService], so a live
+  /// server kept querying the closed database and 500'd on every request —
+  /// including login, because the memoized auth survived even a manual
+  /// stop/start, leaving a full app restart as the only cure. So drop the
+  /// memoized auth and bounce a running server onto the new handle.
+  void setDatabase(AppDatabase db) {
+    if (identical(_db, db)) return;
+    _db = db;
+    _auth = null;
+    if (!isRunning) return;
+    final port = _server!.port;
+    // The rebind callers are synchronous, so the bounce runs detached. A
+    // failure is reported the same way a failed Settings start is, rather than
+    // swallowed: the server ends up stopped with lastStartError set.
+    unawaited(() async {
+      try {
+        await stop();
+        await start(port);
+        _lastStartError = null;
+        _lastStartPortConflict = false;
+      } catch (e) {
+        _lastStartError = describeStartFailure(e, port);
+        _lastStartPortConflict = e is SocketException;
+        debugPrint(
+          '[WebServerHost] Restart after the database was swapped failed: $e',
+        );
+        try {
+          await stop();
+        } catch (_) {}
+        notifyListeners();
+      }
+    }());
+  }
 
   /// Chat service for live token streaming over the WebSocket hub.
   void setChatService(ChatService chatService) => _chatService = chatService;
@@ -178,6 +264,7 @@ class WebServerHost extends ChangeNotifier {
 
   Future<void> start([int? portOverride]) async {
     if (isRunning) return;
+    final int generation = ++_startGeneration;
     final db = _db;
     if (db == null) {
       throw StateError('WebServerHost.start() called before setDatabase()');
@@ -220,16 +307,37 @@ class WebServerHost extends ChangeNotifier {
         final objective = chatService.isCheckingCompletion;
         final active = realism || objective;
         if (active) {
-          streamHub.broadcast({
-            'event': 'processing',
-            'active': true,
-            'realism': realism,
-            'objective': objective,
-            'greeting': chatService.isProcessingGreeting,
-            'verifying': chatService.isVerifyingRealism,
-            'text': chatService.realismEvalStreamTextClean,
-          });
+          final verifying = chatService.isVerifyingRealism;
+          final text = chatService.realismEvalStreamTextClean;
+          final now = DateTime.now();
+          // A phase transition (eval started, verifier flipped, objective
+          // phase joined) always sends; otherwise only send when the eval
+          // text actually grew AND the 300ms window elapsed. This turns the
+          // ~6.6 full-payload frames/s of a long local eval into ≤3 delta-
+          // worthy ones and drops the identical re-broadcasts entirely.
+          final transition = !_wasEvaluatingRealism ||
+              verifying != _lastProcessingVerifying ||
+              objective != _lastProcessingObjective;
+          final textChanged = text.length != _lastProcessingTextLen;
+          if (transition ||
+              (textChanged &&
+                  now.difference(_lastProcessingSent).inMilliseconds >= 300)) {
+            _lastProcessingSent = now;
+            _lastProcessingTextLen = text.length;
+            _lastProcessingVerifying = verifying;
+            _lastProcessingObjective = objective;
+            streamHub.broadcast({
+              'event': 'processing',
+              'active': true,
+              'realism': realism,
+              'objective': objective,
+              'greeting': chatService.isProcessingGreeting,
+              'verifying': verifying,
+              'text': text,
+            });
+          }
         } else if (_wasEvaluatingRealism) {
+          _lastProcessingTextLen = -1;
           streamHub.broadcast({'event': 'processing', 'active': false});
         }
         _wasEvaluatingRealism = active;
@@ -379,12 +487,24 @@ class WebServerHost extends ChangeNotifier {
       imageGen.addListener(onImageProgress);
     }
 
+    final characterFacade = CharacterFacade(
+      db,
+      _storage,
+      _folderService,
+      chatService,
+      _characterRepository,
+    );
+
     // Library live-sync: broadcast a single debounced `library_changed` whenever
     // characters, folders or groups change (from the desktop or a web client),
     // so every browser refreshes its library near-instantly. Debounced ~150ms to
     // coalesce the multiple notifies a single op can fire (e.g. an import).
     if (streamHub != null) {
       void onLibraryChanged() {
+        // Undebounced: the refetch this broadcast triggers must not be served
+        // from a memo that predates the change, or a swapped portrait would
+        // keep its old `v=` token and stay cached in the browser.
+        characterFacade.invalidateAvatarVersions();
         _libraryDebounce?.cancel();
         _libraryDebounce = Timer(const Duration(milliseconds: 150), () {
           streamHub.broadcast({'event': 'library_changed'});
@@ -396,14 +516,6 @@ class WebServerHost extends ChangeNotifier {
       _folderService?.addListener(onLibraryChanged);
       _groupChatRepository?.addListener(onLibraryChanged);
     }
-
-    final characterFacade = CharacterFacade(
-      db,
-      _storage,
-      _folderService,
-      chatService,
-      _characterRepository,
-    );
     // Built before ChatFacade so its saved-image resolver (basename → File
     // with the traversal guard) can be shared for chat image messages.
     final imageFacade = _imageGenService != null
@@ -442,6 +554,8 @@ class WebServerHost extends ChangeNotifier {
             characterFacade,
             streamHub,
             _imageGenService,
+            _storage,
+            chatService,
           )
         : null;
 
@@ -466,7 +580,7 @@ class WebServerHost extends ChangeNotifier {
         : null;
 
     final settingsFacade = _llmProvider != null
-        ? SettingsFacade(_storage, _llmProvider!)
+        ? SettingsFacade(_storage, _llmProvider!, chat: _chatService)
         : null;
 
     // The Stoop relay. The web client keeps its own Stoop session (tokens in
@@ -543,6 +657,8 @@ class WebServerHost extends ChangeNotifier {
       characterLibraryFacade: characterLibraryFacade,
       chargenFacade: chargenFacade,
       chatFacade: chatFacade,
+      chatPackageFacade:
+          chatService != null ? ChatPackageFacade(chatService) : null,
       chatToolsFacade: chatToolsFacade,
       groupFacade: groupFacade,
       settingsFacade: settingsFacade,
@@ -561,12 +677,31 @@ class WebServerHost extends ChangeNotifier {
     // self-signed cert, whose browser trust warning is worse UX than http.
     // Real HTTPS comes only from a trusted external terminator (Tailscale
     // serve / ngrok); over those our server stays plain http on loopback.
-    _server = await shelf_io.serve(buildWebHandler(deps), bindAddress, bindPort)
-      ..autoCompress = true;
+    final bound =
+        await shelf_io.serve(buildWebHandler(deps), bindAddress, bindPort)
+          ..autoCompress = true;
 
-    if (exposeAll) _lanIp = await detectPrivateLanIp();
+    // The caller gave up on this run while it was binding (startSafely's
+    // timeout, or a stop()). Publishing the socket now would leave the app
+    // listening with "disabled" already persisted and the UI insisting the
+    // server is off — so close what we just opened and leave.
+    if (generation != _startGeneration) {
+      await bound.close(force: true);
+      debugPrint('[WebServerHost] Abandoned start — closed the late socket');
+      return;
+    }
+    _server = bound;
+
+    if (exposeAll) {
+      final ip = await detectPrivateLanIp();
+      // Same race, one await later: a stop() during the LAN lookup already
+      // closed the socket above, so leave rather than report an address (or
+      // open a tunnel) for a server that is gone.
+      if (generation != _startGeneration) return;
+      _lanIp = ip;
+    }
     debugPrint(
-      '[WebServerHost] Listening on http://${exposeAll ? (_lanIp ?? '0.0.0.0') : 'localhost'}:${_server!.port}',
+      '[WebServerHost] Listening on http://${exposeAll ? (_lanIp ?? '0.0.0.0') : 'localhost'}:${bound.port}',
     );
 
     // Re-establish the clean no-port HTTPS URL on launch for opted-in users.
@@ -601,8 +736,12 @@ class WebServerHost extends ChangeNotifier {
       await settings.setWebServerStarting(true);
       await start(port).timeout(const Duration(seconds: 25));
       await settings.setWebServerStarting(false);
+      _lastStartError = null;
+      _lastStartPortConflict = false;
       return isRunning;
     } catch (e) {
+      _lastStartError = describeStartFailure(e, port);
+      _lastStartPortConflict = e is SocketException;
       debugPrint('[WebServerHost] Web server start failed: $e — disabling.');
       await settings.setWebServerStarting(false);
       await settings.setWebServerEnabled(false);
@@ -613,9 +752,75 @@ class WebServerHost extends ChangeNotifier {
     }
   }
 
+  /// Turn a [startSafely] failure into an actionable one-liner. The two big
+  /// prod classes are port conflicts (another app — or a second running copy
+  /// of Front Porch AI, e.g. stable + nightly — camping the fixed port) and
+  /// Windows reserved-port ranges (Hyper-V/WSL exclusions make bind fail with
+  /// access-denied on an apparently free port). Static + pure for testing.
+  static String describeStartFailure(Object e, int port) {
+    // Copy is written for NON-technical users (maintainer directive
+    // 2026-08-04): say what happened and what to press, no networking
+    // knowledge assumed. Keep the anchor phrases the start-failure test
+    // asserts ('already in use', 'second running copy', 'refused access',
+    // 'timed out').
+    if (e is TimeoutException) {
+      return 'Starting timed out (it took too long, so the app stopped '
+          'waiting to keep itself responsive). This is usually temporary — '
+          'try again.';
+    }
+    if (e is SocketException) {
+      // EADDRINUSE: macOS 48, Linux 98, Windows 10048. The "shared flag"
+      // message is Dart's in-process flavor of the same collision (two binds
+      // from one process — e.g. overlapping start() calls).
+      // EACCES: 13 (Unix), 10013 (Windows reserved port ranges).
+      final code = e.osError?.errorCode;
+      final msg = '${e.message} ${e.osError?.message ?? ''}'.toLowerCase();
+      if (code == 48 ||
+          code == 98 ||
+          code == 10048 ||
+          msg.contains('already in use') ||
+          msg.contains('shared flag')) {
+        return 'Its "door number" (port $port) is already in use by another '
+            'program on this computer — usually a second running copy of '
+            'Front Porch AI. Close the other program, or let the app switch '
+            'to a free one.';
+      }
+      if (code == 13 || code == 10013 || msg.contains('access')) {
+        return 'This computer refused access to door number (port) $port — '
+            'Windows sometimes reserves numbers for itself. Switching to a '
+            'different one fixes this.';
+      }
+      return 'Could not open port $port: ${e.osError?.message ?? e.message}';
+    }
+    return 'Start failed: $e';
+  }
+
   Future<void> stop() async {
+    // Disown any start still in flight FIRST — before the early return below,
+    // which is exactly the case a start that has not reached its bind yet hits
+    // (nothing wired, no server): otherwise its socket would surface after we
+    // returned. See [_startGeneration].
+    _startGeneration++;
     final server = _server;
-    if (server == null) return;
+    // `start()` attaches every listener, the 1s heartbeat timer, the StreamHub
+    // (which subscribes to the token stream in its constructor) and the
+    // TunnelManager BEFORE it binds — so a failed bind (EADDRINUSE, the
+    // stable+nightly case describeStartFailure is written for) leaves all of
+    // that attached with `_server` still null. `startSafely`'s catch calls
+    // stop() to tear the half-started state down, so returning early on a null
+    // server leaked one full set of listeners/timer/hub per failed attempt,
+    // permanently (the next attempt overwrites the fields without detaching).
+    // Bail only when there is genuinely nothing left to release.
+    final wired =
+        _streamHub != null ||
+        _tunnelManager != null ||
+        _realismListener != null ||
+        _genStatusListener != null ||
+        _imageProgressListener != null ||
+        _libraryListener != null ||
+        _genStatusTicker != null ||
+        _libraryDebounce != null;
+    if (server == null && !wired) return;
     _server = null;
     if (_realismListener != null) {
       _chatService?.removeListener(_realismListener!);
@@ -647,7 +852,7 @@ class WebServerHost extends ChangeNotifier {
     _streamHub = null;
     await _tunnelManager?.dispose();
     _tunnelManager = null;
-    await server.close(force: true);
+    await server?.close(force: true);
     _lanIp = null;
     _hasActiveClient = false;
     _connectedClientIp = null;

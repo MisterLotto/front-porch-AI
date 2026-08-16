@@ -27,11 +27,13 @@
 import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/database/database.dart' show Objective;
+import 'package:front_porch_ai/services/chat/pockets.dart';
 import 'package:front_porch_ai/models/character_card.dart';
 import 'package:front_porch_ai/models/chat_generation_settings.dart';
 import 'package:front_porch_ai/models/chat_message.dart';
 import 'package:front_porch_ai/models/chat_theme_overrides.dart';
 import 'package:front_porch_ai/models/chat_participant.dart';
+import 'package:front_porch_ai/services/chat/context_viewer_snapshot.dart';
 import 'package:front_porch_ai/services/chat/weather_biomes.dart';
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
 import 'package:front_porch_ai/services/chat/weather_segments.dart';
@@ -50,6 +52,7 @@ import 'package:front_porch_ai/services/folder_service.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
 import 'package:front_porch_ai/models/world.dart' as world_model;
 import 'package:front_porch_ai/services/llm_provider.dart';
+import 'package:front_porch_ai/services/memory_service.dart';
 import 'package:front_porch_ai/services/stt_service.dart';
 import 'package:front_porch_ai/services/tts_service.dart';
 import 'package:front_porch_ai/services/tts_voice_info.dart';
@@ -216,6 +219,24 @@ class FakeChatService extends ChangeNotifier implements ChatService {
 
   @override
   final bool realismEnabled;
+
+  /// Objectives running for this chat (v45). CharacterStateGroup reads this in
+  /// build() to decide whether the Ambitions row renders, so the fake must
+  /// answer it or the whole sidebar panel throws mid-build — which is exactly
+  /// how it failed: an 87% pixel diff on character_state.{dark,light}, because
+  /// the widget rendered an error box instead of the panel. Defaults true,
+  /// matching production.
+  @override
+  bool get objectivesActive => true;
+
+  /// Same fake-pinned reason as objectivesActive directly above: the sidebar
+  /// reads this, its body is an extension member, and an unoverridden
+  /// extension call from a fake reaches ChatService privates and throws
+  /// mid-build. Empty = "unremarkable day", which keeps the goldens showing
+  /// the panel exactly as they did before Standing Mood existed.
+  @override
+  String get standingMoodSummary => '';
+
   @override
   final bool isGenerating;
   @override
@@ -291,6 +312,16 @@ class FakeChatService extends ChangeNotifier implements ChatService {
   @override
   RelationshipService get relationshipService => _relationship;
 
+  /// RAG / Memory sidebar: public getters live on ChatServiceAccessors and
+  /// read library-private fields. Fakes that only `implements ChatService`
+  /// must pin them or ChatToolsFacade.state() throws mid-call (CI red since
+  /// the embedding statusSnapshot was added to the facade).
+  @override
+  MemoryService? get memoryService => null;
+
+  @override
+  Map<String, dynamic>? get lastRagReceipt => null;
+
   // 1:1 mode by default (no active group) for the simple sidebar sections.
   @override
   GroupChat? get activeGroup => null;
@@ -308,6 +339,23 @@ class FakeChatService extends ChangeNotifier implements ChatService {
   // getArousalForGroupCharacter is an extension on ChatService (resolves on the
   // static type), so it needs no fake override.
 
+  // Pockets & Wardrobe surface. The 1:1 Character State panel calls both of
+  // these in build(), and they are CLASS members on ChatService rather than
+  // extension members, so noSuchMethod cannot dispatch them and the panel
+  // throws mid-render without these — the same maintenance this file already
+  // does for every other class member the real service grew. Null pockets
+  // means the row renders nothing, so existing goldens are unmoved.
+  @override
+  String characterIdFor(CharacterCard c) => c.name;
+  @override
+  Pockets? pocketsFor(String characterId) => null;
+  // Feature off in every golden scene, so the panel (which since the
+  // add-by-hand change renders even for an EMPTY record when the switch is
+  // on) stays absent and existing goldens are unmoved — same contract as
+  // the null pocketsFor above.
+  @override
+  bool get pocketsFeatureEnabled => false;
+
   // Objective surface — empty by default (renders the "propose an objective" UI).
   @override
   Objective? get primaryObjective => null;
@@ -319,6 +367,14 @@ class FakeChatService extends ChangeNotifier implements ChatService {
   // Context viewer surface.
   @override
   Map<String, int> get lastPromptBudget => const {};
+  @override
+  Map<String, String> get lastPromptSections => const {};
+  @override
+  ContextBudgetSource get promptBudgetSource => ContextBudgetSource.none;
+  @override
+  DateTime? get promptBudgetAssembledAt => null;
+  @override
+  Future<void> estimateContextBudgetNow() async {}
   @override
   int get contextSize => 8192;
 

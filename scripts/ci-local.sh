@@ -66,21 +66,33 @@ run_in "flutter pub get"
 case "$MODE" in
   golden)
     echo "── widget golden suite (CI parity)…"
-    run_in "flutter test --concurrency=1 --tags golden"
+    run_in "flutter test --concurrency=4 --tags golden"
     ;;
   test)
     echo "── full test suite on Linux (CI parity)…"
-    run_in "flutter test"
+    # Must stay byte-identical to the `test` job's command in ci.yml — that is
+    # this script's entire reason to exist. It said bare `flutter test` for a
+    # long time, which is NOT what CI runs: no --exclude-tags golden (so the
+    # pixel suite ran twice, once here and once in the golden step) and default
+    # concurrency instead of CI's explicit flag. Fixed 2026-08-07 alongside the
+    # concurrency=1 → 4 change.
+    run_in "flutter test --concurrency=4 --exclude-tags golden"
     ;;
   all)
     echo "── widget golden suite (CI parity)…"
-    run_in "flutter test --concurrency=1 --tags golden"
+    run_in "flutter test --concurrency=4 --tags golden"
     echo "── full test suite on Linux (CI parity)…"
-    run_in "flutter test"
+    # Must stay byte-identical to the `test` job's command in ci.yml — that is
+    # this script's entire reason to exist. It said bare `flutter test` for a
+    # long time, which is NOT what CI runs: no --exclude-tags golden (so the
+    # pixel suite ran twice, once here and once in the golden step) and default
+    # concurrency instead of CI's explicit flag. Fixed 2026-08-07 alongside the
+    # concurrency=1 → 4 change.
+    run_in "flutter test --concurrency=4 --exclude-tags golden"
     ;;
   update-goldens)
     echo "── regenerating pixel goldens…"
-    run_in "flutter test --concurrency=1 --tags golden --update-goldens"
+    run_in "flutter test --concurrency=4 --tags golden --update-goldens"
     echo "── syncing refreshed goldens back into the repo…"
     docker run --rm --platform "$PLATFORM" \
       -v "$PWD":/src -v "$VOL":/build "$IMG" \

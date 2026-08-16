@@ -181,10 +181,30 @@ class JournalMaintenance {
     try {
       final messages = getMessages();
       var start = getCursor().clamp(0, messages.length);
-      if (start == 0 && messages.length > JournalPhysics.kFirstPassCap) {
-        // Virgin journal on an existing long chat: first pass reads only the
-        // recent tail instead of the whole history (older turns stay
-        // reachable through RAG; the recap catches the character up fast).
+      // THE WINDOW IS CAPPED ON EVERY PASS, not just a virgin one.
+      //
+      // This cap used to be gated on `start == 0`, so it protected a fresh
+      // journal on a long chat and nothing else. That made the pass a one-way
+      // trap, because the cursor only advances when a call SUCCEEDS (see the
+      // `anySucceeded` guard below): one failed pass — a timeout, a model swap,
+      // a backend hiccup — left the cursor behind, the next pass read from that
+      // same stale cursor to now, the window grew, and a bigger window fails
+      // more easily. Every failure made the next failure more likely, forever.
+      //
+      // Found in the maintainer's own database: a 9,488-message chat with the
+      // cursor stuck at 590, i.e. every pass was trying to send 8,898 messages
+      // (~4.37 MILLION tokens) into an 8-16k context, every `journalInterval`
+      // messages, burning a model call each time and never once succeeding.
+      // A second chat sat at 2,168 messages behind (~720k tokens). Their
+      // recaps had been frozen since the day the first call failed, which is
+      // what a reasoning model then reports as "the recap contradicts the
+      // scene" — the memory system had silently stopped, not drifted.
+      //
+      // A pass that far behind cannot catch up in one call anyway, and the
+      // older material is exactly what RAG and the already-written cards are
+      // for. So the tail is bounded unconditionally and the cursor is allowed
+      // to jump the gap: falling behind must not be self-perpetuating.
+      if (messages.length - start > JournalPhysics.kFirstPassCap) {
         start = messages.length - JournalPhysics.kFirstPassCap;
       }
       if (start >= messages.length) {
@@ -196,6 +216,13 @@ class JournalMaintenance {
       }
       final window = messages.sublist(start);
       if (window.isEmpty) return;
+      // The cursor target is the SNAPSHOT's end, never the live list's.
+      // `messages` IS the god's `_messages`, mutated in place, and the user is
+      // free to send while this pass awaits its LLM call (sendMessage guards
+      // only on _isGenerating). Reading messages.length after the awaits below
+      // would park the cursor past turns this pass never read, and nothing
+      // ever rewinds it — those exchanges would be silently un-journaled.
+      final cursorTarget = start + window.length;
 
       // Shared owner loop (pass_support). No guests passed — scene guests
       // never journal (the guest parity guard).
@@ -213,8 +240,17 @@ class JournalMaintenance {
       String? parkedRecap;
       var anySucceeded = false;
 
-      for (var i = 0; i < owners.length; i++) {
-        final owner = owners[i];
+      // The recap is asked of the first owner whose call COMES BACK, not
+      // rigidly of owner 0. It used to be `i == 0`, and a failed first call
+      // then lost the window's recap for good: a later owner succeeding still
+      // advanced the cursor past the window, so nothing ever re-read those
+      // turns and "Where we are" silently aged behind the story — exactly the
+      // frozen-recap failure the window-cap comment above documents, but
+      // reached one flaky call at a time. Still exactly ONE owner is asked per
+      // pass, so the prompt cost is unchanged.
+      var recapOwed = true;
+
+      for (final owner in owners) {
         final ownerId = getCharacterIdFromCard(owner);
         if (ownerId.isEmpty) continue;
 
@@ -224,13 +260,15 @@ class JournalMaintenance {
           cards: cards,
           window: window,
           windowStart: start,
-          includeRecap: i == 0,
+          includeRecap: recapOwed,
         );
         if (exchange == null) {
           debugPrint('[Journal] ✗ ${owner.name}: empty eval response');
           continue;
         }
         final (ops, recapText) = exchange;
+        final isRecapOwner = recapOwed;
+        recapOwed = false;
 
         // Emotional physics: cool the existing cards one step first
         // (flashbulb decay — strong feelings barely fade), so adds and
@@ -253,25 +291,27 @@ class JournalMaintenance {
 
         if (reviewMode) {
           if (ownerProposals.ops.isNotEmpty) parked.add(ownerProposals);
-          if (i == 0) parkedRecap = recapText;
+          if (isRecapOwner) parkedRecap = recapText;
         } else {
           await review.applyOwnerProposals(sessionToken, ownerProposals);
-          if (i == 0 && recapText != null && getSessionId() == sessionToken) {
+          if (isRecapOwner &&
+              recapText != null &&
+              getSessionId() == sessionToken) {
             setRecap(recapText);
-          } else if (i == 0 &&
+          } else if (isRecapOwner &&
               recapText == null &&
               ownerProposals.ops.isNotEmpty) {
             debugPrint(
               '[Journal] ⚠ ${owner.name}: pass produced ops but NO recap — '
-              'likely response-budget truncation (the recap is last in the '
-              'reply); "Where we are" stays stale this pass.',
+              'the model skipped the recap-first instruction (or truncation '
+              'was total); "Where we are" stays stale this pass.',
             );
           }
         }
         anySucceeded = true;
         debugPrint(
           '[Journal] ✓ ${owner.name}: ${ownerProposals.ops.length} op(s)'
-          '${i == 0 && recapText != null ? ' + recap' : ''}'
+          '${isRecapOwner && recapText != null ? ' + recap' : ''}'
           '${reviewMode ? ' (for review)' : ''}',
         );
       }
@@ -286,13 +326,13 @@ class JournalMaintenance {
           review.park(
             JournalReviewBatch(
               sessionId: sessionToken,
-              cursorTarget: messages.length,
+              cursorTarget: cursorTarget,
               owners: parked,
               recap: parkedRecap,
             ),
           );
         } else {
-          setCursor(messages.length);
+          setCursor(cursorTarget);
           await onSaveChat();
         }
       }

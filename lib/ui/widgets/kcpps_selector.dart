@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:flutter/material.dart';
@@ -161,7 +160,14 @@ class _KcppsSelectorState extends State<KcppsSelector> {
     }
 
     final hasModel = widget.storage.kcppsHasModel;
-    final fileExists = widget.storage.kcppsModelFileExists;
+    // ONE parse per build. Reading `kcppsModelPath` is a synchronous read +
+    // jsonDecode of the preset file, and `kcppsModelFileExists` parses it
+    // again internally — asking for both, then re-parsing here for the
+    // basename, put three blocking disk trips in a settings-tab build().
+    final modelPath = widget.storage.kcppsModelPath;
+    final fileExists =
+        modelPath != null &&
+        File(modelPath).existsSync(); // io-ok: one stat, settings row only
 
     IconData icon;
     Color color;
@@ -170,13 +176,6 @@ class _KcppsSelectorState extends State<KcppsSelector> {
     if (hasModel && fileExists) {
       icon = Icons.check_circle;
       color = Colors.greenAccent;
-      final parsed = _parseKcppsFile(widget.storage.activeKcppsPath);
-      final modelPath = parsed != null
-          ? (parsed['model_param'] is String &&
-                    (parsed['model_param'] as String).isNotEmpty
-                ? parsed['model_param'] as String
-                : parsed['model'] as String? ?? '')
-          : '';
       text = 'Model: ${p.basename(modelPath)}';
     } else if (hasModel) {
       icon = Icons.warning_amber_rounded;
@@ -336,18 +335,6 @@ class _KcppsSelectorState extends State<KcppsSelector> {
       final path = result.files.single.path!;
       widget.storage.setActiveKcppsPath(path);
       widget.onBrowsePicked(path);
-    }
-  }
-
-  /// Parse a .kcpps JSON file (mirrors StorageService._parseKcppsFile).
-  static Map<String, dynamic>? _parseKcppsFile(String? kcppsPath) {
-    if (kcppsPath == null || kcppsPath.isEmpty) return null;
-    try {
-      final file = File(kcppsPath);
-      if (!file.existsSync()) return null;
-      return Map<String, dynamic>.from(jsonDecode(file.readAsStringSync()));
-    } catch (_) {
-      return null;
     }
   }
 }

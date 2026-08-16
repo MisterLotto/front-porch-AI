@@ -457,8 +457,7 @@ void main() {
     for (var attempt = 0; attempt < 10 && !deletePersisted; attempt++) {
       await tester.pump(const Duration(milliseconds: 500));
       await chatService.loadSession(sessionId);
-      deletePersisted =
-          chatService.messages.length == messagesBeforeDelete - 1;
+      deletePersisted = chatService.messages.length == messagesBeforeDelete - 1;
     }
     expect(
       deletePersisted,

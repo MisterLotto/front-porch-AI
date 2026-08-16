@@ -13,6 +13,10 @@ export type WsEvent = {
   id?: string | number;
   name?: string;
   error?: string;
+  // `chargen_enhance_done` (AI Enhance): which character was enhanced and the
+  // unsaved field proposal the client reviews before applying.
+  characterId?: string;
+  proposal?: unknown;
   // `processing` event (Realism + Objective engine overlay): which engine is
   // running + the live eval stream text.
   active?: boolean;

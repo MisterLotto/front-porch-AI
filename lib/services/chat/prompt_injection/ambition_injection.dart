@@ -17,6 +17,7 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:front_porch_ai/models/models.dart';
+import 'speaker_resolution.dart';
 import 'package:front_porch_ai/services/chat/ambition_service.dart';
 
 /// Ambition fragment for the words-only state block (Living Time §6): one
@@ -26,13 +27,18 @@ import 'package:front_porch_ai/services/chat/ambition_service.dart';
 /// same dispatch callbacks every other leaf uses (parity). Progress reads
 /// the AmbitionService sync cache (lazy-warmed; renders "just beginning"
 /// until the first read lands).
-class AmbitionInjection {
+class AmbitionInjection with SpeakerCardResolver {
   final AmbitionService ambitionService;
   final String? Function() getSessionId;
+  @override
   final CharacterCard? Function() getActiveCharacter;
+  @override
   final bool Function() getIsGroupNonObserverMode;
+  @override
   final String Function() getCurrentSpeakerIdForRealism;
+  @override
   final List<CharacterCard> Function() getGroupCharacters;
+  @override
   final String Function(CharacterCard) getCharacterIdFromCard;
 
   AmbitionInjection({
@@ -45,18 +51,8 @@ class AmbitionInjection {
     required this.getCharacterIdFromCard,
   });
 
-  CharacterCard? _speakerCard() {
-    if (getIsGroupNonObserverMode()) {
-      final id = getCurrentSpeakerIdForRealism();
-      return getGroupCharacters()
-          .where((c) => getCharacterIdFromCard(c) == id)
-          .firstOrNull;
-    }
-    return getActiveCharacter();
-  }
-
   String buildAmbitionInjection() {
-    final card = _speakerCard();
+    final card = speakerCard();
     final sessionId = getSessionId();
     if (card == null || sessionId == null) return '';
     final ambitions = card.frontPorchExtensions?.ambitions ?? const [];

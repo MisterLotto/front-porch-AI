@@ -29,11 +29,15 @@ import 'package:front_porch_ai/ui/widgets/widgets.dart';
 Future<String?> showSessionPickerDialog(
   BuildContext context,
   List<Map<String, dynamic>> sessions,
-  String characterName,
-) {
+  String characterName, {
+  // AI Enhance reuses this picker purely as "which chat?" — no new-chat
+  // escape hatch, and its own question as the title.
+  bool allowNew = true,
+  String? title,
+}) {
   return showWarmDialog<String>(
     context,
-    title: 'Continue a chat with $characterName?',
+    title: title ?? 'Continue a chat with $characterName?',
     icon: Icons.chat_bubble_outline,
     accent: AppColors.porchHoneyOf(context),
     width: 420,
@@ -42,22 +46,26 @@ Future<String?> showSessionPickerDialog(
       child: Column(
           children: [
             // New chat button
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () => Navigator.of(context).pop('__new__'),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Start New Chat'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.porchTerracottaOf(context),
-                  side: BorderSide(color: AppColors.porchTerracottaOf(context)),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+            if (allowNew) ...[
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).pop('__new__'),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Start New Chat'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.porchTerracottaOf(context),
+                    side: BorderSide(
+                      color: AppColors.porchTerracottaOf(context),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Divider(color: AppColors.borderOf(context)),
-            const SizedBox(height: 4),
+              const SizedBox(height: 12),
+              Divider(color: AppColors.borderOf(context)),
+              const SizedBox(height: 4),
+            ],
             // Session list
             Expanded(
               child: ListView.builder(

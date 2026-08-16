@@ -190,7 +190,7 @@ extension ChatServiceGrowth on ChatService {
         activeId = _getCharacterIdFromCard(_activeCharacter!);
         ids.add(activeId);
       }
-      for (final g in _sceneGuestCards) {
+      for (final g in _sceneGuest.cards) {
         ids.add(_getCharacterIdFromCard(g));
       }
     }
@@ -201,4 +201,13 @@ extension ChatServiceGrowth on ChatService {
       isGroup: isGroup,
     );
   }
+
+  // Effective getters (all injection paths route through these); moved
+  // verbatim from the god file, zero behaviour change.
+  String _getEffectivePersonality(CharacterCard card) =>
+      _growthService.effectivePersonality(card);
+
+  // Scenario evolution is retired (growth-rings design §3.2): the Journal
+  // recap owns "where we are", so every mode uses the card's own scenario.
+  String _getEffectiveScenario(CharacterCard card) => card.scenario;
 }

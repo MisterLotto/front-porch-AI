@@ -43,6 +43,19 @@ class VoiceFacade {
         'ttsEngine': _storage.ttsEngine,
         'sttEnabled': _storage.sttEnabled,
         'sttAvailable': _stt.isAvailable,
+        // Additive (2026-08-14) for the web character editor's per-character
+        // voice picker — an assigned voice overrides the global one, so the
+        // browser needs both the choices and the global's name to label
+        // "use the global voice". Older clients ignore the extra keys.
+        'globalVoice': _storage.ttsVoiceModel,
+        'voices': _tts.activeVoices
+            .map((v) => {
+                  'id': v.id,
+                  'name': v.name,
+                  'gender': v.gender,
+                  'language': v.language,
+                })
+            .toList(),
       };
 
   /// Synthesize [text] to audio bytes (no host playback). Returns the bytes plus

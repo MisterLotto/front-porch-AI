@@ -43,7 +43,7 @@ class NeedsBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pct = (value / 100.0).clamp(0.0, 1.0);
-    final isCritical = value <= ChatService.needCriticalThreshold;
+    final isCritical = value <= needCriticalThreshold;
 
     IconData icon;
     Color color;

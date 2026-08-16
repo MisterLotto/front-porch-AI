@@ -72,8 +72,9 @@ class AvatarGalleryLooksSection extends StatelessWidget {
           onStar: () => controller.setFavorite(null),
           actionLabel: 'Replace portrait',
           onAction: onReplacePortrait,
-          // Deletable only when a look exists to take its place.
+          // Swappable only when a look exists to take its place.
           onDelete: controller.looks.isEmpty ? null : onDeletePortrait,
+          deleteTooltip: 'Swap portrait',
           onTap: _inChat
               ? () => controller.selectFaceInChat(kPortraitFaceId)
               : null,

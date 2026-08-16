@@ -24,6 +24,7 @@ import 'package:shelf_router/shelf_router.dart';
 import 'package:front_porch_ai/app_version.dart';
 import 'package:front_porch_ai/services/web/auth/auth_service.dart';
 import 'package:front_porch_ai/services/web/auth/session_store.dart';
+import 'package:front_porch_ai/services/web/auth/setup_gate.dart';
 import 'package:front_porch_ai/services/web/middleware/auth_middleware.dart';
 import 'package:front_porch_ai/services/web/util/util.dart';
 import 'package:front_porch_ai/services/web/web_server_deps.dart';
@@ -53,10 +54,13 @@ class WebAuthRoutes {
   int get _cookieMaxAge => SessionStore.sessionTtl.inSeconds;
 
   Future<shelf.Response> _health(shelf.Request request) async {
+    final setupRequired = await _auth.isSetupRequired();
     return JsonResponse.ok({
       'status': 'ok',
       'version': appVersion,
-      'setupRequired': await _auth.isSetupRequired(),
+      'setupRequired': setupRequired,
+      if (setupRequired)
+        'setupTokenRequired': !_isDirectLoopbackSetupClient(request),
       'secure': _deps.isSecure(request),
     });
   }
@@ -68,8 +72,11 @@ class WebAuthRoutes {
     // Account details ride along ONLY for an authenticated caller — this
     // endpoint is public (pre-login) and must not leak the username.
     final info = userId != null ? await _auth.accountInfo() : null;
+    final setupRequired = await _auth.isSetupRequired();
     return JsonResponse.ok({
-      'setupRequired': await _auth.isSetupRequired(),
+      'setupRequired': setupRequired,
+      if (setupRequired)
+        'setupTokenRequired': !_isDirectLoopbackSetupClient(request),
       'authenticated': userId != null,
       if (info != null) 'username': info.username,
       if (info != null) 'totpEnabled': info.totpEnabled,
@@ -77,22 +84,54 @@ class WebAuthRoutes {
   }
 
   Future<shelf.Response> _setup(shelf.Request request) async {
+    if (!_isFirstPartyRequest(request)) {
+      return JsonResponse.forbidden(
+        'This setup request came from another website, so it was refused. '
+        'Open the Front Porch AI web page yourself and create the account '
+        'there.',
+      );
+    }
     final Map<String, dynamic> body;
     try {
       body = await RequestBody.readJsonMap(request);
     } catch (_) {
       return JsonResponse.badRequest('Invalid request body');
     }
-    if (!await _auth.isSetupRequired()) {
-      return JsonResponse.forbidden('Account already configured');
-    }
     final username = (body['username'] ?? '').toString();
     final password = (body['password'] ?? '').toString();
-    final ok = await _auth.setupAccount(username, password);
-    if (!ok) {
-      return JsonResponse.badRequest(
-        'Username required and password must be at least 8 characters',
-      );
+    final status = await _auth.setupAccount(
+      username,
+      password,
+      setupToken: body['setupToken']?.toString(),
+      isDirectLoopbackClient: _isDirectLoopbackSetupClient(request),
+      ip: _clientIp(request),
+    );
+    switch (status) {
+      case SetupStatus.alreadyConfigured:
+        return JsonResponse.forbidden('Account already configured');
+      case SetupStatus.rateLimited:
+        return JsonResponse.tooManyRequests(
+          'Too many setup attempts, try again later',
+        );
+      case SetupStatus.tokenRequired:
+        return JsonResponse.error(
+          403,
+          'Setup requires the one-time code from the desktop app '
+          '(Settings → Web Server)',
+          extra: const {'setupTokenRequired': true},
+        );
+      case SetupStatus.invalidToken:
+        return JsonResponse.error(
+          403,
+          'Invalid setup code — check Settings → Web Server on the desktop',
+          extra: const {'setupTokenRequired': true},
+        );
+      case SetupStatus.invalidInput:
+        return JsonResponse.badRequest(
+          'Username required and password must be at least 8 characters',
+        );
+      case SetupStatus.success:
+        break;
     }
     // Immediately sign the new account in.
     final result = await _auth.login(
@@ -217,17 +256,32 @@ class WebAuthRoutes {
     return JsonResponse.ok({'ok': true});
   }
 
+  /// Start 2FA enrollment. Password step-up required — a stolen session alone
+  /// must not mint a new authenticator secret (audit P0.4).
   Future<shelf.Response> _beginTotp(shelf.Request request) async {
-    final enrollment = await _auth.beginTotpEnrollment();
-    if (enrollment == null) {
-      return JsonResponse.error(409, 'Account not configured');
+    final Map<String, dynamic> body;
+    try {
+      body = await RequestBody.readJsonMap(request);
+    } catch (_) {
+      return JsonResponse.badRequest('Invalid request body');
     }
-    return JsonResponse.ok({
-      'secret': enrollment.secret,
-      'otpauthUri': enrollment.provisioningUri,
-    });
+    final result = await _auth.beginTotpEnrollment(
+      currentPassword: body['currentPassword']?.toString() ?? '',
+      totpCode: body['totpCode']?.toString(),
+      ip: _clientIp(request),
+    );
+    if (result.status == CredentialChangeStatus.success &&
+        result.enrollment != null) {
+      return JsonResponse.ok({
+        'secret': result.enrollment!.secret,
+        'otpauthUri': result.enrollment!.provisioningUri,
+      });
+    }
+    return _credentialChangeResponse(result.status);
   }
 
+  /// Confirm 2FA enrollment with an authenticator code. Re-checks password
+  /// so enrollment cannot complete on a session cookie alone.
   Future<shelf.Response> _confirmTotp(shelf.Request request) async {
     final Map<String, dynamic> body;
     try {
@@ -235,13 +289,20 @@ class WebAuthRoutes {
     } catch (_) {
       return JsonResponse.badRequest('Invalid request body');
     }
-    final codes = await _auth.confirmTotpEnrollment(
-      (body['code'] ?? '').toString(),
+    final result = await _auth.confirmTotpEnrollment(
+      currentPassword: body['currentPassword']?.toString() ?? '',
+      code: (body['code'] ?? '').toString(),
+      totpCode: body['totpCode']?.toString(),
+      ip: _clientIp(request),
     );
-    if (codes == null) {
+    if (result.status == CredentialChangeStatus.success &&
+        result.recoveryCodes != null) {
+      return JsonResponse.ok({'recoveryCodes': result.recoveryCodes});
+    }
+    if (result.status == CredentialChangeStatus.invalidInput) {
       return JsonResponse.badRequest('Invalid or expired code');
     }
-    return JsonResponse.ok({'recoveryCodes': codes});
+    return _credentialChangeResponse(result.status);
   }
 
   /// Turning 2FA off is a credential change: it demands the current password
@@ -264,7 +325,7 @@ class WebAuthRoutes {
   // ── helpers ──────────────────────────────────────────────────────────────
 
   /// Map a [CredentialChangeStatus] to its HTTP response (shared by the
-  /// change-credentials and 2FA-disable endpoints).
+  /// change-credentials, 2FA-enroll, and 2FA-disable endpoints).
   shelf.Response _credentialChangeResponse(CredentialChangeStatus status) {
     switch (status) {
       case CredentialChangeStatus.success:
@@ -281,6 +342,12 @@ class WebAuthRoutes {
         return JsonResponse.tooManyRequests('Too many attempts, try again later');
       case CredentialChangeStatus.notSetUp:
         return JsonResponse.error(409, 'Account not configured');
+      case CredentialChangeStatus.alreadyEnabled:
+        return JsonResponse.error(
+          409,
+          'Two-factor authentication is already enabled',
+          extra: const {'alreadyEnabled': true},
+        );
       case CredentialChangeStatus.invalidInput:
         return JsonResponse.badRequest(
           'Provide a new username or a new password of at least 8 characters',
@@ -303,5 +370,43 @@ class WebAuthRoutes {
     final conn = request.context['shelf.io.connection_info'];
     if (conn is HttpConnectionInfo) return conn.remoteAddress.address;
     return null;
+  }
+
+  /// Whether a state-changing public POST was really issued by the Front Porch
+  /// page (or a non-browser client), rather than by some other site's page that
+  /// happens to be open in the same browser.
+  ///
+  /// `api/auth/setup` is session-free by necessity AND token-free for a
+  /// loopback peer — and the victim's own browser IS a loopback peer no matter
+  /// which site told it to send the request. Without this check any page the
+  /// user visits while setup is pending could claim the web account with
+  /// credentials of the attacker's choosing (CSRF), which on a LAN/tunnel bind
+  /// hands over the whole library.
+  ///
+  /// `Sec-Fetch-Site` is set by the browser itself and cannot be forged by a
+  /// page, so when it is present it decides alone — that also keeps the Vite
+  /// dev proxy working, which forwards the browser's original `Origin` while
+  /// rewriting `Host`. Older browsers that don't send it fall back to the same
+  /// origin allowlist the WebSocket upgrades use. Clients that send neither
+  /// header (curl, the desktop app, tests) pass, because only a browser can be
+  /// driven cross-site in the first place.
+  bool _isFirstPartyRequest(shelf.Request request) {
+    final site = request.headers['sec-fetch-site'];
+    if (site != null) return site == 'same-origin' || site == 'none';
+    final origin = request.headers['origin'];
+    if (origin == null || origin.isEmpty) return true;
+    return wsOriginAllowed(request, origin);
+  }
+
+  /// Direct host browser only — see [SetupGate.isDirectLoopbackClient].
+  bool _isDirectLoopbackSetupClient(shelf.Request request) {
+    final conn = request.context['shelf.io.connection_info'];
+    final peerLoopback =
+        conn is HttpConnectionInfo && conn.remoteAddress.isLoopback;
+    return SetupGate.isDirectLoopbackClient(
+      peerIsLoopback: peerLoopback,
+      xForwardedFor: request.headers['x-forwarded-for'],
+      xForwardedProto: request.headers['x-forwarded-proto'],
+    );
   }
 }

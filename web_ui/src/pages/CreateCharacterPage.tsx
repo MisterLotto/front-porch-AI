@@ -15,6 +15,7 @@ import { StepIndicator } from '../components/StepIndicator';
 import { LoreEntriesEditor, type LoreEntry } from '../components/LoreEntriesEditor';
 import { AltGreetingsEditor } from '../components/AltGreetingsEditor';
 import { RealismFormSection } from '../components/realism/RealismFormSection';
+import { useAdultThemes } from '../components/realism/useAdultThemes';
 import { NeedsFormSection } from '../components/realism/NeedsFormSection';
 import { type RealismValues, REALISM_DEFAULTS } from '../components/realism/realismTypes';
 
@@ -50,6 +51,7 @@ const EMPTY: Draft = {
 };
 
 export function CreateCharacterPage() {
+  const adultThemes = useAdultThemes();
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [d, setD] = useState<Draft>(EMPTY);
@@ -149,7 +151,7 @@ export function CreateCharacterPage() {
 
         {step === 4 && (
           <>
-            <RealismFormSection v={d} set={patch} />
+            <RealismFormSection v={d} set={patch} showIntimate={adultThemes} />
             <NeedsFormSection v={d} set={patch} />
           </>
         )}

@@ -19,8 +19,8 @@
 /// Engine eval tools — the tool-calling transport for every structured eval
 /// whose downstream consumes flat-JSON text (the journal_ops/growth_ops
 /// pattern applied to the Realism Engine's judge calls, the needs-impact
-/// eval, the scene-time/posture eval, the expression reclassifier, and the
-/// Scene Guest cast detector).
+/// eval, the scene-time eval, the posture pass, the expression
+/// reclassifier, and the Scene Guest cast detector).
 ///
 /// Design: tools are a RELIABLE WAY TO OBTAIN THE SAME JSON the evals have
 /// always parsed. A successful tool call is converted by
@@ -38,7 +38,7 @@ library;
 
 import 'dart:convert';
 
-import 'package:front_porch_ai/services/llm_service.dart' show LlmToolCall;
+import 'package:front_porch_ai/services/services.dart' show LlmToolCall;
 import 'package:front_porch_ai/utils/utils.dart';
 
 /// Tool names (also referenced by the prompts' tools-mode instruction).
@@ -50,6 +50,9 @@ const String kNeedsImpactTool = 'report_needs_impact';
 const String kSceneTimeTool = 'report_scene_time';
 const String kExpressionTool = 'report_expression_label';
 const String kCastDetectTool = 'report_detected_character';
+const String kClimaxToolName = 'report_climax';
+const String kPocketsToolName = 'report_inventory';
+const String kReplyFactsToolName = 'report_reply_facts';
 
 Map<String, dynamic> _intField(String description) => {
   'type': 'integer',
@@ -91,6 +94,15 @@ final Map<String, Map<String, dynamic>> _narrativeFields = {
   'proposed_objective': _strField(
     'A goal the character independently wants to pursue, or "none".',
   ),
+  // Present in the schema unconditionally even though the PROMPT only asks for
+  // it when the character has ambitions: a tool schema is a fixed contract
+  // negotiated once per backend identity, not per turn, and every field here
+  // is optional. A character with no ambitions is simply never told to fill it
+  // in, and the parse treats absent and "none" identically.
+  'serves_ambition': _strField(
+    'The number of the ambition the proposed objective is a step toward, or '
+    '"none". Only asked for when the character has ambitions.',
+  ),
   'fixation_topic': _strField(
     'An intrusive thought the character keeps returning to, or "none".',
   ),
@@ -99,9 +111,9 @@ final Map<String, Map<String, dynamic>> _narrativeFields = {
 final Map<String, Map<String, dynamic>> _oneShotFields = {
   ..._relationshipFields,
   ..._emotionalFields,
-  'posture': _strField(
-    'Current physical position and location (brief phrase), or "none".',
-  ),
+  // No `posture`: it moved to its own POST-generation pass on 2026-08-08
+  // (see kSceneTimeEvalTools below). One-shot fuses the PRE-generation
+  // judges, and posture stopped being one of those.
   // Scene-time fields ride the fused call so one-shot mode needs no separate
   // per-turn time eval (strict one-shot vs normal parity — same fields, same
   // clamp/floor/backstop applied by TimeService).
@@ -171,17 +183,31 @@ final List<Map<String, dynamic>> kOneShotEvalTools = [
     kOneShotTool,
     'Report the full realism evaluation for this exchange in one call.',
     _oneShotFields,
-    const ['relationship_delta', 'trust_delta', 'emotion', 'emotion_intensity'],
+    // `minutes_elapsed` is required for the same reason `is_climax` is: a
+    // model fills in what the schema demands and skips what it does not. When
+    // one-shot fuses, this call is the story clock's ONLY driver — an omitted
+    // minutes_elapsed makes TimeService fall back to failureDriftMinutes, so
+    // every turn advanced a flat 5 minutes while the multi-call path (whose
+    // twin kSceneTimeOnlyEvalTools demands it) got a real estimate. `new_day`
+    // stays optional exactly as it is on that twin.
+    const [
+      'relationship_delta',
+      'trust_delta',
+      'emotion',
+      'emotion_intensity',
+      'minutes_elapsed',
+    ],
   ),
 ];
 
 final Map<String, Map<String, dynamic>> _needsImpactFields = {
-  'activities': {
-    'type': 'array',
-    'items': {'type': 'string'},
-    'description': 'Activity tags for the scene (e.g. "sexual", "messy").',
-  },
-  'intensity': _intField('Scene intensity, 1-10.'),
+  // 'activities' and 'intensity' were REMOVED 2026-08-10: nothing in the
+  // app has ever read either from the response (the applier consumes the
+  // seven deltas + reason, full stop), the text prompt stopped asking in
+  // the Tier-1 sweep — but their survival HERE meant every tools-transport
+  // needs call still invited the model to fill them, and it did, paying
+  // output tokens for fields that went straight to the void (visible in
+  // the maintainer's own log: "activities":["sleeping","washing",…]).
   for (final k in const [
     'hunger',
     'energy',
@@ -193,14 +219,6 @@ final Map<String, Map<String, dynamic>> _needsImpactFields = {
   ])
     '${k}_delta': _intField('Net signed effect on $k.'),
   'reason': _strField('Brief grounded reason for the deltas.'),
-  'is_climax': {
-    'type': 'boolean',
-    'description':
-        'True ONLY when the character themselves reaches climax in this scene.',
-  },
-  'refractory_turns': _intField(
-    'Post-climax cooldown turns (3-7) when is_climax is true, else 0.',
-  ),
 };
 
 final List<Map<String, dynamic>> kNeedsImpactEvalTools = [
@@ -217,6 +235,34 @@ final List<Map<String, dynamic>> kNeedsImpactEvalTools = [
       'bladder_delta',
       'comfort_delta',
       'reason',
+      // CLIMAX MOVED OUT (2026-08-07). It used to be required here, and the
+      // comment below records why — a lesson worth keeping, because the same
+      // trap applies to the arousal tool it moved to.
+      //
+      // It moved because Afterglow depended on it, and this eval early-returns
+      // unless BOTH Needs and the Realism Engine are on. Needs is off on most
+      // cards (CharacterCard.needsSimEnabled defaults false), so Afterglow
+      // silently did nothing for most users who switched it on — while the
+      // Porch Life row told them its one dependency (the engine) was met.
+      // It now has its own post-generation pass (ClimaxEval) — post-gen
+      // because the question is about the REPLY, and standalone so it answers
+      // to the Realism Engine and the Afterglow switch and nothing else.
+      //
+      // The kept lesson: is_climax MUST be required. A model answering a tool call fills in what
+      // the schema demands and skips what it does not, and this field was
+      // optional — so orgasm detection was silently off on every tools-capable
+      // backend. Observed live: the model returned exactly these eight fields
+      // and nothing else, with a reason reading "Violet experiences her first
+      // orgasm ever ... an overwhelming first climax". It had understood the
+      // scene completely; it just never emitted the key, so the refractory
+      // never started and the Lust bar stayed pinned at 100/100.
+      //
+      // This is the SAME failure the text path already learned (see the comment
+      // on climaxGuidance in llm_eval_engine.dart: a model "won't guess at an
+      // undefined field"). The tools transport re-created it by a different
+      // route — the field was defined, but optional. Forcing an explicit
+      // true/false is that lesson expressed in schema. refractory_turns rides
+      // along because it is meaningless to answer one without the other.
     ],
   ),
 ];
@@ -237,12 +283,38 @@ final Map<String, Map<String, dynamic>> _sceneTimeFields = {
   ),
 };
 
+/// The POST-generation posture pass (TimeService's `postureOnly` mode). It
+/// keeps the full field set because `posture` is the only REQUIRED one and a
+/// model that volunteers the others costs nothing — but posture is the only
+/// field that pass reads. Until 2026-08-08 this was the fused pre-generation
+/// scene-time+posture schema; posture moved out of that call because the
+/// question ("where did this reply leave her") is unanswerable before the
+/// reply exists.
 final List<Map<String, dynamic>> kSceneTimeEvalTools = [
   _tool(
     kSceneTimeTool,
-    'Report the scene-time verdict and the character\'s current posture.',
+    'Report the character\'s current physical position and stance.',
     _sceneTimeFields,
     const ['posture'],
+  ),
+];
+
+/// The per-turn clock advance — BOTH drivers, the engine's and the standalone
+/// one (TimeService's `timeOnly` mode is only about how much scene framing the
+/// PROMPT carries; the schema is one). Deliberately the SAME tool name as the
+/// posture variant, so [realismToolCallToJson] and every parse step downstream
+/// are literally the same code path; it just drops `posture`. Field
+/// definitions are reused from [_sceneTimeFields] rather than restated, so the
+/// two variants cannot drift.
+final List<Map<String, dynamic>> kSceneTimeOnlyEvalTools = [
+  _tool(
+    kSceneTimeTool,
+    'Report how much in-story time the latest exchange took.',
+    {
+      'minutes_elapsed': _sceneTimeFields['minutes_elapsed']!,
+      'new_day': _sceneTimeFields['new_day']!,
+    },
+    const ['minutes_elapsed'],
   ),
 ];
 
@@ -281,6 +353,83 @@ final List<Map<String, dynamic>> kCastDetectEvalTools = [
   ),
 ];
 
+/// Afterglow's climax check (ClimaxEval). Declared HERE rather than in the
+/// leaf because [_fieldsByTool] below is what makes the tools transport work
+/// at all — an unregistered tool makes [realismToolCallToJson] return null,
+/// so the call silently falls back to text on every backend, forever. One
+/// definition, registered by construction.
+final Map<String, Map<String, dynamic>> kClimaxFields = {
+  'is_climax': {
+    'type': 'boolean',
+    'description': 'True ONLY when the character themselves reached climax.',
+  },
+  'refractory_turns': _intField(
+    'Cooldown turns (3-7) when is_climax is true, else 0.',
+  ),
+};
+
+final List<Map<String, dynamic>> kClimaxEvalTools = [
+  _tool(
+    kClimaxToolName,
+    'Report whether the character reached climax.',
+    kClimaxFields,
+    // BOTH required — the lesson from the needs tool: a model fills in what
+    // the schema demands and skips what it does not, so an optional is_climax
+    // was never emitted and detection was silently off on every tools-capable
+    // backend.
+    const ['is_climax', 'refractory_turns'],
+  ),
+];
+
+/// Pockets & Wardrobe (PocketsEval). Declared here for the same reason the
+/// climax fields are: [_fieldsByTool] is what makes the tools transport work,
+/// and an unregistered tool converts to null and falls back to text forever,
+/// silently. Pockets shipped that way — its calls never once used tools.
+final Map<String, Map<String, dynamic>> kPocketsFields = {
+  'inventory_ops': {
+    'type': 'array',
+    'items': {'type': 'object'},
+    'description': 'Every change this reply made to worn/carried items.',
+  },
+};
+
+/// The fused post-generation reply-facts call (ReplyFactsEval): climax +
+/// inventory + posture in ONE tool. Field definitions are REUSED from the
+/// standalone tools above so the fused and standalone lanes cannot drift;
+/// which fields are REQUIRED is computed per call from which features are
+/// live ([kReplyFactsToolsFor]) — the is_climax lesson applied to a composed
+/// schema: a model fills in what the schema demands and skips what it does
+/// not, so a live feature's fields must be demanded and a disabled feature's
+/// must not.
+final Map<String, Map<String, dynamic>> kReplyFactsFields = {
+  ...kClimaxFields,
+  ...kPocketsFields,
+  'posture': _strField(
+    'Current physical position and location (brief phrase), or "none".',
+  ),
+};
+
+/// The reply-facts schema for THIS turn's live feature set. Every field is
+/// always DEFINED (the registry below is a fixed contract); only the
+/// `required` list varies.
+List<Map<String, dynamic>> kReplyFactsToolsFor({
+  required bool askClimax,
+  required bool askPockets,
+  required bool askPosture,
+}) => [
+  _tool(
+    kReplyFactsToolName,
+    'Report the scene facts this reply changed (climax / inventory / '
+    'posture).',
+    kReplyFactsFields,
+    [
+      if (askClimax) ...['is_climax', 'refractory_turns'],
+      if (askPockets) 'inventory_ops',
+      if (askPosture) 'posture',
+    ],
+  ),
+];
+
 /// The whitelisted keys per tool (anything else the model invents is
 /// dropped, mirroring how the regex extractors ignore unknown text keys).
 final Map<String, Map<String, Map<String, dynamic>>> _fieldsByTool = {
@@ -292,7 +441,18 @@ final Map<String, Map<String, Map<String, dynamic>>> _fieldsByTool = {
   kSceneTimeTool: _sceneTimeFields,
   kExpressionTool: _expressionFields,
   kCastDetectTool: _castDetectFields,
+  kClimaxToolName: kClimaxFields,
+  kPocketsToolName: kPocketsFields,
+  kReplyFactsToolName: kReplyFactsFields,
 };
+
+/// Is [toolName] known to the converter?
+///
+/// Exposed for the registry guard: an unregistered tool makes
+/// [realismToolCallToJson] return null on every call, so the feature silently
+/// uses the text transport forever. Pockets shipped that way. Cheap to assert,
+/// impossible to notice otherwise.
+bool toolIsRegistered(String toolName) => _fieldsByTool.containsKey(toolName);
 
 /// Convert the first matching tool call into the canonical flat-JSON text
 /// the text transport would have produced — the single normalization point
@@ -331,7 +491,25 @@ String? realismToolCallToJson(String toolName, List<LlmToolCall> calls) {
           }
           break;
         case 'array':
-          if (v is List) {
+          // An array of OBJECTS passes through intact; only arrays of scalars
+          // get stringified.
+          //
+          // The blanket `e.toString()` below was written when every array here
+          // was a list of strings (`activities`). Pockets then declared
+          // `inventory_ops` as a list of objects, and stringifying those would
+          // produce Dart map literals — `{op: pickup, item: keys}` — which are
+          // not JSON, do not decode, and are silently dropped by the op parser.
+          // The feature was saved from that only because its tool was never
+          // registered below, so the whole call converted to null and fell back
+          // to text. Registering it without this branch would have turned a
+          // working fallback into silent data loss.
+          final itemType = (spec['items'] as Map?)?['type'];
+          if (v is List && itemType == 'object') {
+            out[entry.key] = [
+              for (final e in v)
+                if (e is Map) Map<String, dynamic>.from(e),
+            ];
+          } else if (v is List) {
             out[entry.key] = v.map((e) => e.toString()).toList();
           } else if (v.toString().trim().isNotEmpty) {
             out[entry.key] = [v.toString().trim()];

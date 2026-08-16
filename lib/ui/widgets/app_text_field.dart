@@ -22,7 +22,8 @@ import 'dart:ui' show BoxHeightStyle, BoxWidthStyle;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:front_porch_ai/services/desktop_spell_check_service.dart';
+import 'package:front_porch_ai/services/services.dart'
+    show DesktopSpellCheckService;
 
 // Re-export so callers can reference SpellCheckConfiguration without an extra
 // import when they need to explicitly opt out on a technical input field.
@@ -38,6 +39,17 @@ export 'package:flutter/material.dart' show SpellCheckConfiguration;
 /// is null when [spellCheckConfiguration] is disabled.
 abstract class SpellCheckResultsProvider {
   SpellCheckResults? get spellCheckResults;
+}
+
+/// The text a spell-check span covers in [text], or null when that span no
+/// longer fits the string — an empty/invalid range, or one whose end is past
+/// the end of the text. Every use of a [SuggestionSpan] range has to be
+/// re-checked against the live text before it is read or replaced, because
+/// spell-check results outlive the text they were measured against.
+String? _spanWord(String text, TextRange range) {
+  if (!range.isValid || range.isCollapsed) return null;
+  if (range.start < 0 || range.end > text.length) return null;
+  return text.substring(range.start, range.end);
 }
 
 /// The standard text input widget for all user-facing **prose** fields across
@@ -57,11 +69,11 @@ abstract class SpellCheckResultsProvider {
 /// |----------|-------------------------------|
 /// | macOS    | `NSSpellChecker`              |
 /// | Windows  | Windows Spell Checking API    |
+/// | Linux    | hunspell, compiled into the app             |
 /// | iOS/Android | OS keyboard handles it (no override needed) |
-/// | Linux    | Not yet supported by Flutter  |
 ///
-/// This widget only injects [SpellCheckConfiguration] on macOS and Windows.
-/// All other platforms fall through to Flutter's native defaults.
+/// This widget only injects [SpellCheckConfiguration] on the three desktop
+/// platforms. All others fall through to Flutter's native defaults.
 ///
 /// ## Opting out or customizing visuals (technical or stylized inputs)
 ///
@@ -218,12 +230,12 @@ class AppTextField extends StatelessWidget {
   final TapRegionUpCallback? onTapUpOutside;
 
   /// Returns the correct [SpellCheckConfiguration] for the current platform,
-  /// or `null` on unsupported platforms (Linux, web, etc.).
+  /// or `null` on unsupported platforms (web, mobile).
   ///
   /// Exposed as a static so other widgets that cannot use [AppTextField]
   /// (e.g. [TextFormField] with a `validator`) can reuse the same logic.
   ///
-  /// ## macOS / Windows
+  /// ## macOS / Windows / Linux
   ///
   /// No explicit [SpellCheckService] is provided. On macOS, Flutter's material
   /// [TextField.build] routes the config through
@@ -242,7 +254,14 @@ class AppTextField extends StatelessWidget {
   /// |----------|--------------------------------------------------|
   /// | macOS    | Native NSSpellChecker via FlutterTextInputPlugin |
   /// | Windows  | Native Windows Spell Checking API                |
+  /// | Linux    | Vendored hunspell + a bundled en_US dictionary   |
   /// | Others   | `null` — spell check disabled                   |
+  ///
+  /// Linux needs nothing installed: the engine is compiled into the binary and
+  /// the dictionary ships in the app bundle. A user's own system dictionaries
+  /// are preferred when present, which is what keeps other languages working;
+  /// for a language with no dictionary anywhere the channel replies null and
+  /// the field simply shows no underlines.
   ///
   /// [showMisspellings] controls whether the red wavy underline style is
   /// applied. Set to false for fields with custom TextSpan styling (e.g. chat
@@ -252,7 +271,8 @@ class AppTextField extends StatelessWidget {
   static SpellCheckConfiguration? platformSpellCheck({
     bool showMisspellings = true,
   }) {
-    if (Platform.isMacOS || Platform.isWindows) {
+    if (!DesktopSpellCheckService.isEnabled) return null;
+    if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
       return SpellCheckConfiguration(
         spellCheckService: DesktopSpellCheckService(),
         misspelledTextStyle: showMisspellings
@@ -290,14 +310,23 @@ class AppTextField extends StatelessWidget {
     final TextEditingValue value = editableTextState.textEditingValue;
 
     // Find a misspelled span that contains the current cursor position.
+    //
+    // A span is only usable while the word it measured is still there: results
+    // arrive asynchronously and are never invalidated when the text changes,
+    // so a cached span can describe a longer, older string. Applying one
+    // verbatim would rewrite the wrong characters — or throw, once its end is
+    // past the end of the live text.
     SuggestionSpan? hitSpan;
+    String? hitWord;
     if (results != null && value.selection.isValid) {
       final int cursor = value.selection.baseOffset;
       for (final SuggestionSpan span in results.suggestionSpans) {
-        if (cursor >= span.range.start && cursor <= span.range.end) {
-          hitSpan = span;
-          break;
-        }
+        if (cursor < span.range.start || cursor > span.range.end) continue;
+        final String? word = _spanWord(value.text, span.range);
+        if (word == null) continue;
+        hitSpan = span;
+        hitWord = word;
+        break;
       }
     }
 
@@ -313,16 +342,26 @@ class AppTextField extends StatelessWidget {
     }
 
     final SuggestionSpan span = hitSpan;
+    final String word = hitWord!;
     final List<ContextMenuButtonItem> suggestionItems = span.suggestions
         .take(5)
         .map(
           (String suggestion) => ContextMenuButtonItem(
             label: suggestion,
             onPressed: () {
-              editableTextState.userUpdateTextEditingValue(
-                value.replaced(span.range, suggestion),
-                SelectionChangedCause.tap,
-              );
+              // Read the LIVE value, not the one captured when the menu was
+              // built: the field can be typed into, undone or programmatically
+              // rewritten while the toolbar is open. If the misspelled word is
+              // no longer sitting at that range, the correction no longer
+              // applies — dropping it beats rewriting whatever moved in.
+              final TextEditingValue current =
+                  editableTextState.textEditingValue;
+              if (_spanWord(current.text, span.range) == word) {
+                editableTextState.userUpdateTextEditingValue(
+                  current.replaced(span.range, suggestion),
+                  SelectionChangedCause.tap,
+                );
+              }
               editableTextState.hideToolbar(false);
             },
           ),

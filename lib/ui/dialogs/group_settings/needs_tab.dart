@@ -1,13 +1,14 @@
 // Copyright (C) 2026 Front Porch AI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 import 'package:front_porch_ai/ui/dialogs/group_settings/group_settings_support.dart';
+import 'package:front_porch_ai/ui/dialogs/group_settings/member_ext_persist.dart';
 
 part 'needs_tab.member.dart';
 
@@ -55,6 +56,13 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
   final Map<String, bool> _enjoysLowHygiene = {};
 
   List<CharacterCard> _chars = [];
+
+  // Baselines and "enjoys low hygiene" live on the member's card ext, which
+  // only reaches disk through this persister — the dialog's Save writes the
+  // groups row alone, so these edits used to vanish on the next launch.
+  late final GroupMemberExtPersister _extPersister = GroupMemberExtPersister(
+    widget.chatService,
+  );
 
   // Field name constants for needs baselines map keys.
 
@@ -106,9 +114,12 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
     }
   }
 
-  String _getCharId(CharacterCard c) => c.imagePath != null
-      ? c.imagePath!.split('/').last.split('.').first
-      : c.name;
+  // The engine keys every per-member store by CharacterCard.stableGroupId
+  // (ChatService._getCharacterIdFromCard). Deriving it by hand here split on
+  // '/' only and cut at the FIRST dot, so a Windows path or a filename with a
+  // dot in it produced an id no service call could match — the decay persist
+  // (setGroupNeedsDecayRate(memberId:)) matches members by that exact id.
+  String _getCharId(CharacterCard c) => c.stableGroupId;
 
   CharacterCard? _findCharById(String id) {
     for (final c in _chars) {
@@ -133,9 +144,12 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
               needsBaselineComfort: _needsBaselines[id]?[_kComfort] ?? 80,
             );
         char.frontPorchExtensions?.ensureStableId();
+        _extPersister.schedule(char);
       }
     });
-    _persistMemberNeedsPref(id, field, value);
+    // The card's needsBaseline* fields above are the real storage. A second
+    // copy used to be written into the group blob under a 'needsBaselines'
+    // key that nothing in lib/ or web_ui/ ever read back.
   }
 
   // Local display update while a decay slider is dragged. The persist (member
@@ -158,80 +172,62 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
         char.frontPorchExtensions?.ensureStableId();
     });
     persistGroupMemberPref(widget.chatService, id, 'enjoysLowHygiene', value);
+    // The blob key above is creation-time seeding only; the runtime reads
+    // frontPorchExtensions.enjoysLowHygiene, so the card has to be written.
+    _extPersister.schedule(char);
   }
 
 
-  void _persistMemberNeedsPref(String id, String field, int value) {
-    try {
-      final group = widget.chatService.activeGroup;
-      if (group != null) {
-        final map =
-            group.defaultMemberRealismState.isNotEmpty &&
-                group.defaultMemberRealismState != '{}'
-            ? (jsonDecode(group.defaultMemberRealismState)
-                      as Map<String, dynamic>? ??
-                  {})
-            : <String, dynamic>{};
-        final perChar = (map['perChar'] as Map<String, dynamic>? ?? {})
-            .cast<String, dynamic>();
-        final current = (perChar[id] as Map<String, dynamic>? ?? {})
-            .cast<String, dynamic>();
-        // Store needs baselines under a nested 'needsBaselines' key.
-        final needsBaselines =
-            (current['needsBaselines'] as Map<String, dynamic>? ?? {})
-                .cast<String, dynamic>();
-        needsBaselines[field] = value;
-        current['needsBaselines'] = needsBaselines;
-        perChar[id] = current;
-        map['perChar'] = perChar;
-        group.defaultMemberRealismState = jsonEncode(map);
-      }
-    } catch (_) {
-      // Non-fatal
-    }
-  }
-
-  void _resetAllNeedsStates() {
+  Future<void> _resetAllNeedsStates() async {
     for (final c in _chars) {
-      final id = _getCharId(c);
-      setState(() {
-        _needsBaselines[id] = {
-          _kHunger: 80,
-          _kBladder: 80,
-          _kEnergy: 80,
-          _kSocial: 80,
-          _kFun: 80,
-          _kHygiene: 80,
-          _kComfort: 80,
-        };
-        _decayRates[id] = Map<String, int>.from(_defaultDecayRates);
-        _enjoysLowHygiene[id] = false;
-      });
-      widget.chatService.resetRealismForGroupCharacter(c);
+      await _resetCharacterNeeds(c);
     }
   }
 
-  void _resetCharacterNeeds(CharacterCard character) {
+  /// Put one member back on the engine defaults.
+  ///
+  /// Every value goes out through the SAME setters the sliders use. Resetting
+  /// only the three local maps repainted the dialog while the member kept its
+  /// old decay rates and baselines — the card ext is what the runtime reads
+  /// (`_activeDecayRates()`), and `resetRealismForGroupCharacter` only drops
+  /// the live `_groupRealism` slot, it never touches the card.
+  Future<void> _resetCharacterNeeds(CharacterCard character) async {
     final id = _getCharId(character);
-    setState(() {
-      _needsBaselines[id] = {
-        _kHunger: 80,
-        _kBladder: 80,
-        _kEnergy: 80,
-        _kSocial: 80,
-        _kFun: 80,
-        _kHygiene: 80,
-        _kComfort: 80,
-      };
-      _decayRates[id] = Map<String, int>.from(_defaultDecayRates);
-      _enjoysLowHygiene[id] = false;
-    });
+    final previousDecay = Map<String, int>.from(
+      _decayRates[id] ?? _defaultDecayRates,
+    );
+
+    // _defaultDecayRates is keyed by the same seven need names as the baselines.
+    for (final field in _defaultDecayRates.keys) {
+      _updateNeedsBaseline(id, field, 80);
+      _updateMemberDecay(id, field, _defaultDecayRates[field]!);
+    }
+    _updateMemberEnjoysLowHygiene(character, false);
     widget.chatService.resetRealismForGroupCharacter(character);
+
+    // The lines above queued this member's ext; write it HERE, before the
+    // decay writes below, so no debounced save is ever in flight at the same
+    // time as one of them — two concurrent saves would race on the same PNG.
+    await _extPersister.flushMember(id);
+
+    // The decay persist (member card ext + PNG + GroupMembers row) is the
+    // expensive one: only the needs that actually changed are written, and
+    // strictly one at a time — two concurrent saves would race on the same PNG.
+    for (final entry in _defaultDecayRates.entries) {
+      if (previousDecay[entry.key] != entry.value) {
+        await widget.chatService.setGroupNeedsDecayRate(
+          entry.key,
+          entry.value,
+          memberId: id,
+        );
+      }
+    }
   }
 
   @override
   void dispose() {
     widget.chatService.removeListener(_onServiceChanged);
+    _extPersister.dispose();
     super.dispose();
   }
 

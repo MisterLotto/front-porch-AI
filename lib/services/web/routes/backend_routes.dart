@@ -56,6 +56,7 @@ class WebBackendRoutes {
       router.post('/api/backend/hardware/redetect', _redetectHardware);
       router.get('/api/backend/recommendations', _recommendations);
       router.post('/api/backend/remote-models', _remoteModels);
+      router.post('/api/backend/reasoning-menu', _reasoningMenu);
       router.post('/api/backend/test-connection', _testConnection);
     }
     if (image != null) {
@@ -199,6 +200,20 @@ class WebBackendRoutes {
       apiKey: body['apiKey']?.toString(),
     );
     return JsonResponse.ok({'models': models});
+  }
+
+  Future<shelf.Response> _reasoningMenu(shelf.Request r) async {
+    final body = await _json(r);
+    final model = body['model']?.toString() ?? '';
+    if (model.isEmpty) {
+      return JsonResponse.badRequest('model is required');
+    }
+    final menu = await _backend!.reasoningMenu(
+      model: model,
+      apiUrl: body['apiUrl']?.toString(),
+      apiKey: body['apiKey']?.toString(),
+    );
+    return JsonResponse.ok(menu);
   }
 
   Future<shelf.Response> _testConnection(shelf.Request r) async {

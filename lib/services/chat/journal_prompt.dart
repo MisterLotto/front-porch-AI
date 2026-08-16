@@ -24,10 +24,11 @@ import 'package:front_porch_ai/database/database.dart';
 const int kRecapMaxWords = 200;
 
 /// Prompt-side ask for new memories per pass. Verbose models (GLM-5.2 on
-/// Nano-GPT planted ~40 adds per pass) blow the 4000-token response budget,
-/// and because the recap is instructed LAST, truncation decapitates exactly
-/// the recap — every pass, forever ("Where we are" never persisted). The cap
-/// keeps the response comfortably inside budget and the journal readable.
+/// Nano-GPT planted ~40 adds per pass) blow the 4000-token response budget.
+/// The recap is now instructed FIRST (see the ordering comment in the
+/// format section) so a blown budget costs trailing memory beats instead
+/// of decapitating the recap; this cap remains the first line of defense
+/// that keeps passes inside budget at all.
 const int kJournalMaxNewMemories = 6;
 
 /// The Journal — maintenance-pass prompt building (extracted from
@@ -116,6 +117,16 @@ String buildJournalPrompt({
     '(the relationship), moment (something that happened), promise.',
   );
 
+  // RECAP FIRST in both transports (2026-08-10). The recap used to be
+  // instructed LAST, so whenever a busy pass hit the response budget the
+  // truncation decapitated exactly the recap — ops landed, "Where we are"
+  // stayed stale, and the maintenance warning fired ("pass produced ops but
+  // NO recap"), live in the maintainer's own log. Truncation has to cost
+  // SOMETHING; ordering chooses the cheaper casualty: a lost trailing
+  // memory is one one-sentence beat, while the lost recap is the per-turn
+  // "Where we are" the prompt and the growth pass read — and a pass that
+  // produced ops advances the cursor, so neither victim gets a retry.
+  // Both parsers are order-independent, so only the instruction moves.
   if (toolsMode) {
     b.writeln(
       '- Use ONLY the provided tools (add_memory, revise_memory, '
@@ -125,10 +136,10 @@ String buildJournalPrompt({
     b.writeln();
     if (includeRecap) {
       b.writeln(
-        'Add your memories first with add_memory, then finish with exactly '
-        'one write_recap call: where things stand now — present tense, your '
-        'voice, at most $kRecapMaxWords words. Never skip the write_recap '
-        'call, even when you add few or no memories.',
+        'Start with exactly one write_recap call: where things stand now — '
+        'present tense, your voice, at most $kRecapMaxWords words. Never '
+        'skip the write_recap call, even when you add few or no memories. '
+        'Then add your memories with add_memory.',
       );
     } else {
       b.writeln('Do not call write_recap.');
@@ -137,6 +148,12 @@ String buildJournalPrompt({
     b.writeln('- Emit only the tags below. No other commentary.');
     b.writeln();
     b.writeln('Format — one tag per operation:');
+    if (includeRecap) {
+      b.writeln(
+        '<recap>Where things stand now — present tense, your voice, at most '
+        '$kRecapMaxWords words.</recap>',
+      );
+    }
     b.writeln(
       '<memory action="add" category="moment" msgs="12,14">first-person '
       'memory text</memory>',
@@ -148,14 +165,11 @@ String buildJournalPrompt({
     b.writeln('<memory action="retire" id="2"/>');
     b.writeln('<memory action="pin" id="5"/>');
     if (includeRecap) {
-      b.writeln(
-        '<recap>Where things stand now — present tense, your voice, at most '
-        '$kRecapMaxWords words.</recap>',
-      );
       b.writeln();
-      b.writeln('Write your <memory> tags first, then end with exactly one '
-          '<recap> tag. Never skip the recap, even when you add few or no '
-          'memories.');
+      b.writeln(
+        'Open with exactly one <recap> tag, then write your <memory> tags. '
+        'Never skip the recap, even when you add few or no memories.',
+      );
     } else {
       b.writeln();
       b.writeln('Do not write a <recap> tag.');

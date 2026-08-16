@@ -26,14 +26,27 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/data_bank_dialog.dart';
 import 'package:front_porch_ai/ui/chat_components/chat_components.dart';
 import 'memory_sources_list.dart';
+import 'rag_engine_card.dart';
+import 'rag_receipt_view.dart';
+import 'rag_settings_well.dart';
 
 /// Memory (RAG) sidebar panel — enable toggle (with first-run consent flow),
-/// embedding engine status, retrieval settings, cross-character source picker,
-/// and the Data Bank. The RAG half of the old MemorySection; the Character
-/// Growth half lives in GrowthPanel.
+/// embedding engine status, the last reply's retrieval receipt
+/// (RagReceiptView — what memory just did), retrieval settings,
+/// cross-character source picker, and the Data Bank. The RAG half of the old
+/// MemorySection; the Character Growth half lives in GrowthPanel.
 class MemoryPanel extends StatefulWidget {
   final ChatService chatService;
-  const MemoryPanel({super.key, required this.chatService});
+
+  /// Journal-receipts tap-to-jump, threaded down from the chat page so a
+  /// receipt line can seek the transcript to the message it quoted.
+  final ValueChanged<int>? onJumpToMessage;
+
+  const MemoryPanel({
+    super.key,
+    required this.chatService,
+    this.onJumpToMessage,
+  });
 
   @override
   State<MemoryPanel> createState() => _MemoryPanelState();
@@ -44,8 +57,17 @@ class _MemoryPanelState extends State<MemoryPanel> {
   bool _showSources = false;
   Set<String> _selectedSources = {};
   bool _sourcesLoaded = false;
-  double? _dragRagRetrievalCount;
-  double? _dragRagWindowSize;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // If Memory is on but the engine is idle (model missing / not loaded),
+    // start setup so the RagEngineCard can show a real progress bar.
+    final storage = Provider.of<StorageService>(context);
+    if (storage.ragEnabled) {
+      Provider.of<EmbeddingService>(context, listen: false).ensureReady();
+    }
+  }
 
   /// Load current memorySources from DB
   Future<void> _loadSources() async {
@@ -54,11 +76,16 @@ class _MemoryPanelState extends State<MemoryPanel> {
     try {
       final repo = Provider.of<CharacterRepository>(context, listen: false);
       final sources = await repo.getMemorySources(activeChar.dbId!);
+      // The read crosses the DB isolate, and the panel dies on an accordion
+      // collapse or a chat switch — setState on a defunct State throws.
+      if (!mounted) return;
       setState(() {
         _selectedSources = sources.toSet();
         _sourcesLoaded = true;
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[RAG:UI] Failed to load memorySources: $e');
+      if (!mounted) return;
       setState(() => _sourcesLoaded = true);
     }
   }
@@ -151,117 +178,53 @@ class _MemoryPanelState extends State<MemoryPanel> {
 
         if (enabled) ...[
           const SizedBox(height: 6),
-          // Status indicator
-          Builder(
-            builder: (context) {
-              final embeddings = Provider.of<EmbeddingService>(context);
-              final statusColor = embeddings.isAvailable
-                  ? AppColors.bondHighOf(context)
-                  : AppColors.porchAmberOf(context);
-              final statusText = embeddings.isAvailable
-                  ? 'Memory engine ready'
-                  : embeddings.modelOnDisk
-                  ? 'Starting...'
-                  : 'Model not downloaded';
-              return Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: statusColor,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    statusText,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: AppColors.textTertiary(context),
-                    ),
-                  ),
-                ],
-              );
-            },
+          // Engine status — progress bar / download / retry (not a dead dot).
+          RagEngineCard(accent: accent),
+          // What memory just did — the last reply's retrieval receipt.
+          RagReceiptView(
+            receipt: widget.chatService.lastRagReceipt,
+            onJumpToMessage: widget.onJumpToMessage,
+            accent: accent,
           ),
           const SizedBox(height: 6),
-          // Controls row
-          Row(
+          // Sidebar width is whatever the user dragged it to — wrap rather
+          // than assume the three chips fit on one line (225px overflowed).
+          Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              // Settings gear toggle
-              InkWell(
+              _link(
+                icon: Icons.tune,
+                label: 'Settings',
+                color: _showSettings
+                    ? accent
+                    : AppColors.textTertiary(context),
+                iconColor: _showSettings
+                    ? accent
+                    : AppColors.iconSecondary(context),
                 onTap: () => setState(() => _showSettings = !_showSettings),
-                borderRadius: BorderRadius.circular(4),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 2,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.tune,
-                        size: 14,
-                        color: _showSettings
-                            ? accent
-                            : AppColors.iconSecondary(context),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Settings',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: _showSettings
-                              ? accent
-                              : AppColors.textTertiary(context),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               ),
-              const SizedBox(width: 12),
-              // Sources toggle
-              InkWell(
+              _link(
+                icon: Icons.people,
+                label:
+                    'Sources${_selectedSources.isNotEmpty ? ' (${_selectedSources.length})' : ''}',
+                color: _showSources
+                    ? accent
+                    : AppColors.textTertiary(context),
+                iconColor: _showSources
+                    ? accent
+                    : AppColors.iconSecondary(context),
                 onTap: () {
                   setState(() => _showSources = !_showSources);
                   if (_showSources && !_sourcesLoaded) _loadSources();
                 },
-                borderRadius: BorderRadius.circular(4),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 2,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.people,
-                        size: 14,
-                        color: _showSources
-                            ? accent
-                            : AppColors.iconSecondary(context),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Sources${_selectedSources.isNotEmpty ? ' (${_selectedSources.length})' : ''}',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: _showSources
-                              ? accent
-                              : AppColors.textTertiary(context),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               ),
-              const SizedBox(width: 12),
-              // Data Bank button
-              InkWell(
+              _link(
+                icon: Icons.library_books,
+                label: 'Data Bank',
+                color: AppColors.textTertiary(context),
+                iconColor: AppColors.iconSecondary(context),
                 onTap: () {
                   final activeChar = widget.chatService.activeCharacter;
                   if (activeChar == null) return;
@@ -273,162 +236,13 @@ class _MemoryPanelState extends State<MemoryPanel> {
                     ),
                   );
                 },
-                borderRadius: BorderRadius.circular(4),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 2,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.library_books,
-                        size: 14,
-                        color: AppColors.iconSecondary(context),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Data Bank',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: AppColors.textTertiary(context),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               ),
             ],
           ),
 
-          // Expandable settings
           if (_showSettings) ...[
             const SizedBox(height: 8),
-            Container(
-              padding: SidebarTokens.wellPadding,
-              decoration: BoxDecoration(
-                color: AppColors.sunkenSurfaceOf(context),
-                borderRadius: BorderRadius.circular(SidebarTokens.wellRadius),
-                border: Border.all(color: AppColors.borderOf(context)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Memories per turn
-                  Row(
-                    children: [
-                      Text(
-                        'Memories per turn',
-                        style: TextStyle(
-                          color: AppColors.textSecondary(context),
-                          fontSize: 11,
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        (_dragRagRetrievalCount ??
-                                        storage.ragRetrievalCount.toDouble())
-                                    .round() ==
-                                0
-                            ? 'All'
-                            : '${(_dragRagRetrievalCount ?? storage.ragRetrievalCount.toDouble()).round()}',
-                        style: TextStyle(
-                          color: accent,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      trackHeight: 3,
-                      thumbShape: const RoundSliderThumbShape(
-                        enabledThumbRadius: 6,
-                      ),
-                    ),
-                    child: Slider(
-                      value:
-                          _dragRagRetrievalCount ??
-                          storage.ragRetrievalCount.toDouble(),
-                      min: 0,
-                      max: 50,
-                      divisions: 50,
-                      activeColor: accent,
-                      inactiveColor: AppColors.borderOf(context),
-                      onChanged: (val) =>
-                          setState(() => _dragRagRetrievalCount = val),
-                      onChangeEnd: (val) {
-                        _dragRagRetrievalCount = null;
-                        storage.setRagRetrievalCount(val.round());
-                      },
-                    ),
-                  ),
-                  // Window size
-                  Row(
-                    children: [
-                      Text(
-                        'Window size',
-                        style: TextStyle(
-                          color: AppColors.textSecondary(context),
-                          fontSize: 11,
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        '${(_dragRagWindowSize ?? storage.ragWindowSize.toDouble()).round()}',
-                        style: TextStyle(
-                          color: accent,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      trackHeight: 3,
-                      thumbShape: const RoundSliderThumbShape(
-                        enabledThumbRadius: 6,
-                      ),
-                    ),
-                    child: Slider(
-                      value:
-                          _dragRagWindowSize ??
-                          storage.ragWindowSize.toDouble(),
-                      min: 3,
-                      max: 10,
-                      divisions: 7,
-                      activeColor: accent,
-                      inactiveColor: AppColors.borderOf(context),
-                      onChanged: (val) =>
-                          setState(() => _dragRagWindowSize = val),
-                      onChangeEnd: (val) {
-                        _dragRagWindowSize = null;
-                        storage.setRagWindowSize(val.round());
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Icon(Icons.info_outline, size: 12, color: accent),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          'Uses local nomic-embed-text model — no data leaves your machine.',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: AppColors.textTertiary(context),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+            RagSettingsWell(accent: accent),
           ],
 
           // Expandable memory sources (cross-character picker)
@@ -472,6 +286,30 @@ class _MemoryPanelState extends State<MemoryPanel> {
           ],
         ],
       ],
+    );
+  }
+
+  Widget _link({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required Color iconColor,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: iconColor),
+            const SizedBox(width: 4),
+            Text(label, style: TextStyle(fontSize: 10, color: color)),
+          ],
+        ),
+      ),
     );
   }
 }

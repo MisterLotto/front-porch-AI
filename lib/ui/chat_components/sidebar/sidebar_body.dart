@@ -24,16 +24,14 @@ import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
-import 'package:front_porch_ai/ui/dialogs/group_objectives_dialog.dart';
+import 'package:front_porch_ai/ui/dialogs/dialogs.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
-import 'character_state/character_state_group.dart';
+import 'character_state/character_state.dart';
 import 'journal_memory/journal_memory_group.dart';
 import 'porch_accordion.dart';
 import 'sidebar_tokens.dart';
-import 'story_tools/author_note_section.dart';
-import 'story_tools/objective_panel.dart';
-import 'story_tools/story_tools_group.dart';
+import 'story_tools/story_tools.dart';
 import 'tool_calling_pill.dart';
 
 /// The scrolling body of the warm-porch chat sidebar: the lite-NPC banner
@@ -140,7 +138,10 @@ class SidebarBody extends StatelessWidget {
             // Objectives: own leaf, collapsed by default — runs in the
             // background; expand when the user wants to steer the story.
             // 1:1 full chats only (same gate as the old Story Tools embed).
-            if (!isGroup && !isLite)
+            // Switched off (v45) ⇒ the panel is GONE, not disabled: a feature
+            // that costs a model call per check should leave no surface behind
+            // suggesting it is still working. The quests themselves are kept.
+            if (!isGroup && !isLite && chat.objectivesActive)
               PorchAccordion(
                 id: 'objectives',
                 emoji: '🎯',

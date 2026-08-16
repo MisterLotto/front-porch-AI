@@ -23,17 +23,26 @@ import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
 import 'package:front_porch_ai/services/gpu_backend_resolver.dart';
 import 'package:front_porch_ai/services/kobold_binary_version.dart';
+import 'package:front_porch_ai/services/kobold_launch_args.dart';
+import 'package:front_porch_ai/services/kobold_process_control.dart';
+import 'package:front_porch_ai/services/kobold_system_role.dart';
 import 'package:front_porch_ai/services/live_gen_progress.dart';
 import 'package:front_porch_ai/services/model_file_check.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/openai_chat_stream.dart';
+import 'package:front_porch_ai/services/system_role_probe.dart';
 import 'package:path/path.dart' as path;
 
 class KoboldService extends ChangeNotifier
     with WidgetsBindingObserver
     implements LLMService {
   final StorageService _storageService;
+
+  /// See [KoboldSystemRole]: resolved once per model load, read once per
+  /// generation, forgotten on stop.
+  final KoboldSystemRole _systemRole;
+
   Process? _process;
   bool _isRunning = false;
   bool _isStarting = false;
@@ -102,7 +111,10 @@ class KoboldService extends ChangeNotifier
   @override
   String get backendName => 'KoboldCPP';
 
-  KoboldService(this._storageService) {
+  /// The `--jinja` system-message workaround's wiring (arm / read / forget).
+  /// [systemRoleProbe] is a test seam: production takes the app-wide probe.
+  KoboldService(this._storageService, {SystemRoleProbe? systemRoleProbe})
+    : _systemRole = KoboldSystemRole(probe: systemRoleProbe) {
     _purgeLogs();
     WidgetsBinding.instance.addObserver(this);
     // Best-effort fast path: probe on construction so hot restarts pick up
@@ -132,45 +144,37 @@ class KoboldService extends ChangeNotifier
             '[KoboldService] Reconnected to existing KoboldCPP instance.',
           );
           _isRunning = true;
-          _modelReady = true;
-          _modelJustLoaded = true;
-          notifyListeners();
+          _markModelReady();
           await _syncVersionFromResponse(response);
         } else {
           // Orphaned zombie from a previous app instance (e.g. after update).
-          // Kill it so we can start fresh on the same port.
+          // Kill it so we can start fresh on the same port — but ONLY when the
+          // managed local backend is the selected one. killOrphanedKobold-
+          // Processes sweeps the whole MACHINE by image name, and this probe
+          // runs from the constructor on every launch, so on Remote API / oMLX
+          // (pointing at 127.0.0.1:5001 without an API key is a supported
+          // setup) it would SIGKILL a server the app neither started nor is
+          // about to replace. Same gate the other backend-owning paths use
+          // (backend_manager.dart, setup_service.dart).
+          await _storageService.initialized;
+          final backendType = _storageService.backendType;
+          if (backendType == 'openRouter' || backendType == 'omlx') {
+            debugPrint(
+              '[KoboldService] KoboldCPP is answering on $_baseUrl but the '
+              'selected backend is $backendType — leaving it alone.',
+            );
+            return;
+          }
           debugPrint(
             '[KoboldService] Found orphaned KoboldCPP on $_baseUrl — killing it.',
           );
-          await killOrphanedBackend();
+          await killOrphanedKoboldProcesses(_addLog);
         }
       }
     } catch (_) {
       // Not running — normal on first launch, ignore silently.
     } finally {
       client.close();
-    }
-  }
-
-  /// Kill any KoboldCPP processes that were left behind by a previous app
-  /// instance (e.g. after an update where exit(0) bypassed cleanup).
-  /// This is a best-effort cleanup — it won't fail if nothing is found.
-  Future<void> killOrphanedBackend() async {
-    try {
-      if (Platform.isWindows) {
-        // Kill all koboldcpp.exe processes — there should only be zombies.
-        await Process.run('taskkill', ['/F', '/IM', 'koboldcpp.exe']);
-        await Process.run('taskkill', ['/F', '/IM', 'koboldcpp_nocuda.exe']);
-        // Non-AVX2 machines run the oldpc build (distinct image name).
-        await Process.run('taskkill', ['/F', '/IM', 'koboldcpp-oldpc.exe']);
-        _addLog('Killed orphaned KoboldCPP processes.');
-      } else {
-        // macOS/Linux: kill by process name
-        await Process.run('pkill', ['-KILL', '-f', 'koboldcpp']);
-        _addLog('Killed orphaned KoboldCPP processes.');
-      }
-    } catch (e) {
-      debugPrint('[KoboldService] killOrphanedBackend failed (OK): $e');
     }
   }
 
@@ -238,6 +242,13 @@ class KoboldService extends ChangeNotifier
     bool useRocm = false,
   }) async {
     if (_isStarting) return;
+    // Claim the slot BEFORE the stop ladder below, not after it. That ladder
+    // awaits for 1–6s with `_isRunning` already false, and a second caller
+    // arriving in that window used to see both flags clear, walk straight to
+    // Process.start, and have its handle overwritten by the first caller
+    // resuming — one KoboldCpp process left with no owner, holding the port
+    // and the VRAM. Every early return below must clear it again.
+    _isStarting = true;
     // If the previous process is still alive (e.g. stopKobold was not awaited
     // or the stop is racing with start), kill it first to prevent zombie
     // processes from accumulating — especially on Windows where port reuse
@@ -246,11 +257,19 @@ class KoboldService extends ChangeNotifier
       debugPrint(
         '[KoboldService] startKobold called while still running — stopping first.',
       );
-      await stopKobold();
-      // Give the OS a moment to release the port
-      await Future<void>.delayed(const Duration(seconds: 1));
+      try {
+        await stopKobold();
+        // Give the OS a moment to release the port
+        await Future<void>.delayed(const Duration(seconds: 1));
+      } catch (e) {
+        // The slot is claimed above, so a throwing stop must release it or
+        // no launch would ever be possible again this session.
+        _isStarting = false;
+        _addLog('Could not stop the previous backend: $e');
+        notifyListeners();
+        rethrow;
+      }
     }
-    _isStarting = true;
 
     // ── Model file pre-flight ────────────────────────────────────────────────
     // Verify the .gguf is genuinely readable BEFORE spawning KoboldCpp, so a
@@ -274,154 +293,20 @@ class KoboldService extends ChangeNotifier
     // Store the executable path for cleanup
     _executablePath = executablePath;
 
-    List<String> args;
-
-    if (kcppsPath != null) {
-      // ── Preset mode (.kcpps) ────────────────────────────────────────────────
-      // Let KoboldCpp load GPU, context, and all other settings from the file.
-      // We only force the port so the app's _baseUrl doesn't break.
-      //
-      // If the .kcpps file has NO model key (StorageService.kcppsHasModel is
-      // false), the user selected one via the Flutter model picker and we pass
-      // it via --model.  Without this KoboldCPP would open its own native file
-      // picker — which is the bug we're fixing.
-      //
-      // If the .kcpps file DOES have a model, modelPath is empty here and we
-      // let the preset handle it entirely.
-      args = [
-        '--config',
-        kcppsPath,
-        '--port',
-        port.toString(),
-        if (modelPath.isNotEmpty) ...['--model', modelPath],
-      ];
-    } else {
-      // ── Standard UI-driven mode ─────────────────────────────────────────────
-      args = [
-        '--model',
-        modelPath,
-        '--port',
-        port.toString(),
-        '--contextsize',
-        contextSize.toString(),
-        '--gpulayers',
-        gpuLayers.toString(),
-      ];
-
-      // \u2500\u2500 GPU backend flags \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-
-      if (useVulkan) args.add('--usevulkan');
-
-      if (useCublas) {
-        // Always pass an explicit GPU ID with --usecublas to prevent KoboldCPP
-        // from defaulting to GPU 0 which may be an iGPU on multi-GPU systems.
-        // Bug fix: on a system with both an iGPU (GPU 0) and a discrete RTX (GPU 1)
-        // the old code silently ran everything on the iGPU at ~0.5 t/s.
-        args.addAll(['--usecublas', _storageService.gpuId.toString()]);
-      }
-
-      if (useRocm) {
-        // Explicit device index — same iGPU-defaulting hazard as CUDA on
-        // APU + dGPU systems.
-        args.addAll(['--usehipblas', _storageService.gpuId.toString()]);
-        // Flash attention kernel crashes on many AMD GPUs — always disable for ROCm.
-        args.add('--noflashattention');
-      }
-      // Note: Metal is used automatically on macOS Apple Silicon, no flag needed.
-
-      // \u2500\u2500 FlashAttention \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-      // Bug fix: previously only added when KV quantization was also enabled,
-      // meaning CUDA/Metal users without KV quant never got the ~30% speed boost.
-      // Now enabled independently for CUDA and Metal. ROCm is excluded above.
-      final wantsFlashAttn = _storageService.flashAttentionEnabled;
-      final canUseFlashAttn = (useCublas || useMetal) && !useRocm;
-      if (wantsFlashAttn && canUseFlashAttn) {
-        args.add('--flashattention');
-      }
-
-      // \u2500\u2500 KV Cache Quantization \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-      // Flash attention is a prerequisite for V-cache quantization. Since we
-      // may have already added it above, only add the flag if it wasn\u2019t added.
-      if (_storageService.kvQuantizationLevel > 0) {
-        args.add('--quantkv');
-        args.add(_storageService.kvQuantizationLevel.toString());
-        // Ensure flash attention is present for quantised V-cache even if the
-        // user disabled it in Advanced settings (quantkv requires it).
-        if (!args.contains('--flashattention') && !useRocm) {
-          args.add('--flashattention');
-        }
-      }
-
-      // \u2500\u2500 mlock \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-      // Prevents the OS from paging model weights to disk under memory pressure.
-      // Without this, a system at the edge of RAM capacity can drop from 20 t/s
-      // to 0.5 t/s mid-session. Default ON for Win/Mac, OFF for Linux (requires
-      // root or ulimit -l unlimited which most users haven\u2019t set).
-      if (_storageService.mlockEnabled) {
-        args.add('--usemlock');
-      }
-
-      // \u2500\u2500 BLAS batch size \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-      // Controls how many tokens are processed in parallel during prefill (prompt
-      // evaluation). Higher = faster context loading, more VRAM. Default 512.
-      // Large-VRAM users (24 GB+) benefit from 1024\u20132048.
-      if (_storageService.blasBatchSize != 512) {
-        final batch = _storageService.blasBatchSize;
-        if (batch > 4096) {
-          // KoboldCpp's CLI rejects anything above 4096 \u2014 but that cap is
-          // launcher-only (an argparse `choices` list); the engine itself has
-          // no upper clamp for GGUF models and sets n_ubatch = n_batch from
-          // whatever arrives. Values loaded from a --config file are applied
-          // with setattr AFTER argument parsing \u2014 no choices validation \u2014 and
-          // Kobold's loader is explicitly designed so CLI flags override
-          // config keys, so this one-key config carries ONLY the batch size
-          // while every other flag stays authoritative on the CLI. If a
-          // future build hardens config validation, the worst case is the
-          // key failing to apply (Kobold runs at its default batch instead
-          // of refusing to start, which is what the raw CLI flag did).
-          final overrides = File(
-            path.join(
-              path.dirname(executablePath),
-              'fpai_batch_override.kcpps',
-            ),
-          );
-          await overrides.writeAsString(jsonEncode({'batchsize': batch}));
-          args.addAll(['--config', overrides.path]);
-        } else {
-          // Only pass the flag when non-default so KoboldCPP's built-in
-          // default applies for users who haven't changed this setting.
-          args.addAll(['--blasbatchsize', batch.toString()]);
-        }
-      }
-    }
-
-    // ── Jinja chat templates ─────────────────────────────────────────────────
-    // Run each model's OWN embedded chat template server-side instead of
-    // KoboldCpp's built-in AutoGuess string adapter. This is what lets a model's
-    // `chat_template_kwargs` (notably enable_thinking) actually take effect —
-    // without --jinja, Kobold discards that field, so reasoning/thinking models
-    // whose template defaults to suppressed (Gemma-4-class channel reasoners)
-    // never think, and the "Request Reasoning" toggle is a no-op locally.
-    // Applied to BOTH launch paths (preset .kcpps and standard) since both drive
-    // the shared /v1/chat/completions transport. Safe as a global default: if a
-    // model's embedded template is missing or malformed, KoboldCpp automatically
-    // falls back to its heuristic adapter (verified — the server still starts and
-    // answers), so this never blocks a model from loading. Plain --jinja keeps
-    // tool calls on the non-jinja path (unchanged); --jinja_tools is intentionally
-    // NOT used.
-    args.add('--jinja');
-
-    // ── Vision projector (mmproj) ────────────────────────────────────────────
-    // A multimodal model whose projector is NOT baked into the GGUF (it ships in
-    // a separate mmproj file) can actually see images only when KoboldCpp is
-    // handed that file. Added for BOTH preset and standard modes, and only when
-    // a non-empty path is configured AND the file exists on disk — a stale or
-    // missing mmproj must never abort the launch.
-    if (mmprojPath != null &&
-        mmprojPath.isNotEmpty &&
-        File(mmprojPath).existsSync()) {
-      args.addAll(['--mmproj', mmprojPath]);
-    }
+    final args = await buildKoboldLaunchArgs(
+      storage: _storageService,
+      executablePath: executablePath,
+      modelPath: modelPath,
+      kcppsPath: kcppsPath,
+      mmprojPath: mmprojPath,
+      port: port,
+      gpuLayers: gpuLayers,
+      contextSize: contextSize,
+      useVulkan: useVulkan,
+      useCublas: useCublas,
+      useMetal: useMetal,
+      useRocm: useRocm,
+    );
 
     try {
       print('AG_DEBUG: === STARTING KOBOLDCPP ===');
@@ -481,10 +366,18 @@ class KoboldService extends ChangeNotifier
             }
           });
 
-      _process!.exitCode.then((code) {
+      final launched = _process!;
+      launched.exitCode.then((code) {
+        _addLog('Process exited with code $code');
+        // Only the process we are still tracking may clear the state — a
+        // late-dying orphan from an overlapping start must not report the
+        // LIVE backend as stopped.
+        if (!identical(_process, launched)) {
+          notifyListeners();
+          return;
+        }
         _isRunning = false;
         _process = null;
-        _addLog('Process exited with code $code');
         // Exit 2 is KoboldCpp's "Cannot find text model file" path. The
         // pre-flight above catches most causes, but KoboldCpp resolves the
         // path through Python and can still reject a file we read fine, so
@@ -528,22 +421,42 @@ class KoboldService extends ChangeNotifier
     List<Map<String, dynamic>> tools,
   ) async {
     if (!isReady) return null;
-    // Serialize politely on the single-slot local engine: wait for any
-    // in-flight request first, and register on the SAME _pendingRequest slot
-    // generateStream uses — so waitForIdle callers (text evals, the Scene
-    // Guest mint's background-safe path) genuinely wait for an in-flight
-    // tools call instead of racing it.
+    http.Client? mine;
+    return _runSerialized(
+      () => postOpenAiChatWithTools(
+        _baseUrl,
+        params,
+        tools,
+        foldSystemIntoUser: _systemRole.foldSystemIntoUser,
+        registerClient: (client) {
+          mine = client;
+          _activeClient = client;
+        },
+        // Same ownership rule the `_pendingRequest` slot two lines below
+        // already follows (and OpenRouterService already applies to this
+        // very field): a finishing call may only clear the abort handle if
+        // it is still ITS handle. Clearing a newer request's client left
+        // Stop/abort with nothing to close.
+        onDone: () {
+          if (identical(_activeClient, mine)) _activeClient = null;
+        },
+      ),
+    );
+  }
+
+  /// Run [body] with exclusive use of the single-slot local engine: wait for
+  /// any in-flight request, then register on the SAME `_pendingRequest` slot
+  /// [generateStream] uses, so other `waitForIdle` callers (text evals, the
+  /// Scene Guest mint, the system-role probe) queue behind us instead of
+  /// racing. Extracted from [generateWithTools], which was the only thing
+  /// that did this dance — a second hand-rolled copy of a slot protocol is
+  /// how one of them ends up subtly different.
+  Future<T> _runSerialized<T>(Future<T> Function() body) async {
     await waitForIdle();
     final completer = Completer<void>();
     _pendingRequest = completer.future;
     try {
-      return await postOpenAiChatWithTools(
-        _baseUrl,
-        params,
-        tools,
-        registerClient: (client) => _activeClient = client,
-        onDone: () => _activeClient = null,
-      );
+      return await body();
     } finally {
       if (!completer.isCompleted) completer.complete();
       // Only release the slot if it is still OURS — a stream that started
@@ -559,12 +472,21 @@ class KoboldService extends ChangeNotifier
   Stream<String> generateStream(GenerationParams params) async* {
     final completer = Completer<void>();
     _pendingRequest = completer.future;
+    http.Client? mine;
     try {
       yield* streamOpenAiChat(
         _baseUrl,
         params,
-        registerClient: (client) => _activeClient = client,
-        onDone: () => _activeClient = null,
+        foldSystemIntoUser: _systemRole.foldSystemIntoUser,
+        registerClient: (client) {
+          mine = client;
+          _activeClient = client;
+        },
+        // Ownership guard — see generateWithTools: this stream's late
+        // teardown must not null a newer request's abort handle.
+        onDone: () {
+          if (identical(_activeClient, mine)) _activeClient = null;
+        },
       );
     } finally {
       if (!completer.isCompleted) completer.complete();
@@ -651,6 +573,55 @@ class KoboldService extends ChangeNotifier
     caseSensitive: false,
   );
 
+  /// The ONE "the model is up" transition. Three call sites used to inline
+  /// the same five statements (the readiness poll, the log fast-path, and the
+  /// hot-restart reconnect), which is how the reconnect path quietly ended up
+  /// missing `_stopReadinessProbe()`. Folded into one so anything that must
+  /// happen on model-ready — like arming the system-role probe — happens on
+  /// EVERY path by construction.
+  void _markModelReady() {
+    _modelLoadingStatus = '';
+    _modelReady = true;
+    _modelJustLoaded = true;
+    _stopReadinessProbe();
+    // Resolve the probe key and arm the measurement in the idle window right
+    // after load — the only place it is cheap. See [KoboldSystemRole].
+    //
+    // BEFORE notifyListeners, not after: a listener woken by that call can
+    // reach straight back in and generate, and until this line runs the key
+    // still names the PREVIOUS model — so a notify-first ordering leaves a
+    // window where the workaround is decided from a stale verdict.
+    _armedProbe = _systemRole.arm(
+      baseUrl: _baseUrl,
+      backendName: backendName,
+      storage: _storageService,
+      runExclusive: _runSerialized,
+      log: _addLog,
+    );
+    notifyListeners();
+  }
+
+  /// The measurement armed by the last [_markModelReady]. Production never
+  /// waits on it (see [KoboldSystemRole.arm]); [debugMarkModelReady] does,
+  /// because the alternative for a test is guessing when the probe finished —
+  /// by sleeping, or by watching requests ARRIVE at a fake server. Arrival is
+  /// the wrong event: the verdict is written after the last RESPONSE is
+  /// parsed, so that guess is a race that passes alone and reddens CI at
+  /// `--concurrency=4`.
+  Future<void> _armedProbe = Future<void>.value();
+
+  /// Test hooks: the model-ready transition that only a real process would
+  /// otherwise drive — returning the measurement it armed — and the key it
+  /// resolved.
+  @visibleForTesting
+  Future<void> debugMarkModelReady() {
+    _markModelReady();
+    return _armedProbe;
+  }
+
+  @visibleForTesting
+  String get systemRoleIdentity => _systemRole.identity;
+
   void _startReadinessProbe() {
     _stopReadinessProbe(); // Cancel any prior timer.
     _readinessProbe = Timer.periodic(
@@ -677,11 +648,7 @@ class KoboldService extends ChangeNotifier
           .timeout(const Duration(seconds: 3));
       if (response.statusCode == 200) {
         debugPrint('[KoboldService] Readiness probe: 200 OK — model ready.');
-        _modelLoadingStatus = '';
-        _modelReady = true;
-        _modelJustLoaded = true;
-        _stopReadinessProbe();
-        notifyListeners();
+        _markModelReady();
         await _syncVersionFromResponse(response);
       }
     } catch (_) {
@@ -696,11 +663,7 @@ class KoboldService extends ChangeNotifier
   void _parseLoadingStatus(String data) {
     // Model is ready when server starts listening (fast-path).
     if (_readyPattern.hasMatch(data)) {
-      _modelLoadingStatus = '';
-      _modelReady = true;
-      _modelJustLoaded = true;
-      _stopReadinessProbe();
-      notifyListeners();
+      _markModelReady();
       return;
     }
 
@@ -836,89 +799,29 @@ class KoboldService extends ChangeNotifier
   }
 
   Future<void> stopKobold() async {
-    if (_process != null) {
-      final pid = _process!.pid;
-      _addLog('Stopping Backend (PID: $pid)...');
-
-      if (Platform.isWindows) {
-        try {
-          // Force kill process tree on Windows
-          await Process.run('taskkill', ['/F', '/T', '/PID', pid.toString()]);
-          _addLog('Force killed process tree.');
-        } catch (e) {
-          _addLog('Taskkill failed, trying standard kill: $e');
-          _process!.kill();
-        }
-      } else {
-        // Linux/macOS: Dart's Process.start() does NOT create a new process group,
-        // so the child inherits our PGID. We can't use kill(-pid) reliably.
-        // Instead: kill all child processes first, then the parent.
-        try {
-          // Step 1: Kill all child processes of the koboldcpp parent
-          _addLog('Killing child processes of PID $pid...');
-          await Process.run('pkill', ['-TERM', '-P', pid.toString()]);
-
-          // Step 2: Kill the parent process itself
-          _process?.kill(ProcessSignal.sigterm);
-          _addLog('Sent SIGTERM to parent and children.');
-
-          // Wait up to 3 seconds for graceful shutdown
-          bool exited = false;
-          for (int i = 0; i < 6; i++) {
-            await Future.delayed(const Duration(milliseconds: 500));
-            try {
-              final check = await Process.run('kill', ['-0', pid.toString()]);
-              if (check.exitCode != 0) {
-                exited = true;
-                break;
-              }
-            } catch (_) {
-              exited = true;
-              break;
-            }
-          }
-
-          if (!exited) {
-            // Force kill with SIGKILL — children first, then parent
-            _addLog('Process did not exit gracefully, sending SIGKILL...');
-            await Process.run('pkill', ['-KILL', '-P', pid.toString()]);
-            _process?.kill(ProcessSignal.sigkill);
-          }
-
-          // Step 3: Final safety net — kill any remaining processes matching the
-          // executable name. This catches deeply nested children or processes
-          // that reparented to init (PID 1) after their parent was killed.
-          if (_executablePath != null) {
-            final exeName = path.basename(_executablePath!);
-            _addLog('Cleaning up any remaining $exeName processes...');
-            await Process.run('pkill', ['-KILL', '-f', exeName]);
-          }
-        } catch (e) {
-          _addLog('Process cleanup failed, using fallback: $e');
-          _process?.kill(ProcessSignal.sigkill);
-          // Still try the executable-name fallback
-          if (_executablePath != null) {
-            final exeName = path.basename(_executablePath!);
-            try {
-              await Process.run('pkill', ['-KILL', '-f', exeName]);
-            } catch (_) {}
-          }
-        }
-      }
-
-      // Wait briefly for process to fully exit before clearing state
-      try {
-        await _process?.exitCode.timeout(const Duration(seconds: 2));
-      } catch (_) {
-        // Timeout is fine — we've already sent kill signals
-      }
-
-      _process = null;
-      _isRunning = false;
-      _modelLoadingStatus = '';
-      _modelReady = false;
-      _stopReadinessProbe();
-      notifyListeners();
-    }
+    // Before anything else, and regardless of whether we own the process — a
+    // hot-restart reconnect marks the model ready with `_process == null`,
+    // and that verdict must not outlive the stop either. This also CANCELS a
+    // measurement still on the wire: it is about to be a measurement of a
+    // server that no longer exists, and it is holding this class's single
+    // request slot while it waits. See [KoboldSystemRole.forget].
+    _systemRole.forget();
+    // Captured, because the exitCode listener installed by [startKobold] nulls
+    // `_process` the moment the process dies — which can happen part-way
+    // through the kill ladder below.
+    final process = _process;
+    if (process == null) return;
+    _addLog('Stopping Backend (PID: ${process.pid})...');
+    await terminateKoboldTree(
+      process,
+      executablePath: _executablePath,
+      log: _addLog,
+    );
+    _process = null;
+    _isRunning = false;
+    _modelLoadingStatus = '';
+    _modelReady = false;
+    _stopReadinessProbe();
+    notifyListeners();
   }
 }

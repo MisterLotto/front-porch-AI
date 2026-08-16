@@ -9,8 +9,11 @@
 // (NeedsFormSection) rendered alongside this one.
 
 import { Slider, ToggleRow, SelectRow } from './controls';
+import { ChipList } from './ChipList';
 import {
   type RealismValues,
+  chipsToInventory,
+  inventoryToChips,
   INTENSITY_OPTIONS,
   TIME_OPTIONS,
   longTermTier,
@@ -21,7 +24,17 @@ import {
 
 type Patch = (patch: Partial<RealismValues>) => void;
 
-export function RealismFormSection({ v, set }: { v: RealismValues; set: Patch }) {
+export function RealismFormSection({
+  v,
+  set,
+  showIntimate = false,
+}: {
+  v: RealismValues;
+  set: Patch;
+  /// The install's 18+ master switch, mirroring desktop: the intimate pair is
+  /// absent (not disabled) unless the user opted into 18+ themes.
+  showIntimate?: boolean;
+}) {
   return (
     <div className="realism-section">
       <ToggleRow
@@ -160,16 +173,80 @@ export function RealismFormSection({ v, set }: { v: RealismValues; set: Patch })
             )}
           </div>
 
-          {/* ── Current task / quest ── */}
-          <h4 className="realism-head">Current task / quest</h4>
-          <label className="realism-field">
-            <textarea
-              rows={2}
-              value={v.currentTask}
-              placeholder="e.g. Find the missing artifact, Survive the first day at school"
-              onChange={(e) => set({ currentTask: e.target.value })}
-            />
-          </label>
+          {/* ── Ambitions (approved sketch §4) ──
+              "Ambitions — long-term goals, one per chip (replaces 'Current
+              Task / Quest' in this editor)". Mirrors the desktop editor. */}
+          <ChipList
+            label="Ambitions"
+            accent
+            values={v.ambitions}
+            onChange={(a) => set({ ambitions: a })}
+            placeholder="e.g. open a bakery"
+            helper="What this character is working toward across the whole story. They colour how the character steers a scene, and they inch forward when objectives complete. Not a to-do list — quests live in the chat sidebar."
+          />
+          {/* ── Likes & Dislikes ── mirrors identity_chip_lists.dart. Two
+              plain (non-accent) chip lists, exactly as the sketch draws them. */}
+          <ChipList
+            label="Drawn to"
+            values={v.likes}
+            onChange={(a) => set({ likes: a })}
+            placeholder="e.g. thunderstorms"
+            helper="Small, specific things this character warms to. They colour how the character reacts to what is already happening — and, with the Realism Engine on, how much a moment moves them."
+          />
+          <ChipList
+            label="Put off by"
+            values={v.dislikes}
+            onChange={(a) => set({ dislikes: a })}
+            placeholder="e.g. being interrupted"
+            helper="What makes this character bristle. Phrases, not paragraphs — one thing per chip reads best in a scene."
+          />
+
+          {/* ── Pockets & Wardrobe ── mirrors identity_chip_lists.dart. What
+              the character already has when a chat opens; the runtime seeds
+              its record from exactly this map. */}
+          <ChipList
+            label="Wearing"
+            values={inventoryToChips(v.inventory).worn}
+            onChange={(a) =>
+              set({ inventory: chipsToInventory(a, inventoryToChips(v.inventory).carrying) })
+            }
+            placeholder="e.g. flour-dusted apron"
+            helper='What this character already has when a chat opens. Add a condition in brackets — "sundress (rain-soaked)" — and it is kept and updated as the story uses the item.'
+          />
+          <ChipList
+            label="Carrying"
+            values={inventoryToChips(v.inventory).carrying}
+            onChange={(a) =>
+              set({ inventory: chipsToInventory(inventoryToChips(v.inventory).worn, a) })
+            }
+            placeholder="e.g. car keys"
+            helper="Tracked once Pockets & Wardrobe is switched on in Settings → Porch Life. Up to 8 of each; the oldest drops off if a character picks up more."
+          />
+
+          {/* The 18+ pair, only for an install that asked for it. */}
+          {showIntimate && (
+            <>
+              <ChipList
+                label="Warms to"
+                values={v.intimateInto}
+                onChange={(a) => set({ intimateInto: a })}
+                placeholder="e.g. slow mornings"
+                helper="Suggestive tastes for 18+ scenes. These stay out of the prompt entirely unless 18+ themes are switched on."
+              />
+              <ChipList
+                label="Not interested in"
+                values={v.intimateNotInto}
+                onChange={(a) => set({ intimateNotInto: a })}
+                placeholder="e.g. an audience"
+              />
+            </>
+          )}
+
+          {/* Ambitions replaced the "Current task / quest" textarea here, exactly
+              as on desktop. `currentTask` stays in RealismValues (seeded from
+              /detail, sent straight back on save) so a card authored before the
+              swap keeps its task on disk — the chat now imports it as a starting
+              objective instead of asking the author to maintain it by hand. */}
         </>
       )}
     </div>

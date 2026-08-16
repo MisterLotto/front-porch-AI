@@ -29,6 +29,16 @@
 /// Distinct from LlmEvalEngine.stripThinkBlocks, which is eval-plumbing with
 /// its own budget semantics; this one is for message text shown/spoken to
 /// the user.
+/// Close a dangling `<think>` so later Continue text cannot be swallowed
+/// into the thought block. No-op when tags already balance.
+String closeOpenThink(String text) {
+  final lower = text.toLowerCase();
+  if (lower.lastIndexOf('<think>') > lower.lastIndexOf('</think>')) {
+    return '$text\n</think>\n';
+  }
+  return text;
+}
+
 String stripThinkTags(String text) {
   return text
       .replaceAll(

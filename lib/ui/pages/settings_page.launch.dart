@@ -23,6 +23,20 @@ part of 'settings_page.dart';
 /// from the inline _buildAdvancedLaunchOptions/_Body; direct state access
 /// preserves behavior. Warm-porch amber accent (was a teal-green literal).
 extension _SettingsLaunchOptions on _SettingsPageState {
+  /// Does the model the backend would relaunch still exist? Memoized per
+  /// path: the caller's Builder listens to KoboldService, which notifies per
+  /// backend log line while a model loads, and a bare existsSync there stats
+  /// a multi-GB GGUF on every one of those rebuilds.
+  bool _launchModelExists(String? path) {
+    if (path == null) return false;
+    if (_launchModelExistsForPath == path) return _launchModelExistsCache;
+    _launchModelExistsForPath = path;
+    _launchModelExistsCache = File(
+      path,
+    ).existsSync(); // io-ok: memoized per path — once per model, not per notify
+    return _launchModelExistsCache;
+  }
+
   Widget _buildAdvancedLaunchOptions(
     BuildContext context,
     StorageService storage,
@@ -338,8 +352,7 @@ extension _SettingsLaunchOptions on _SettingsPageState {
               final storage = Provider.of<StorageService>(ctx, listen: false);
               final canRestart =
                   backendManager.backendPath != null &&
-                  storage.lastUsedModelPath != null &&
-                  File(storage.lastUsedModelPath!).existsSync();
+                  _launchModelExists(storage.lastUsedModelPath);
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,

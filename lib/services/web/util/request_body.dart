@@ -33,6 +33,11 @@ class RequestBody {
   /// 32 MiB cap for binary uploads (character-card PNGs, .byaf archives).
   static const int uploadMaxBytes = 32 * 1024 * 1024;
 
+  /// Chat packages embed every portrait in the zip. 32 MiB rejects a
+  /// desktop-exported Image Studio chat. This bounds the *compressed*
+  /// upload only — unpacked zip size is capped in `decodeFpchatBytes`.
+  static const int packageMaxBytes = 256 * 1024 * 1024;
+
   /// Read the raw request body as bytes, throwing [BodyTooLarge] past [maxBytes].
   static Future<Uint8List> readBytes(
     shelf.Request request, {

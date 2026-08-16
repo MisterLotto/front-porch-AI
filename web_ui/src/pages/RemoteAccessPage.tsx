@@ -55,6 +55,9 @@ function TunnelResult({ url }: { url: string }) {
 export function RemoteAccessPage() {
   const [status, setStatus] = useState<RemoteStatus | null>(null);
   const [ngrokToken, setNgrokToken] = useState('');
+  const [password, setPassword] = useState('');
+  const [totpCode, setTotpCode] = useState('');
+  const [totpEnabled, setTotpEnabled] = useState(false);
   const [loginUrl, setLoginUrl] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
@@ -63,7 +66,16 @@ export function RemoteAccessPage() {
     api.get<RemoteStatus>('/api/remote/status').then(setStatus).catch(() => {});
   useEffect(() => {
     void load();
+    void api
+      .get<{ totpEnabled?: boolean }>('/api/auth/state')
+      .then((s) => setTotpEnabled(!!s.totpEnabled))
+      .catch(() => {});
   }, []);
+
+  const stepUpBody = () => ({
+    currentPassword: password,
+    ...(totpEnabled && totpCode.trim() ? { totpCode: totpCode.trim() } : {}),
+  });
 
   const act = async (key: string, fn: () => Promise<unknown>) => {
     setBusy(key);
@@ -72,11 +84,43 @@ export function RemoteAccessPage() {
       await fn();
       await load();
     } catch (e) {
+      if (e instanceof ApiError && e.payload.totpRequired === true) {
+        setTotpEnabled(true);
+      }
       setError(e instanceof ApiError ? e.message : 'Action failed');
     } finally {
       setBusy('');
     }
   };
+
+  const stepUpFields = (
+    <>
+      <p className="muted small">
+        Turning a tunnel on publishes this app beyond this computer — confirm your
+        web login password{totpEnabled ? ' and a 2FA code' : ''}.
+      </p>
+      <label>
+        Web login password
+        <input
+          type="password"
+          autoComplete="current-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+      </label>
+      {totpEnabled && (
+        <label>
+          Two-factor code
+          <input
+            inputMode="numeric"
+            placeholder="123456"
+            value={totpCode}
+            onChange={(e) => setTotpCode(e.target.value)}
+          />
+        </label>
+      )}
+    </>
+  );
 
   if (!status) return <div className="centered"><div className="spinner" /></div>;
   const { tailscale: ts, ngrok } = status;
@@ -159,10 +203,15 @@ export function RemoteAccessPage() {
         ) : (
           <>
             <p className="muted">Signed in and ready. Turn on HTTPS to get your address.</p>
+            {stepUpFields}
             <button
               className="primary"
-              disabled={busy === 'ts'}
-              onClick={() => act('ts', () => api.post('/api/remote/tailscale', { enable: true }))}
+              disabled={busy === 'ts' || !password}
+              onClick={() =>
+                act('ts', () =>
+                  api.post('/api/remote/tailscale', { enable: true, ...stepUpBody() }),
+                )
+              }
             >
               {busy === 'ts' ? 'Starting…' : 'Enable HTTPS access'}
             </button>
@@ -226,12 +275,21 @@ export function RemoteAccessPage() {
                 )}
               </label>
             )}
+            {stepUpFields}
             <button
               className="primary"
-              disabled={busy === 'ng' || (!ngrok.hasAuthToken && !ngrokToken)}
+              disabled={
+                busy === 'ng' ||
+                !password ||
+                (!ngrok.hasAuthToken && !ngrokToken)
+              }
               onClick={() =>
                 act('ng', () =>
-                  api.post('/api/remote/ngrok', { enable: true, authToken: ngrokToken || undefined }),
+                  api.post('/api/remote/ngrok', {
+                    enable: true,
+                    authToken: ngrokToken || undefined,
+                    ...stepUpBody(),
+                  }),
                 )
               }
             >

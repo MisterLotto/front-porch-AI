@@ -88,8 +88,19 @@ extension ChatServiceSpeakerObjectives on ChatService {
       baseline = {};
     }
 
+    // NOTE: this REPLACES the per-character entry with exactly this shape, so a
+    // key missing here is silently dropped no matter what the caller passes.
+    // 'longTermScore' was missing, which is half of why the Group Settings
+    // "Long-Term Bond" slider never persisted — the editor wrote it into
+    // 'trust' instead, and even the correct key would have been discarded here.
+    // Defaults to affection, matching how RelationshipService seeds a member
+    // that predates the key.
     baseline[charId] = {
       'affection': (values['affection'] as num?)?.toInt() ?? 50,
+      'longTermScore':
+          (values['longTermScore'] as num?)?.toInt() ??
+          (values['affection'] as num?)?.toInt() ??
+          50,
       'trust': (values['trust'] as num?)?.toInt() ?? 50,
       'emotion': (values['emotion'] as String?) ?? 'neutral',
       'emotionIntensity': (values['emotionIntensity'] as String?) ?? 'moderate',
@@ -132,6 +143,40 @@ extension ChatServiceSpeakerObjectives on ChatService {
     notifyListeners();
   }
 
+  /// Import a card's authored "Current Task / Quest" as that character's
+  /// primary objective.
+  ///
+  /// The authoring box was retired from every editor (approved sketch §4:
+  /// Ambitions replaced it, and a per-chat quest belongs in the sidebar's
+  /// Objectives panel, not baked into the card). The FIELD is still read, so a
+  /// quest an author typed before the swap still arrives — quietly, in the one
+  /// place quests now live. No prompt, no banner: it is exactly what they asked
+  /// for when they typed it.
+  ///
+  /// Shared by all three fresh-chat entry points. Two of them (1:1 first entry
+  /// and startNewChat) had carried their own copy of this since V2.5; group
+  /// entry never seeded at all, so a member card's task was dropped on the
+  /// floor — invisible while the editor existed, permanent data loss once it
+  /// was gone.
+  ///
+  /// Deferred to a microtask for the reason the 1:1 copies always were: the
+  /// session row must exist before the objective write. [target] pins a group
+  /// member's task to THEM rather than to whoever happens to speak first; 1:1
+  /// leaves it null and [setObjective] resolves the active character. Not gated
+  /// on [objectivesActive] — this is a data-preservation write, and an
+  /// objective costs nothing while the feature is off.
+  void _importAuthoredTask(FrontPorchExtensions? ext, {CharacterCard? target}) {
+    final task = ext?.currentTask.trim() ?? '';
+    if (task.isEmpty) return;
+    Future.microtask(() async {
+      await setObjective(task, isPrimary: true, targetCharacter: target);
+      debugPrint(
+        '[ChatService] Imported authored task'
+        '${target != null ? ' for ${target.name}' : ''}: $task',
+      );
+    });
+  }
+
   /// One-time seeding of objectives that were carried in an imported Group Card.
   /// Called after group state is loaded for a freshly imported group.
   Future<void> _seedImportedMemberObjectivesIfPresent() async {
@@ -152,8 +197,14 @@ extension ChatServiceSpeakerObjectives on ChatService {
         final list = entry.value as List? ?? [];
         for (final objData in list) {
           final objMap = objData as Map<String, dynamic>? ?? {};
-          final newId =
-              'obj_${DateTime.now().millisecondsSinceEpoch}_${charId.hashCode}';
+          // Uuid, like every other objective write (chat_service_objectives).
+          // The old id was `obj_<millis>_<charId.hashCode>`, built INSIDE this
+          // loop from the OUTER key — so two objectives for the same member
+          // written in the same millisecond (routinely: the inserts are
+          // adjacent) collided on the primary key. The insert threw, the bare
+          // catch below ate it, and every remaining member's quests were
+          // dropped with no log.
+          final newId = const Uuid().v4();
           await _db.insertObjective(
             ObjectivesCompanion.insert(
               id: newId,
@@ -175,11 +226,17 @@ extension ChatServiceSpeakerObjectives on ChatService {
         }
       }
 
-      // Remove the marker so it doesn't seed again
+      // Remove the marker so it doesn't seed again. The marker lives on the
+      // GROUP row, and _saveChat only upserts the session — so the in-memory
+      // clear used to evaporate on the next launch and every re-entry seeded
+      // the same quests all over again. Save the group too.
       map.remove('imported_member_objectives');
       _activeGroup!.defaultMemberRealismState = jsonEncode(map);
+      await _groupChatRepository?.save(_activeGroup!);
       await _saveChat();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[ChatService] Imported member objectives seed failed: $e');
+    }
   }
 
   String _getRealismStateInjection() {
@@ -203,15 +260,15 @@ extension ChatServiceSpeakerObjectives on ChatService {
       _restoreRealismStateFromMessage(msg);
       return;
     }
-    final idx = _groupCharacters.indexWhere((c) => c.name == msg.sender);
-    if (idx < 0) return;
-    final sid = _getCharacterIdFromCard(_groupCharacters[idx]);
+    final speaker = _resolveGroupSpeakerForMessage(msg);
+    if (speaker == null) return;
+    final sid = _getCharacterIdFromCard(speaker);
     if (sid.isEmpty) return;
     final hadStoredNeeds = _getGroupNeeds(sid).isNotEmpty;
     final state = msg.activeMetadata?['realism_state'];
     final stampHasNeeds = state is Map && state['needs'] is Map;
     _loadGroupRealismIntoScalars(sid);
-    _restoreRealismStateFromMessage(msg);
+    _restoreRealismStateFromMessage(msg, groupSpeakerId: sid);
     if (!hadStoredNeeds && !stampHasNeeds) {
       // The load's initializeFresh() filled the scalar vector for a member
       // with no needs history, and the stamp carries none either — clear it
@@ -221,7 +278,21 @@ extension ChatServiceSpeakerObjectives on ChatService {
     _saveScalarsIntoGroupRealism(sid);
   }
 
-  void _restoreRealismStateFromMessage(ChatMessage? msg) {
+  /// [groupSpeakerId] names the member being rewound so the two registers
+  /// that ride the group map — the hidden inter-character feelings and the
+  /// decay cadence — are rewound with everything else. Only
+  /// [_restoreRealismStateForSpeaker] knows it, and it passes it; the 1:1
+  /// callers leave it null and the cadence rides the scalar instead.
+  ///
+  /// Before this, ONLY the regen REVERT rewound those two. Every other
+  /// time-travel door — the regen merge, swipe navigation, delete rollback —
+  /// restored bond/trust/emotion faithfully and silently left the feelings
+  /// and cadence where the discarded turn had pushed them (independent review
+  /// of 848309c4 found the gap; the original fix closed one doorway of four).
+  void _restoreRealismStateFromMessage(
+    ChatMessage? msg, {
+    String? groupSpeakerId,
+  }) {
     if (msg == null) return;
 
     // Check if the current visible node has an active swipe metadata array or just the base metadata
@@ -234,8 +305,10 @@ extension ChatServiceSpeakerObjectives on ChatService {
     }
 
     final state = meta['realism_state'] as Map<String, dynamic>;
-    _relationshipService.restoreFromMessageState(state);
-    _moodDecayCounter = state['moodDecayCounter'] as int? ?? _moodDecayCounter;
+    _relationshipService.restoreFromMessageState(
+      state,
+      groupSpeakerId: groupSpeakerId,
+    );
     _characterEmotion =
         state['characterEmotion'] as String? ?? _characterEmotion;
     _emotionIntensity =
@@ -257,6 +330,29 @@ extension ChatServiceSpeakerObjectives on ChatService {
         _needsSimEnabled) {
       final needsData = state['needs'] as Map;
       _needsSimulation.restoreFromSnapshot(needsData);
+    }
+
+    // Pockets & Wardrobe. Restored unconditionally rather than behind the
+    // switch: a snapshot only exists if the feature was on when the turn ran,
+    // and rolling the timeline back must put the record where it was even if
+    // the user has since toggled Pockets off and on again.
+    //
+    // Owner key MUST be the message speaker (groupSpeakerId when rewinding a
+    // group member), never bare `_activeCharacter` — after post-gen the
+    // active pointer is often someone else, so restore used to write
+    // speaker A's kit onto B (audit P1.7). `_restorePocketsFromStamp` already
+    // keys by stamp `char`; this realism_state path is the dual for no-op /
+    // stamp-less turns that only carry pockets inside realism_state.
+    final pocketsSnap = state['pockets'];
+    if (pocketsSnap is Map) {
+      final ownerId = (groupSpeakerId != null && groupSpeakerId.isNotEmpty)
+          ? groupSpeakerId
+          : (_activeCharacter != null
+              ? _getCharacterIdFromCard(_activeCharacter!)
+              : '');
+      if (ownerId.isNotEmpty) {
+        setPocketsFor(ownerId, Pockets.fromJson(pocketsSnap));
+      }
     }
 
     debugPrint(

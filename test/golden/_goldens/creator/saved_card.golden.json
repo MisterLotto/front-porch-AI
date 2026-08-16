@@ -68,9 +68,15 @@
         "current_task": "",
         "day_count": 4,
         "dialogue_color": null,
+        "dislikes": [],
         "emotion_intensity": "moderate",
         "enabled": true,
         "enjoys_low_hygiene": false,
+        "intimate_preferences": {
+          "into": [],
+          "not_into": []
+        },
+        "likes": [],
         "long_term_bond": 0,
         "needs_baseline_bladder": 80,
         "needs_baseline_comfort": 80,

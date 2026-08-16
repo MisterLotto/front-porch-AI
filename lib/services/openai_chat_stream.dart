@@ -20,10 +20,12 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:front_porch_ai/services/chat/stop_sequences.dart';
+import 'package:front_porch_ai/services/chat/chat.dart'
+    show kMaxLocalServerStops;
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/llm_tool_parsing.dart';
 import 'package:front_porch_ai/services/reasoning_stream_wrapper.dart';
+import 'package:front_porch_ai/services/system_role_probe.dart';
 
 /// Streams an OpenAI-compatible `/v1/chat/completions` response token by token.
 ///
@@ -50,20 +52,35 @@ import 'package:front_porch_ai/services/reasoning_stream_wrapper.dart';
 /// derived from `repeatPenalty`, and the model's own template doing the rest.
 /// Chat-completions payload shared by [streamOpenAiChat] and
 /// [postOpenAiChatWithTools] — one builder so the two paths can't drift.
+///
+/// [foldSystemIntoUser] is the escape hatch for backends the [SystemRoleProbe]
+/// caught silently DISCARDING the leading system message — the `--jinja`
+/// defect where a GGUF whose chat template has no system branch answers HTTP
+/// 200 while the character card, persona, scenario and state blocks never
+/// reach the model. When set, the same text is prepended to the user content
+/// instead. See [foldSystemIntoUserContent] for why that trade is worth
+/// making.
 Map<String, dynamic> _chatPayload(
   GenerationParams params, {
   required String modelName,
   required bool stream,
+  bool foldSystemIntoUser = false,
 }) {
   // Object-valued so the user content can be a plain string (text-only —
   // byte-identical to the pre-vision payload) or a multimodal array when
   // GenerationParams.images rides along (KoboldCpp accepts the OpenAI
   // image_url shape on this endpoint when an mmproj is loaded).
   final messages = <Map<String, Object>>[];
-  if (params.systemPrompt != null && params.systemPrompt!.isNotEmpty) {
-    messages.add({'role': 'system', 'content': params.systemPrompt!});
+  final system = params.systemPrompt;
+  var userContent = params.openAiUserContent;
+  if (system != null && system.isNotEmpty) {
+    if (foldSystemIntoUser) {
+      userContent = foldSystemIntoUserContent(system, userContent);
+    } else {
+      messages.add({'role': 'system', 'content': system});
+    }
   }
-  messages.add({'role': 'user', 'content': params.openAiUserContent});
+  messages.add({'role': 'user', 'content': userContent});
 
   final payload = <String, dynamic>{
     'model': modelName,
@@ -154,12 +171,19 @@ Future<LlmToolResponse?> postOpenAiChatWithTools(
   GenerationParams params,
   List<Map<String, dynamic>> tools, {
   String modelName = 'koboldcpp',
+  bool foldSystemIntoUser = false,
   void Function(http.Client client)? registerClient,
   void Function()? onDone,
 }) async {
-  final payload = _chatPayload(params, modelName: modelName, stream: false)
-    ..['tools'] = tools
-    ..['tool_choice'] = 'auto';
+  final payload =
+      _chatPayload(
+          params,
+          modelName: modelName,
+          stream: false,
+          foldSystemIntoUser: foldSystemIntoUser,
+        )
+        ..['tools'] = tools
+        ..['tool_choice'] = 'auto';
 
   final client = http.Client();
   registerClient?.call(client);
@@ -207,19 +231,30 @@ Stream<String> streamOpenAiChat(
   String baseUrl,
   GenerationParams params, {
   String modelName = 'koboldcpp',
+  bool foldSystemIntoUser = false,
   void Function(http.Client client)? registerClient,
   void Function()? onDone,
 }) async* {
   final uri = Uri.parse('$baseUrl/v1/chat/completions');
-  final payload = _chatPayload(params, modelName: modelName, stream: true);
+  final payload = _chatPayload(
+    params,
+    modelName: modelName,
+    stream: true,
+    foldSystemIntoUser: foldSystemIntoUser,
+  );
 
   // In jinja mode Kobold splits thinking into `reasoning_content`; re-wrap it in
   // <think>…</think> for the app's parser. Armed only when thinking was actually
   // requested (matches the payload's `thinkOn`) so an off toggle / the Continue
   // + eval suppress path (reasoningMaxTokens==0) discards any stray reasoning
-  // rather than leaking it into the visible reply.
+  // rather than leaking it into the visible reply. Evals (salvageReasoning)
+  // keep the channel TAGGED instead — a local model that ignores
+  // enable_thinking:false and parks its answer in reasoning_content would
+  // otherwise hand the judges an empty reply (the remote Kimi 2.6 bug's
+  // local twin); evals are never user-visible, so nothing can leak.
   final wrapper = ReasoningTagWrapper(
     wrap: params.reasoningEnabled && params.reasoningMaxTokens != 0,
+    salvage: params.salvageReasoning,
   );
 
   final request = http.Request('POST', uri);

@@ -54,6 +54,11 @@ class StoopMessageSocket {
   /// Live card counter updates (net score + unique downloads), app-wide.
   static Stream<StoopCardStats> get onCardStats => _cardStats.stream;
 
+  /// The live socket's keepalive interval — null when no socket is connected.
+  /// Exposed so a test can prove the connect path actually arms it.
+  @visibleForTesting
+  Duration? get pingInterval => _ws?.pingInterval;
+
   StoopMessageSocket(this._token) {
     _initUnread();
     _connect();
@@ -86,6 +91,14 @@ class StoopMessageSocket {
         return;
       }
       _ws = ws;
+      // Keepalive. Reconnection is driven purely by onDone/onError, which only
+      // fire when the peer actually signals a close — so a NAT/router that
+      // silently drops an idle TCP connection left this socket half-open
+      // forever: no badge bump, no mod-message snackbar and frozen vote /
+      // download counters, with nothing on screen saying so. Pinging makes
+      // dart:io close (and therefore reconnect) when the pong stops coming.
+      // Same 30s the app's own WebSocket server uses (stream_routes.dart).
+      ws.pingInterval = const Duration(seconds: 30);
       ws.listen(
         _onData,
         onDone: _scheduleReconnect,

@@ -16,7 +16,9 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:image/image.dart' as img;
@@ -53,6 +55,14 @@ class ThumbnailCache {
   static const int _minWidth = 32;
   static const int _maxWidth = 1024;
 
+  /// Generation runs one image at a time. The work itself is off this isolate
+  /// (see [bytesFor]), but a cold library grid fires N requests at once and N
+  /// simultaneous worker isolates would each hold a fully decoded card in
+  /// memory — tens of MB apiece. Serializing keeps the peak at one decode and
+  /// matches the throughput of the old blocking path; the difference is that
+  /// the UI isolate stays free the whole time.
+  Future<void> _generationGate = Future.value();
+
   /// Build the HTTP response for [file] (already resolved by the caller), or a
   /// 404 when it is null/missing. Honours `?w=` (thumbnail), `If-None-Match`
   /// (304), and always sets an `ETag` + [cacheControl].
@@ -61,18 +71,19 @@ class ThumbnailCache {
     File? file, {
     String cacheControl = 'public, max-age=3600',
   }) async {
-    if (file == null || !file.existsSync()) {
+    if (file == null || !await file.exists()) {
       return shelf.Response.notFound('No avatar');
     }
 
-    final int sourceMtime = file.statSync().modified.millisecondsSinceEpoch;
+    final int sourceMtime =
+        (await file.stat()).modified.millisecondsSinceEpoch;
     final int? width = _parseWidth(request.url.queryParameters['w']);
 
     final List<int> body;
     final String contentType;
     final String etagBody;
     if (width == null) {
-      body = file.readAsBytesSync();
+      body = await file.readAsBytes();
       contentType = 'image/png';
       etagBody = '$sourceMtime-full';
     } else {
@@ -114,13 +125,19 @@ class ThumbnailCache {
   /// newer than the cached copy). Falls back to the original bytes when the
   /// image can't be decoded. Split out from [serve] so it is unit-testable
   /// without an HTTP request.
+  ///
+  /// The decode/resize/encode is synchronous CPU work in package:image, and
+  /// this HTTP server shares the Flutter UI isolate — running it inline froze
+  /// the desktop app for ~100ms+ per tile while a phone loaded the library
+  /// grid. It is handed to a worker isolate for the same reason
+  /// [PasswordHasher] hands off Argon2, and serialized by [_generationGate].
   Future<ThumbnailBytes> bytesFor(
     File source,
     int width, [
     int? sourceMtime,
   ]) async {
     final int mtime =
-        sourceMtime ?? source.statSync().modified.millisecondsSinceEpoch;
+        sourceMtime ?? (await source.stat()).modified.millisecondsSinceEpoch;
     final String key = '${_hash(source.path)}_$width';
     final File jpg = File('${_cacheDir.path}${Platform.pathSeparator}$key.jpg');
     final File png = File('${_cacheDir.path}${Platform.pathSeparator}$key.png');
@@ -128,45 +145,56 @@ class ThumbnailCache {
     // Fresh cache hit → serve it. The extension tells us the content-type, and
     // a cache file at least as new as the source is still valid.
     for (final cached in [jpg, png]) {
-      if (cached.existsSync() &&
-          cached.statSync().modified.millisecondsSinceEpoch >= mtime) {
+      if (await cached.exists() &&
+          (await cached.stat()).modified.millisecondsSinceEpoch >= mtime) {
         return ThumbnailBytes(
-          cached.readAsBytesSync(),
+          await cached.readAsBytes(),
           cached == jpg ? 'image/jpeg' : 'image/png',
         );
       }
     }
 
-    // Miss (or stale): decode → downscale → re-encode.
-    final decoded = img.decodeImage(source.readAsBytesSync());
-    if (decoded == null) {
+    // Miss (or stale): decode → downscale → re-encode, one at a time.
+    final Future<void> queuedBehind = _generationGate;
+    final Completer<void> mine = Completer<void>();
+    _generationGate = mine.future;
+    await queuedBehind;
+    // Declared before the try (and assigned in it) so both stay in scope after.
+    Uint8List raw = Uint8List(0);
+    ThumbnailBytes? generated;
+    try {
+      raw = await source.readAsBytes();
+      generated = await Isolate.run(() {
+        final decoded = img.decodeImage(raw);
+        if (decoded == null) return null;
+        final resized = decoded.width > width
+            ? img.copyResize(
+                decoded,
+                width: width,
+                interpolation: img.Interpolation.average,
+              )
+            : decoded;
+        return _hasRealTransparency(resized)
+            ? ThumbnailBytes(img.encodePng(resized), 'image/png')
+            : ThumbnailBytes(img.encodeJpg(resized, quality: 82), 'image/jpeg');
+      });
+    } finally {
+      // Always release the gate, or one failed request wedges every later one.
+      mine.complete();
+    }
+    if (generated == null) {
       // Not a decodable image — hand back the original untouched (best effort;
       // don't cache so a transient decode issue can recover next time).
-      return ThumbnailBytes(source.readAsBytesSync(), 'image/png');
+      return ThumbnailBytes(raw, 'image/png');
     }
-    final resized = decoded.width > width
-        ? img.copyResize(
-            decoded,
-            width: width,
-            interpolation: img.Interpolation.average,
-          )
-        : decoded;
 
-    final bool transparent = _hasRealTransparency(resized);
-    final Uint8List bytes;
-    final String contentType;
-    final File out;
-    if (transparent) {
-      bytes = img.encodePng(resized);
-      contentType = 'image/png';
-      out = png;
-    } else {
-      bytes = img.encodeJpg(resized, quality: 82);
-      contentType = 'image/jpeg';
-      out = jpg;
-    }
-    _persist(out, bytes, sibling: transparent ? jpg : png);
-    return ThumbnailBytes(bytes, contentType);
+    final bool transparent = generated.contentType == 'image/png';
+    await _persist(
+      transparent ? png : jpg,
+      generated.bytes,
+      sibling: transparent ? jpg : png,
+    );
+    return generated;
   }
 
   /// Write [bytes] to [out] via a temp file + atomic rename (so a concurrent
@@ -174,15 +202,19 @@ class ThumbnailCache {
   /// (the opposite format for the same key) so a later lookup is unambiguous.
   /// Best-effort: a caching failure never fails the request — the caller still
   /// has the in-memory bytes.
-  void _persist(File out, List<int> bytes, {required File sibling}) {
+  Future<void> _persist(
+    File out,
+    List<int> bytes, {
+    required File sibling,
+  }) async {
     try {
-      if (!_cacheDir.existsSync()) _cacheDir.createSync(recursive: true);
+      if (!await _cacheDir.exists()) await _cacheDir.create(recursive: true);
       final tmp = File(
         '${out.path}.${DateTime.now().microsecondsSinceEpoch}.part',
       );
-      tmp.writeAsBytesSync(bytes, flush: true);
-      tmp.renameSync(out.path);
-      if (sibling.existsSync()) sibling.deleteSync();
+      await tmp.writeAsBytes(bytes, flush: true);
+      await tmp.rename(out.path);
+      if (await sibling.exists()) await sibling.delete();
     } catch (_) {
       // Ignore — caching is an optimization, not a correctness requirement.
     }

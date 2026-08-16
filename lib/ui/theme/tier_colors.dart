@@ -16,72 +16,14 @@ import 'app_colors.dart';
 class TierColors {
   TierColors._();
 
-  /// Score (±300 bond scale) → tier (−10…10).
-  static int calcTier(int score) {
-    final abs = score.abs();
-    if (abs < 5) return 0;
-    if (abs < 15) return score > 0 ? 1 : -1;
-    if (abs < 30) return score > 0 ? 2 : -2;
-    if (abs < 50) return score > 0 ? 3 : -3;
-    if (abs < 75) return score > 0 ? 4 : -4;
-    if (abs < 110) return score > 0 ? 5 : -5;
-    if (abs < 150) return score > 0 ? 6 : -6;
-    if (abs < 200) return score > 0 ? 7 : -7;
-    if (abs < 250) return score > 0 ? 8 : -8;
-    if (abs < 300) return score > 0 ? 9 : -9;
-    return score > 0 ? 10 : -10;
-  }
+  // calcTier() and tierName() used to live here as a second, hand-copied
+  // ladder and vocabulary. Both had drifted from the engine: the numeric
+  // bands at three rungs (75/110/150 vs 80/120/160) and the names at five
+  // (tier 5 was 'Warm' here and 'Amiable' in the engine, while 'Warm' in
+  // the engine means tier 3 — the same word for two different bonds).
+  // Tiers and names now come from RelationshipService; this class owns
+  // only the colour mapping, which is a genuine UI concern.
 
-  static String tierName(int tier) {
-    switch (tier) {
-      case 10:
-        return 'Devoted';
-      case 9:
-        return 'Enamored';
-      case 8:
-        return 'Smitten';
-      case 7:
-        return 'Affectionate';
-      case 6:
-        return 'Fond';
-      case 5:
-        return 'Warm';
-      case 4:
-        return 'Friendly';
-      case 3:
-        return 'Neutral+';
-      case 2:
-        return 'Neutral';
-      case 1:
-        return 'Cool';
-      case 0:
-        return 'Indifferent';
-      case -1:
-        return 'Distant';
-      case -2:
-        return 'Cold';
-      case -3:
-        return 'Hostile';
-      case -4:
-        return 'Resentful';
-      case -5:
-        return 'Bitter';
-      case -6:
-        return 'Hateful';
-      case -7:
-        return 'Despising';
-      case -8:
-        return 'Loathing';
-      case -9:
-        return 'Reviling';
-      case -10:
-        return 'Abhorrent';
-      default:
-        return 'Unknown';
-    }
-  }
-
-  /// Tier → bar/label color, light-mode safe.
   static Color tierColor(BuildContext context, int tier) {
     // Strong positive tiers (vibrant, work on both themes)
     if (tier >= 10) return Colors.deepPurpleAccent;

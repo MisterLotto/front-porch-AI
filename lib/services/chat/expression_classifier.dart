@@ -5,7 +5,7 @@
 //
 // Front Porch AI is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
-// the Software Foundation, either version 3 of the License, or
+// the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
 // Front Porch AI is distributed in the hope that it will be useful,
@@ -25,6 +25,8 @@ import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/avatar_gallery.dart';
+import 'package:front_porch_ai/services/chat/llm_eval_engine.dart'
+    show kScalarEvalRepeatPenalty;
 import 'package:front_porch_ai/services/chat/pass_support.dart';
 import 'package:front_porch_ai/services/chat/realism_tools.dart';
 import 'package:front_porch_ai/services/services.dart';
@@ -312,21 +314,35 @@ class ExpressionService {
     // group chats (which resolve several characters in one build cycle)
     // can't evict each other's picks.
     final stableKey = '${character.dbId ?? character.name}:$label';
-    if (rerollIfSame) {
-      final lastId = _stableExpressionPicks[stableKey];
-      final different = matches.where((a) => a.id != lastId).toList();
+    final msgs = getMessages();
+    // List length + sender is stable for the whole stream of one reply
+    // (text grows; the list does not). A new reply increments length.
+    final tipStamp = msgs.isEmpty
+        ? '0'
+        : '${msgs.length}:${msgs.last.sender}';
+    final turnKey = '$stableKey@$tipStamp';
+    final thisTurn = _stableExpressionPicks[turnKey];
+    if (thisTurn != null) {
+      final match = matches.where((a) => a.id == thisTurn).firstOrNull;
+      if (match != null) return match;
+    }
+    final lastForLabel = _stableExpressionPicks[stableKey];
+    // "Re-roll if same" = different variant than the previous REPLY,
+    // not a new roll every rebuild.
+    if (rerollIfSame && lastForLabel != null) {
+      final different = matches.where((a) => a.id != lastForLabel).toList();
       if (different.isNotEmpty) {
         final picked = different[_expressionRandom.nextInt(different.length)];
+        _stableExpressionPicks[turnKey] = picked.id;
         _stableExpressionPicks[stableKey] = picked.id;
         return picked;
       }
     }
-    final remembered = _stableExpressionPicks[stableKey];
-    if (remembered != null) {
-      final match = matches.where((a) => a.id == remembered).firstOrNull;
-      if (match != null) return match;
-    }
-    final picked = matches[_expressionRandom.nextInt(matches.length)];
+    final picked = lastForLabel != null
+        ? (matches.where((a) => a.id == lastForLabel).firstOrNull ??
+              matches[_expressionRandom.nextInt(matches.length)])
+        : matches[_expressionRandom.nextInt(matches.length)];
+    _stableExpressionPicks[turnKey] = picked.id;
     _stableExpressionPicks[stableKey] = picked.id;
     return picked;
   }
@@ -416,8 +432,13 @@ class ExpressionService {
           maxLength: isThinkingModel ? 2048 : 32,
           temperature: 0.1,
           topP: 0.5,
-          repeatPenalty: 1.15,
+          repeatPenalty: kScalarEvalRepeatPenalty,
           reasoningEnabled: false,
+          // Same as every other eval: without this the reasoning-disable
+          // block is never sent to remote ":thinking" models and they reason
+          // through a one-word classification (this was the one eval that
+          // forgot the flag).
+          reasoningMaxTokens: 0,
           stopSequences: isThinkingModel ? [] : ['}\n', '}'],
         );
         final StringBuffer sb = StringBuffer();

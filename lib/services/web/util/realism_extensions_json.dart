@@ -54,6 +54,19 @@ FrontPorchExtensions frontPorchFromFields(
   bool asBool(String key, bool fallback) =>
       fields[key] is bool ? fields[key] as bool : fallback;
 
+  /// Defensive list-of-strings read: a hand-edited or older client may send a
+  /// scalar, a null, or entries that are not strings. Anything unusable is
+  /// dropped rather than throwing, matching how every other field here fails
+  /// soft.
+  List<String> asStrList(String key, List<String> fallback) {
+    final v = fields[key];
+    if (v is! List) return fallback;
+    return [
+      for (final e in v)
+        if (e is String && e.trim().isNotEmpty) e.trim(),
+    ];
+  }
+
   String asStr(String key, String fallback) =>
       fields.containsKey(key) && fields[key] != null
       ? fields[key].toString()
@@ -71,6 +84,17 @@ FrontPorchExtensions frontPorchFromFields(
     dialogueColor: b.dialogueColor,
     actionColor: b.actionColor,
     chatFontFamily: b.chatFontFamily,
+    // Same class of bug as `inventory` below, and missed when that one was
+    // fixed: the web editor has no control for any of these three, so they were
+    // absent from this constructor entirely and silently took their `null`
+    // default on every web save. Editing a description from a phone erased the
+    // authored Story Begins date/time (new chats then opened at "the day the
+    // chat starts") and un-starred the canonical avatar. The desktop twin
+    // (edit_character_page.dart, via copyWith) preserves them, so carrying them
+    // from the base is also what restores desktop↔web parity.
+    storyStartDate: b.storyStartDate,
+    storyStartTime: b.storyStartTime,
+    favoriteAvatarId: b.favoriteAvatarId,
 
     // Realism Engine core.
     realismEnabled: asBool('realismEnabled', b.realismEnabled),
@@ -88,6 +112,37 @@ FrontPorchExtensions frontPorchFromFields(
     ),
     chaosModeEnabled: asBool('chaosModeEnabled', b.chaosModeEnabled),
     currentTask: asStr('currentTask', b.currentTask),
+    ambitions: asStrList('ambitions', b.ambitions),
+    likes: asStrList('likes', b.likes),
+    dislikes: asStrList('dislikes', b.dislikes),
+    // The 18+ pair travels FLAT over this bridge (`intimateInto` /
+    // `intimateNotInto`) even though the CARD nests it under
+    // `intimate_preferences`. This bridge is the web editor's own wire format,
+    // not the portable card JSON — every other field here is flat camelCase,
+    // and nesting one pair would earn a special case in asStrList for nothing.
+    // CharacterCard.toJson still emits the nested object, so what ships to The
+    // Stoop is unchanged.
+    intimateInto: asStrList('intimateInto', b.intimateInto),
+    intimateNotInto: asStrList('intimateNotInto', b.intimateNotInto),
+    // Starting Pockets & Wardrobe. Nested (`{worn: [...], carrying: [...]}`)
+    // rather than flat, because unlike the 18+ pair above this is not two lists
+    // of strings — entries can be `{name, state}` — and flattening it would
+    // lose the condition half of every item.
+    //
+    // Read with the same shallow, shape-tolerant cast CharacterCard.fromJson
+    // uses for this field, deliberately: two readers of one field that disagree
+    // about what counts as valid is its own bug. Anything unusable falls back
+    // to the base rather than throwing, and Pockets.fromJson (the only consumer)
+    // already tolerates both entry shapes.
+    //
+    // Falling back to `b.inventory` is the actual fix here: the field was absent
+    // from this constructor entirely, so it silently took its `const {}` default
+    // on every web save. Editing a character from a phone wiped whatever
+    // starting inventory its author had written, with nothing on screen to
+    // suggest the edit had touched it.
+    inventory: fields['inventory'] is Map
+        ? Map<String, dynamic>.from(fields['inventory'] as Map)
+        : b.inventory,
 
     // Realism verification (Director/Verifier).
     realismVerificationEnabled: asBool(
@@ -143,6 +198,12 @@ Map<String, dynamic> frontPorchToJson(FrontPorchExtensions e) => {
   'passageOfTimeEnabled': e.passageOfTimeEnabled,
   'chaosModeEnabled': e.chaosModeEnabled,
   'currentTask': e.currentTask,
+  'ambitions': e.ambitions,
+  'likes': e.likes,
+  'dislikes': e.dislikes,
+  'intimateInto': e.intimateInto,
+  'intimateNotInto': e.intimateNotInto,
+  'inventory': e.inventory,
   'realismVerificationEnabled': e.realismVerificationEnabled,
   'realismVerificationMaxReprocesses': e.realismVerificationMaxReprocesses,
   'realismVerificationStrictness': e.realismVerificationStrictness,

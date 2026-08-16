@@ -41,9 +41,11 @@ class RealismProgressRow extends StatelessWidget {
   final bool compact;
 
   /// When non-null, overrides the ±maxValue normalization with an explicit
-  /// 0..1 fill (used by the 1:1 sidebar's "progress toward next tier" bars —
-  /// relationshipService.*ProgressPercent). Group cards omit it and keep the
-  /// absolute ±max fill, pixel-identical to before.
+  /// 0..1 fill — "progress toward the next tier" rather than raw magnitude.
+  /// Both the 1:1 sidebar and (since 8d113811) group member cards pass it, so
+  /// a member's bar fills, drains and refills per tier exactly like the host's;
+  /// the comment here used to say group cards omit it, which stopped being
+  /// true the moment they were wired up.
   final double? progress;
 
   const RealismProgressRow({

@@ -300,7 +300,7 @@ class _BackupsPageState extends State<BackupsPage> {
         content: Text(
           'This will replace your current database with the backup. '
           'All changes made after this backup was created will be lost.\n\n'
-          'The app will need to restart after restoring.',
+          'Your library reloads in place, so you should not need to restart.',
           style: TextStyle(color: AppColors.textSecondary(ctx), height: 1.5),
         ),
         actions: [

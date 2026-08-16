@@ -57,7 +57,21 @@ class _ImportLorebookPageState extends State<ImportLorebookPage> {
   bool _importing = false;
 
   @override
+  void initState() {
+    super.initState();
+    // The Import button's enabled state is computed from this field's text
+    // (_canProceed), so the nav bar has to rebuild as it is typed in or
+    // cleared — otherwise an emptied name leaves the button enabled.
+    _worldNameCtrl.addListener(_onWorldNameChanged);
+  }
+
+  void _onWorldNameChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void dispose() {
+    _worldNameCtrl.removeListener(_onWorldNameChanged);
     _worldNameCtrl.dispose();
     _worldDescCtrl.dispose();
     super.dispose();

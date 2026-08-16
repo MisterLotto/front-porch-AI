@@ -229,12 +229,18 @@ class HFModelFile {
 
   /// Creates an HFModelFile from a HuggingFace API response map.
   /// Expected format from /api/models/{repoId}/tree/main endpoint.
-  factory HFModelFile.fromApiMap(Map<String, dynamic> map, String repoId) {
+  /// [baseUrl] is the endpoint root — ModelManager passes its hfBaseUrl seam
+  /// so tests can serve downloads from a local fake.
+  factory HFModelFile.fromApiMap(
+    Map<String, dynamic> map,
+    String repoId, {
+    String baseUrl = 'https://huggingface.co',
+  }) {
     final path = map['path'] as String? ?? '';
     final size = (map['size'] as num?)?.toInt() ?? 0;
 
     // Build direct download URL
-    final downloadUrl = 'https://huggingface.co/$repoId/resolve/main/$path';
+    final downloadUrl = '$baseUrl/$repoId/resolve/main/$path';
 
     // Try to extract param count from filename
     double? params;

@@ -5,7 +5,7 @@
 //
 // Front Porch AI is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
-// the Software Foundation, either version 3 of the License, or
+// the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
 // Front Porch AI is distributed in the hope that it will be useful,
@@ -22,6 +22,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/chat/eval_traffic.dart';
 import 'package:front_porch_ai/services/chat/pass_support.dart';
 import 'package:front_porch_ai/services/chat/realism_tools.dart';
 import 'package:front_porch_ai/services/chat/relationship_service.dart';
@@ -40,6 +41,17 @@ const Duration kEvalStreamChunkTimeout = Duration(seconds: 180);
 /// PROBE merely marks the backend XML-only for the run (text path floor,
 /// which carries its own chunk timeout).
 const Duration kEvalToolCallTimeout = Duration(minutes: 6);
+
+/// Repeat penalty for the SCALAR JSON evals (realism judges, needs impact,
+/// scene time, posture, climax, pockets, reply-facts, cast detect, guest
+/// gate, Director critique). Repeat penalty punishes exactly the tokens
+/// structured output must repeat — quotes, braces, seven `*_delta` keys — a
+/// known distorter of long JSON, and at temp 0.1 it buys nothing (eval
+/// review Tier-1 §3.6). The prose-emitting passes (Journal cards + recap,
+/// Growth rings, Dreams, task generation) deliberately KEEP
+/// [fireLLMEval]'s 1.15 default, where the penalty still earns its keep
+/// against low-temperature repetition loops.
+const double kScalarEvalRepeatPenalty = 1.0;
 
 /// Plain (non-ChangeNotifier) domain service owning the central LLM eval
 /// firing (_fireLLMEval with full streaming + retry loop + cancel support,
@@ -146,6 +158,77 @@ const Duration kEvalToolCallTimeout = Duration(minutes: 6);
 /// Some objective mgmt / prompt coordination stayed thin in god per plan for step9/11
 /// (qualify everywhere; full objective proposal in step 11 sibling leaf).
 /// Realism evals (step 10) own their 5 calls + prompts.
+/// The last few turns as `sender: text`, the shape every eval that needs scene
+/// context uses.
+///
+/// Extracted because it was being written out by hand in three places and the
+/// copies had already drifted into a bug. When Afterglow's climax check was
+/// split out of the needs eval it inherited the reply and NOT this, so a climax
+/// the user narrated became invisible to it and E2E went red on three platforms.
+/// The Pockets pass had the same narrow view for the same reason.
+///
+/// Three turns is the window the needs eval has always used: enough to carry
+/// the user's message and the reply it prompted, short enough that an eval
+/// prompt stays an eval prompt.
+/// Pre-gen judges score the USER. After Next Character the live list ends
+/// on another NPC's reply — cut there so bond/mood/arousal cannot move off
+/// that speech. Trust was already prompt-gated to the user; this is the
+/// same rule in code. Post-gen (climax/pockets/posture) keep [recentExchange].
+List<ChatMessage> messagesThroughLastUser(List<ChatMessage> msgs) {
+  final i = msgs.lastIndexWhere((m) => m.isUser);
+  return i < 0 ? msgs : msgs.sublist(0, i + 1);
+}
+
+String recentExchangeThroughLastUser(List<ChatMessage> msgs, {int take = 3}) =>
+    recentExchange(messagesThroughLastUser(msgs), take: take);
+
+String recentExchange(List<ChatMessage> msgs, {int take = 3}) {
+  final n = msgs.length < take ? msgs.length : take;
+  return msgs.reversed
+      .take(n)
+      .toList()
+      .reversed
+      // promptText, not displayText, since 2026-08-10: the two differ only
+      // for photo messages, where promptText carries the "[shared a photo:
+      // caption]" marker — and the realism judges already read promptText,
+      // so needs/climax/pockets were the only evals blind to a photo the
+      // exchange was about (eval review Tier-3 hygiene).
+      .map((m) => '${m.sender}: ${clampEvalMessage(m.promptText)}')
+      .join('\n');
+}
+
+/// Per-message ceiling for EVAL windows (chars, ≈1k tokens). Verbose models
+/// write 20k+ character replies, and with no ceiling every judge window
+/// ballooned to the size of a short story: the maintainer's own EvalTraffic
+/// line showed four ~50k-char eval prompts in ONE turn — 48k tokens and 50
+/// seconds of LLM time to score a single exchange, with the objective check
+/// spending 50k chars on an 18-char answer. Evals judge the exchange; they
+/// do not need to re-read the novella.
+const int kEvalMessageCharCap = 4000;
+
+/// The marker a clamped message carries in place of its middle. A visible
+/// sentence, not an ellipsis: the judges must know text was omitted rather
+/// than believe the reply jump-cut.
+const String kEvalClampMarker =
+    '[… middle of a very long message omitted for this evaluation …]';
+
+/// Clamp ONE message's contribution to an eval window: text at or under
+/// [kEvalMessageCharCap] passes through byte-identical (the overwhelming
+/// majority — so short-message prompts, and every existing test fixture,
+/// are unchanged); longer text keeps its head and tail around
+/// [kEvalClampMarker]. Head-heavy on purpose — a reply's opening carries
+/// the reaction to the user (what the judges score) and its tail carries
+/// where the scene landed (what the reply-readers need). Pure and
+/// deterministic, so a regen sees the identical window (the regen-parity
+/// rule: identical inputs must produce identical eval prompts).
+String clampEvalMessage(String text) {
+  if (text.length <= kEvalMessageCharCap) return text;
+  final head = (kEvalMessageCharCap * 2) ~/ 3;
+  final tail = kEvalMessageCharCap - head;
+  return '${text.substring(0, head)}\n$kEvalClampMarker\n'
+      '${text.substring(text.length - tail)}';
+}
+
 class LlmEvalEngine {
   // (onNotify/onSaveChat removed here post step11 objective_proposal extraction;
   // they were only used by the moved checkTaskCompletionInBackground finally;
@@ -255,6 +338,19 @@ class LlmEvalEngine {
     if (unclosed >= 0) {
       cleaned = cleaned.substring(0, unclosed).trim();
     }
+    // Third leak shape (utils/think_tags.dart names all three): a bare orphan
+    // `</think>` whose opening tag the transport/chat template consumed, so
+    // everything BEFORE it is reasoning. Unlike the user-prose strip — which
+    // only drops the tag, because wiping prose would blank a legit message —
+    // the eval lane must drop that reasoning: every extractor below is a
+    // firstMatch over the whole string, so leaving it in hands the parse the
+    // model's DRAFT numbers instead of its final JSON. Kept only when
+    // something follows; otherwise callers' existing raw fallback applies.
+    final orphan = cleaned.lastIndexOf('</think>');
+    if (orphan >= 0) {
+      final after = cleaned.substring(orphan + '</think>'.length).trim();
+      if (after.isNotEmpty) cleaned = after;
+    }
     return cleaned;
   }
 
@@ -286,6 +382,12 @@ class LlmEvalEngine {
   Future<String?> fireLLMEval(
     String prompt, {
     void Function(String)? onChunk,
+    double repeatPenalty = 1.15,
+    // For the [EvalTraffic] tally only. Coarse where a closure is shared
+    // (the realism judges + scene time all ride one wiring closure as
+    // 'realism'; their per-kind detail is in the [Realism:*] logs), precise
+    // where a pass has its own closure.
+    String label = 'eval',
   }) async {
     final llm = getLlmService();
     // For remote backends, require full readiness (API key + model configured).
@@ -311,7 +413,7 @@ class LlmEvalEngine {
       prompt: prompt,
       maxLength: 4000,
       temperature: 0.1,
-      repeatPenalty: 1.15,
+      repeatPenalty: repeatPenalty,
       topP: 0.5,
       xtcProbability: 0.0,
       reasoningEnabled: false,
@@ -321,6 +423,9 @@ class LlmEvalEngine {
       // through every eval — slow, costly, and a source of flaky/empty
       // structured replies. 0 → {enabled:false, max_tokens:0, exclude:true}.
       reasoningMaxTokens: 0,
+      // Mandatory-reasoning models park the JSON in the think channel.
+      // Salvage it; exclude:true would drop it (Kimi 2.6, 2026-08-15).
+      salvageReasoning: true,
       stopSequences: const [],
     );
 
@@ -329,6 +434,7 @@ class LlmEvalEngine {
       if (k != null) await k.waitForIdle();
     }
 
+    final trafficWatch = Stopwatch()..start();
     String response = '';
     // Retry loop: thinking models can cause KoboldCPP to drop the connection
     // briefly (OOM during dense thinking sessions). One retry after a short
@@ -339,12 +445,6 @@ class LlmEvalEngine {
         debugPrint(
           '[Realism] evaluation cancelled before attempt ${attempt + 1}',
         );
-        return null;
-      }
-
-      // If cancellation was requested, abort immediately
-      if (getIsCancellingRealismEval()) {
-        debugPrint('[Realism] eval cancelled before attempt ${attempt + 1}');
         return null;
       }
       if (attempt > 0) {
@@ -449,6 +549,13 @@ class LlmEvalEngine {
     debugPrint(
       '[Realism:RawEval] len=${response.length} | ${preview.replaceAll('\n', '↵')}',
     );
+    EvalTraffic.current.record(
+      label: label,
+      lane: 'text',
+      promptChars: prompt.length,
+      outputChars: response.length,
+      ms: trafficWatch.elapsedMilliseconds,
+    );
     return response.isEmpty ? null : response;
   }
 
@@ -476,14 +583,7 @@ class LlmEvalEngine {
       return null; // Director
     }
 
-    final msgs = getMessages();
-    final recentCount = msgs.length < 3 ? msgs.length : 3;
-    final recent = msgs.reversed
-        .take(recentCount)
-        .toList()
-        .reversed
-        .map((m) => '${m.sender}: ${m.displayText}')
-        .join('\n');
+    final recent = recentExchange(getMessages());
 
     final char = getActiveCharacter();
     final charName = char?.name ?? 'the character';
@@ -496,21 +596,11 @@ class LlmEvalEngine {
         ? 'Current physical position/stance of $charName: "${relationshipService.spatialStance}". '
         : '';
 
-    // Shared climax-detection guidance, injected into BOTH the main and the
-    // critique prompts. Without explicit criteria the model (especially a
-    // reasoning/"thinking" model, which won't guess at an undefined field)
-    // almost never sets is_climax=true, so the post-orgasm cooldown never fires
-    // and the Lust/arousal bar stays pinned at the top. This mirrors the
-    // "high arousal is NOT climax" rule the other realism evals already use
-    // (see realism_evals.dart arousal instructions).
-    final climaxGuidance =
-        'CLIMAX DETECTION — "is_climax": Set this to true ONLY when $charName themselves reaches sexual orgasm / release in THIS scene — '
-        'i.e. the text explicitly narrates their own climax (coming, finishing, a shuddering or spasming release, '
-        'crying out as they tip over the edge, gushing/ejaculating, going limp or boneless right after the peak). '
-        'High arousal, being "close", edging, begging, grinding, foreplay, or ONLY the partner/user climaxing are NOT a climax for '
-        '$charName — leave "is_climax" false in those cases. '
-        'When (and only when) "is_climax" is true, also emit "refractory_turns" as an int from 3 to 7 for how long the post-orgasm '
-        'cooldown should last (~6-7 for an intense, drawn-out, or repeated climax; ~3 for a quick one). When false, set "refractory_turns" to 0.\n\n';
+    // Climax guidance USED TO LIVE HERE. It moved to the arousal section of
+    // the realism evals (2026-08-07) because Afterglow depended on it and this
+    // eval never runs unless Needs is on — which it is not, on most cards. The
+    // needs eval has no reader for is_climax any more, so asking for it here
+    // would be paying tokens for a field nothing consumes.
 
     final needsStateStr = currentNeeds != null && currentNeeds.isNotEmpty
         ? '\nCurrent needs for $charName (0-100, lower = more urgent): '
@@ -531,13 +621,21 @@ class LlmEvalEngine {
       // The format sections below are the ONLY difference between the tools
       // and text transports — every guideline/magnitude line is shared, so
       // the two paths can never drift in what the model is told.
+      // The text ask names ONLY fields something still reads: the seven
+      // deltas + reason. `activities`/`intensity` were requested for years
+      // and never read by anything (the Director hint even said so), and
+      // `is_climax`/`refractory_turns` moved out with Afterglow's own pass
+      // (2026-08-07) — the comment above records that nothing here consumes
+      // them, and as of 2026-08-10 the ask finally agrees (eval review
+      // Tier-1 §3.5). The TOOL schema keeps activities/intensity DEFINED
+      // (optional, never required) because the registry is a fixed contract
+      // and the converter's scalar-array branch is pinned by
+      // tool_registry_test.
       final flatJsonAsk = toolsMode
           ? 'Report the result by calling the $kNeedsImpactTool tool. '
                 'Use ONLY the tool — no plain-text reply.\n'
           : 'Respond with ONLY a flat JSON object. Do NOT use markdown code blocks — return raw JSON only:\n'
-                '{"activities": ["sexual", "self_touch", "messy", "dominance" or similar], '
-                '"intensity": 1-10, '
-                '"hunger_delta": <int>, "energy_delta": <int>, "hygiene_delta": <int>, "fun_delta": <int>, "social_delta": <int>, "bladder_delta": <int>, "comfort_delta": <int>, ';
+                '{"hunger_delta": <int>, "energy_delta": <int>, "hygiene_delta": <int>, "fun_delta": <int>, "social_delta": <int>, "bladder_delta": <int>, "comfort_delta": <int>, ';
       if (decayTurns != null) {
         // ── AFK auto-response simplified prompt ──────────────────────────
         // The normal evaluator prompt (~2000 chars) is too complex for
@@ -589,15 +687,12 @@ class LlmEvalEngine {
           'Even if the critique suggests little/no change, you MUST output the complete flat JSON with all seven _delta keys (0 is valid). Do not omit fields.\n\n'
           'MAGNITUDE: needs run 0–100 (100 = fully satisfied); ±8 BARELY registers. When the scene SATISFIES/RESTORES a need, use a LARGE positive delta so it actually fills — using the bathroom → bladder +60 to +100; a full meal → hunger +50 to +90; sleeping / a long rest → energy +60 to +100; cozy solitude, lounging, drowsing → comfort +20 to +45, energy +10 to +30; a thorough wash → hygiene +50 to +90. Reserve small numbers for incidental effects, never a complete relief. (1x baselines; scale by the strength above.)\n\n'
           'Examples of valid correction output:\n'
-          '{"hunger_delta": 8, "energy_delta": 0, "hygiene_delta": -2, "fun_delta": 5, "social_delta": 0, "bladder_delta": 0, "comfort_delta": 1, "reason": "ate snack per critique", "is_climax": false, "refractory_turns": 0}\n'
-          '{"hunger_delta": 0, "energy_delta": 0, "hygiene_delta": 0, "fun_delta": 0, "social_delta": 0, "bladder_delta": 0, "comfort_delta": 0, "reason": "no notable need impact", "is_climax": false, "refractory_turns": 0}\n'
-          '{"hunger_delta": 0, "energy_delta": -12, "hygiene_delta": -10, "fun_delta": 25, "social_delta": 10, "bladder_delta": 0, "comfort_delta": 8, "reason": "$charName climaxed during sex", "is_climax": true, "refractory_turns": 6}\n\n' +
-          climaxGuidance +
+          '{"hunger_delta": 8, "energy_delta": 0, "hygiene_delta": -2, "fun_delta": 5, "social_delta": 0, "bladder_delta": 0, "comfort_delta": 1, "reason": "ate snack per critique"}\n'
+          '{"hunger_delta": 0, "energy_delta": 0, "hygiene_delta": 0, "fun_delta": 0, "social_delta": 0, "bladder_delta": 0, "comfort_delta": 0, "reason": "no notable need impact"}\n\n' +
           flatJsonAsk +
           (toolsMode
               ? ''
-              : '"reason": "<brief grounded reason for the deltas incorporating the critique>", '
-                  '"is_climax": true/false, "refractory_turns": <int 3-7 when is_climax is true, else 0> }');
+              : '"reason": "<brief grounded reason for the deltas incorporating the critique>" }');
       } else {
         return 'You are evaluating the effects of a roleplay scene on $charName\'s needs.\n\n'
               '$personalityInjection'
@@ -610,6 +705,33 @@ class LlmEvalEngine {
               '${decayContextStr.isEmpty ? ', on top of normal decay' : ''}.\n\n'
               'This is immersive erotic roleplay. Detailed physical and psychological descriptions matter: self-touch, bodily arousal states ("charging", "aching", "swollen", "leaking through fabric"), fluids, dominance, submission, "choosing", begging, power exchange, and explicit narration of what the character is doing or feeling should influence the relevant needs (fun, social, comfort, hygiene, energy, etc.) in natural, grounded ways.\n\n'
               'Be reasonable and faithful to the written text. Do not invent events that are not described.\n\n'
+              // ── THE LOOP-BREAKER ────────────────────────────────────────
+              // Reported 2026-08-08: "the need starts to influence the
+              // response, then next turn the response further boosts the need
+              // gravity… sudden loss of like 35-40 points in single turn."
+              //
+              // The RESPONSE above was written FROM the needs listed below it:
+              // the state block hands the model lines like "sharp, gnawing
+              // hunger cramps… thoughts drifting uncontrollably to food", the
+              // model narrates exactly that, and this eval then read the
+              // narration as evidence she had BECOME hungrier. Describing a
+              // state was being scored as changing it, and the lower a need
+              // went the more vivid the prose and the harder the next hit.
+              //
+              // CLAUDE.md already forbids this for the Realism Engine — "the
+              // eval scores the USER's message, never the character's own
+              // reply" — and the rule had simply never been applied here.
+              'DEPLETION IS HANDLED SEPARATELY. Needs drift downward on their own every turn; '
+                  'that is already accounted for and is not your job. The scene text above was WRITTEN FROM '
+                  'the current needs listed below — a character mentioning her empty stomach, dragging her feet, '
+                  'or squirming is DESCRIBING the state you are being shown, not becoming worse. Do not charge '
+                  'her for it.\n'
+                  'Report a NEGATIVE delta only when the scene explicitly describes something that COST her: '
+                  'hard exertion, sex, a soaking or a mess, being kept awake, going without, or drinking a '
+                  'lot (which fills the bladder rather than emptying it). A described event SHOULD register '
+                  'clearly — a soda is a real hit to bladder, a long walk a real hit to energy — it is the '
+                  'ambient drift you must not double-count. Otherwise the negative is 0; most needs in most '
+                  'scenes should be 0.\n\n'
               'Report *net signed effects* (deltas) on each need.\n\n'
               'User has set Needs delta strength to ' +
           strength.toString() +
@@ -623,13 +745,10 @@ class LlmEvalEngine {
               '  • A thorough wash, shower, or bath → hygiene +50 to +90\n'
               '  • Deep, fulfilling social connection, cuddling, or play → social / fun +20 to +50; comfort +10 to +25\n'
               'Partial or interrupted versions get proportionally smaller deltas. Reserve small numbers (±1 to ±8) for INCIDENTAL effects, never for a complete relief or restoration. (These are 1x baselines — scale by the strength factor above.)\n\n' +
-            climaxGuidance +
             flatJsonAsk +
             (toolsMode
                 ? 'If the scene had little or no notable effect on needs, use small numbers or zeros and a short reason.'
-                : '"reason": "<brief grounded reason for the deltas>", '
-                      '"is_climax": true/false, "refractory_turns": <int 3-7 when is_climax is true, else 0> }\n'
-                      'Example when $charName climaxes: {"activities": ["sexual"], "intensity": 9, "hunger_delta": 0, "energy_delta": -12, "hygiene_delta": -10, "fun_delta": 25, "social_delta": 10, "bladder_delta": 0, "comfort_delta": 8, "reason": "$charName came hard during sex", "is_climax": true, "refractory_turns": 6}\n'
+                : '"reason": "<brief grounded reason for the deltas>" }\n'
                       'If the scene had little or no notable effect on needs, use small numbers or zeros and a short reason.');
       }
     }
@@ -653,16 +772,31 @@ class LlmEvalEngine {
               callToText: (resp) =>
                   realismToolCallToJson(kNeedsImpactTool, resp.calls),
               fireToolEval: fireToolEval!,
-              fireTextEval: fireLLMEval,
+              fireTextEval: (p, {onChunk}) => fireLLMEval(
+                p,
+                onChunk: onChunk,
+                repeatPenalty: kScalarEvalRepeatPenalty,
+                label: 'needs',
+              ),
               isCancelled: () =>
                   getIsCancellingRealismEval() || getRealismEvalCancelled(),
               onChunk: onChunk,
             )
-          : await fireLLMEval(buildPrompt(toolsMode: false), onChunk: onChunk);
+          : await fireLLMEval(
+              buildPrompt(toolsMode: false),
+              onChunk: onChunk,
+              repeatPenalty: kScalarEvalRepeatPenalty,
+              label: 'needs',
+            );
       if (raw == null) return null;
       final searchText = stripThinkBlocks(raw);
-      if (searchText.trim().isEmpty) return null;
-      return searchText;
+      // Same fallback the four realism calls use: a think-only reply (a
+      // mandatory-reasoning model that parked its JSON in the think channel,
+      // or was cut mid-think) must still reach the regex parse rather than
+      // silently skipping the needs turn.
+      final text = searchText.trim().isNotEmpty ? searchText : raw;
+      if (text.trim().isEmpty) return null;
+      return text;
     } catch (e) {
       debugPrint('[Realism:Needs] Engine impact call failed: $e');
       return null;

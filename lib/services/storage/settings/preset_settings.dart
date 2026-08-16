@@ -18,6 +18,7 @@
 
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'settings_base.dart';
 
 /// Saved system prompts, kcpps presets, model preset map.
@@ -42,13 +43,26 @@ class PresetSettings with SettingsBase {
   Map<String, String> get modelMmprojMap => Map.unmodifiable(_modelMmprojMap);
 
   void load() {
-    // Load saved prompts
+    // Load saved prompts. A malformed value (hand-edited prefs file, a torn
+    // write) must never escape: StorageService._init is fire-and-forget, so a
+    // throw here leaves its `initialized` completer unresolved forever and the
+    // app comes up half-booted (no web server, no groups/worlds) with no way
+    // for the user to recover. Fall back to the default set, exactly like the
+    // two map decodes below.
     final promptsJson = prefs?.getString(k('saved_prompts'));
     if (promptsJson != null) {
-      final decoded = jsonDecode(promptsJson) as List;
-      _savedPrompts = decoded
-          .map((e) => Map<String, String>.from(e as Map))
-          .toList();
+      try {
+        final decoded = jsonDecode(promptsJson) as List;
+        _savedPrompts = decoded
+            .map((e) => Map<String, String>.from(e as Map))
+            .toList();
+      } catch (e) {
+        debugPrint(
+          '[Settings] saved_prompts is unreadable ($e) — starting from the '
+          'default prompt set.',
+        );
+        _savedPrompts = [];
+      }
     }
     // Default "Immersive Roleplay" ensure/persist now handled in thin god _init (after load of persisted list)
     // so that first-run case always persists (was mem-only insert here causing god any() on unmodifiable to skip savePrompt).

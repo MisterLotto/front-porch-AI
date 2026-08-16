@@ -95,7 +95,10 @@ class JournalMemoryGroup extends StatelessWidget {
           ],
           if (showMemory) ...[
             const SizedBox(height: 12),
-            MemoryPanel(chatService: chatService),
+            MemoryPanel(
+              chatService: chatService,
+              onJumpToMessage: onJumpToMessage,
+            ),
           ],
           if (!isLite) ...[
             const SizedBox(height: 12),

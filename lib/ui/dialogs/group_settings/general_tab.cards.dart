@@ -3,7 +3,7 @@
 
 part of 'general_tab.dart';
 
-extension _GroupGeneralCards on _GroupGeneralTabState {
+extension _GroupGeneralCards on GroupGeneralTabState {
   Widget _buildTurnStrategyCard(
     TurnOrder order,
     String label,
@@ -11,12 +11,15 @@ extension _GroupGeneralCards on _GroupGeneralTabState {
     IconData icon,
   ) {
     final isSelected = _turnOrder == order;
-    final borderColor = isSelected ? Colors.purpleAccent : Colors.white12;
+    final amber = AppColors.porchAmberOf(context);
+    final borderColor = isSelected ? amber : AppColors.borderOf(context);
     final bgColor = isSelected
-        ? const Color(0xFF1F2937)
-        : const Color(0xFF111827);
-    final iconColor = isSelected ? Colors.purpleAccent : Colors.white54;
-    final textColor = isSelected ? Colors.purpleAccent : Colors.white;
+        ? amber.withValues(alpha: 0.12)
+        : AppColors.surfaceContainerOf(context);
+    final iconColor = isSelected ? amber : AppColors.iconSecondary(context);
+    final textColor = isSelected
+        ? AppColors.textPrimary(context)
+        : AppColors.textSecondary(context);
 
     return GestureDetector(
       onTap: () => _setTurnOrder(order),
@@ -49,9 +52,9 @@ extension _GroupGeneralCards on _GroupGeneralTabState {
             const SizedBox(height: 6),
             Text(
               description,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
-                color: Colors.white54,
+                color: AppColors.textTertiary(context),
                 height: 1.3,
               ),
             ),
@@ -64,91 +67,92 @@ extension _GroupGeneralCards on _GroupGeneralTabState {
   /// Director Mode defaults section (verbatim from the old inline build).
   List<Widget> _directorModeSection() {
     return [
-                // ── Director Mode ──────────────────────────────────────────
-                GroupSectionHeader(
-                  'Director Mode Defaults',
-                  Icons.movie_creation_outlined,
-                  Colors.amberAccent,
+      GroupSectionHeader(
+        'Director Mode Defaults',
+        Icons.movie_creation_outlined,
+        AppColors.porchAmberOf(context),
+      ),
+      const SizedBox(height: 8),
+      Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerOf(context),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppColors.borderOf(context)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.visibility,
+                  size: 18,
+                  color: AppColors.iconSecondary(context),
                 ),
-                const SizedBox(height: 8),
-
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF111827),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.visibility,
-                            size: 18,
-                            color: Colors.white54,
-                          ),
-                          const SizedBox(width: 8),
-                          const Expanded(
-                            child: Text(
-                              'Start this group in Director Mode',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                          Switch(
-                            value: _directorModeDefault,
-                            activeTrackColor: Colors.amberAccent,
-                            onChanged: _setDirectorModeDefault,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      const Padding(
-                        padding: EdgeInsets.only(left: 26),
-                        child: Text(
-                          'When enabled, entering the group begins in observer/director mode. You steer via the input box while characters respond autonomously. The live toggle is also available in the group sidebar.',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.white38,
-                            height: 1.3,
-                          ),
-                        ),
-                      ),
-                    ],
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Start this group in Director Mode',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      color: AppColors.textPrimary(context),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 16),
-
-                // Persistence note
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0F172A),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.white10),
-                  ),
-                  child: const Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.info_outline, size: 14, color: Colors.white38),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'These settings are stored with the group definition. Saving here updates the live session immediately. The values are persisted to the database automatically on membership changes (add/remove character) and on session checkpoints.',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: Colors.white38,
-                            height: 1.25,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                Switch(
+                  value: _directorModeDefault,
+                  activeTrackColor: AppColors.porchAmberOf(context),
+                  onChanged: _setDirectorModeDefault,
                 ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.only(left: 26),
+              child: Text(
+                'When enabled, entering the group begins in observer/director mode. You steer via the input box while characters respond autonomously. The live toggle is also available in the group sidebar.',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textTertiary(context),
+                  height: 1.3,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 16),
+      Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: AppColors.surfaceOf(context),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppColors.borderOf(context)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(
+              Icons.info_outline,
+              size: 14,
+              color: AppColors.iconSecondary(context),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'These settings are stored with the group definition. Saving here updates the live session immediately. The values are persisted to the database automatically on membership changes (add/remove character) and on session checkpoints.',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: AppColors.textTertiary(context),
+                  height: 1.25,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     ];
   }
 }

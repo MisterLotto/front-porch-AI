@@ -180,8 +180,22 @@ class GroupCard {
     return result;
   }
 
+  /// Rebuild a group card from card JSON.
+  ///
+  /// THE INPUT IS A STRANGER'S UPLOAD. Both Stoop download paths
+  /// (stoop_card_detail_page, the web facade's stoop relay) hand a downloaded
+  /// card straight to this factory, so every read here is type-CHECKED rather
+  /// than `as`-cast: an `as` on a present-but-wrong-typed field throws out of
+  /// the factory and kills the whole download instead of costing one field.
+  /// `turn_order` was the field that proved it: a card whose `turn_order` was
+  /// an empty list threw a "not a subtype of type String" error from here.
   factory GroupCard.fromJson(Map<String, dynamic> json) {
-    final rawMembers = (json['members'] as List<dynamic>? ?? const [])
+    // Local coercions, so a bad field is dropped rather than fatal.
+    String str(Object? v, String fallback) => v is String ? v : fallback;
+    bool flag(Object? v, bool fallback) => v is bool ? v : fallback;
+    List<dynamic> list(Object? v) => v is List ? v : const [];
+
+    final rawMembers = list(json['members'])
         .whereType<Map<String, dynamic>>()
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
@@ -189,19 +203,21 @@ class GroupCard {
     // Prefer the high-fidelity raw_member_data (contains avatar_base64,
     // _original_stable_id, full extensions, etc.) when present. This is what
     // enables 100% member fidelity for avatar-less characters in exported groups.
-    final suppliedRaw = (json['raw_member_data'] as List<dynamic>?)
-        ?.whereType<Map<String, dynamic>>()
+    final suppliedRaw = list(json['raw_member_data'])
+        .whereType<Map<String, dynamic>>()
         .map((e) => Map<String, dynamic>.from(e))
         .toList();
-    final effectiveRaw = (suppliedRaw != null && suppliedRaw.isNotEmpty)
-        ? suppliedRaw
-        : rawMembers;
+    final effectiveRaw = suppliedRaw.isNotEmpty ? suppliedRaw : rawMembers;
 
     final members = rawMembers.map((m) {
       final data = m['data'] is Map ? Map<String, dynamic>.from(m['data']) : m;
+      final nested = data['data'];
       return CharacterCard(
         // minimal reconstruction for display; rawMemberData is used for fidelity
-        name: (data['name'] ?? data['data']?['name'] ?? 'Unknown').toString(),
+        name: str(
+          data['name'] ?? (nested is Map ? nested['name'] : null),
+          'Unknown',
+        ),
         // ... other fields can remain minimal since we rely on rawMemberData
       );
     }).toList();
@@ -214,34 +230,28 @@ class GroupCard {
       );
     }
 
-    final worldIds =
-        (json['world_ids'] as List<dynamic>?)
-            ?.map((e) => e.toString())
-            .toList() ??
-        [];
-    final worldNames =
-        (json['world_names'] as List<dynamic>?)
-            ?.map((e) => e.toString())
-            .toList() ??
-        [];
+    final worldIds = list(json['world_ids']).map((e) => e.toString()).toList();
+    final worldNames = list(
+      json['world_names'],
+    ).map((e) => e.toString()).toList();
 
     return GroupCard(
-      name: json['name'] ?? 'Group',
+      name: str(json['name'], 'Group'),
       members: members,
       rawMemberData: effectiveRaw,
-      turnOrder: json['turn_order'] ?? 'roundRobin',
-      autoAdvance: json['auto_advance'] ?? false,
-      directorMode: json['director_mode'] ?? false,
-      firstMessage: json['first_message'] ?? '',
-      scenario: json['scenario'] ?? '',
-      systemPrompt: json['system_prompt'] ?? '',
+      turnOrder: str(json['turn_order'], 'roundRobin'),
+      autoAdvance: flag(json['auto_advance'], false),
+      directorMode: flag(json['director_mode'], false),
+      firstMessage: str(json['first_message'], ''),
+      scenario: str(json['scenario'], ''),
+      systemPrompt: str(json['system_prompt'], ''),
       characterSystemPrompts: charPrompts,
       groupLorebook: json['group_lorebook']?.toString(),
       worldIds: worldIds,
       worldNames: worldNames,
-      inheritCharacterLorebooks: json['inherit_character_lorebooks'] ?? true,
-      chaosModeEnabled: json['chaos_mode_enabled'] ?? false,
-      chaosNsfwEnabled: json['chaos_nsfw_enabled'] ?? false,
+      inheritCharacterLorebooks: flag(json['inherit_character_lorebooks'], true),
+      chaosModeEnabled: flag(json['chaos_mode_enabled'], false),
+      chaosNsfwEnabled: flag(json['chaos_nsfw_enabled'], false),
       baselineRealismState: json['baseline_realism_state']?.toString() ?? '{}',
       defaultMemberRealismState:
           json['default_member_realism_state']?.toString() ?? '{}',
@@ -249,9 +259,7 @@ class GroupCard {
           ? (json['member_objectives'] as Map).map(
               (k, v) => MapEntry(
                 k.toString(),
-                (v as List)
-                    .map((e) => Map<String, dynamic>.from(e as Map))
-                    .toList(),
+                list(v).whereType<Map>().map(Map<String, dynamic>.from).toList(),
               ),
             )
           : const {},

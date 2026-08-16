@@ -5,7 +5,7 @@
 //
 // Front Porch AI is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
-// the Software Foundation, either version 3 of the License, or
+// the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
 // Front Porch AI is distributed in the hope that it will be useful,
@@ -365,7 +365,13 @@ class RealismVerification {
     final scene = (bundle['scene'] as String? ?? '').toLowerCase();
     final strictFactor = (strict / 3.0).clamp(0.6, 1.4);
     final pre = (bundle['pre_state'] as Map?) ?? {};
+    // 'affectionScore' FIRST: that is the key ChatService._captureRealismState
+    // actually writes the bond under, and it is the only producer of
+    // `pre_state` in production. Probing the other two alone left preBond
+    // pinned at 0, so the 'extreme bond swing' damper below could never fire.
+    // The legacy names stay as fallbacks (card extension / hand-built states).
     final preBond =
+        (pre['affectionScore'] as num?)?.toInt() ??
         (pre['short_term_bond'] as num?)?.toInt() ??
         (pre['bond'] as num?)?.toInt() ??
         0;
@@ -465,9 +471,28 @@ class RealismVerification {
     }
 
     if (kind == 'emotional_state' || kind == 'oneShot') {
-      final em = (_extractJsonString(raw, 'character_emotion') ?? '')
-          .toLowerCase();
-      final inten = extractJsonInt(raw, 'emotion_intensity') ?? 1;
+      // 'emotion' is the key every producer emits (the prompt's emotion
+      // section and the tools schema alike), and emotion_intensity is a
+      // STRING enum (mild|moderate|strong) — probing 'character_emotion' and
+      // reading the intensity as an int made this rule dead for every real
+      // eval output, the same class as the hunger_delta case below. Legacy
+      // shapes stay as fallbacks.
+      final em =
+          (_extractJsonString(raw, 'emotion') ??
+                  _extractJsonString(raw, 'character_emotion') ??
+                  '')
+              .toLowerCase();
+      final numericInten = extractJsonInt(raw, 'emotion_intensity');
+      final intenWord = numericInten != null
+          ? ''
+          : (_extractJsonString(raw, 'emotion_intensity') ?? '').toLowerCase();
+      final inten =
+          numericInten ??
+          (intenWord.startsWith('strong')
+              ? 3
+              : intenWord.startsWith('moderate')
+              ? 2
+              : 1);
       if (em.isNotEmpty &&
           !_sceneSupportsEmotion(scene, em) &&
           inten >= 2 &&
@@ -475,7 +500,15 @@ class RealismVerification {
         return _RuleResult(
           false,
           'strong emotion w/o support',
-          _correctedJson(raw, 'emotion_intensity', 1),
+          // Damp in whichever shape the model used — writing a number back
+          // over `"strong"` would leave the raw untouched, since the eval
+          // parse only reads the quoted enum.
+          numericInten != null
+              ? _correctedJson(raw, 'emotion_intensity', 1)
+              : raw.replaceAll(
+                  RegExp('"emotion_intensity"\\s*:\\s*"[^"]*"'),
+                  '"emotion_intensity": "mild"',
+                ),
         );
       }
     }
@@ -502,15 +535,23 @@ class RealismVerification {
       }
     }
 
-    final h = extractJsonInt(raw, 'hunger') ?? 0;
+    // hunger_delta first: it is the key the needs eval actually emits — the
+    // plain-'hunger' probe alone made this rule dead for every real output
+    // (the strict-quote extractor never matched `"hunger_delta"`), found in
+    // the 2026-08-10 eval review. The plain key stays as the fallback the
+    // parser also accepts.
+    final hKey = extractJsonInt(raw, 'hunger_delta') != null
+        ? 'hunger_delta'
+        : 'hunger';
+    final h = extractJsonInt(raw, hKey) ?? 0;
     if (h.abs() > (8 * strictFactor) &&
         !scene.contains('eat') &&
         !scene.contains('food')) {
-      final v = h.sign * 2;
-      final corrected = raw
-          .replaceAll(RegExp('"hunger"\\s*:\\s*(-?\\d+)'), '"hunger": $v')
-          .replaceAll(RegExp('"hunger"\\s*:\\s*(-?\\d+)'), '"hunger": $v');
-      return _RuleResult(false, 'hunger delta w/o eat', corrected);
+      return _RuleResult(
+        false,
+        'hunger delta w/o eat',
+        _correctedJson(raw, hKey, h.sign * 2),
+      );
     }
 
     return _RuleResult(true, '', null);
@@ -541,9 +582,21 @@ class RealismVerification {
         ? 'Classic $kind: prior rejected. Output scene-supported deltas.'
         : '';
     final structHint = (kind == 'narrative')
-        ? ' Preserve full shape: include "proposed_objective" ("none" or short goal) and "fixation_topic" (persistent lingering/intrusive thought or "none"). Only correct unsupported values; keep well-supported fixations.'
+        // "serves_ambition" is named for the same reason "is_climax" is named
+        // below: the Director REWRITES this text and the rewrite is what gets
+        // parsed, so a field omitted here is a field the parse never sees. Drop
+        // it and every Director-verified proposal loses its ambition tag —
+        // silently, and only in chats that have verification switched on.
+        ? ' Preserve full shape: include "proposed_objective" ("none" or short goal), "serves_ambition" (the ambition number the objective serves, or "none" — carry it through unchanged unless you changed the objective itself) and "fixation_topic" (persistent lingering/intrusive thought or "none"). Only correct unsupported values; keep well-supported fixations.'
         : (kind == 'needs_impact')
-            ? ' Preserve the needs delta keys (hunger_delta/energy_delta/etc or plain names) + reason + activities. The model is trusted to interpret the full erotic narrative (physical descriptions, self-touch, leaking, charging/aching, dominance, power exchange) and assign reasonable deltas like the other realism evals (bond/emotion etc). Only correct if the numbers clearly contradict what is actually written in the scene or pre-state. Keep scene-faithful numbers.'
+            // The preserved shape is the shape something reads: the seven
+            // delta keys + reason. The climax verdict left this eval with
+            // Afterglow's own pass (2026-08-07), and as of 2026-08-10 the
+            // needs prompt no longer asks for it — a Director told to
+            // preserve a field the eval never emits would only invite the
+            // rewrite to invent it. (It used to also say "activities", a
+            // field nothing in the app has ever read.)
+            ? ' Preserve the needs delta keys (hunger_delta/energy_delta/etc or plain names) + reason. The model is trusted to interpret the full erotic narrative (physical descriptions, self-touch, leaking, charging/aching, dominance, power exchange) and assign reasonable deltas like the other realism evals (bond/emotion etc). Only correct if the numbers clearly contradict what is actually written in the scene or pre-state. Keep scene-faithful numbers.'
             : '';
     final emotionConstraint = (bundle['injections'] as Map<String, dynamic>?)?['emotion_constraint'] as String? ?? '';
     final constraintText = emotionConstraint.isNotEmpty ? '\n$emotionConstraint\n' : '';

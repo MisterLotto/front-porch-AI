@@ -26,6 +26,9 @@ import {
   TypeConfirmDialog,
   type PickerPersona,
 } from '../components/library/LibraryDialogs';
+import { EnhanceDialog } from '../components/aichargen/EnhanceDialog';
+import { EnhanceReviewModal } from '../components/aichargen/EnhanceReviewModal';
+import type { EnhanceProposal, EnhanceSelection } from '../components/aichargen/enhanceForm';
 
 type Dialog =
   | { kind: 'newFolder' }
@@ -40,6 +43,10 @@ type Dialog =
   | { kind: 'move'; ids: string[] }
   // Step 2 of "Start new chat": persona choice for a fresh session.
   | { kind: 'newChat'; subject: string; target: { characterId?: string; groupId?: string } }
+  // AI Enhance: pre-flight (chat pick + field checklist + progress), then the
+  // old-vs-new review once the proposal arrives over the socket.
+  | { kind: 'aiEnhance'; char: LibChar }
+  | { kind: 'enhanceReview'; char: LibChar; proposal: EnhanceProposal; selection: EnhanceSelection }
   | null;
 
 export function CharactersPage() {
@@ -70,10 +77,15 @@ export function CharactersPage() {
 
   // Refresh the persona list whenever the new-chat dialog opens, so a persona
   // added on the desktop (or another tab) shows up without a reload.
+  // Depend on the stable `loadPersonas` callback, NEVER on `lib` — useLibrary
+  // returns a fresh object literal every render, and setPersonas re-renders
+  // this page, so `lib` as a dep re-fires the effect forever while the picker
+  // is open (one GET /api/personas per round trip).
+  const { loadPersonas } = lib;
   useEffect(() => {
     if (dialog?.kind !== 'newChat') return;
-    void lib.loadPersonas().then(setPersonas);
-  }, [dialog?.kind, lib]);
+    void loadPersonas().then(setPersonas);
+  }, [dialog?.kind, loadPersonas]);
 
   // ── Menu item builders (one CardMenu serves every surface) ───────────────
   const charMenu = (c: LibChar): CardMenuItem[] => [
@@ -84,6 +96,7 @@ export function CharactersPage() {
         setDialog({ kind: 'newChat', subject: c.name, target: { characterId: c.id } }),
     },
     { label: 'Edit', icon: '✏️', onClick: () => lib.editCharacter(c.id) },
+    { label: 'AI Enhance', icon: '✨', onClick: () => setDialog({ kind: 'aiEnhance', char: c }) },
     { label: 'Duplicate', icon: '⧉', onClick: () => lib.duplicateCharacter(c.id) },
     { label: 'Export PNG', icon: '🖼', onClick: () => lib.exportPng(c.id) },
     { label: 'Export JSON', icon: '📄', onClick: () => lib.exportJson(c.id) },
@@ -349,6 +362,31 @@ export function CharactersPage() {
       )}
 
       {menu && <CardMenu menu={menu} onClose={() => setMenu(null)} />}
+
+      {dialog?.kind === 'aiEnhance' && (
+        <EnhanceDialog
+          characterId={dialog.char.id}
+          characterName={dialog.char.name}
+          defaultNsfw={false}
+          onProposal={(proposal, selection) =>
+            setDialog({ kind: 'enhanceReview', char: dialog.char, proposal, selection })
+          }
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog?.kind === 'enhanceReview' && (
+        <EnhanceReviewModal
+          characterId={dialog.char.id}
+          characterName={dialog.char.name}
+          proposal={dialog.proposal}
+          selection={dialog.selection}
+          onApplied={(newId) => {
+            setDialog(null);
+            navigate(`/edit/${newId}`);
+          }}
+          onClose={() => setDialog(null)}
+        />
+      )}
 
       {dialog?.kind === 'newFolder' && (
         <PromptDialog

@@ -14,7 +14,9 @@
 // GNU Affero General Public License for more details.
 //
 // You should have received a copy of the GNU Affero General Public License
-// along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
+// along with Front Porch AI. If not, see https://www.gnu.org/licenses/.
+
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -26,7 +28,10 @@ import 'package:front_porch_ai/ui/widgets/character_card_grid.dart'
 /// The home grid's top toolbar: selection/organize header or folder breadcrumb
 /// or the Characters/Stories mode toggle, plus the sort dropdown, grid-size
 /// slider, and the refresh / multi-select / organize / new-folder / import
-/// actions. Extracted verbatim from CharacterCardGrid.build (behavior-preserving).
+/// actions.
+///
+/// There is no fixed window size. [LayoutBuilder] sheds the slider, then the
+/// sort labels, then the inline actions, so a resized window never overflows.
 class HomeGridToolbar extends StatelessWidget {
   const HomeGridToolbar({
     super.key,
@@ -79,6 +84,13 @@ class HomeGridToolbar extends StatelessWidget {
   })
   onFolderDialogAction;
   final void Function(String source) onImport;
+
+  static const _sortItems = <(String, String)>[
+    ('name', 'Name (A\u2192Z)'),
+    ('recent', 'Recent Activity'),
+    ('importDate', 'Import Date'),
+    ('messages', 'Messages Sent'),
+  ];
 
   /// Ancestor chain for the active folder, root-first with the current
   /// folder last (subfolder cards only render inside their parent, so the
@@ -145,231 +157,308 @@ class HomeGridToolbar extends StatelessWidget {
     );
   }
 
+  List<Widget> _leadingChildren(BuildContext context, double toggleMaxWidth) {
+    if (isSelecting || isOrganizing) {
+      return [
+        IconButton(
+          icon: const Icon(Icons.close),
+          tooltip: 'Cancel selection',
+          visualDensity: VisualDensity.compact,
+          onPressed: onCancelSelection,
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            '$selectedCount selected',
+            overflow: TextOverflow.ellipsis,
+            softWrap: false,
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: isOrganizing
+                  ? AppColors.porchHoneyOf(context)
+                  : AppColors.porchTerracottaOf(context),
+            ),
+          ),
+        ),
+      ];
+    }
+    if (activeFolderId != null) {
+      return [
+        IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Up one level',
+          visualDensity: VisualDensity.compact,
+          onPressed: onFolderNavigateBack,
+        ),
+        const SizedBox(width: 8),
+        Flexible(child: _breadcrumb(context)),
+      ];
+    }
+    // ConstrainedBox (not Flexible) so the toggle keeps its natural width
+    // when it fits — a Flexible here would steal space from the sort
+    // control and shove it toward the actions.
+    return [
+      ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: toggleMaxWidth),
+        child: modeToggle,
+      ),
+    ];
+  }
+
+  Widget _sortControl(BuildContext context, {required bool labeled}) {
+    if (!labeled) {
+      return PopupMenuButton<String>(
+        tooltip:
+            'Sort: ${_sortItems.where((e) => e.$1 == sortMode).firstOrNull?.$2 ?? sortMode}',
+        icon: Icon(
+          Icons.sort,
+          size: 18,
+          color: AppColors.iconSecondary(context),
+        ),
+        initialValue: sortMode,
+        color: AppColors.surfaceContainerOf(context),
+        onSelected: onSortChanged,
+        itemBuilder: (_) => [
+          for (final item in _sortItems)
+            PopupMenuItem(value: item.$1, child: Text(item.$2)),
+        ],
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerOf(context),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.borderOf(context)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: sortMode,
+          icon: Icon(
+            Icons.sort,
+            size: 18,
+            color: AppColors.iconSecondary(context),
+          ),
+          dropdownColor: AppColors.surfaceContainerOf(context),
+          style: TextStyle(
+            color: AppColors.textSecondary(context),
+            fontSize: 13,
+          ),
+          isDense: true,
+          items: [
+            for (final item in _sortItems)
+              DropdownMenuItem(value: item.$1, child: Text(item.$2)),
+          ],
+          onChanged: (value) {
+            if (value != null) onSortChanged(value);
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _scaleSlider(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: SizedBox(
+        width: 100,
+        child: Row(
+          children: [
+            Icon(
+              Icons.grid_view,
+              size: 16,
+              color: AppColors.iconSecondary(context),
+            ),
+            Expanded(
+              child: SliderTheme(
+                data: SliderThemeData(
+                  trackHeight: 3,
+                  thumbShape: const RoundSliderThumbShape(
+                    enabledThumbRadius: 6,
+                  ),
+                  overlayShape: const RoundSliderOverlayShape(
+                    overlayRadius: 12,
+                  ),
+                  activeTrackColor: AppColors.porchHoneyOf(
+                    context,
+                  ).withValues(alpha: 0.7),
+                  inactiveTrackColor: AppColors.borderOf(
+                    context,
+                  ).withValues(alpha: 0.4),
+                  thumbColor: AppColors.porchHoneyOf(context),
+                ),
+                child: Slider(
+                  value: gridScale,
+                  min: 150,
+                  max: 450,
+                  onChanged: (v) => onGridScaleChanged(v),
+                  onChangeEnd: (v) => onGridScaleChangeEnd?.call(v),
+                ),
+              ),
+            ),
+            Icon(
+              Icons.view_module,
+              size: 16,
+              color: AppColors.iconSecondary(context),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _actionButtons(BuildContext context) {
+    return [
+      IconButton(
+        tooltip:
+            'Refresh character list (pick up external changes, e.g. Character Card Forge)',
+        icon: const Icon(Icons.refresh),
+        visualDensity: VisualDensity.compact,
+        onPressed: () => repo.loadCharacters(),
+      ),
+      IconButton(
+        tooltip: 'Multi-select characters (for organizing, moving, etc.)',
+        icon: const Icon(Icons.check_box_outlined),
+        visualDensity: VisualDensity.compact,
+        onPressed: onToggleSelectMode,
+      ),
+      IconButton(
+        tooltip: 'Organize into folders',
+        icon: Icon(
+          Icons.drive_file_move_outlined,
+          color: AppColors.porchHoneyOf(context),
+        ),
+        visualDensity: VisualDensity.compact,
+        onPressed: onToggleOrganizeMode,
+      ),
+      if (activeFolderId == null)
+        IconButton(
+          tooltip: 'New Folder',
+          icon: const Icon(Icons.create_new_folder_outlined),
+          visualDensity: VisualDensity.compact,
+          onPressed: () => onFolderDialogAction(FolderDialogAction.create),
+        ),
+      if (activeFolderId != null)
+        IconButton(
+          tooltip: 'New Subfolder',
+          icon: Icon(
+            Icons.create_new_folder_outlined,
+            color: AppColors.porchAmberOf(context),
+          ),
+          visualDensity: VisualDensity.compact,
+          onPressed: () => onFolderDialogAction(
+            FolderDialogAction.create,
+            parentId: activeFolderId,
+          ),
+        ),
+      PopupMenuButton<String>(
+        tooltip: 'Import or discover characters',
+        icon: const Icon(Icons.download),
+        color: AppColors.surfaceContainerOf(context),
+        onSelected: onImport,
+        itemBuilder: (_) => _importItems(context),
+      ),
+    ];
+  }
+
+  List<PopupMenuEntry<String>> _importItems(BuildContext context) {
+    final iconColor = AppColors.iconSecondary(context);
+    Widget row(IconData icon, String label) => Row(
+      children: [
+        Icon(icon, size: 18, color: iconColor),
+        const SizedBox(width: 8),
+        Text(label),
+      ],
+    );
+    return [
+      PopupMenuItem(value: 'cards', child: row(Icons.download, 'Import Cards')),
+      PopupMenuItem(
+        value: 'folder',
+        child: row(Icons.library_add, 'Import Folder'),
+      ),
+      PopupMenuItem(
+        value: 'byaf',
+        child: row(Icons.archive_outlined, 'Import Backyard AI (.byaf)'),
+      ),
+    ];
+  }
+
+  Widget _overflowActions(BuildContext context) {
+    return PopupMenuButton<String>(
+      tooltip: 'More library actions',
+      icon: const Icon(Icons.more_vert),
+      color: AppColors.surfaceContainerOf(context),
+      onSelected: (value) {
+        switch (value) {
+          case 'refresh':
+            repo.loadCharacters();
+          case 'select':
+            onToggleSelectMode?.call();
+          case 'organize':
+            onToggleOrganizeMode?.call();
+          case 'new_folder':
+            onFolderDialogAction(
+              FolderDialogAction.create,
+              parentId: activeFolderId,
+            );
+          case 'cards':
+          case 'folder':
+          case 'byaf':
+            onImport(value);
+        }
+      },
+      itemBuilder: (_) => [
+        const PopupMenuItem(value: 'refresh', child: Text('Refresh list')),
+        const PopupMenuItem(value: 'select', child: Text('Multi-select')),
+        const PopupMenuItem(value: 'organize', child: Text('Organize')),
+        PopupMenuItem(
+          value: 'new_folder',
+          child: Text(activeFolderId == null ? 'New Folder' : 'New Subfolder'),
+        ),
+        const PopupMenuDivider(),
+        ..._importItems(context),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24.0,
-                vertical: 16.0,
-              ),
-              child: Row(
-                children: [
-                  if (isSelecting || isOrganizing) ...[
-                    IconButton(
-                      icon: const Icon(Icons.close),
-                      tooltip: 'Cancel selection',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: onCancelSelection,
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        '$selectedCount selected',
-                        overflow: TextOverflow.ellipsis,
-                        softWrap: false,
-                        style: Theme.of(context).textTheme.headlineSmall
-                            ?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: isOrganizing
-                                  ? AppColors.porchHoneyOf(context)
-                                  : AppColors.porchTerracottaOf(context),
-                            ),
-                      ),
-                    ),
-                  ] else if (activeFolderId != null) ...[
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back),
-                      tooltip: 'Up one level',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: onFolderNavigateBack,
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(child: _breadcrumb(context)),
-                  ] else
-                    modeToggle,
-                  const SizedBox(width: 12),
-                  if (!isSelecting && !isOrganizing)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceContainerOf(context),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.borderOf(context)),
-                      ),
-                      child: DropdownButtonHideUnderline(
-                        child: DropdownButton<String>(
-                          value: sortMode,
-                          icon: Icon(
-                            Icons.sort,
-                            size: 18,
-                            color: AppColors.iconSecondary(context),
-                          ),
-                          dropdownColor: AppColors.surfaceContainerOf(context),
-                          style: TextStyle(
-                            color: AppColors.textSecondary(context),
-                            fontSize: 13,
-                          ),
-                          isDense: true,
-                          items: const [
-                            DropdownMenuItem(
-                              value: 'name',
-                              child: Text('Name (A\u2192Z)'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'recent',
-                              child: Text('Recent Activity'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'importDate',
-                              child: Text('Import Date'),
-                            ),
-                            DropdownMenuItem(
-                              value: 'messages',
-                              child: Text('Messages Sent'),
-                            ),
-                          ],
-                          onChanged: (value) {
-                            if (value != null) onSortChanged(value);
-                          },
-                        ),
-                      ),
-                    ),
-                  if (!isSelecting && !isOrganizing)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: SizedBox(
-                        width: 100,
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.grid_view,
-                              size: 16,
-                              color: AppColors.iconSecondary(context),
-                            ),
-                            Expanded(
-                              child: SliderTheme(
-                                data: SliderThemeData(
-                                  trackHeight: 3,
-                                  thumbShape: const RoundSliderThumbShape(
-                                    enabledThumbRadius: 6,
-                                  ),
-                                  overlayShape: const RoundSliderOverlayShape(
-                                    overlayRadius: 12,
-                                  ),
-                                  activeTrackColor: AppColors.porchHoneyOf(
-                                    context,
-                                  ).withValues(alpha: 0.7),
-                                  inactiveTrackColor: AppColors.borderOf(
-                                    context,
-                                  ).withValues(alpha: 0.4),
-                                  thumbColor: AppColors.porchHoneyOf(context),
-                                ),
-                                child: Slider(
-                                  value: gridScale,
-                                  min: 150,
-                                  max: 450,
-                                  onChanged: (v) => onGridScaleChanged(v),
-                                  onChangeEnd: (v) =>
-                                      onGridScaleChangeEnd?.call(v),
-                                ),
-                              ),
-                            ),
-                            Icon(
-                              Icons.view_module,
-                              size: 16,
-                              color: AppColors.iconSecondary(context),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  const Spacer(),
-                  if (!isSelecting && !isOrganizing) ...[
-                    // Full reload via loadCharacters() (DB re-query + fresh PNG extensions/avatars)
-                    // so external direct writers (Character Card Forge, web imports, etc.) are
-                    // picked up immediately without app restart. Matches the established pattern
-                    // used by cloud sync, the web server, and main.dart startup.
-                    IconButton(
-                      tooltip:
-                          'Refresh character list (pick up external changes, e.g. Character Card Forge)',
-                      icon: const Icon(Icons.refresh),
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () => repo.loadCharacters(),
-                    ),
-                    IconButton(
-                      tooltip:
-                          'Multi-select characters (for organizing, moving, etc.)',
-                      icon: const Icon(Icons.check_box_outlined),
-                      visualDensity: VisualDensity.compact,
-                      onPressed: onToggleSelectMode,
-                    ),
-                    IconButton(
-                      tooltip: 'Organize into folders',
-                      icon: Icon(
-                        Icons.drive_file_move_outlined,
-                        color: AppColors.porchHoneyOf(context),
-                      ),
-                      visualDensity: VisualDensity.compact,
-                      onPressed: onToggleOrganizeMode,
-                    ),
-                    if (activeFolderId == null)
-                      IconButton(
-                        tooltip: 'New Folder',
-                        icon: const Icon(Icons.create_new_folder_outlined),
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () =>
-                            onFolderDialogAction(FolderDialogAction.create),
-                      ),
-                    if (activeFolderId != null)
-                      IconButton(
-                        tooltip: 'New Subfolder',
-                        icon: Icon(
-                          Icons.create_new_folder_outlined,
-                          color: AppColors.porchAmberOf(context),
-                        ),
-                        visualDensity: VisualDensity.compact,
-                        onPressed: () => onFolderDialogAction(
-                          FolderDialogAction.create,
-                          parentId: activeFolderId,
-                        ),
-                      ),
-                    PopupMenuButton<String>(
-                      tooltip: 'Import or discover characters',
-                      icon: const Icon(Icons.download),
-                      onSelected: onImport,
-                      itemBuilder: (_) => [
-                        const PopupMenuItem(
-                          value: 'cards',
-                          child: ListTile(
-                            leading: Icon(Icons.download),
-                            title: Text('Import Cards'),
-                            dense: true,
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'folder',
-                          child: ListTile(
-                            leading: Icon(Icons.library_add),
-                            title: Text('Import Folder'),
-                            dense: true,
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'byaf',
-                          child: ListTile(
-                            leading: Icon(Icons.archive_outlined),
-                            title: Text('Import Backyard AI (.byaf)'),
-                            dense: true,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
-              ),
-            );
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          // Content-area widths, not window sizes. Sidebar already ate its
+          // share; these decide what still fits in the remaining strip.
+          final showSlider = width >= 720;
+          final labeledSort = width >= 520;
+          final inlineActions = width >= 440;
+          final browsing = !isSelecting && !isOrganizing;
+          // High-side estimates so the toggle goes compact a few px early
+          // rather than the row overflowing. Not a window-size assumption.
+          var reserved = 0.0;
+          if (browsing) {
+            reserved += 12;
+            reserved += labeledSort ? 190 : 48;
+            if (showSlider) reserved += 120;
+            reserved += inlineActions ? 230 : 48;
+          }
+          final toggleMax = math.max(0.0, width - reserved);
+          return Row(
+            children: [
+              ..._leadingChildren(context, toggleMax),
+              if (browsing) ...[
+                const SizedBox(width: 12),
+                _sortControl(context, labeled: labeledSort),
+                if (showSlider) _scaleSlider(context),
+              ],
+              const Spacer(),
+              if (browsing && inlineActions) ..._actionButtons(context),
+              if (browsing && !inlineActions) _overflowActions(context),
+            ],
+          );
+        },
+      ),
+    );
   }
 }

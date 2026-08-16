@@ -161,7 +161,10 @@ jobs:
       # Regenerate assets/web_app from web_ui/src so the Flutter build bundles a
       # fresh WebUI (never a stale committed bundle). Must run before flutter build.
       - name: Build WebUI bundle
-        run: npm ci && npm run build
+          # --ignore-scripts: no package in this tree runs an install-time
+          # script today (verified 2026-08-05), so this changes nothing now
+          # and blocks the ChainDrop vector if one ever arrives.
+        run: npm ci --ignore-scripts && npm run build
         working-directory: web_ui
 
       - name: Build Application
@@ -656,6 +659,42 @@ jobs:
           body: ${{ steps.release_notes.outputs.body }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # The release is not published until every installer is PROVEN present
+      # and plausibly sized on the release itself. The Linux tarball silently
+      # vanished from every stable release for three months (a matrix
+      # variable removal in 5bc2b9c6 dropped it from the upload lists) and
+      # nothing noticed until the AUR package 404'd for a user — softprops
+      # tolerates missing files by design, so a shrunken `files:` list
+      # publishes a green, incomplete release. This step turns that silent
+      # gap into a red run naming the missing asset.
+      - name: Verify release assets are complete
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          EXPECTED="Front_Porch_AI-Linux.AppImage Front_Porch_AI-Linux.deb \
+            Front_Porch_AI-Linux.rpm Front_Porch_AI_Linux.tar.gz \
+            Front_Porch_AI_Setup.exe Front_Porch_AI.pkg"
+          ASSETS=$(gh release view "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --json assets --jq '.assets[] | "\(.name) \(.size)"')
+          echo "Published assets:"
+          echo "$ASSETS"
+          MISSING=0
+          for NAME in $EXPECTED; do
+            SIZE=$(echo "$ASSETS" | awk -v n="$NAME" '$1 == n {print $2}')
+            if [ -z "$SIZE" ]; then
+              echo "::error::release asset MISSING: $NAME"
+              MISSING=1
+            elif [ "$SIZE" -lt 1000000 ]; then
+              # Every installer is tens of MB; anything under 1 MB is a
+              # truncated upload or an error page, not a build.
+              echo "::error::release asset SUSPICIOUSLY SMALL (${SIZE} bytes): $NAME"
+              MISSING=1
+            fi
+          done
+          [ "$MISSING" -eq 0 ] || exit 1
+          echo "✓ all $(echo $EXPECTED | wc -w) installers present and sized"
 
   # ── Publish .deb to APT repository at apt.frontporchai.app ──
   publish-apt:

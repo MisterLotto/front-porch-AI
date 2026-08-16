@@ -395,7 +395,11 @@
 .hub-member {
   border: 1px solid var(--border); border-radius: var(--radius-sm);
   background: var(--card); padding: 12px 15px;
-  display: grid; gap: 4px; font-size: 0.9rem;
+  /* align-content: a cast whose members carry different amounts of identity
+     gets cells of very different natural heights, and the grid stretches them
+     all to the tallest. Without this the quiet member's two lines float in the
+     middle of an empty card. */
+  display: grid; gap: 4px; font-size: 0.9rem; align-content: start;
 }
 .hub-member b { color: var(--cream); }
 
@@ -415,6 +419,10 @@
 .hub-lore-entry:first-child { border-top: 0; }
 .hub-lore-head { padding: 12px 18px 0; }
 .hub-lore-head strong { color: var(--cream); font-size: 0.92rem; }
+/* Card-authored identity lists (ambitions, likes & dislikes, pockets & wardrobe).
+   The glyph is inline text in each line, not a ::before, so a reader can copy it. */
+.hub-glyphlist { display: grid; gap: 5px; padding: 4px 18px 16px; color: var(--cream-2); font-size: 0.92rem; line-height: 1.5; word-break: break-word; }
+.hub-sublabel { color: var(--mute); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; margin-top: 6px; }
 
 /* ---- creator ---- */
 .hub-creator-head { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-bottom: 26px; }
@@ -487,6 +495,55 @@
 .hub-submit-img { max-width: 180px; border-radius: var(--radius-sm); border: 1px solid var(--border-hi); }
 .hub-filebtn-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .hub-form { display: grid; gap: 14px; }
+
+/* Completeness checklist on Submit — empty required fields must be obvious */
+.hub-completeness {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-hi);
+  padding: 12px 14px;
+  margin: 0 0 14px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.hub-completeness.hot {
+  border-color: rgba(232, 131, 58, 0.55);
+  background: rgba(232, 131, 58, 0.08);
+  border-left: 3px solid #e8833a;
+}
+.hub-completeness.cool {
+  border-color: rgba(62, 207, 142, 0.35);
+  background: rgba(62, 207, 142, 0.07);
+  border-left: 3px solid #3ecf8e;
+}
+.hub-completeness-title { font-weight: 700; color: var(--cream); margin-bottom: 6px; font-size: 0.95rem; }
+.hub-completeness-msg { font-size: 0.88rem; color: var(--cream-2); margin-bottom: 8px; line-height: 1.45; }
+.hub-completeness-grid { display: grid; gap: 4px; }
+.hub-comp-row {
+  display: grid; grid-template-columns: 18px 1fr auto; gap: 8px; align-items: center;
+  font-size: 0.84rem; padding: 4px 6px; border-radius: 6px; background: rgba(0,0,0,0.18);
+}
+.hub-comp-row.ok .hub-comp-mark { color: #3ecf8e; }
+.hub-comp-row.bad { background: rgba(232, 131, 58, 0.12); }
+.hub-comp-row.bad .hub-comp-mark { color: #ffb08a; font-weight: 700; }
+.hub-comp-row.warn .hub-comp-mark { color: var(--mute); }
+.hub-comp-label { color: var(--cream-2); }
+.hub-comp-meta { color: var(--mute); font-size: 0.78rem; }
+.hub-completeness-note { font-size: 0.8rem; color: var(--mute); margin-top: 6px; }
+
+/* Forced 18+ on Submit — the card carries intimate preferences, so the NSFW box
+   is ticked and locked. Verify-banner layout in the group-warning's ember, since
+   this is the same kind of "read this before you go on" note. */
+.hub-forced18 {
+  display: flex; align-items: flex-start; gap: 14px; flex-wrap: wrap;
+  border: 1px solid rgba(232, 131, 58, 0.5); border-left: 4px solid var(--ember);
+  border-radius: var(--radius-sm); background: rgba(232, 131, 58, 0.1);
+  padding: 14px 18px; margin: 0 0 14px;
+}
+.hub-forced18-ico { font-size: 1.3rem; line-height: 1.2; }
+.hub-forced18-text { flex: 1 1 260px; }
+.hub-forced18-text strong { color: #ffc196; display: block; margin-bottom: 3px; }
+.hub-forced18-text p { color: var(--cream-2); font-size: 0.92rem; margin: 0; line-height: 1.5; }
+.hub-forced18-note { display: block; color: #ffc196; font-size: 0.82rem; margin-top: 3px; }
+
 .hub-submitted { text-align: center; padding: 60px 0; }
 .hub-submitted h2 { color: var(--cream); margin: 10px 0; }
 .hub-submitted .hub-gate-actions { justify-content: center; }

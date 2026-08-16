@@ -98,6 +98,27 @@ front_porch_ai.png
 .sandbox-*/
 .opencode/
 .sisyphus/
+.grok/
+
+# ---------------------------------------------------------------------------
+# Scripts & Docker — local only; NEVER commit or push (maintainer 2026-08-11)
+# ---------------------------------------------------------------------------
+# CI uses the workflow YAML on the remote, not whatever is dirty on disk here.
+# Tracked copies still need skip-worktree per clone (gitignore can't hide
+# edits to already-tracked files):
+#   git ls-files 'scripts/*' 'tools/golden/Dockerfile' 'tools/golden/golden.sh' \
+#     | xargs git update-index --skip-worktree
+# Agents: never git add scripts/, *Dockerfile*, docker-compose*, tools/golden/.
+scripts/
+**/Dockerfile
+**/Dockerfile.*
+**/*.Dockerfile
+**/docker-compose*.yml
+**/docker-compose*.yaml
+**/compose*.yml
+**/compose*.yaml
+tools/golden/Dockerfile
+tools/golden/golden.sh
 
 aur/src/
 aur/pkg/
@@ -148,6 +169,7 @@ docs/Newsletter-Since-March-28-2026.md
 !.claude/skills/dart-collect-coverage/
 !.claude/skills/dart-use-pattern-matching/
 !.claude/skills/flutter-add-integration-test/
+!.claude/skills/path-complete-chat/
 
 # Locally-built fpzip dylib for the native Draw Things client (scripts/build-fpzip-macos.sh)
 tools/fpzip/
@@ -157,3 +179,12 @@ tools/fpzip/
 # died at GitHub's file-size wall. Never again.
 /*.pkg
 /*.dmg
+
+# Local-only live poke against a private DB copy (real chats — never share)
+test/services/chat/.local_poke/
+*.local_poke.dart
+
+# Regenerated binary zip from fpchat_synthetic_roundtrip_test (timestamps
+# change every run). The test builds bytes in-memory; keep the ST JSON only.
+test/fixtures/fpchat/synthetic.fpchat
+test/fixtures/fpchat/*.fpchat

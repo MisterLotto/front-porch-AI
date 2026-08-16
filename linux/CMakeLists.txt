@@ -54,6 +54,11 @@ add_subdirectory(${FLUTTER_MANAGED_DIR})
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
 
+# Vendored spell check engine. Built before the runner, which links it.
+# Kept out of APPLY_STANDARD_SETTINGS on purpose — see its CMakeLists.txt.
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../third_party/hunspell"
+                 "${CMAKE_BINARY_DIR}/hunspell")
+
 # Application build; see runner/CMakeLists.txt.
 add_subdirectory("runner")
 
@@ -95,6 +100,14 @@ install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
 
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
+  COMPONENT Runtime)
+
+# The bundled spell check dictionary. Installed here rather than declared as a
+# Flutter asset because only the native runner reads it, and C++ cannot reach
+# rootBundle — spell_check_plugin.cc resolves it relative to the executable.
+# This is what makes spell check work with no packages installed at all.
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/dictionaries/"
+  DESTINATION "${INSTALL_BUNDLE_DATA_DIR}/dictionaries"
   COMPONENT Runtime)
 
 install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"

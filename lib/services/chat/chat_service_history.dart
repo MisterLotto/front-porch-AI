@@ -25,9 +25,23 @@ part of '../chat_service.dart';
 /// fast-forward) never matches and the whole transcript re-prefills each
 /// message. Rounding the drop point up to a chunk boundary wastes at most a
 /// chunk's worth of budget but keeps the prefix byte-stable for up to this
-/// many turns between evictions. Stateless: the boundary is derived from the
-/// drop index alone, so regen/swipe/reload all land on the same boundary.
+/// many turns between evictions. Layer 1 of sticky trimming — layer 2 is the
+/// per-session monotonic [_HistoryAnchor] below, which stops budget wobble
+/// from oscillating the drop across a chunk boundary between turns.
 const int kHistoryTrimChunk = 8;
+
+/// Per-service history-window anchor (see the monotonic-anchor comment in
+/// [_buildChatHistoryWithBudget]). An [Expando] rather than a ChatService
+/// field ONLY because the shell sits at the 1,000-line ratchet's edge —
+/// per-instance state, garbage-collected with the service, invisible to
+/// golden fakes.
+class _HistoryAnchor {
+  String? session;
+  int dropped = 0;
+  int budget = 0;
+}
+
+final Expando<_HistoryAnchor> _historyAnchorOf = Expando();
 
 /// Private prompt chat-history builders and token counting/budgeting. Pure
 /// formatting over `_messages` plus token accounting — no orchestration or
@@ -36,63 +50,30 @@ const int kHistoryTrimChunk = 8;
 /// extension (never part of the public interface / fakeable).
 extension ChatServiceHistory on ChatService {
   /// One history line per message (shared by both history builders so they
-  /// can never drift). Director notes get bracketed so the AI treats them as
-  /// instructions; generated-image messages (empty text + image metadata from
-  /// `/image` or the studio's Send to chat) are described briefly instead of
-  /// producing a bare "Sender:" line; user-attached photos are marked (with
-  /// the stored auto-caption once available) so turns after the pixels stop
-  /// riding along still know a photo was shared and what it showed.
-  String _formatHistoryLine(ChatMessage m) {
-    if (m.characterId == '__director__') {
-      return '[Director: ${m.text}]';
-    }
-    if (m.activeMetadata?['is_user_image'] == true) {
-      final caption = (m.activeMetadata?['image_caption'] as String? ?? '')
-          .trim();
-      final attach = '[attaches a photo${caption.isEmpty ? '' : ': $caption'}]';
-      final text = m.text.trim();
-      return '${m.sender}: ${text.isEmpty ? attach : '$text $attach'}';
-    }
-    if (m.activeMetadata?['is_generated_image'] == true && m.text.isEmpty) {
-      final prompt = (m.activeMetadata?['image_prompt'] as String? ?? '')
-          .trim();
-      final short = prompt.length > 120
-          ? '${prompt.substring(0, 120)}…'
-          : prompt;
-      return '${m.sender}: [shares a generated image'
-          '${short.isEmpty ? '' : ': $short'}]';
-    }
-    return '${m.sender}: ${m.text}';
+  /// can never drift). Delegates to [ChatMessage.toPromptHistoryLine] so the
+  /// generation prompt and the eval windows ([recentExchange]) agree: think
+  /// blocks stay UI-only, photos carry their caption marker, director notes
+  /// and generated-image shares keep their brackets.
+  String _formatHistoryLine(ChatMessage m) => m.toPromptHistoryLine();
+
+  /// Tiny-context floor: keep the latest user line and everything after it.
+  /// A guest chime-in used to keep only `_messages.last` (the host reaction)
+  /// and the question the guest was meant to answer vanished.
+  ({String history, int droppedCount}) _overflowContinuityHistory() {
+    if (_messages.isEmpty) return (history: '', droppedCount: 0);
+    final start = overflowHistoryStart(_messages);
+    return (
+      history: _messages.sublist(start).map(_formatHistoryLine).join('\n'),
+      droppedCount: start,
+    );
   }
 
   String _buildChatHistory({List<LoreDepthEntry> depthLore = const []}) {
     final lines = _messages.map(_formatHistoryLine).toList();
-    if (lines.any((l) => ChatService._macroPattern.hasMatch(l))) {
+    if (lines.any((l) => _macroPattern.hasMatch(l))) {
       debugPrint('[MacroResolver] ⚠ Unresolved macro detected in chat history');
     }
-    return _spliceDepthLore(lines, depthLore).join("\n");
-  }
-
-  /// Insert @depth lore entries into a history line list: depth N = N
-  /// message-lines up from the end (0 = after the last message), clamped.
-  /// Entries sharing a depth keep their bucket order.
-  List<String> _spliceDepthLore(
-    List<String> lines,
-    List<LoreDepthEntry> depthLore,
-  ) {
-    if (depthLore.isEmpty) return lines;
-    final atFromEnd = <int, List<String>>{};
-    for (final d in depthLore) {
-      final clamped = d.depth > lines.length ? lines.length : d.depth;
-      atFromEnd.putIfAbsent(clamped, () => []).add(d.content);
-    }
-    final out = <String>[];
-    for (var i = 0; i <= lines.length; i++) {
-      final insert = atFromEnd[lines.length - i];
-      if (insert != null) out.addAll(insert);
-      if (i < lines.length) out.add(lines[i]);
-    }
-    return out;
+    return spliceDepthLore(lines, depthLore).join("\n");
   }
 
   /// Build chat history that fits within a token budget.
@@ -110,7 +91,7 @@ extension ChatServiceHistory on ChatService {
 
     // Format all messages, skipping hidden group realism checkpoints
     final formatted = _messages.map(_formatHistoryLine).toList();
-    if (formatted.any((l) => ChatService._macroPattern.hasMatch(l))) {
+    if (formatted.any((l) => _macroPattern.hasMatch(l))) {
       debugPrint('[MacroResolver] ⚠ Unresolved macro detected in chat history');
     }
 
@@ -138,14 +119,55 @@ extension ChatServiceHistory on ChatService {
       included.insert(0, msgText);
     }
 
-    // Sticky trimming (kHistoryTrimChunk): quantize the drop point UP to the
-    // next chunk boundary so the surviving prefix stays identical for up to
-    // a chunk of turns — the prefix-cache win. Never evicts the newest
-    // message (clamp), and the freed margin is simply unused budget that
-    // refills before the next eviction.
-    if (droppedCount > 0) {
+    // Sticky trimming, TWO layers — both exist for the prefix cache:
+    //
+    //  1. kHistoryTrimChunk quantizes the drop point UP to a chunk boundary
+    //     so ordinary growth moves the window start only once per chunk of
+    //     turns.
+    //  2. The MONOTONIC ANCHOR (2026-08-11, maintainer report: oMLX at 2.8%
+    //     cache efficiency, ~52k re-prefilled EVERY turn). Quantization
+    //     alone re-fits from scratch each turn, so when the post-history
+    //     blocks wobble the budget (the journal re-sorts with mood and
+    //     re-warms cards per turn, expand-memory flaps ±1k chars, the
+    //     set-aside line comes and goes), a raw drop point sitting near a
+    //     chunk boundary OSCILLATES across it — and every flip re-prefills
+    //     the entire transcript on every prefix-caching backend (oMLX,
+    //     KoboldCpp, LM Studio). The anchor makes the window start
+    //     monotonic per session: once a message is dropped it STAYS
+    //     dropped, so the surviving prefix is byte-stable until the chat
+    //     genuinely outgrows the next chunk. The cost is up to one chunk of
+    //     messages hidden a few turns earlier than strictly necessary —
+    //     covered by the recap, which keys on droppedCount and stays live.
+    //     Deliberate resets only: a session switch, a budget that GREW by
+    //     >25% (the user raised context — permanently hiding messages the
+    //     context now affords would be theft), or an anchor beyond the
+    //     message list (a cleared/rewritten chat).
+    final anchor = _historyAnchorOf[this] ??= _HistoryAnchor();
+    if (anchor.session != _currentSessionId ||
+        anchor.dropped >= formatted.length) {
+      anchor.session = _currentSessionId;
+      anchor.dropped = 0;
+      anchor.budget = tokenBudget;
+    } else if (tokenBudget > anchor.budget + (anchor.budget >> 2)) {
+      // Genuinely more room than this session has EVER had (the user raised
+      // the context) — permanently hiding messages it can now afford would
+      // be theft. anchor.budget is a HIGH-WATER mark on purpose: comparing
+      // against the last-seen budget instead made an ordinary block
+      // wobble's downswing+restore read as growth and re-opened the window
+      // — the exact oscillation this anchor exists to kill (caught red by
+      // history_prefix_stability_test before this ever shipped).
+      anchor.dropped = 0;
+      anchor.budget = tokenBudget;
+    } else if (tokenBudget > anchor.budget) {
+      anchor.budget = tokenBudget;
+    }
+
+    final effectiveDrop = droppedCount > anchor.dropped
+        ? droppedCount
+        : anchor.dropped;
+    if (effectiveDrop > 0) {
       final quantized =
-          ((droppedCount + kHistoryTrimChunk - 1) ~/ kHistoryTrimChunk) *
+          ((effectiveDrop + kHistoryTrimChunk - 1) ~/ kHistoryTrimChunk) *
           kHistoryTrimChunk;
       final capped = quantized.clamp(0, formatted.length - 1);
       if (capped > droppedCount) {
@@ -155,9 +177,16 @@ extension ChatServiceHistory on ChatService {
         included.removeRange(0, capped - droppedCount);
         droppedCount = capped;
       }
+      if (droppedCount > anchor.dropped) {
+        debugPrint(
+          '[Context] history window advanced to $droppedCount '
+          '(prefix re-anchors this turn)',
+        );
+      }
+      anchor.dropped = droppedCount;
     }
 
-    final spliced = _spliceDepthLore(included, depthLore);
+    final spliced = spliceDepthLore(included, depthLore);
 
     // If messages were dropped, prepend a separator
     String history = spliced.join('\n');

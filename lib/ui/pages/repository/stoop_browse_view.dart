@@ -50,6 +50,10 @@ class _StoopBrowseViewState extends State<StoopBrowseView> {
   bool _hasMore = true;
   bool _loading = true;
   bool _loadingMore = false;
+  // Bumped by every full (re)load. A response that comes back carrying an
+  // older generation belongs to a filter/sort the user has already replaced,
+  // so it must never land in the grid.
+  int _reqGen = 0;
   String? _error;
   StreamSubscription<StoopCardStats>? _statsSub;
 
@@ -85,6 +89,7 @@ class _StoopBrowseViewState extends State<StoopBrowseView> {
   Future<void> _loadAll() async {
     final token = _token;
     if (token == null) return;
+    final gen = ++_reqGen;
     // Worlds are announced but not queryable until the backend accepts the
     // WORLD type — show the coming-soon panel without hitting the server.
     if (_type == 'world' && !kStoopWorldsLive) {
@@ -136,7 +141,7 @@ class _StoopBrowseViewState extends State<StoopBrowseView> {
               )
             : Future.value(const StoopBrowsePage(total: 0, page: 0, items: [])),
       ]);
-      if (!mounted) return;
+      if (!mounted || gen != _reqGen) return;
       setState(() {
         _grid
           ..clear()
@@ -149,7 +154,7 @@ class _StoopBrowseViewState extends State<StoopBrowseView> {
         _loading = false;
       });
     } catch (_) {
-      if (mounted) {
+      if (mounted && gen == _reqGen) {
         setState(() {
           _error = 'Couldn’t load The Stoop. Pull to retry.';
           _loading = false;
@@ -160,7 +165,8 @@ class _StoopBrowseViewState extends State<StoopBrowseView> {
 
   Future<void> _loadMore() async {
     final token = _token;
-    if (token == null || _loadingMore || !_hasMore) return;
+    if (token == null || _loading || _loadingMore || !_hasMore) return;
+    final gen = _reqGen;
     setState(() => _loadingMore = true);
     try {
       final next = await _api.browse(
@@ -171,6 +177,14 @@ class _StoopBrowseViewState extends State<StoopBrowseView> {
         page: _page + 1,
       );
       if (!mounted) return;
+      if (gen != _reqGen) {
+        // A newer filter/sort replaced the list while this page was in
+        // flight: appending it would mix the old filter's cards into the new
+        // grid and push _page past a page nobody fetched. Drop the items, but
+        // still clear the flag or pagination stays wedged.
+        setState(() => _loadingMore = false);
+        return;
+      }
       setState(() {
         _grid.addAll(next.items);
         _page += 1;

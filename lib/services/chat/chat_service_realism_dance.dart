@@ -23,6 +23,16 @@ part of '../chat_service.dart';
 /// (_evaluateRealismForUpcomingSpeaker / _loadGroupRealismIntoScalars /
 /// _saveScalarsIntoGroupRealism). Extracted verbatim (zero behaviour change).
 extension ChatServiceRealismDance on ChatService {
+  /// True if the realism engine has already captured a meaningful baseline
+  /// (emotion or bond score). Used to avoid redundant retroactive scans.
+  /// (Private — moved from the class body; fakes cannot override privates,
+  /// so extension dispatch is safe here.)
+  bool get _hasRealismBaseline =>
+      _characterEmotion.isNotEmpty ||
+      _relationshipService.affectionScore != 0 ||
+      _nsfwService.arousalLevel != 0 ||
+      _relationshipService.activeFixation.isNotEmpty;
+
   /// Runs targeted realism evaluation for the specific character who is about
   /// to speak next in a group chat. This is the core of making realism work
   /// on a per-character, turn-timed basis.
@@ -30,9 +40,28 @@ extension ChatServiceRealismDance on ChatService {
   /// Uses temporary impersonation of _activeCharacter so that all existing
   /// realism eval methods (_evaluateOneShotCall, _evaluateRelationshipCall, etc.)
   /// and their parsing/inertia logic are reused without duplication.
+  ///
+  /// THE EVAL RUNS BEFORE GENERATION ON PURPOSE, AND A REGENERATED REPLY MUST
+  /// NEVER INFLUENCE ITS OWN EVALUATION. Settled 2026-08-02 — do not re-propose
+  /// moving this after generation.
+  ///
+  /// The deltas answer one question: how does this character feel about what
+  /// the USER just said. They are not a review of the character's own reply.
+  /// Scoring the reply would mean the character's mood was set by words the
+  /// model happened to choose for them, so rerolling a line would reroll their
+  /// feelings — bond and trust would become a slot machine the user pulls by
+  /// pressing Regenerate, instead of a response to what the user actually did.
+  ///
+  /// This is why realism deliberately lags one exchange, and why a regen is
+  /// expected to reproduce the SAME deltas: the input it scores (the user's
+  /// message and the state before the turn) is identical, so the answer should
+  /// be identical. When two regens disagree, that is a bug in what was rewound
+  /// — not the engine being lifelike. See restoreFromMessageState +
+  /// captureCadenceAndFeelings for the pair that keeps the rewind honest.
   Future<void> _evaluateRealismForUpcomingSpeaker(
-    CharacterCard speaker,
-  ) async {
+    CharacterCard speaker, {
+    bool skipClockAdvance = false,
+  }) async {
     // Unified gate: runs for the 1:1 host AND each group speaker (one at a time);
     // skips group observer mode and realism-off. This is the single realism eval
     // path — the former centralized 1:1 block was removed in favour of this.
@@ -179,12 +208,56 @@ extension ChatServiceRealismDance on ChatService {
         return;
       }
 
+      // ── The opening position, and ONLY the opening one ────────────────
+      // Posture is a post-generation question now (it reads the reply), so
+      // the very first time a character is asked to speak there is nothing
+      // on record and the prompt would carry no "Position:" line at all —
+      // the maintainer's "the part that informs the character where they
+      // are when they start their turn".
+      //
+      // This is the single site that reaches EVERY opening: the 1:1 host
+      // (sendMessage calls us) and every group member (_generateResponse
+      // calls us once the speaker is picked), for cards with and without
+      // frontPorchExtensions, through New Chat, a first-ever open, or a
+      // reload of a session that predates the feature. Wiring the seed to
+      // the chat-entry paths instead is what shipped it to third-party
+      // cards only and skipped groups entirely.
+      //
+      // Per-speaker by construction: this runs AFTER the load above, so the
+      // stance it inspects and the stance it writes are this speaker's own
+      // `_groupRealism` slot, and the save below files it back there. No
+      // stance is shared across the cast and nobody inherits the first
+      // speaker's. See _seedOpeningPosture for why the empty-stance guard
+      // makes this an opening baseline and not a return to pre-generation
+      // evaluation.
+      // NEVER let the seed take the engine down with it. This method is
+      // `try { … } finally { … }` with NO catch, so anything thrown here
+      // propagates out and SKIPS every eval below — bond, trust, emotion,
+      // arousal, the lot. The seed is one fallible network call, and it was
+      // shipped awaited-raw on 2026-08-08; the maintainer hit it the same day
+      // ("no deltas, emotion is sticking across messages") and their Nina
+      // session shows the fingerprint exactly: characterEmotion left at the
+      // card default, trustLevel 0, spatialStance '', and the bond/arousal
+      // keys absent from realism_state altogether because the code that
+      // writes them never ran.
+      //
+      // An opening position is a nice-to-have baseline. The Realism Engine is
+      // not. A seed that fails must cost its own line and nothing else.
+      try {
+        await _seedOpeningPosture();
+      } catch (e) {
+        debugPrint('[Realism:Posture] Opening seed failed (continuing): $e');
+      }
+
       if (_relationshipService.pendingTrustRepair) {
-        // Trust-repair eval (fires when trust dropped sharply). Was 1:1-only in
-        // the old centralized block; now part of the single path so the host
-        // keeps it (and a group member would too, if their trust ever flags it).
+        // Trust-repair is a RELATIONSHIP substitute, not a full pre-gen freeze
+        // (audit P1.11). Docs once claimed it only replaced the relationship
+        // judge; the code ran ONLY trust-repair and skipped emotion/narrative/
+        // scene-time — freezing mood and the clock for a turn. After the
+        // repair call we still run emotion + narrative + physical (time).
         debugPrint(
-          '[Realism:Unified] Trust-repair eval for ${speaker.name} ($charId)',
+          '[Realism:Unified] Trust-repair eval for ${speaker.name} ($charId) '
+          '+ remaining judges (not a full freeze)',
         );
         _relationshipService.consumePendingTrustRepair();
         final userText = _messages
@@ -194,11 +267,21 @@ extension ChatServiceRealismDance on ChatService {
             )
             .text;
         await _evaluateTrustRepairCall(userText, onChunk: handleChunk);
-      } else if (_storageService.realismSettings.realismOneShotEval) {
+        if (_realismEvalCancelled) return;
+        await _runBatchedRealismVerification(
+          () => _fireTrustRepairRemainingEvals(
+            handleChunk,
+            skipClockAdvance: skipClockAdvance,
+          ),
+        );
+      } else if (_oneShotActive) {
         debugPrint(
           '[Realism:Unified] One-shot eval for ${speaker.name} ($charId)',
         );
-        await _evaluateOneShotCall(onChunk: handleChunk);
+        await _evaluateOneShotCall(
+          onChunk: handleChunk,
+          skipClockAdvance: skipClockAdvance,
+        );
       } else {
         // Run the four evals AND the batched verifier pass — identical to the
         // (former) centralized 1:1 path, so EVERY speaker (host or group member)
@@ -206,36 +289,13 @@ extension ChatServiceRealismDance on ChatService {
         debugPrint(
           '[Realism:Unified] 4-call eval + verifier for ${speaker.name} ($charId)',
         );
-        _realismEvals.beginCollectForBatchedVerification();
-        await _fireStaggeredRealismEvals(handleChunk);
-        await _realismEvals.finalizeBatchedRealismVerifications();
-
-        final collected = _realismEvals.getCollectedForBatch();
-        if (collected.isNotEmpty) {
-          debugPrint(
-            '[Realism:Unified] Verifying ${collected.length} eval(s) for '
-            '${speaker.name}',
-          );
-          final items = collected
-              .map(
-                (p) => (
-                  evalKind: p['kind'] as String,
-                  rawOutput: p['raw'] as String,
-                  sceneResponse: p['scene'] as String,
-                  preState: null,
-                  activeChar: _activeCharacter,
-                  activeGroup: _activeGroup,
-                  recentMessages: _messages,
-                  promptText: p['prompt'] as String?,
-                  injections: (p['injections'] as Map?)?.cast<String, String>(),
-                  strictnessOverride: null,
-                  maxPassesOverride: null,
-                ),
-              )
-              .toList();
-          final batchRes = await _realismVerifier.verifyBatch(items);
-          await _realismEvals.applyBatchResults(batchRes);
-        }
+        await _runBatchedRealismVerification(
+          () => _fireStaggeredRealismEvals(
+            handleChunk,
+            skipClockAdvance: skipClockAdvance,
+          ),
+          logSpeakerName: speaker.name,
+        );
       }
 
       // Handle cancellation after the eval calls. The flag is deliberately
@@ -291,26 +351,21 @@ extension ChatServiceRealismDance on ChatService {
   void _loadGroupRealismIntoScalars(String charId) {
     // Relationship (affection/trust/fix/tiers etc) now via service load helper (uses the same _getGroup* internally via cbs).
     _relationshipService.loadRelationshipScalarsForSpeaker(charId);
+    _relationshipService.pendingTrustRepair =
+        _groupRealism[charId]?.trustRepairPending ?? false;
     // Nsfw (arousal + cooldown + nsfwEnabled per char) via service (extends prior arousal-only for full group parity).
     // Note: group uses 'arousal' key (historical) vs snapshot 'arousalLevel' for compat.
     _nsfwService.loadNsfwScalarsForSpeaker(charId);
 
-    _characterEmotion = _getGroupString(charId, 'emotion');
-    _emotionIntensity = _getGroupString(
-      charId,
-      'emotionIntensity',
-      defaultValue: 'moderate',
-    );
+    _characterEmotion = _groupRealism[charId]?.emotion ?? '';
+    _emotionIntensity = _groupRealism[charId]?.emotionIntensity ?? 'moderate';
 
-    // Needs vector (if any persisted for this char)
-    final needs = _getGroupNeeds(charId);
-    if (needs.isNotEmpty) {
-      _needsSimulation.restoreFromSnapshot({'vector': needs});
-    } else if (_needsSimEnabled) {
-      // Fresh start for a group member who has never had needs for this group chat.
-      // Use full 100 to match 1:1 "new chat" behavior (prevents bleed perception).
-      _needsSimulation.initializeFresh();
-    }
+    // Needs vector. _getGroupNeeds fills every key in NeedsSimulation.needKeys,
+    // falling back to needDefaults, so it can never come back empty — the
+    // "member has never had needs" branch that used to sit here was
+    // unreachable, and its comment claimed a starting value (full 100) that
+    // initializeFresh does not use either.
+    _needsSimulation.restoreFromSnapshot({'vector': _getGroupNeeds(charId)});
   }
 
   /// Writes the current scalar realism fields back into the target group
@@ -318,15 +373,17 @@ extension ChatServiceRealismDance on ChatService {
   void _saveScalarsIntoGroupRealism(String charId) {
     // Relationship scalars (affection/long/trust/fix/tiers/spatial) now via service.
     _relationshipService.saveRelationshipScalarsToGroup(charId);
+    _memberForWrite(charId).trustRepairPending =
+        _relationshipService.pendingTrustRepair;
     // Nsfw scalars (arousal + cooldown + enabled) now via service (for group per-char persistence parity).
     // Note: group uses 'arousal' key (historical) vs snapshot 'arousalLevel' for compat.
     _nsfwService.saveNsfwScalarsToGroup(charId);
 
     if (_characterEmotion.isNotEmpty) {
-      _setGroupRealismValue(charId, 'emotion', _characterEmotion);
+      _memberForWrite(charId).emotion = _characterEmotion;
     }
     if (_emotionIntensity.isNotEmpty) {
-      _setGroupRealismValue(charId, 'emotionIntensity', _emotionIntensity);
+      _memberForWrite(charId).emotionIntensity = _emotionIntensity;
     }
 
     // Persist current needs vector for this speaker

@@ -9,6 +9,7 @@ project(runner LANGUAGES CXX)
 add_executable(${BINARY_NAME}
   "main.cc"
   "my_application.cc"
+  "spell_check_plugin.cc"
   "${FLUTTER_MANAGED_DIR}/generated_plugin_registrant.cc"
 )
 
@@ -22,5 +23,11 @@ add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 # Add dependency libraries. Add any application-specific dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
+
+# The spell check engine, compiled into this binary from third_party/hunspell.
+# Not a system package and not dlopen'd: there is nothing for a user to install
+# and nothing for a distribution to get wrong. See third_party/hunspell/
+# README.fpai.md.
+target_link_libraries(${BINARY_NAME} PRIVATE hunspell)
 
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")

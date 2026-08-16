@@ -100,19 +100,21 @@ class CharacterStateSettings extends StatelessWidget {
                 : (val) => chat.setPassageOfTimeEnabled(val),
           ),
           const SizedBox(height: 10),
-          _toggleRow(
+          _modeRow(
             context,
             icon: Icons.speed,
-            label: 'One-Shot Eval (Experimental)',
+            label: 'One-Shot Eval',
             caption:
-                'Fuses relationship + scene evals into a single LLM call to '
-                'double the processing speed. May be less accurate on < 8B '
-                'param models.',
-            value: storage.realismOneShotEval,
+                'Fuses the realism evals into a single LLM call for roughly '
+                'double the processing speed. Auto uses it on remote AI '
+                'services that support tool calls, and keeps the safer '
+                'multi-call path on local models, where small models can '
+                'struggle with the combined prompt.',
+            value: storage.oneShotMode,
             accent: AppColors.journalAccentOf(context),
             onChanged: chat.isGenerating
                 ? null
-                : (val) => storage.setRealismOneShotEval(val),
+                : (val) => storage.setOneShotMode(val),
           ),
           const SizedBox(height: 10),
           _toggleRow(
@@ -170,6 +172,83 @@ class CharacterStateSettings extends StatelessWidget {
                 ),
               ),
             ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          caption,
+          style: TextStyle(
+            color: AppColors.textTertiary(context),
+            fontSize: 10,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// [_toggleRow]'s shape for the one tri-state setting: same icon + label +
+  /// caption layout, with three compact choice pills where the switch sits.
+  /// Auto is listed first because it is the default and the recommendation.
+  Widget _modeRow(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String caption,
+    required OneShotMode value,
+    required Color accent,
+    required ValueChanged<OneShotMode>? onChanged,
+  }) {
+    Widget pill(OneShotMode mode, String name) {
+      final selected = value == mode;
+      return GestureDetector(
+        onTap: onChanged == null ? null : () => onChanged(mode),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: selected
+                ? accent.withValues(alpha: 0.22)
+                : AppColors.surfaceContainerOf(context),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected ? accent : AppColors.borderOf(context),
+            ),
+          ),
+          child: Text(
+            name,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+              color: selected
+                  ? AppColors.textPrimary(context)
+                  : AppColors.textSecondary(context),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 14, color: AppColors.iconSecondary(context)),
+            const SizedBox(width: 5),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary(context),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            pill(OneShotMode.auto, 'Auto'),
+            const SizedBox(width: 4),
+            pill(OneShotMode.on, 'On'),
+            const SizedBox(width: 4),
+            pill(OneShotMode.off, 'Off'),
           ],
         ),
         const SizedBox(height: 2),

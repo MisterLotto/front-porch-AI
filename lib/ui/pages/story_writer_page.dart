@@ -20,6 +20,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/models/models.dart';
@@ -530,10 +531,7 @@ class _StoryWriterPageState extends State<StoryWriterPage> {
       final scene = project.scenes[widget.actIndex]![widget.sceneIndex];
       final dir = await getApplicationDocumentsDirectory();
       final file = File(
-        '${dir.path}/${project.title}_${scene.title}.txt'.replaceAll(
-          RegExp(r'[^\w\s.]'),
-          '_',
-        ),
+        storySceneExportPath(dir.path, project.title, scene.title),
       );
       await file.writeAsString(text);
       if (mounted) {
@@ -548,4 +546,24 @@ class _StoryWriterPageState extends State<StoryWriterPage> {
       if (mounted) showAiErrorSnackBar(context, e);
     }
   }
+}
+
+/// Absolute path a scene export is written to: [dirPath] plus a sanitized
+/// `<project>_<scene>.txt` file name.
+///
+/// Only the FILE NAME may be sanitized. The sanitizer used to run over the
+/// whole interpolated path, so every separator (and the Windows drive colon)
+/// became `_` and the export landed in the process working directory under a
+/// mangled name — invisible on macOS/Linux, an access-denied write on Windows
+/// where the CWD is the install folder.
+String storySceneExportPath(
+  String dirPath,
+  String projectTitle,
+  String sceneTitle,
+) {
+  final name = '${projectTitle}_$sceneTitle.txt'.replaceAll(
+    RegExp(r'[^\w\s.]'),
+    '_',
+  );
+  return p.join(dirPath, name);
 }

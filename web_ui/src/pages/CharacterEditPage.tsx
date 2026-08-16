@@ -15,6 +15,7 @@ import { AltGreetingsEditor } from '../components/AltGreetingsEditor';
 import { MacroField } from '../components/MacroField';
 import { LoreEntriesEditor, type LoreEntry } from '../components/LoreEntriesEditor';
 import { RealismFormSection } from '../components/realism/RealismFormSection';
+import { useAdultThemes } from '../components/realism/useAdultThemes';
 import { NeedsFormSection } from '../components/realism/NeedsFormSection';
 import { TokenBadge } from '../components/realism/controls';
 import { type RealismValues, realismFromDetail } from '../components/realism/realismTypes';
@@ -42,6 +43,13 @@ interface CharDetail {
   worldNames: string[];
   lorebook?: { entries: RawLore[] } | null;
   realism?: Partial<RealismValues> | null;
+  ttsVoice?: string | null;
+}
+
+interface VoiceStatus {
+  ttsEnabled?: boolean;
+  globalVoice?: string;
+  voices?: { id: string; name: string; gender?: string }[];
 }
 
 const FIELDS: { key: keyof CharDetail; label: string; rows: number }[] = [
@@ -55,6 +63,7 @@ const FIELDS: { key: keyof CharDetail; label: string; rows: number }[] = [
 ];
 
 export function CharacterEditPage() {
+  const adultThemes = useAdultThemes();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [c, setC] = useState<CharDetail | null>(null);
@@ -64,6 +73,8 @@ export function CharacterEditPage() {
   const [rv, setRv] = useState<RealismValues | null>(null);
   const [worldNames, setWorldNames] = useState<string[]>([]);
   const [allWorlds, setAllWorlds] = useState<string[]>([]);
+  const [ttsVoice, setTtsVoice] = useState('');
+  const [voiceStatus, setVoiceStatus] = useState<VoiceStatus | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState('');
@@ -77,6 +88,7 @@ export function CharacterEditPage() {
         setTags((d.tags ?? []).join(', '));
         setGreetings(d.alternateGreetings ?? []);
         setWorldNames(d.worldNames ?? []);
+        setTtsVoice(d.ttsVoice ?? '');
         setRv(realismFromDetail(d.realism));
         setLore(
           (d.lorebook?.entries ?? []).map((e) => ({
@@ -94,6 +106,10 @@ export function CharacterEditPage() {
       .get<{ worlds: { name: string }[] }>('/api/worlds')
       .then((r) => setAllWorlds((r.worlds ?? []).map((w) => w.name)))
       .catch(() => setAllWorlds([]));
+    api
+      .get<VoiceStatus>('/api/voice/status')
+      .then(setVoiceStatus)
+      .catch(() => setVoiceStatus(null));
   }, [id]);
 
   // Mirror the desktop _updateTokenCount exactly: name + the seven text fields +
@@ -131,6 +147,7 @@ export function CharacterEditPage() {
         tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
         alternateGreetings: greetings.filter((g) => g.trim()),
         worldNames,
+        ttsVoice,
         lorebook: lore.filter((e) => e.key.trim() || e.content.trim()),
         ...rv,
       });
@@ -236,6 +253,45 @@ export function CharacterEditPage() {
         </button>
       </div>
 
+      {/* A character voice OVERRIDES the global Settings voice, and one can
+          arrive without the user picking it (imported cards carry tts_voice).
+          Desktop parity: visible AND clearable here. */}
+      <h3 className="section-label">Voice</h3>
+      {voiceStatus === null || (voiceStatus.voices ?? []).length === 0 ? (
+        <p className="muted small">
+          Enable text-to-speech on the desktop app to assign this character a voice.
+        </p>
+      ) : (
+        <>
+          <select
+            className="voice-select"
+            value={ttsVoice}
+            onChange={(e) => setTtsVoice(e.target.value)}
+          >
+            <option value="">
+              Use the global voice
+              {voiceStatus.globalVoice
+                ? ` (${(voiceStatus.voices ?? []).find((v) => v.id === voiceStatus.globalVoice)?.name ?? voiceStatus.globalVoice})`
+                : ' (none picked yet)'}
+            </option>
+            {ttsVoice && !(voiceStatus.voices ?? []).some((v) => v.id === ttsVoice) && (
+              <option value={ttsVoice}>{ttsVoice} — not available on this engine</option>
+            )}
+            {(voiceStatus.voices ?? []).map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.gender === 'Male' ? '♂ ' : v.gender === 'Female' ? '♀ ' : '⚬ '}
+                {v.name}
+              </option>
+            ))}
+          </select>
+          <p className="muted small">
+            {ttsVoice
+              ? 'This character speaks in their own voice — the Settings voice does not apply to them. Choose “Use the global voice” to follow Settings again.'
+              : 'Following the voice set in text-to-speech settings.'}
+          </p>
+        </>
+      )}
+
       <h3 className="section-label">Linked places</h3>
       {allWorlds.length === 0 ? (
         <p className="muted small">No places yet. Create one from the Worlds page to link it here.</p>
@@ -251,7 +307,7 @@ export function CharacterEditPage() {
       )}
 
       <h3 className="section-label">Realism Engine</h3>
-      <RealismFormSection v={rv} set={patch} />
+      <RealismFormSection v={rv} set={patch} showIntimate={adultThemes} />
 
       <h3 className="section-label">Needs Simulation</h3>
       <NeedsFormSection v={rv} set={patch} />

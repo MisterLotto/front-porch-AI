@@ -29,101 +29,6 @@ extension GenParsing on CharacterGenService {
     return fixDynamicMacroBraces(cleaned);
   }
 
-  /// Check if a greeting was truncated (cut off mid-sentence).
-  bool _isGreetingTruncated(String text) {
-    if (text.isEmpty) return true;
-    final trimmed = text.trimRight();
-    if (trimmed.isEmpty) return true;
-
-    // Check for unclosed formatting
-    final asteriskCount = '*'.allMatches(trimmed).length;
-    if (asteriskCount % 2 != 0) return true; // Unclosed *asterisk*
-    final quoteCount = '"'.allMatches(trimmed).length;
-    if (quoteCount % 2 != 0) return true; // Unclosed "quote"
-
-    // Check if it ends with proper sentence-ending punctuation
-    final lastChar = trimmed[trimmed.length - 1];
-    final endsWithPunctuation = '.!?*"”'.contains(lastChar);
-    if (!endsWithPunctuation) return true;
-
-    return false;
-  }
-
-  /// Strip analysis preamble/postamble from editor output.
-  /// Models often include reasoning/analysis before the actual corrected greeting.
-  String _cleanEditorOutput(String raw) {
-    String text = _stripContent(raw).trim();
-
-    // Strategy 1: Look for explicit section markers that precede the actual greeting.
-    // The actual greeting typically follows markers like "polished version:", etc.
-    final sectionMarkers = RegExp(
-      r'(polished version|corrected version|corrected greeting|revised greeting|'
-      r'polished greeting|here is the|here.s the|the polished|the corrected|'
-      r'now let me write|final version|edited version|cleaned version|'
-      r'output:|result:)\s*:?\s*$',
-      caseSensitive: false,
-      multiLine: true,
-    );
-    final markerMatch = sectionMarkers.allMatches(text).lastOrNull;
-    if (markerMatch != null) {
-      final afterMarker = text.substring(markerMatch.end).trim();
-      if (afterMarker.isNotEmpty) {
-        text = afterMarker;
-      }
-    }
-
-    // Strategy 2: If text still has analysis lines (Current:, Enhancement:, Line X:, etc.)
-    // split into paragraphs and keep only the ones that look like prose, not analysis.
-    final analysisLinePattern = RegExp(
-      r'^(Current:|Enhancement:|Original:|Revised?:|Rewrite:|'
-      r'Line \d|Paragraph \d|Instance \d|\d+\.\s+"|\d+\.\s+\*|'
-      r'- ".*" →|Check:|Note:|Summary:|Wait,|Actually,|Let me|Looking at|'
-      r'So the|I need to|Better:|Try:|Hmm|The issue|'
-      r'Enhancement|puppeting|This is)',
-      caseSensitive: false,
-    );
-
-    final lines = text.split('\n');
-    bool hasAnalysis = lines.any((l) => analysisLinePattern.hasMatch(l.trim()));
-
-    if (hasAnalysis) {
-      // Find the last large block of consecutive non-analysis lines
-      List<String> bestBlock = [];
-      List<String> currentBlock = [];
-
-      for (final line in lines) {
-        if (analysisLinePattern.hasMatch(line.trim()) ||
-            (line.trim().isEmpty && currentBlock.isEmpty)) {
-          // Analysis line or leading blank — save best block and reset
-          if (currentBlock.length > bestBlock.length) {
-            bestBlock = List.from(currentBlock);
-          }
-          currentBlock = [];
-        } else {
-          currentBlock.add(line);
-        }
-      }
-      // Check final block
-      if (currentBlock.length > bestBlock.length) {
-        bestBlock = currentBlock;
-      }
-
-      if (bestBlock.length >= 3) {
-        text = bestBlock.join('\n');
-      }
-    }
-
-    // Strategy 3: Strip any remaining trailing analysis
-    final trailingAnalysis = RegExp(
-      r'\n\s*(Note:|Summary:|Changes? made|I (?:changed|removed|fixed|revised)|'
-      r'The (?:changes|edits|fixes)|Wait,|Actually,|Let me check)[\s\S]*$',
-      caseSensitive: false,
-    );
-    text = text.replaceAll(trailingAnalysis, '');
-
-    return _cleanGreeting(text.trim());
-  }
-
   // ═════════════════════════════════════════════════════════════
   //  Content Stripping
   // ═════════════════════════════════════════════════════════════
@@ -253,15 +158,22 @@ extension GenParsing on CharacterGenService {
     // Look past the opening quote
     final contentStart = start + 1;
 
-    // Find the end by looking for the next key pattern or closing brace
+    // Find the end by looking for the nearest following key, or the closing
+    // brace. EVERY other key is considered and the earliest match in the TEXT
+    // wins: stopping at the first hit in `keys` order assumed the model emits
+    // fields in canonical order, so a reply that put scenario before
+    // personality made description run all the way to "personality" — the
+    // whole scenario field, quotes and commas included, ended up inside the
+    // description. Nothing downstream re-checks it (the length guards are
+    // floors), so the bloated value shipped on the card.
     int? nextBoundary;
-    for (int j = currentIdx + 1; j < keys.length; j++) {
+    for (int j = 0; j < keys.length; j++) {
+      if (j == currentIdx) continue;
       final nextKeyPattern = RegExp('"${keys[j]}"\\s*:');
       final nextMatch = nextKeyPattern.firstMatch(raw.substring(contentStart));
-      if (nextMatch != null) {
-        nextBoundary = contentStart + nextMatch.start;
-        break;
-      }
+      if (nextMatch == null) continue;
+      final at = contentStart + nextMatch.start;
+      if (nextBoundary == null || at < nextBoundary) nextBoundary = at;
     }
 
     // If no next key found, look for final }

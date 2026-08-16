@@ -244,7 +244,18 @@ void main() {
         ),
       );
       final o = oneShot(arousal: true);
-      expect(o, contains('"posture"'));
+      // AMENDED 2026-08-08 (maintainer-approved test change). This asserted
+      // `contains('"posture"')`. One-shot fuses the PRE-generation judges, and
+      // posture is no longer one of them: it moved to its own post-generation
+      // pass so it can read the reply that actually moved her (maintainer
+      // ruling — a check that runs before the reply cannot see where she went).
+      //
+      // Flipped rather than deleted, because this assertion now guards the
+      // strict one-shot/multi-call parity rule. If posture were ever restored
+      // to one path and not the other, one-shot would become the only mode that
+      // asserts a stale position into the reply it precedes — the exact bug,
+      // reintroduced through the back door. Both paths must omit it.
+      expect(o, isNot(contains('"posture"')));
       expect(o, contains('"proposed_objective"'));
       expect(o, contains('"fixation_topic"'));
       expect(o, contains('"reason"'));

@@ -21,13 +21,17 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
-import 'package:front_porch_ai/ui/pages/edit_group_page.dart';
+import 'package:front_porch_ai/services/chat/chat.dart';
+import 'package:front_porch_ai/ui/dialogs/dialogs.dart'
+    show showPocketItemDialog;
+import 'package:front_porch_ai/ui/pages/pages.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/theme/tier_colors.dart';
 import 'package:front_porch_ai/ui/widgets/realism_progress_row.dart';
 import 'package:front_porch_ai/ui/widgets/needs_bar.dart';
 import 'package:front_porch_ai/ui/widgets/fixation_chip.dart';
-import 'package:front_porch_ai/ui/chat_components/sidebar/character_state/ambitions_row.dart';
+import 'package:front_porch_ai/ui/widgets/group_member_chips.dart';
+import 'package:front_porch_ai/ui/chat_components/sidebar/character_state/character_state.dart';
 import 'package:front_porch_ai/utils/utils.dart';
 
 /// First-class representation of a group chat member in the sidebar.
@@ -92,6 +96,9 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
     final affection = isRealism
         ? chat.getAffectionForGroupCharacter(widget.character)
         : 0;
+    final longTerm = isRealism
+        ? chat.getLongTermForGroupCharacter(widget.character)
+        : 0;
     final trust = isRealism
         ? chat.getTrustForGroupCharacter(widget.character)
         : 0;
@@ -110,20 +117,36 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
     final topNeeds = isRealism
         ? chat.getTopUrgentNeedsForGroupCharacter(widget.character, count: 2)
         : const <(String, int)>[];
+    // Hoisted: both of these were called twice further down (ambitions guard +
+    // row, and the active-objectives count). This card renders once per group
+    // member on every notify, so the duplicates were paid per member per frame.
+    final ambitions = chat.ambitionsFor(widget.character);
+    final memberObjectives = chat.getObjectivesForGroupCharacter(
+      widget.character,
+    );
 
-    final bondTier = TierColors.calcTier(affection);
-    final bondName = TierColors.tierName(bondTier);
+    final bondTier = RelationshipService.bondTierFor(affection);
+    final bondName = RelationshipService.bondTierLabel(bondTier);
+    final longTermTier = RelationshipService.bondTierFor(longTerm);
+    final longTermName = RelationshipService.longTermTierLabel(longTermTier);
     final bondColor = TierColors.tierColor(context, bondTier);
 
-    final trustTier = TierColors.calcTier(trust);
-    final trustName = TierColors.tierName(trustTier);
+    final trustTier = RelationshipService.bondTierFor(trust);
+    // Trust has its own vocabulary ('Deeply Trusting'), and it is a +/-100
+    // scale. Using the bond table here printed bond words like 'Smitten'
+    // against a trust score.
+    final trustName = RelationshipService.trustTierLabel(trustTier);
     final trustColor = TierColors.tierColor(context, trustTier);
 
     // Lust visibility follows the stable per-member group flag (the live
     // nsfwService scalar is per-speaker-volatile in groups).
     final lustOn = chat.isGroupNsfwEnabled;
-    final arousalTier = TierColors.calcTier(arousal);
-    final arousalName = chat.nsfwService.arousalTierName;
+    // Arousal has its own ±100 ladder (level ÷ 10) and its own vocabulary, and
+    // both must be read for THIS member. The tier came from the bond ladder,
+    // and the name came from nsfwService.arousalTierName — the LIVE SPEAKER's
+    // scalar — so in a group every member's card showed whoever spoke last.
+    final arousalTier = NsfwService.arousalTierForLevel(arousal);
+    final arousalName = chat.nsfwService.arousalTierNameForLevel(arousal);
     final arousalColor = arousalTier >= 6
         ? AppColors.lustDeepOf(context)
         : arousalTier <= -1
@@ -134,7 +157,7 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
     final opacity = isDirector ? 0.38 : 1.0;
 
     final ringColor = (emotion != null && isRealism)
-        ? _emotionRingColor(emotion)
+        ? emotionRingColor(emotion)
         : widget.avatarColor;
 
     return Opacity(
@@ -335,7 +358,7 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: _emotionRingColor(emotion ?? 'neutral'),
+                          color: emotionRingColor(emotion ?? 'neutral'),
                         ),
                       ),
                       if (isDirector) ...[
@@ -357,18 +380,25 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                     tier: bondTier,
                     tierName: bondName,
                     color: bondColor,
+                    // Fill toward the NEXT tier, then drain and refill — the
+                    // same bar the 1:1 sidebar draws. The group card used the
+                    // absolute ±300 fill, so the same score looked different
+                    // depending on which screen you were on.
+                    progress: RelationshipService.bondScalePercent(affection),
                     icon: affection < 0 ? Icons.heart_broken : Icons.favorite,
                   ),
                   const SizedBox(height: 8),
 
-                  // Long-Term Bond (exact 1:1 treatment — separate row even if data shares affection)
+                  // Long-Term Bond. This row was fed `affection` — the SHORT
+                  // term score — so the card drew the same number twice.
                   RealismProgressRow(
                     label: 'Long-Term Bond',
-                    value: affection,
-                    tier: bondTier,
-                    tierName: bondName,
-                    color: bondColor,
-                    icon: affection < 0
+                    value: longTerm,
+                    tier: longTermTier,
+                    tierName: longTermName,
+                    progress: RelationshipService.bondScalePercent(longTerm),
+                    color: TierColors.tierColor(context, longTermTier),
+                    icon: longTerm < 0
                         ? Icons.heart_broken_sharp
                         : Icons.monitor_heart,
                   ),
@@ -378,6 +408,7 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                   RealismProgressRow(
                     label: 'Trust',
                     value: trust,
+                    progress: RelationshipService.trustScalePercent(trust),
                     tier: trustTier,
                     tierName: trustName,
                     color: trustColor,
@@ -425,17 +456,68 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                     NeedsGrid(needs: needs, mini: false, crossAxisCount: 2),
                   ],
 
-                  // Ambitions (Living Time §6) — per-member, same widget as
-                  // the 1:1 Character State accordion (parity).
-                  if (widget.chatService
-                      .ambitionsFor(widget.character)
-                      .isNotEmpty) ...[
+                  // Ambitions (Living Time §6) — per-member, same widget and
+                  // same v46 step merge as the 1:1 Character State accordion.
+                  // The objectivesActive gate matches 1:1 and the web facade,
+                  // which both had it; this card did not, so Objectives-off
+                  // showed ambitions nothing could move — and would have named
+                  // an open quest from the disabled feature (Grok, 2026-08-07).
+                  if (chat.objectivesActive && ambitions.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     AmbitionsRow(
-                      ambitions:
-                          widget.chatService.ambitionsFor(widget.character),
+                      ambitions: ambitions,
+                      steps: AmbitionService.activeStepsFrom(memberObjectives),
                     ),
                   ],
+
+                  // Pockets & Wardrobe — per-member, the same widget the 1:1
+                  // Character State accordion uses.
+                  //
+                  // A group had NO wardrobe surface at all until 2026-08-08:
+                  // the only mount was gated `!isGroup`, so the eval ran every
+                  // turn per member, the injection told the model what each of
+                  // them was wearing, the web drawer displayed it — and on
+                  // desktop a group member's pockets were invisible, with the
+                  // hand-remove that "stops a wrong entry becoming permanent"
+                  // unreachable. Needs and Ambitions were already per-member
+                  // here; wardrobe simply never followed them across.
+                  Builder(
+                    builder: (context) {
+                      // Same off-absent / on-even-when-empty gate as the 1:1
+                      // panel (2026-08-13, add-by-hand parity).
+                      if (!chat.pocketsFeatureEnabled) {
+                        return const SizedBox.shrink();
+                      }
+                      final id = chat.characterIdFor(widget.character);
+                      final p = chat.pocketsFor(id) ?? Pockets();
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: PocketsRow(
+                          pockets: p,
+                          day: chat.storyDayCount,
+                          onRemove: ({required section, required index}) =>
+                              chat.removePocketItem(
+                                id,
+                                section: section,
+                                index: index,
+                              ),
+                          onAdd: () async {
+                            final add = await showPocketItemDialog(
+                              context,
+                              characterName: widget.character.name,
+                            );
+                            if (add == null) return;
+                            await chat.addPocketItem(
+                              id,
+                              section: add.section,
+                              name: add.name,
+                              gift: add.gift,
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
 
                   // Objectives quick access
                   if (widget.onOpenObjectives != null) ...[
@@ -445,7 +527,7 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                         const Icon(Icons.flag, size: 13, color: AppColors.taskAccent),
                         const SizedBox(width: 4),
                         Text(
-                          '${chat.getObjectivesForGroupCharacter(widget.character).where((o) => o.active).length} active objectives',
+                          '${memberObjectives.where((o) => o.active).length} active objectives',
                           style: const TextStyle(
                             fontSize: 11,
                             color: AppColors.taskAccent,
@@ -485,7 +567,7 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                           emotion[0].toUpperCase() + emotion.substring(1),
                           style: TextStyle(
                             fontSize: 10,
-                            color: _emotionRingColor(emotion),
+                            color: emotionRingColor(emotion),
                           ),
                         ),
                         const Spacer(),
@@ -504,11 +586,11 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                       spacing: 8,
                       runSpacing: 2,
                       children: [
-                        _miniTier('B', affection, bondColor),
-                        _miniTier('T', trust, trustColor),
-                        if (lustOn) _miniTier('L', arousal, arousalColor),
+                        MiniTierChip(label: 'B', value: affection, color: bondColor),
+                        MiniTierChip(label: 'T', value: trust, color: trustColor),
+                        if (lustOn) MiniTierChip(label: 'L', value: arousal, color: arousalColor),
                         if (topNeeds.isNotEmpty)
-                          ...topNeeds.map((n) => _miniNeed(n.$1, n.$2)),
+                          ...topNeeds.map((n) => MiniNeedChip(name: n.$1, value: n.$2)),
                       ],
                     ),
                   ],
@@ -578,74 +660,4 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
   }
 
   // --- tiny helpers for compact row ---
-  Widget _miniTier(String label, int value, Color color) {
-    final isNeg = value < 0;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-      decoration: BoxDecoration(
-        color: (isNeg ? AppColors.negativeAccentOf(context) : color)
-            .withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(3),
-      ),
-      child: Text(
-        '$label${value.abs()}',
-        style: TextStyle(
-          fontSize: 9,
-          color: isNeg ? AppColors.negativeAccentOf(context) : color,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-    );
-  }
-
-  Widget _miniNeed(String name, int val) {
-    final isCrit = val <= ChatService.needCriticalThreshold;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-      decoration: BoxDecoration(
-        color:
-            (isCrit
-                    ? AppColors.negativeAccentOf(context)
-                    : AppColors.porchAmberOf(context))
-                .withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(3),
-      ),
-      child: Text(
-        '${name[0].toUpperCase()}$val',
-        style: TextStyle(
-          fontSize: 9,
-          color: isCrit
-              ? AppColors.negativeAccentOf(context)
-              : AppColors.porchAmberOf(context),
-        ),
-      ),
-    );
-  }
-
-  Color _emotionRingColor(String emotion) {
-    switch (emotion.toLowerCase()) {
-      case 'joy':
-      case 'amusement':
-      case 'excitement':
-        return Colors.amber;
-      case 'sadness':
-      case 'grief':
-      case 'disappointment':
-        return Colors.blueGrey;
-      case 'anger':
-      case 'annoyance':
-        return Colors.redAccent;
-      case 'fear':
-      case 'nervousness':
-        return Colors.deepPurpleAccent;
-      case 'affection':
-      case 'love':
-        return Colors.pinkAccent;
-      case 'anticipation':
-      case 'desire':
-        return Colors.orangeAccent;
-      default:
-        return Colors.grey;
-    }
-  }
 }

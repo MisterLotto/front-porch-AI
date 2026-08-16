@@ -27,10 +27,13 @@ import 'package:front_porch_ai/services/web/util/util.dart';
 class WebChatRoutes {
   WebChatRoutes(this._facade, Router router) {
     router.get('/api/chat/state', _state);
+    router.get('/api/chat/context-budget', _contextBudget);
+    router.post('/api/chat/context-budget/refresh', _refreshContextBudget);
     router.get('/api/chat/participant/<id>/realism', _participantRealism);
     router.get('/api/chat/sessions', _sessions);
     router.get('/api/personas', _personas);
     router.post('/api/personas/select', _selectPersona);
+    router.post('/api/chat/persona', _selectChatPersona);
     router.post('/api/personas/create', _createPersona);
     router.get('/api/personas/<id>/detail', _personaDetail);
     router.post('/api/personas/<id>/delete', _deletePersona);
@@ -44,6 +47,7 @@ class WebChatRoutes {
     router.post('/api/chat/regenerate', _regenerate);
     router.post('/api/chat/cancel-realism', _cancelRealism);
     router.post('/api/chat/continue', _continue);
+    router.post('/api/chat/impersonate', _impersonate);
     router.post('/api/chat/swipe', _swipe);
     router.post('/api/chat/edit', _edit);
     router.post('/api/chat/delete', _delete);
@@ -64,6 +68,12 @@ class WebChatRoutes {
 
   shelf.Response _state(shelf.Request request) =>
       JsonResponse.ok(_facade.state());
+
+  shelf.Response _contextBudget(shelf.Request request) =>
+      JsonResponse.ok(_facade.contextBudget());
+
+  Future<shelf.Response> _refreshContextBudget(shelf.Request request) async =>
+      JsonResponse.ok(await _facade.refreshContextBudget());
 
   /// Re-probe the current model's tool-calling support (web pill retest).
   Future<shelf.Response> _toolTest(shelf.Request request) async =>
@@ -101,7 +111,11 @@ class WebChatRoutes {
   /// List the active character's saved conversations (newest first) so the web
   /// UI can show the Conversations drawer and resume any of them.
   Future<shelf.Response> _sessions(shelf.Request request) async =>
-      JsonResponse.ok({'sessions': await _facade.sessions()});
+      JsonResponse.ok({
+        'sessions': await _facade.sessions(
+          characterId: request.url.queryParameters['characterId'],
+        ),
+      });
 
   shelf.Response _personas(shelf.Request request) =>
       JsonResponse.ok({'personas': _facade.personas()});
@@ -111,6 +125,18 @@ class WebChatRoutes {
     final id = body['id']?.toString();
     if (id == null) return JsonResponse.badRequest('id is required');
     final ok = await _facade.setPersona(id);
+    if (!ok) return JsonResponse.error(404, 'Persona not found');
+    return JsonResponse.ok({'status': 'ok'});
+  }
+
+  /// Speak as a different persona in the CURRENT chat. Separate endpoint from
+  /// /api/personas/select on purpose: that one moves the default for new chats
+  /// and must not touch the chat you are in.
+  Future<shelf.Response> _selectChatPersona(shelf.Request request) async {
+    final body = await _json(request);
+    final id = body['id']?.toString();
+    if (id == null) return JsonResponse.badRequest('id is required');
+    final ok = await _facade.setChatPersona(id);
     if (!ok) return JsonResponse.error(404, 'Persona not found');
     return JsonResponse.ok({'status': 'ok'});
   }
@@ -235,6 +261,12 @@ class WebChatRoutes {
     return JsonResponse.ok({'status': 'ok'});
   }
 
+  Future<shelf.Response> _impersonate(shelf.Request request) async {
+    final body = await _json(request);
+    _facade.impersonate(body['prefix']?.toString() ?? '');
+    return JsonResponse.ok({'status': 'ok'});
+  }
+
   Future<shelf.Response> _swipe(shelf.Request request) async {
     final body = await _json(request);
     final index = body['messageIndex'];
@@ -298,7 +330,20 @@ class WebChatRoutes {
     if (critique.isEmpty) {
       return JsonResponse.badRequest('critique is required');
     }
-    final ok = await _facade.reprocessNeeds(index, critique);
+    // Optional, and parsed defensively: an app built before scoped reprocess
+    // sends no 'needs' key at all and must keep working unchanged.
+    final rawNeeds = body['needs'];
+    final onlyNeeds = rawNeeds is List
+        ? rawNeeds
+              .map((n) => n.toString().trim().toLowerCase())
+              .where((n) => n.isNotEmpty)
+              .toSet()
+        : const <String>{};
+    final ok = await _facade.reprocessNeeds(
+      index,
+      critique,
+      onlyNeeds: onlyNeeds,
+    );
     if (!ok) return JsonResponse.error(409, 'Message cannot be reprocessed');
     return JsonResponse.ok({'status': 'ok'});
   }

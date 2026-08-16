@@ -93,6 +93,91 @@ extension _SettingsAdvancedTab on _SettingsPageState {
     );
   }
 
+  /// One shared start-attempt flow for the toggle and the failure dialog's
+  /// retry button. Failures show a warm, plain-English dialog (maintainer
+  /// directive 2026-08-04: most users are non-technical and a vanishing
+  /// toast left them stuck) with a one-tap "use a free port" fix whenever
+  /// the port is the problem — no networking knowledge needed.
+  Future<void> _attemptWebServerStart(
+    BuildContext context,
+    StorageService storage,
+    WebServerHost webServer,
+  ) async {
+    // startSafely reverts + disables on failure so a bad start can never
+    // leave the app in a launch crash loop.
+    final ok = await webServer.startSafely(storage.webServerPort);
+    if (!context.mounted) return;
+    if (ok) {
+      // Guide the user through how they'll reach it.
+      await WebAccessSetupDialog.show(context);
+      return;
+    }
+    final altPort = webServer.lastStartPortConflict
+        ? await webServer.findFreePortNear(storage.webServerPort)
+        : null;
+    if (!context.mounted) return;
+
+    Future<void> retry() async {
+      Navigator.of(context).pop();
+      if (altPort != null) await storage.setWebServerPort(altPort);
+      await storage.setWebServerEnabled(true);
+      if (!context.mounted) return;
+      await _attemptWebServerStart(context, storage, webServer);
+    }
+
+    await showWarmDialog<void>(
+      context,
+      title: 'Web server couldn’t start',
+      icon: Icons.wifi_tethering_off,
+      width: 380,
+      content: Text(
+        webServer.lastStartError ??
+            'Something unexpected stopped it. Try again in a moment.',
+        style: TextStyle(
+          color: AppColors.textSecondary(context),
+          fontSize: 13,
+          height: 1.4,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.porchAmberOf(context),
+            foregroundColor: AppColors.onChaosAccent,
+          ),
+          onPressed: () => retry(),
+          child: Text(
+            altPort != null ? 'Use port $altPort instead' : 'Try again',
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// The ONE commit path for the web-server port field — Enter and focus
+  /// loss both land here, so clicking away can no longer discard a typed
+  /// port. Unparseable or out-of-range text leaves the saved port alone
+  /// (see [parseWebServerPort]); an unchanged port is a no-op so a blur
+  /// never restarts a running server for nothing.
+  Future<void> _commitWebServerPort(
+    String value,
+    StorageService storage,
+    WebServerHost webServer,
+  ) async {
+    _pendingWebServerPort = null;
+    final port = parseWebServerPort(value);
+    if (port == null || port == storage.webServerPort) return;
+    await storage.setWebServerPort(port);
+    if (webServer.isRunning) {
+      await webServer.stop();
+      await webServer.start(port);
+    }
+  }
+
   Widget _buildWebServerSection(BuildContext context) {
     final theme = Theme.of(context);
     return Consumer2<StorageService, WebServerHost>(
@@ -133,26 +218,11 @@ extension _SettingsAdvancedTab on _SettingsPageState {
                     onChanged: (val) async {
                       await storage.setWebServerEnabled(val);
                       if (val) {
-                        // startSafely reverts + disables on failure so a
-                        // bad start can never leave the app in a launch
-                        // crash loop.
-                        final ok = await webServer.startSafely(
-                          storage.webServerPort,
+                        await _attemptWebServerStart(
+                          context,
+                          storage,
+                          webServer,
                         );
-                        if (!context.mounted) return;
-                        if (ok) {
-                          // Guide the user through how they'll reach it.
-                          await WebAccessSetupDialog.show(context);
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Web server failed to start and was '
-                                'turned off.',
-                              ),
-                            ),
-                          );
-                        }
                       } else {
                         await webServer.stop();
                       }
@@ -173,32 +243,54 @@ extension _SettingsAdvancedTab on _SettingsPageState {
                           const SizedBox(height: 4),
                           SizedBox(
                             width: 120,
-                            child: TextFormField(
-                              initialValue: storage.webServerPort.toString(),
-                              keyboardType: TextInputType.number,
-                              style: TextStyle(
-                                color: AppColors.textPrimary(context),
-                                fontSize: 13,
-                              ),
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: theme.scaffoldBackgroundColor,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 8,
-                                ),
-                              ),
-                              onFieldSubmitted: (val) async {
-                                final port = int.tryParse(val) ?? 8085;
-                                await storage.setWebServerPort(port);
-                                if (webServer.isRunning) {
-                                  await webServer.stop();
-                                  await webServer.start(port);
-                                }
+                            // Enter was the ONLY commit path: a typed port was
+                            // silently dropped when the user clicked away. The
+                            // pending text lives on the State because storage
+                            // and webServer notifications rebuild this field
+                            // mid-edit.
+                            child: Focus(
+                              // Blur listener only — a focusable wrapper would
+                              // add a Tab stop in front of the field that shows
+                              // no caret and swallows typing.
+                              canRequestFocus: false,
+                              onFocusChange: (hasFocus) {
+                                if (hasFocus) return;
+                                final pending = _pendingWebServerPort;
+                                if (pending == null) return;
+                                _commitWebServerPort(
+                                  pending,
+                                  storage,
+                                  webServer,
+                                );
                               },
+                              child: TextFormField(
+                                // Keyed on the port so the one-tap "Use port N"
+                                // fix in the failure dialog refreshes the field.
+                                key: ValueKey(storage.webServerPort),
+                                initialValue: storage.webServerPort.toString(),
+                                keyboardType: TextInputType.number,
+                                style: TextStyle(
+                                  color: AppColors.textPrimary(context),
+                                  fontSize: 13,
+                                ),
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor: theme.scaffoldBackgroundColor,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 8,
+                                  ),
+                                ),
+                                onChanged: (val) => _pendingWebServerPort = val,
+                                onFieldSubmitted: (val) => _commitWebServerPort(
+                                  val,
+                                  storage,
+                                  webServer,
+                                ),
+                              ),
                             ),
                           ),
                         ],

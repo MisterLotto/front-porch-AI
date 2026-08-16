@@ -41,7 +41,8 @@ class WebSettingsRoutes {
 
   final SettingsFacade _facade;
 
-  shelf.Response _get(shelf.Request request) => JsonResponse.ok(_facade.read());
+  Future<shelf.Response> _get(shelf.Request request) async =>
+      JsonResponse.ok(await _readWithLanguages());
 
   Future<shelf.Response> _post(shelf.Request request) async {
     Map<String, dynamic> body;
@@ -51,6 +52,17 @@ class WebSettingsRoutes {
       return JsonResponse.badRequest('Invalid JSON body');
     }
     await _facade.update(body);
-    return JsonResponse.ok(_facade.read());
+    return JsonResponse.ok(await _readWithLanguages());
+  }
+
+  /// [SettingsFacade.read] is sync, but the installed dictionary list has to be
+  /// asked for over a method channel. Merged here so both GET and POST return
+  /// the same shape — a web client that saved settings must not lose the
+  /// picker's options as a side effect.
+  Future<Map<String, dynamic>> _readWithLanguages() async {
+    await _facade.ensureReasoningResolved();
+    final data = _facade.read();
+    data['spellCheckLanguages'] = await _facade.spellCheckLanguages();
+    return data;
   }
 }

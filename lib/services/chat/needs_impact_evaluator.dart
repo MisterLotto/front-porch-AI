@@ -5,7 +5,7 @@
 //
 // Front Porch AI is free software: you can redistribute it and/or modify
 // it under the terms of the GNU Affero General Public License as published by
-// the Software Foundation, either version 3 of the License, or
+// the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
 // Front Porch AI is distributed in the hope that it will be useful,
@@ -30,6 +30,55 @@ import 'package:front_porch_ai/services/chat/realism_verification.dart';
 /// Optional Director/Verifier corrects when authority is enabled on the card.
 /// Simple clamps only. Decay is handled separately in NeedsSimulation.
 class NeedsImpactEvaluator {
+  /// THE bound on what a model may say one scene did to a need — applied here,
+  /// once, by both the normal pass and the reprocess pass.
+  ///
+  /// Reported 2026-08-08: "the need starts to influence the response, then next
+  /// turn the response further boosts the need gravity… sudden loss of like
+  /// 35-40 points of hunger, energy or bladder in single turn. Sometimes
+  /// several of them affected." Maintainer: "it is still very whack a mole."
+  ///
+  /// It was whack-a-mole because the rule lived at the CALL SITES: two
+  /// byte-identical `clamp(-30, 100)` lines, and nothing at all on the third
+  /// applier in chat_service_needs_reprocess. A rule enforced by whoever
+  /// remembers it drifts by construction. One helper, both sites, no copies.
+  ///
+  /// ASYMMETRIC ON PURPOSE — decay owns depletion (maintainer ruling). A need
+  /// falling is slow and ambient and `tickDecay` models it; a scene may take
+  /// only [NeedsSimulation.sceneDepletionCapFor] extra, and the prompt now tells
+  /// the eval to report a negative ONLY for something the scene explicitly
+  /// describes costing her. Positives stay wide open: eating a meal really does
+  /// fill you in one go, and the prompt spends a paragraph fighting models that
+  /// lowball exactly that. Capping the fill would be a worse bug than the one
+  /// this fixes.
+  ///
+  /// PER-NEED, not one number: "I want variability but not wide swings"
+  /// (maintainer). The cap is roughly inverse to each need's decay rate, so
+  /// hunger and bladder — clocks that fill on their own — barely move for a
+  /// scene, while hygiene, which hardly decays at all and is event-driven by
+  /// design, gets the widest bite. A single flat number would have been simpler
+  /// and duller: every scene nudging everything equally is not variability.
+  ///
+  /// THE DIRECTOR IS EXEMPT, and that is a deliberate scoping decision rather
+  /// than an oversight. "Needs Director authority" is a per-card opt-in that
+  /// defaults OFF, and switching it on is asking for a second pass — one that
+  /// re-reads the scene for faithfulness — to overrule the evaluator. Bounding
+  /// it would make the switch mean less than it says. The trade-off, stated
+  /// plainly: a user who enables Director authority can still see wide swings,
+  /// and if that turns out to matter the bound is one `if` away (plus a
+  /// maintainer-approved edit to the two authority tests that assert the
+  /// unbounded numbers).
+  ///
+  /// Deliberately NOT pushed down into `NeedsSimulation.applySceneImpact`. That
+  /// was tried first and it bounded the whole vector, breaking two tests that
+  /// use the mutator merely to ARRANGE a state — the bound was reaching past
+  /// the bug. What needs limiting is what a MODEL proposes, which is here.
+  void _boundDeltas(Map<String, int> deltas) {
+    for (final k in deltas.keys.toList()) {
+      deltas[k] = deltas[k]!.clamp(-needsSimulation.sceneDepletionCapFor(k), 100);
+    }
+  }
+
   final Future<String?> Function(
     String responseText, {
     void Function(String)? onChunk,
@@ -64,7 +113,7 @@ class NeedsImpactEvaluator {
   final Map<String, dynamic> Function()? getPendingRealismMetadata;
   final void Function(Map<String, dynamic>)? setPendingRealismMetadata;
 
-  final void Function(int crashTurns)? onClimax;
+
 
   final CharacterCard? Function() getActiveCharacter;
   final GroupChat? Function() getActiveGroup;
@@ -105,7 +154,6 @@ class NeedsImpactEvaluator {
     required this.getRealismEnabled,
     required this.getNeedsModelAuthorityEnabled,
     this.getNeedsSimStrength = _defaultStrength,
-    this.onClimax,
   });
 
   static int _defaultStrength() => 1;
@@ -271,6 +319,8 @@ class NeedsImpactEvaluator {
       );
       if (text == null) return;
 
+      var directorCorrected = false;
+
       String effectiveText = text;
       final authority = getNeedsModelAuthorityEnabled();
       final cardVerifEnabled =
@@ -303,6 +353,7 @@ class NeedsImpactEvaluator {
           );
           if (vres.correctedRaw != null && vres.correctedRaw!.isNotEmpty) {
             effectiveText = vres.correctedRaw!;
+            directorCorrected = true;
           }
           if (vres.status.isNotEmpty) {
             final current =
@@ -355,16 +406,11 @@ class NeedsImpactEvaluator {
         }
       }
 
-      // Simple clamps only (no complex gates/rules). Prevent obviously broken output from the model.
-      // The Director (when authority + verification enabled) does the scene-faithfulness check,
-      // just like bond/emotion/relationship evals. Strength scaling is already instructed in the prompt.
-      //
-      // Positive side loosened to +100 so a strong replenishing scene (meal, long rest, thorough
-      // care/bathing, deep social connection) can meaningfully restore a need in one go.
-      // Negative side kept at -30 to avoid any single scene catastrophically tanking a need.
-      for (final k in deltas.keys.toList()) {
-        deltas[k] = deltas[k]!.clamp(-30, 100);
-      }
+      // The Director is EXEMPT — see _boundDeltas. Its authority is opt-in and
+      // off by default; turning it on is asking for a second, scene-checked
+      // pass to overrule the evaluator, so bounding it would make the switch
+      // mean less than it says.
+      if (!directorCorrected) _boundDeltas(deltas);
 
       // AFK zero-floor: model sometimes ignores "Only report positive gains"
       // and emits small negative deltas. Zero them to match the instruction.
@@ -411,32 +457,6 @@ class NeedsImpactEvaluator {
       ).firstMatch(effectiveText);
       final reason = reasonMatch?.group(1)?.trim();
 
-      bool isClimax = false;
-      int crashTurns = 5;
-      if (parsed.isNotEmpty) {
-        final c = parsed['is_climax'];
-        if (c is bool) {
-          isClimax = c;
-        } else if (c is String) {
-          isClimax = c.toLowerCase() == 'true';
-        }
-
-        final t = parsed['crashTurns'] ?? parsed['refractory_turns'];
-        if (t is num) crashTurns = t.toInt();
-      } else {
-        final re = RegExp(r'"is_climax"\s*:\s*(true|false)');
-        final m = re.firstMatch(effectiveText);
-        if (m != null) isClimax = m.group(1) == 'true';
-        crashTurns =
-            _extractInt(effectiveText, 'crashTurns') ??
-            _extractInt(effectiveText, 'refractory_turns') ??
-            5;
-      }
-
-      if (isClimax) {
-        onClimax?.call(crashTurns.clamp(1, 10));
-      }
-
       final impact = NeedsImpact(
         deltas: deltas,
         reason: (reason != null && reason.toLowerCase() != 'none')
@@ -454,6 +474,7 @@ class NeedsImpactEvaluator {
     }
   }
 
+
   int? _extractInt(String text, String key) {
     final re = RegExp('"$key"\\s*:\\s*(-?\\d+)');
     final m = re.firstMatch(text);
@@ -461,13 +482,32 @@ class NeedsImpactEvaluator {
     return null;
   }
 
+  /// Re-evaluate this scene's needs impact under a user critique and apply the
+  /// result. The caller has already restored the simulation to the message's
+  /// pre-impact baseline, so applying here lands on the right vector.
+  ///
+  /// [onlyNeeds] scopes the pass to the needs the user ticked. Scoped, the
+  /// correction is MERGED over [oldDeltas] before it is applied, so the needs
+  /// nobody asked about keep the values the turn gave them instead of
+  /// collapsing to "no change". Empty (the full-set pass) applies exactly what
+  /// the model returned, unchanged from how this always behaved.
   Future<bool> reprocessWithUserCritique(
     String responseText,
     Map<String, int> oldDeltas,
-    String critique,
-  ) async {
+    String critique, {
+    Set<String> onlyNeeds = const <String>{},
+  }) async {
     // Use the injected evaluateNeedsImpactCall (now supports critique/oldDeltas for unified rich prompt + personality/stance/recent/full guidance + MUST + examples).
     final strength = getNeedsSimStrength();
+    // Name the scope in the prompt as well as filtering the reply: a model
+    // told to reconsider ONE need reasons about that need instead of re-rolling
+    // seven and having six of them thrown away.
+    if (onlyNeeds.isNotEmpty) {
+      critique =
+          '$critique\n\nScope: reconsider ONLY these needs — '
+          '${onlyNeeds.join(', ')}. Leave every other need out of your answer; '
+          'their existing values are correct and will be kept.';
+    }
 
     try {
       // No debugPrint here — the engine logs the same "Running manual
@@ -527,55 +567,45 @@ class NeedsImpactEvaluator {
         }
       }
 
+      // Drop anything outside the requested scope. A model that ignores the
+      // scope line and answers with all seven keys must not be able to move a
+      // need the user did not tick — the prompt asks, this enforces.
+      if (onlyNeeds.isNotEmpty) {
+        deltas.removeWhere((k, _) => !onlyNeeds.contains(k));
+      }
+
       // C: if after strip/parse we got literally no delta keys at all, treat as failure (do not apply empty "correction")
       if (deltas.isEmpty) {
         debugPrint(
-          '[Realism:Needs] reprocess parsed no deltas; treating as failure',
+          '[Realism:Needs] reprocess parsed no deltas in scope '
+          '${onlyNeeds.isEmpty ? '(all needs)' : onlyNeeds.toList().toString()}'
+          '; treating as failure',
         );
         return false;
       }
 
-      for (final k in deltas.keys.toList()) {
-        deltas[k] = deltas[k]!.clamp(-30, 100);
-      }
+      _boundDeltas(deltas);
+
+      // Scoped: everything the user did NOT tick keeps the delta it already
+      // had. Unscoped stays byte-for-byte what it always was.
+      final effective = onlyNeeds.isEmpty
+          ? deltas
+          : (Map<String, int>.from(oldDeltas)..addAll(deltas));
 
       final reasonMatch = RegExp(
         r'"reason"\s*:\s*"([^"]*)"',
       ).firstMatch(effectiveText);
       final reason = reasonMatch?.group(1)?.trim();
 
-      bool isClimax = false;
-      int crashTurns = 5;
-      if (parsed.isNotEmpty) {
-        final c = parsed['is_climax'];
-        if (c is bool) {
-          isClimax = c;
-        } else if (c is String) {
-          isClimax = c.toLowerCase() == 'true';
-        }
-        final t = parsed['crashTurns'] ?? parsed['refractory_turns'];
-        if (t is num) crashTurns = t.toInt();
-      } else {
-        final re = RegExp(r'"is_climax"\s*:\s*(true|false)');
-        final m = re.firstMatch(effectiveText);
-        if (m != null) isClimax = m.group(1) == 'true';
-        crashTurns =
-            _extractInt(effectiveText, 'crashTurns') ??
-            _extractInt(effectiveText, 'refractory_turns') ??
-            5;
-      }
-
-      if (isClimax) {
-        onClimax?.call(crashTurns.clamp(1, 10));
-      }
-
       final impact = NeedsImpact(
-        deltas: deltas,
+        deltas: effective,
         reason: (reason != null && reason.toLowerCase() != 'none')
             ? reason
             : null,
       );
 
+      // Applied from the baseline the caller restored (see
+      // ChatServiceNeedsReprocess._needsPreImpactBaseline).
       needsSimulation.applySceneImpact(impact);
 
       // Store the metadata for the update

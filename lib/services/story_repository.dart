@@ -79,10 +79,26 @@ class StoryRepository extends ChangeNotifier {
     return project;
   }
 
-  /// Save an existing project (full overwrite of JSON blob).
+  /// Save a project (full overwrite of JSON blob). A project that has never
+  /// been inserted (dbId == null — the chat-to-story path builds one via
+  /// buildChatStoryProject) is INSERTED here, not dropped: the old
+  /// `if (dbId == null) return;` silently no-opped, so the desktop dialog
+  /// crashed on `project.dbId!` and the web twin returned `{'id': null}` —
+  /// the whole chat-to-story feature was dead on both surfaces.
   Future<void> saveProject(model.StoryProject project) async {
-    if (project.dbId == null) return;
     project.updatedAt = DateTime.now();
+    if (project.dbId == null) {
+      final id = await _db.insertStoryProject(
+        StoryProjectsCompanion(
+          title: Value(project.title),
+          data: Value(project.toJsonString()),
+        ),
+      );
+      project.dbId = id;
+      _projects.insert(0, project);
+      notifyListeners();
+      return;
+    }
     await _db.updateStoryProject(
       StoryProjectsCompanion(
         id: Value(project.dbId!),

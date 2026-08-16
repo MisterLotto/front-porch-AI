@@ -56,7 +56,7 @@ extension ChatServiceImages on ChatService {
   ImageCommandService _ensureImageCommand() {
     return _imageCommand ??= ImageCommandService(
       isConfigured: () => _imageGenService?.isConfigured ?? false,
-      isBusy: () => _isTurnBusy || _guestBusy,
+      isBusy: () => _isTurnBusy || _sceneGuest.busy,
       onStatus: (message, {bool sticky = false}) => _setGuestStatus(
         message,
         isError: message.startsWith('⚠'),
@@ -123,7 +123,7 @@ extension ChatServiceImages on ChatService {
     final candidates = <CharacterCard>[
       ?_activeCharacter,
       ..._groupCharacters,
-      ..._sceneGuestCards,
+      ..._sceneGuest.cards,
     ];
     final wanted = request.kind == ImageCommandKind.character
         ? request.text.trim().toLowerCase()

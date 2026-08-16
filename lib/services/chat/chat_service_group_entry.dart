@@ -28,6 +28,11 @@ extension ChatServiceGroupEntry on ChatService {
   }) async {
     // Cancel any in-flight generation before switching context AND reset author note for new session context
     await _cancelAndWaitForGeneration();
+    await _waitForTurnToSettle();
+    // Groups have no same-cast fast path — every re-enter clears
+    // `_messages`. Persist first or the last exchange dies the same
+    // way as the 1:1 slow path.
+    await flushPendingSaves();
     _generationEpoch++;
 
     // Reset AFK idle state when switching to a different group
@@ -56,21 +61,16 @@ extension ChatServiceGroupEntry on ChatService {
     _groupCharacterRAGPriorities = {};
 
     // Scene Guests are 1:1-only — clear them when entering a group.
-    _sceneGuestIds.clear();
-    _sceneGuestCards.clear();
-    _pendingGuestDeparture = null;
-    _pendingGuestPickerFilter = null;
+    _sceneGuest.ids.clear();
+    _sceneGuest.cards.clear();
+    _sceneGuest.pendingDeparture = null;
+    _sceneGuest.pendingPickerFilter = null;
     _resetGuestActivityState();
     // Phase 2 cast detection: reset the scan cadence + pending/debounce state
     // for the new 1:1 context (kept in sync with the Scene Guest clears).
-    _userMessagesSinceLastCastScan = 0;
-    _pendingGuestDetection = null;
-    _offeredOrIgnoredGuestNames.clear();
-
-    // Path B: Load per-character group system prompts from the clean model field
-    _groupCharacterSystemPrompts = Map<String, String>.from(
-      group.characterSystemPrompts,
-    );
+    _sceneGuest.turnsSinceCastScan = 0;
+    _sceneGuest.pendingDetection = null;
+    _sceneGuest.offeredOrIgnoredNames.clear();
 
     if (_characterRepository == null) return;
 
@@ -80,6 +80,19 @@ extension ChatServiceGroupEntry on ChatService {
     // stale values in the brief window before group per-speaker loads take over.
     // (Full reset happens on return to any 1:1 via setActiveCharacter.)
     _characterEmotion = '';
+    _emotionIntensity = '';
+    // Realism/Needs are per-chat and were never zeroed here. The promotion
+    // block below only fires when the group definition carries member realism
+    // seeds, so a group authored without them simply INHERITED the previous
+    // chat's flags and needs vector — and the `_saveChat()` at the end of this
+    // method baked them onto the group's first session row for good. Same
+    // zeros the 1:1 twin does in setActiveCharacter; a stored session still
+    // wins, because _loadLastSession hydrates both flags below.
+    _realismEnabled = false;
+    _needsSimEnabled = false;
+    _enjoysLowHygiene = false;
+    _needsSimulation.clearVector();
+    _needsSimulation.resetBuffers();
     // Relationship scalars/fixation (affection/trust/tiers/fixation/spatial/pending) via extracted service.
     // Expression manual/caches via service. Time (clock/day/passage/anchor/turns) via service.
     // Nsfw (arousal/cooldown) via service.
@@ -172,8 +185,19 @@ extension ChatServiceGroupEntry on ChatService {
 
     // Seed group definition defaults for Chaos (can be overridden by per-session values loaded below).
     // This makes the chaosModeEnabled / chaosNsfwEnabled on the GroupChat model actually functional.
+    //
+    // Reset FIRST, exactly as the 1:1 twin does: seedFromGroupOrExt sets only
+    // the two switches ("pressure left as-is or explicitly zeroed by caller"),
+    // so without this the previous chat's chance-time pressure — and an
+    // un-delivered manual "SPIN NOW" event, which injects as CANON with no
+    // chaos-enabled gate — walked into the group.
+    _chaosModeService.resetForFreshChat();
     _chaosModeService.seedFromGroupOrExt(
-      group.chaosModeEnabled,
+      // OR-override, matching the two 1:1 seed sites: the group asks, or the
+      // Porch Life global default does. A user who switched Chaos on globally
+      // means it for groups too — this is the third of three seed sites and
+      // missing it would have made the global switch quietly 1:1-only.
+      group.chaosModeEnabled || _storageService.realismSettings.chaosModeDefault,
       group.chaosNsfwEnabled,
     );
 
@@ -191,10 +215,18 @@ extension ChatServiceGroupEntry on ChatService {
         _realismEnabled = true;
         // Infer needs from whether the seeded per-char states actually contain needs data.
         // (Creator omits the 'needs' sub-map entirely when the user disabled Needs in the wizard.)
-        _needsSimEnabled = _groupRealism.values.any((state) {
-          final n = state['needs'];
-          return n is Map && n.isNotEmpty;
-        });
+        // Presence-inference — see the matching note in
+        // group_realism_dynamics_editor. An explicit flag belongs at the blob's
+        // top level, not in the per-member seed; that is a schema change.
+        // AND-gated by the global Needs switch (Porch Life tab), like all four
+        // 1:1/import seed sites. Without it the global was quietly 1:1-only:
+        // every group still ran the full simulation and its per-turn eval.
+        _needsSimEnabled =
+            _storageService.realismSettings.needsSimDefault &&
+            _groupRealism.values.any((state) {
+              final n = state.needs;
+              return n != null && n.isNotEmpty;
+            });
         if (_needsSimEnabled) {
           // Seed from group definition's per-char needs baselines (falls back to 80 when absent).
           final defaults = <String, int>{
@@ -214,6 +246,18 @@ extension ChatServiceGroupEntry on ChatService {
         );
       }
     }
+
+    // Path B: per-character group system prompts come from the group row's own
+    // v32 column, and this seed MUST come after the block above: on a fresh
+    // group `_loadGroupRealismStateFromSession(null)` zeroes every per-char
+    // config map and can only refill them from `defaultMemberRealismState`,
+    // which is perChar-only and never carries `characterSystemPrompts`. Seeding
+    // before it meant the wizard's prompts were wiped on entry and the first
+    // `_saveChat` below baked the empty map into the session blob — dead for
+    // the life of the chat. (startNewChat avoids the same trap by not calling
+    // that loader at all; see its group branch.) `addAll`, not assign, so a
+    // legacy blob that did carry entries keeps them.
+    _groupCharacterSystemPrompts.addAll(group.characterSystemPrompts);
 
     // Seed objectives that came from an imported Group Card (one-time)
     await _seedImportedMemberObjectivesIfPresent();
@@ -237,6 +281,12 @@ extension ChatServiceGroupEntry on ChatService {
     // Try to load last session for this group
     await _loadLastSession();
 
+    // Same as the 1:1 twin in chat_service_chat_entry: message 0 needs every
+    // member's authored wardrobe in place, and after the load so a restored
+    // session wins. Parity is not optional here — a group member dressed by her
+    // author must arrive dressed exactly as she would in a 1:1.
+    seedPocketsFromCards();
+
     // Load the objectives for whoever is the initial next speaker (or first char)
     if (_activeGroup != null) {
       await _loadObjectivesForCurrentSpeaker();
@@ -247,6 +297,11 @@ extension ChatServiceGroupEntry on ChatService {
 
     // If no session, create a greeting
     if (_messages.isEmpty && _groupCharacters.isNotEmpty) {
+      // Each member's authored starting quest, imported once per fresh chat.
+      for (final c in _groupCharacters) {
+        _importAuthoredTask(c.frontPorchExtensions, target: c);
+      }
+
       String greetingText;
       String greetingSender;
       String? greetingCharId;

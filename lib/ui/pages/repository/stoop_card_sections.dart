@@ -10,6 +10,9 @@
 
 import 'package:flutter/material.dart';
 
+import 'stoop_collapsible.dart';
+import 'stoop_identity_sections.dart';
+
 import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
@@ -23,51 +26,7 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 /// `character_book`. Each returns an empty box when its data is absent, so a
 /// character without that feature shows no empty section.
 
-/// A titled, default-collapsed section matching the panel's type styling.
-class StoopCollapsible extends StatelessWidget {
-  final String title;
-  final Widget? child;
-  final bool initiallyExpanded;
 
-  const StoopCollapsible({
-    super.key,
-    required this.title,
-    required this.child,
-    this.initiallyExpanded = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (child == null) return const SizedBox.shrink();
-    // Hub .hub-sect: a bordered card row whose disclosure marker is amber.
-    return Container(
-      margin: const EdgeInsets.only(top: 10),
-      decoration: BoxDecoration(
-        gradient: stoopCardGradient(context),
-        borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: stoopBorder(context)),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-          initiallyExpanded: initiallyExpanded,
-          iconColor: stoopAmberText(context),
-          collapsedIconColor: stoopAmberText(context),
-          title: Text(title, style: stoopSectionTitleStyle(context)),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-          children: [
-            Align(alignment: Alignment.centerLeft, child: child!),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-TextStyle stoopSectionTitleStyle(BuildContext context) =>
-    stoopDisplay(context, size: 16.5, weight: FontWeight.w600);
 
 /// A collapsible holding a plain text body. Renders nothing when [body] is blank.
 Widget stoopTextSection(
@@ -112,6 +71,12 @@ List<Widget> stoopStandardSections(
     stoopTextSection(context, 'Scenario', s('scenario')),
     firstMessage ?? _defaultFirstMessage(context, card, name),
     stoopTextSection(context, 'Example dialogue', s('mes_example')),
+    stoopAmbitionsSection(context, re),
+    stoopPreferencesSection(context, re),
+    // Kept with the other two card-authored identity sections and ahead of the
+    // engine-gated pair below: what a character owns is theirs whether or not
+    // the downloader ever turns the Realism Engine on.
+    stoopWardrobeSection(context, re),
     stoopRealismSection(context, re),
     stoopNeedsSection(context, re),
     stoopLorebookSection(context, card, name),
@@ -150,8 +115,11 @@ List<Widget> stoopWorldSections(
         ]
       : const <String>[];
   final lore = card['lorebook'];
-  final entries = (lore is Map ? lore['entries'] : null) as List?;
-  final valid = entries?.whereType<Map>().toList() ?? const [];
+  // Stranger-uploaded JSON: `is`-check, never `as` — a wrong-typed 'entries'
+  // (string, map) crashed the whole detail panel (1.3 sweep).
+  final rawEntries = lore is Map ? lore['entries'] : null;
+  final valid =
+      rawEntries is List ? rawEntries.whereType<Map>().toList() : const <Map>[];
   return [
     stoopTextSection(
       context,
@@ -174,12 +142,13 @@ Widget _defaultFirstMessage(
   String name,
 ) {
   final first = stoopResolveMacros((card['first_mes'] ?? '').toString(), name);
-  final alts =
-      (card['alternate_greetings'] as List?)
-          ?.map((e) => stoopResolveMacros(e.toString(), name))
-          .where((x) => x.isNotEmpty)
-          .toList() ??
-      const [];
+  final rawAlts = card['alternate_greetings'];
+  final alts = rawAlts is List
+      ? rawAlts
+            .map((e) => stoopResolveMacros(e.toString(), name))
+            .where((x) => x.isNotEmpty)
+            .toList()
+      : const <String>[];
   final greetings = [if (first.isNotEmpty) first, ...alts];
   if (greetings.isEmpty) return const SizedBox.shrink();
   return stoopTextSection(
@@ -294,8 +263,11 @@ Widget stoopLorebookSection(
   String name,
 ) {
   final book = card['character_book'];
-  final entries = (book is Map ? book['entries'] : null) as List?;
-  final valid = entries?.whereType<Map>().toList() ?? const [];
+  // Stranger JSON: `is`, never `as` (1.3 sweep — the sibling builders kept
+  // crashing after the detail panel was hardened).
+  final rawEntries = book is Map ? book['entries'] : null;
+  final valid =
+      rawEntries is List ? rawEntries.whereType<Map>().toList() : const <Map>[];
   if (valid.isEmpty) return const SizedBox.shrink();
   return stoopLorebookEntries(context, 'Lorebook (${valid.length})', valid, name);
 }
@@ -339,7 +311,10 @@ Widget stoopLorebookEntries(
 
 // The entry's trigger keywords as little chips (falls back to its name/label).
 Widget _lorebookTriggers(BuildContext context, Map e) {
-  final keys = (e['keys'] as List?)?.map((k) => k.toString()).toList() ?? const [];
+  final rawKeys = e['keys'];
+  final keys = rawKeys is List
+      ? rawKeys.map((k) => k.toString()).toList()
+      : const <String>[];
   if (keys.isEmpty) {
     return Text(
       (e['name'] ?? e['comment'] ?? 'Entry').toString(),

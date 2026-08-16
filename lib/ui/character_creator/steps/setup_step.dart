@@ -520,18 +520,28 @@ class SetupStep extends StatelessWidget {
     );
   }
 
+  /// The machine's architecture never changes while the app is running, so the
+  /// `uname` probe below is resolved once per process and cached. It is read
+  /// from `build()`, which re-runs on every CreatorState notification — once a
+  /// second for up to two minutes while a model loads — and a synchronous
+  /// process spawn on that path blocks the frame every time.
+  static bool? _appleSiliconMac;
+
   /// Check if running on Apple Silicon Mac (arm64 architecture).
   bool _isAppleSiliconMac() {
-    if (!Platform.isMacOS) return false;
+    final cached = _appleSiliconMac;
+    if (cached != null) return cached;
+    if (!Platform.isMacOS) return _appleSiliconMac = false;
     // Try to detect arm64 architecture
+    bool arm64 = false;
     try {
       final result = Process.runSync('uname', ['-m']);
       if (result.exitCode == 0) {
-        return result.stdout.toString().trim() == 'arm64';
+        arm64 = result.stdout.toString().trim() == 'arm64';
       }
     } catch (_) {}
     // Fallback: if uname fails, assume it's not Apple Silicon
-    return false;
+    return _appleSiliconMac = arm64;
   }
 
   Widget _buildExtraSettingsBody(BuildContext context, CreatorState state) {

@@ -27,6 +27,7 @@ Straight answers to the questions I get most often. If yours isn't here, the [Di
 
 ### The Stoop
 - [What is The Stoop?](#what-is-the-stoop)
+- [Can I share Worlds too?](#can-i-share-worlds-too)
 - [What data does The Stoop collect?](#what-data-does-the-stoop-collect)
 
 ### Voice
@@ -65,15 +66,15 @@ Three optional features involve the internet, and only if you turn them on:
 
 - **Remote AI APIs** (OpenRouter and similar) — your prompts go to that provider. Check their privacy policy.
 - **Cloud voices** (ElevenLabs, OpenAI) — the text being spoken goes to that provider.
-- **The Stoop** — the community character hub. It's the only part of the app with an account or any data collection at all — see [What data does The Stoop collect?](#what-data-does-the-stoop-collect)
+- **The Stoop** — the community character hub. It's the only part of the app that involves an online account or collects anything at all — see [What data does The Stoop collect?](#what-data-does-the-stoop-collect)
 
 The full details are in the [Privacy Policy](https://github.com/linux4life1/front-porch-AI/blob/main/PRIVACY.md).
 
 ### What platforms are supported?
 
-- **Windows** 10 and 11
-- **macOS** — Apple Silicon (M-series) natively; Intel Macs can run the app but only with remote AI APIs (local models need Apple Silicon)
-- **Linux** — install from the APT/RPM repos, the AUR, or grab an AppImage
+- **Windows** 10 and 11 — a normal `.exe` installer
+- **macOS** — a signed, Apple-notarized `.pkg`. Apple Silicon (M-series) runs local models natively; Intel Macs can run the app, but local models are switched off there — the app says so and you switch yourself to **Remote API** in Settings → Backend
+- **Linux** — the APT repo, the RPM repo, the AUR, or a standalone `.deb`, `.rpm`, AppImage, or `.tar.gz`
 
 See the [Installation Guide](install.md) for step-by-step instructions.
 
@@ -81,14 +82,18 @@ See the [Installation Guide](install.md) for step-by-step instructions.
 
 Only for the initial setup: downloading the app, the AI engine, and a model. After that, everything core works fully offline — chatting, memory, local voices, image generation with a local backend, all of it.
 
-You need to be online for: remote AI APIs, cloud voices, The Stoop, and downloading new models.
+Most of it needs nothing installed alongside it: speech, listening, emotion detection, and memory all run inside the app itself — no Python, no helper programs. There are two exceptions. The first is the AI engine for local models: the app downloads KoboldCpp for you and runs it as a local server, which you start and stop from Settings → Backend. The second is local image generation, which happens in a separate program you install and run yourself — Draw Things, ComfyUI, or an Automatic1111-style server. The app never downloads or launches that one; you just point it at the address the program is listening on.
+
+You need to be online for: remote AI APIs, cloud voices, The Stoop, and downloading new models or voices.
 
 ### What's the difference between Stable and Nightly builds?
 
-- **Stable** is the recommended download — tested, polished releases (currently v0.9.9.1.3).
-- **Nightly** builds come fresh from active development every night. You get new features first — right now that includes **The Stoop** community hub and the ability to change a chat's cast on the fly — but you may also hit rough edges.
+- **Stable** is the recommended download — tested, polished releases. The current one is **v1.2.0, "Occupy Mars"** (released 2026-08-01). The things that used to be nightly-only are in it, including The Stoop and changing a chat's cast on the fly with `/join`.
+- **Nightly** builds come fresh from active development most days. You get new features first, but you may also hit rough edges.
 
-Beta and nightly builds keep their data in a completely separate folder (`FrontPorchAI-Beta`), so trying one never touches your stable characters and chats.
+Beta and nightly builds keep their data in a completely separate folder (`FrontPorchAI-Beta`) with their own settings, so trying one never touches your stable characters and chats.
+
+One thing to know before you switch: on beta and nightly builds the Backups & Restore page opens but its contents are replaced by a notice, so there is no way to browse or roll back a snapshot there. The automatic snapshots themselves keep running.
 
 ---
 
@@ -96,7 +101,7 @@ Beta and nightly builds keep their data in a completely separate folder (`FrontP
 
 ### What AI models can I use?
 
-**Local models (recommended for privacy):** any model in **GGUF format** — the standard file format for AI models that run on your own computer. That covers essentially every popular open model family: Llama, Mistral, Qwen, Gemma, Phi, DeepSeek, and many more. The built-in **Model Hub** lets you search and download them without leaving the app.
+**Local models (recommended for privacy):** any model in **GGUF format** — the standard file format for AI models that run on your own computer. That covers essentially every popular open model family: Llama, Mistral, Qwen, Gemma, Phi, DeepSeek, and many more. The built-in **Model Manager** (*Manage Models* in the sidebar) lets you search Hugging Face and download them without leaving the app.
 
 **Remote models:** with an API key you can use OpenRouter (which offers hundreds of models including the biggest frontier ones), or any other OpenAI-compatible service.
 
@@ -117,19 +122,19 @@ Two terms you'll see everywhere:
 - **"7B", "13B" etc.** — the model's size in billions of parameters. Bigger is smarter but needs more memory and runs slower.
 - **"Q4", "Q5" etc.** — quantization, i.e. how compressed the model file is. Q4 or Q5 is the sweet spot; quality loss is tiny and the memory savings are huge.
 
-The Model Hub shows an estimate of whether a model fits your GPU before you download it. When in doubt, start small — modern 8B models are shockingly good at roleplay.
+The Model Manager estimates whether a model fits your GPU *before* you download it. When in doubt, start small — modern 8B models are shockingly good at roleplay.
 
 ### Can I use OpenAI / Claude / Google models?
 
-Yes. Add an **OpenRouter** key in Settings → AI Settings and you get access to virtually every major model through one account. You can also point the app at any OpenAI-compatible service. Remote models work with everything — the Realism Engine, memory, voices, all of it.
+Yes. Add an **OpenRouter** key in Settings → Backend and you get access to virtually every major model through one account. You can also point the app at any OpenAI-compatible service (Nano-GPT and self-hosted servers included). Remote models work with everything — the Realism Engine, memory, voices, all of it.
 
 ### Why is the AI slow?
 
 Almost always one of these:
 
 - **The model is too big for your GPU**, so part of it spills over to regular RAM, which is much slower. Fix: use a smaller model or a more compressed version (Q4 instead of Q6/Q8), or lower the context size.
-- **Too many GPU layers** — lower the GPU Layers setting so the model actually fits.
-- **The app is running on CPU** without you realizing. Re-run hardware detection in Settings → AI Settings.
+- **Too many GPU layers** — lower **GPU Layers** in Settings → Advanced so the model actually fits.
+- **The app is running on CPU** without you realizing. Settings → Advanced shows the GPU it detected and a memory gauge; if the name is wrong or missing, see [Troubleshooting → GPU not detected](troubleshooting.md#gpu-not-detected).
 - **Very large context sizes** (16k+) cost speed and memory even before the model starts writing.
 
 See [Troubleshooting → Generation is slow](troubleshooting.md#generation-is-extremely-slow) for the full checklist.
@@ -139,7 +144,8 @@ See [Troubleshooting → Generation is slow](troubleshooting.md#generation-is-ex
 Usually fixable with settings:
 
 - Raise **Temperature** a little (0.8–1.1 works well for roleplay).
-- Raise **Repetition Penalty** slightly (1.05–1.15).
+- Raise **Repeat Penalty** slightly (1.05–1.15).
+- Try **DRY Strength** at around 0.8 — it catches repeated *phrases*, not just repeated words, which is usually what makes a character feel stuck.
 - Check the character card — missing or weak **example dialogue** is the number-one cause of repetitive characters. A few good example exchanges work wonders.
 - Some models are simply repetitive, especially at heavy compression. Try a different one — personality varies a lot between model families.
 
@@ -149,18 +155,19 @@ Usually fixable with settings:
 
 ### Where can I find characters?
 
-- **The Stoop** — the community hub built right into the app (currently in nightly builds): browse, follow creators, and download with one tap.
-- **Import a card file** — download a card (PNG or JSON) from any character site in your normal browser, then use the **Import** button and it lands straight in your library.
+- **The Stoop** — the community hub built right into the app: browse, follow creators, and download with one tap. It ships in the stable release.
+- **Import a card file** — download a card (PNG or JSON) from any character site in your normal browser, then use **Import Cards** on the home screen and it lands straight in your library.
 - **Anywhere character cards are shared** — Front Porch AI reads standard V2/V2.5 character card files (PNG or JSON), the same format the whole community uses.
-- **Make your own** — the AI Character Creator builds a complete character from a one-line concept, or use the step-by-step manual creator.
+- **Make your own** — the AI Character Creator goes from a one-line idea to a finished card, or walks you through it trait by trait if you'd rather steer. There's a fully manual step-by-step creator too.
 - **The Discord** — people share cards and ideas in the [community Discord](https://discord.gg/e4tET6rpdv).
 
 ### Can I use my SillyTavern or Backyard AI characters?
 
 Yes, directly:
 
-- **SillyTavern cards** (PNG or JSON) import perfectly — drag them onto the app or use the Import button. Multi-select and whole-folder import are supported.
-- **Backyard AI archives** (`.byaf` files) have a dedicated importer, so your characters aren't stranded in that format.
+- **SillyTavern cards** (PNG or JSON) import perfectly — **Import Cards** on the home screen takes many files at once, and **Import Folder** takes a whole directory.
+- **Backyard AI archives** (`.byaf` files) have their own importer (**Import Backyard AI**), so your characters aren't stranded in that format.
+- **Lorebooks** from SillyTavern, Chub, NovelAI, AgnAI and RisuAI come in through their own preview wizard.
 
 Everything you create or edit is saved as standard, portable character cards too — no lock-in in either direction.
 
@@ -171,7 +178,7 @@ In rough order of likelihood:
 1. **The card is thin.** A character with no example dialogue and a two-line description gives the AI almost nothing to work with. Add example exchanges and specifics.
 2. **The model is too small** for a subtle personality. Try a larger or newer model.
 3. **Sampler settings are off.** Extremely low temperature makes characters robotic; extremely high makes them incoherent. Start at 0.85–1.0.
-4. **A global system prompt is fighting the card.** If you've customized the system prompt in Settings, it can override character instructions.
+4. **A global system prompt is fighting the card.** If you've customized the system prompt in Settings → General, it can override character instructions.
 5. **The Realism Engine is off.** Without it, characters have no persistent emotional state between turns. Turning it on adds bond, trust, mood, and memory of how your story has been going — see the [Realism Engine guide](realism-engine.md).
 
 ---
@@ -180,20 +187,29 @@ In rough order of likelihood:
 
 ### What is The Stoop?
 
-The Stoop is a community character hub built into the app (currently in nightly builds, coming to stable): browse featured and moderator-picked cards, follow creators you like, vote, and download characters — including entire group casts with their Realism state intact — straight into your library.
+The Stoop is a community character hub built into the app, and it ships in the stable release. Browse featured and moderator-picked cards, follow creators you like, vote, and download characters — including entire group casts with their lorebooks and Realism state intact — straight into your library. You can also browse it in any web browser at [hub.frontporchai.app](https://hub.frontporchai.app).
 
-It's opt-in, needs a free account, and is strictly 18+. Adult content is hidden unless you explicitly turn it on. The rest of the app stays 100% local whether or not you ever open The Stoop.
+Your name on The Stoop is a real profile page: your picture, when you joined, your followers and lifetime stats, a short bio, up to four links, and your uploads underneath as an art grid. Every other creator gets the same page. A **confirmed email address** is what unlocks the parts of an account other people can see — a profile picture and sharing your own cards — so drive-by accounts can't post pictures at all.
+
+It's opt-in, needs a free account, and is strictly 18+. Suggestive and 18+ cards stay hidden until you turn them on yourself. The rest of the app stays 100% local whether or not you ever open The Stoop.
+
+### Can I share Worlds too?
+
+Yes. A Place you've built — its lore, its cover art, and its climate (your own weather names and emoji, temperature bands, atmosphere and gravity) — can be posted to The Stoop exactly like a character, and downloading one imports it straight into your Worlds list. You can also hand the file to someone directly: the Worlds page has an **Import Place** button, and each place has its own **Export .fpworld** action.
+
+One catch worth knowing before you send a file to a friend: **opening a `.fpworld` needs Front Porch AI 1.2 or newer.** Older installs can't import them, so if a place won't open, updating is the fix.
 
 ### What data does The Stoop collect?
 
 Only if you sign in and use it:
 
 - **Your account info** — email, display name, your 18+ confirmation, and a securely hashed password.
-- **What you upload** — the cards you choose to share, obviously.
-- **An anti-abuse signal** — a salted, one-way *hash* of your IP address (never the raw IP), used only to enforce bans and stop ban-evasion, deleted after 90 days.
-- **An anonymous stats ping** — coarse facts like OS, app version, and GPU tier (e.g. "NVIDIA · 8–12 GB") so I know what hardware to prioritize. It's on by default but there's an off switch right on the sign-up screen and in Account settings. It never includes chats, characters, or your IP.
+- **Your public profile, if you fill one in** — profile picture, bio, and links. All optional.
+- **What you upload** — the cards you choose to share, obviously — plus account activity like votes and downloads.
+- **Anti-abuse signals** — a salted, one-way *hash* of your IP address (never the raw IP) and an anonymous per-install id, used only to enforce bans and stop ban-evasion. These are automatically deleted after 90 days, and they're a condition of having an account: if you'd rather they weren't collected, don't make one — the rest of Front Porch works fully without it.
+- **An anonymous stats ping** — your operating system and app version, your language setting, and your graphics card's name and how much memory it has, so I know what hardware to prioritize. The server sorts the card into a coarse tier (e.g. "NVIDIA · 8–12 GB") and never stores an IP. It's on by default but there's an off switch right on the sign-up screen and in Account settings. It never includes your chats or your characters.
 
-Never collected: your conversations, your characters (unless you upload them), or anything from offline use. Full details: [Privacy Policy](https://github.com/linux4life1/front-porch-AI/blob/main/PRIVACY.md).
+Never collected: your conversations, your characters (unless you upload them), or anything from offline use. You can permanently delete your Stoop account from inside the app at any time, which erases your account, your uploads, your votes, and your messages. Full details: [Privacy Policy](https://github.com/linux4life1/front-porch-AI/blob/main/PRIVACY.md).
 
 ---
 
@@ -201,9 +217,9 @@ Never collected: your conversations, your characters (unless you upload them), o
 
 ### Why isn't the voice (TTS) working?
 
-- **First use downloads voice files.** The default local engine (Kokoro) fetches its voice models (~300 MB) the first time you use it. Give it a minute and watch for the progress indicator.
-- **Wrong engine selected** — check Settings → Voice. Kokoro is the local default; ElevenLabs and OpenAI need an API key and internet.
-- **A character has a voice from a different engine.** If you switched engines, a character's assigned voice may no longer match — the voice picker warns you about incompatible ones. Re-assign or choose the default.
+- **First use downloads voice files.** The default local engine (Kokoro) fetches its voice bundle (roughly 380 MB once unpacked) the first time you use it. Give it a minute and watch for the progress indicator.
+- **Wrong engine selected** — check Settings → Voice & Media. Kokoro is the local default; ElevenLabs and OpenAI need an API key and internet.
+- **A character has a voice from a different engine.** If you switched engines, a voice assigned under the old one isn't available anymore and the app quietly substitutes one that is: on Piper it falls back to your global Piper voice, while Kokoro picks the nearest voice it actually has (same language and gender where it can). Either way the character stops sounding like themselves, so pick a voice again for the engine you're on now.
 
 More fixes in [Troubleshooting → Voice](troubleshooting.md#tts-not-producing-sound).
 
@@ -212,7 +228,8 @@ More fixes in [Troubleshooting → Voice](troubleshooting.md#tts-not-producing-s
 - **Best free local:** Kokoro (the default) — over 50 voices, surprisingly natural, fully offline.
 - **Best overall (paid):** ElevenLabs — extremely natural and expressive, needs an API key.
 - **Lots of distinct voices:** Piper — lightweight and fast, handy for giving every group member their own voice.
-- **Per-character voices:** assign a specific voice on each character's card; it overrides the global default, including in group chats.
+- **Bring your own Piper voice:** open the **Voice Model Browser** and hit **Add custom voice** to import a raw Piper `.onnx` file (with its matching `.onnx.json` sitting next to it). No conversion step, and the voice then shows up everywhere the built-in ones do. This importer is desktop-only by design — there's no web equivalent.
+- **Per-character voices:** a character can carry its own voice instead of the global one — pick one per member while you're building a group chat, or let it ride along in an imported card. Their own voice always wins over the global default.
 
 ### Why does voice call mode send my message too early?
 
@@ -235,11 +252,11 @@ The optional system that makes characters feel *alive* over time instead of rese
 
 - carries a **mood** that shifts naturally and lingers between turns
 - builds (or loses) **bond** (−300 to +300) and **trust** (−100 to +100) with you, which changes how open they are
-- experiences the **passage of time** — the story clock moves forward as you chat
-- can develop **fixations**, pursue their own **objectives**, and **evolve new personality traits** over long stories
+- experiences the **passage of time** — the story clock moves forward on every turn, on a real calendar, with its own weather and seasons
+- can develop **fixations**, pursue their own **objectives**, and grow in ways you can actually read back (**Growth Rings**) over long stories
 - can live with Sims-style **needs** — hunger, energy, social, fun, hygiene, comfort, and more
 
-It's off by default and configurable per character. The [Realism Engine guide](realism-engine.md) covers all of it.
+New characters have it off by default and it's configurable per character; new group chats start with it on. The [Realism Engine guide](realism-engine.md) covers all of it.
 
 ### Does the Realism Engine slow down my chats?
 
@@ -247,7 +264,7 @@ Honestly: yes, somewhat — it's not free. After each turn, the engine asks the 
 
 Ways to reduce it:
 
-- Turn on **One-Shot Eval** mode, which combines the background questions into a single call.
+- Turn on **One-Shot Eval** in the chat sidebar's **Character State** section, which fuses those background questions into a single call. It's marked experimental because it can be less accurate on very small models.
 - Use a fast model — the evaluations are short, so speed matters more than size.
 - Turn the Realism Engine off for characters or scenes where you don't need it.
 
@@ -268,7 +285,12 @@ Automatically, and always on. The app snapshots your database every **30 minutes
 - the **10 most recent** snapshots (fine-grained undo for the last few hours), plus
 - **one snapshot per day for the last 7 days** (a rolling week of restore points)
 
-Old ones are pruned automatically so it never grows unbounded. If the database is ever damaged, a restore screen appears on launch and recovery is one click. You can also make a manual backup any time from Settings.
+Old ones are pruned automatically so it never grows unbounded. If the database is ever damaged, a restore screen appears on launch and recovery is one click. You can also make one yourself, or restore an older snapshot, from **Backups & Restore** in the sidebar. Since 1.2, restoring doesn't need a relaunch — the app picks the restored database straight back up. If that live reload ever fails, it tells you and asks you to close and reopen Front Porch AI.
+
+Two caveats worth being precise about:
+
+- **A backup is the database and nothing else.** It captures what the database holds — your chats, memories, and Realism history — and not the separate files sitting on disk beside it: character card PNGs, avatar images, or your downloaded AI models. So a restore will *not* undo a deleted character, because deleting one also removes its picture from disk and no backup brings that file back.
+- **On beta and nightly builds the Backups & Restore page opens but its contents are replaced by a notice**, so there is no way to browse or roll back a snapshot there. The automatic snapshots themselves keep running.
 
 For an extra off-machine copy, just copy your whole `FrontPorchAI` folder somewhere safe — that's everything.
 
@@ -285,23 +307,26 @@ Inside you'll find your database, character cards, and backups (in `KoboldManage
 
 ### Can I chat from my phone or another computer?
 
-Yes. The app has a built-in **web server**: turn it on in Settings, then open `http://<your-computer's-address>:8085` in any browser on the same network — phone, tablet, laptop. You get a full web interface for chatting.
+Yes. The app has a built-in **web server**: turn it on in Settings → Advanced, then open `http://<your-computer's-address>:8085` in any browser on the same network — phone, tablet, laptop. You get a full interface for chatting, and on a phone you can add it to your home screen so it behaves like an app.
 
-Two things to know:
+Three things to know:
 
+- It's password-protected. You create the login the first time you open it in a browser, and two-factor is there if you want it. If you ever lose access, the desktop app can reset the web login for you.
 - Your desktop computer does all the actual work (it's running the AI), so it needs to stay on.
 - It's designed for your home network. For access away from home, a personal VPN like Tailscale is the safe way to reach it.
 
 ### Can I sync between two computers?
 
-Not really, and I'd steer you away from trying. The old Cloud Sync feature (Google Drive / WebDAV) is **deprecated** — it could occasionally resurrect deleted data across devices, which is why newer builds show a retirement notice. Automatic local backups replaced it as the safety net.
+No — the old Cloud Sync feature (Google Drive / WebDAV) is **gone**. It could occasionally resurrect deleted data across devices, so I removed it; automatic local backups are the replacement safety net.
 
-To move to another machine: copy your `FrontPorchAI` folder over, or export/import individual character cards. Both are reliable.
+To move to another machine: copy your `FrontPorchAI` folder over, or export/import individual character cards. Both are reliable. And if what you actually want is to *use* your library from a second device rather than duplicate it, turn on the built-in web server and reach your desktop from the other machine's browser — see [Can I chat from my phone or another computer?](#can-i-chat-from-my-phone-or-another-computer)
 
 ### How do updates work?
 
 - **Windows / macOS:** the app checks for updates and shows a "What's New" dialog when one is available; download and install from there (or grab it from [GitHub Releases](https://github.com/linux4life1/front-porch-AI/releases)).
-- **Linux (APT/RPM/AUR):** updates arrive through your normal system updates — `apt upgrade`, `dnf upgrade`, or `yay -Syu`.
+- **Linux (APT/RPM):** updates arrive through your normal system updates — `apt upgrade` or `dnf upgrade`.
+- **Linux (AUR):** `yay -Syu` as usual — but right now the AUR package is a full release behind (it's on 1.1.2 while stable is 1.2.0). Pushes to it are being refused on the AUR side and I don't have an ETA, so this won't fix itself in a day or two. If you want the current release, use the APT or RPM repo, the AppImage, or a standalone `.deb`/`.rpm` from [GitHub Releases](https://github.com/linux4life1/front-porch-AI/releases). It also means an AUR install can't open `.fpworld` place files yet, since those need 1.2 or newer.
+- **Linux (AppImage):** the in-app updater works here too, the same way it does on Windows and macOS.
 
 ### How do I report a bug?
 

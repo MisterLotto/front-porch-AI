@@ -4,29 +4,61 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:front_porch_ai/app_version.dart';
+
 class FileConsolidationService {
+  /// Root-path pref key, chosen by channel exactly as StorageService
+  /// (`_rootPathKey`) and AppDatabase do. This consolidator physically MOVES
+  /// the database, chats and models under whatever root that key names, so
+  /// reading the stable key on a beta/nightly build relocated the STABLE
+  /// installation's live data on the beta's first launch (both channels share
+  /// one SharedPreferences store — that is why every other key is prefixed).
+  static String rootPathKeyFor({required bool preRelease}) =>
+      preRelease ? 'root_path_beta' : 'root_path';
+
+  /// Folder this channel nests into — matches AppDatabase's `defaultRootName`.
+  static String rootFolderNameFor({required bool preRelease}) =>
+      preRelease ? 'FrontPorchAI-Beta' : 'FrontPorchAI';
+
+  /// True when [basename] is already one of our roots, so we must not nest
+  /// again. Both channel names are accepted on both channels — a beta rooted
+  /// at FrontPorchAI-Beta would otherwise be re-nested every launch.
+  static bool isAlreadyNested(String basename) {
+    final lower = basename.toLowerCase();
+    return lower == 'frontporchai' ||
+        lower == 'frontporch' ||
+        lower == 'frontporchai-beta';
+  }
+
   /// Checks if the folder structure is scattered, and consolidates it
   /// underneath a dedicated "FrontPorchAI" directory if needed.
   /// Also dynamically retrieves support files and moves them to "system".
-  static Future<void> consolidate() async {
+  ///
+  /// [preRelease] defaults to this build's own channel; it exists because a
+  /// test cannot rebuild the app with a beta version string.
+  static Future<void> consolidate({bool? preRelease}) async {
+    final beta = preRelease ?? isPreRelease;
+    final rootPathKey = rootPathKeyFor(preRelease: beta);
     final prefs = await SharedPreferences.getInstance();
 
     // Existing root path (which might just be the raw Documents folder).
     final docsDir = await getApplicationDocumentsDirectory();
-    final currentRootPath = prefs.getString('root_path') ?? docsDir.path;
+    final currentRootPath = prefs.getString(rootPathKey) ?? docsDir.path;
 
     // Determine target consolidated path.
     // Ensure we don't nest if the basename is already FrontPorchAI or something similar.
     final basename = p.basename(currentRootPath);
-    if (basename.toLowerCase() == 'frontporchai' ||
-        basename.toLowerCase() == 'frontporch') {
+    if (isAlreadyNested(basename)) {
       // It's already cleanly nested. We just need to ensure the system files are moved there.
       await _migrateSystemDependencies(currentRootPath);
       return;
     }
 
     // It's a raw scattered directory! We need to consolidate it.
-    final targetRootPath = p.join(currentRootPath, 'FrontPorchAI');
+    final targetRootPath = p.join(
+      currentRootPath,
+      rootFolderNameFor(preRelease: beta),
+    );
     final targetRoot = Directory(targetRootPath);
 
     // Folders that were historically dumped loosely in rootPath.
@@ -46,13 +78,13 @@ class FileConsolidationService {
       }
     }
 
-    if (!needsMigration && prefs.getString('root_path') != null) {
+    if (!needsMigration && prefs.getString(rootPathKey) != null) {
       // Nothing scattered found in the raw custom path, but we still want
       // to wrap things cleanly going forward, so shift the root path.
       if (!await targetRoot.exists()) {
         await targetRoot.create(recursive: true);
       }
-      await prefs.setString('root_path', targetRootPath);
+      await prefs.setString(rootPathKey, targetRootPath);
       await _migrateSystemDependencies(targetRootPath);
       return;
     } else if (needsMigration) {
@@ -80,7 +112,7 @@ class FileConsolidationService {
       }
 
       // Update root path tracking.
-      await prefs.setString('root_path', targetRootPath);
+      await prefs.setString(rootPathKey, targetRootPath);
       await _migrateSystemDependencies(targetRootPath);
     }
   }

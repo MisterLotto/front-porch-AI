@@ -11,6 +11,7 @@
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -65,6 +66,24 @@ class PickerPrefs {
     }
   }
 
+  /// Test seam: when set, [pickFiles] returns this instead of opening the OS
+  /// dialog, and the last-folder bookkeeping is skipped.
+  ///
+  /// The native picker is the hard stop for every import journey — the file
+  /// dialog belongs to the OS, so a suite can reach the button and no further.
+  /// That left the Import Lorebook wizard's later steps untestable even though
+  /// everything AFTER the pick is ordinary Flutter. One seam here unblocks all
+  /// of them, and it is deliberately a function (not a fixed result) so a test
+  /// can assert WHICH category/extensions a flow asked for.
+  ///
+  /// Set it in a test, and always null it again in the teardown.
+  @visibleForTesting
+  static Future<FilePickerResult?> Function({
+    required String category,
+    List<String>? allowedExtensions,
+  })?
+  testPickFilesOverride;
+
   /// Drop-in for `FilePicker.pickFiles` that resumes at (and records)
   /// the last folder used for [category].
   static Future<FilePickerResult?> pickFiles({
@@ -76,6 +95,10 @@ class PickerPrefs {
     bool withData = false,
     bool lockParentWindow = false,
   }) async {
+    final override = testPickFilesOverride;
+    if (override != null) {
+      return override(category: category, allowedExtensions: allowedExtensions);
+    }
     final prefs = await SharedPreferences.getInstance();
     final result = await FilePicker.pickFiles(
       dialogTitle: dialogTitle,

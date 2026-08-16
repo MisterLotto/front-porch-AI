@@ -23,6 +23,7 @@ import 'package:drift/drift.dart';
 
 import 'package:front_porch_ai/database/database.dart';
 import 'journal_physics.dart';
+import 'pockets.dart' show sameItem;
 
 /// The Journal — card persistence (docs/design/journal-memory.md §5) plus
 /// the DB half of the emotional physics (§4.4): per-pass cooling with
@@ -106,6 +107,13 @@ class JournalStore {
     /// LLMerta imports). Overwrites same keys as story/kind only if the
     /// caller passes them in the map.
     Map<String, dynamic>? extraMetadata,
+
+    /// Optional heat (0–1) for package reimport / restore. Defaults to full
+    /// heat when omitted (new cards feel "just written").
+    double? heat,
+
+    /// Optional pinned flag for package reimport.
+    bool pinned = false,
     required int maxCards,
   }) async {
     final db = getDb();
@@ -143,6 +151,10 @@ class JournalStore {
           sourcePositions.isEmpty ? null : jsonEncode(sourcePositions),
         ),
         metadata: Value(meta.isEmpty ? null : jsonEncode(meta)),
+        heat: heat != null
+            ? Value(heat.clamp(0.0, 1.0))
+            : const Value.absent(),
+        pinned: Value(pinned),
       ),
     );
   }
@@ -221,6 +233,67 @@ class JournalStore {
       }
     }
     return removed;
+  }
+
+  /// Retire every item-memory card in [sessionId] for [itemName], any owner.
+  /// Pickup must clear Alice's "I set the keys down" when Bob picks them up.
+  Future<int> retireItemCardsInSession(
+    String sessionId,
+    String itemName,
+  ) async {
+    final db = getDb();
+    if (db == null || itemName.isEmpty) return 0;
+    var n = 0;
+    for (final old in await db.getJournalCardsForSession(sessionId)) {
+      if (JournalPhysics.isItemCard(old) &&
+          sameItem(JournalPhysics.itemOf(old) ?? '', itemName)) {
+        await db.deleteJournalCard(old.id);
+        n++;
+      }
+    }
+    return n;
+  }
+
+  /// Carry diary cards into a fork: copy cards whose receipts are all
+  /// before [cursor] (manual plants with no receipts copy). Future-citing
+  /// cards stay behind — Growth twin [GrowthStore.copySessionTo].
+  Future<void> copySessionTo(
+    String fromSessionId,
+    String toSessionId, {
+    required int cursor,
+  }) async {
+    final db = getDb();
+    if (db == null) return;
+    for (final card in await db.getJournalCardsForSession(fromSessionId)) {
+      final raw = card.sourceMessageIds;
+      if (raw != null && raw.isNotEmpty) {
+        try {
+          final positions = jsonDecode(raw) as List<dynamic>;
+          if (positions.whereType<num>().any((p) => p.toInt() >= cursor)) {
+            continue;
+          }
+        } catch (_) {}
+      }
+      await db.insertJournalCard(
+        JournalMemoriesCompanion(
+          sessionId: Value(toSessionId),
+          characterId: Value(card.characterId),
+          content: Value(card.content),
+          category: Value(card.category),
+          emotionLabel: Value(card.emotionLabel),
+          emotionIntensity: Value(card.emotionIntensity),
+          originalEmotionLabel: Value(card.originalEmotionLabel),
+          sourceMessageIds: Value(card.sourceMessageIds),
+          metadata: Value(card.metadata),
+          heat: Value(card.heat),
+          pinned: Value(card.pinned),
+          accessCount: Value(card.accessCount),
+          embedding: Value(card.embedding),
+          dimensions: Value(card.dimensions),
+          lastAccessedAt: Value(card.lastAccessedAt),
+        ),
+      );
+    }
   }
 
   /// Merge keys into a card's metadata JSON (Living Time §6 ambition

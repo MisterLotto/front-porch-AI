@@ -4,6 +4,8 @@
 // The Conversations slide-over drawer (past sessions + "New chat"). Extracted
 // verbatim from ChatPage to keep that page under the file-size cap.
 
+import { ChatPackageBar } from './ChatPackageBar';
+
 export interface SessionSummary {
   id: string;
   preview: string;
@@ -27,6 +29,10 @@ export function ConversationsDrawer({
   onLoad,
   onNew,
   onClose,
+  exportTitle,
+  canExport,
+  canImport,
+  onImported,
 }: {
   sessions: SessionSummary[];
   loading: boolean;
@@ -34,6 +40,10 @@ export function ConversationsDrawer({
   onLoad: (id: string) => void;
   onNew: () => void;
   onClose: () => void;
+  exportTitle: string;
+  canExport: boolean;
+  canImport: boolean;
+  onImported: (message: string) => void;
 }) {
   return (
     <div className="drawer-backdrop" onClick={onClose}>
@@ -43,6 +53,12 @@ export function ConversationsDrawer({
           <button className="link-btn" onClick={onClose}>Close</button>
         </div>
         <button className="primary new-chat" onClick={onNew}>+ New chat</button>
+        <ChatPackageBar
+          title={exportTitle}
+          canExport={canExport}
+          canImport={canImport}
+          onImported={onImported}
+        />
         {loading ? (
           <div className="centered"><div className="spinner" /></div>
         ) : sessions.length === 0 ? (

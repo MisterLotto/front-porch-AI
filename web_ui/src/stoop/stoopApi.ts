@@ -59,6 +59,20 @@ export function clearStoopSession(): void {
   localStorage.removeItem(REFRESH_KEY);
 }
 
+/** Restore / first-paint of a saved browser session. Wipe the login only
+ *  when it is already gone (tryRefresh cleared a dead refresh token). A
+ *  502, timeout, or TypeError is a hiccup — keep the tokens so the next
+ *  open can retry. A 401 that still has tokens means refresh hiccuped
+ *  after call() already tried; do not undo that keep.
+ *
+ *  StoopContext used to `clearStoopSession()` on ANY `me()` failure, which
+ *  undid the 401-only rule in tryRefresh and signed the phone out over
+ *  one dropped packet (1.3 independent review leftover). */
+export function shouldWipeStoopSessionAfterRestoreError(err: unknown): boolean {
+  if (!(err instanceof StoopError) || err.status !== 401) return false;
+  return !hasStoopSession();
+}
+
 /** RFC-4122 v4 UUID that also works in an INSECURE browsing context.
  *
  *  `crypto.randomUUID()` is secure-context-only, so it is `undefined` when
@@ -139,9 +153,15 @@ async function raw<T>(
 let refreshing: Promise<boolean> | null = null;
 
 async function tryRefresh(): Promise<boolean> {
+  // The "no refresh token" answer is decided BEFORE the latch is armed. An
+  // early return from inside the IIFE never reaches its `finally`, and even if
+  // it did, a body with no `await` runs to completion (clearing the latch)
+  // BEFORE `??=` assigns the resolved promise — either way the latch would be
+  // left holding a permanent `false`, silently killing refresh-and-retry for
+  // the rest of the page's life (survives an in-place sign-out/sign-in).
+  const refresh = localStorage.getItem(REFRESH_KEY);
+  if (!refresh) return false;
   refreshing ??= (async () => {
-    const refresh = localStorage.getItem(REFRESH_KEY);
-    if (!refresh) return false;
     try {
       const r = await raw<{ accessToken: string; refreshToken: string }>(
         'POST',
@@ -151,8 +171,15 @@ async function tryRefresh(): Promise<boolean> {
       );
       saveTokens(r.accessToken, r.refreshToken);
       return true;
-    } catch {
-      clearStoopSession();
+    } catch (e) {
+      // Only a genuine 401 means the refresh token is dead. A network blip,
+      // a 5xx or a proxy 502 is a hiccup — keep the tokens so a later call
+      // can retry, the same rule the desktop AuthState refresh follows. The
+      // phone/PWA twin used to clear on ANY failure, signing users out over
+      // one dropped packet (1.3 sweep, independent review).
+      if (e instanceof StoopError && e.status === 401) {
+        clearStoopSession();
+      }
       return false;
     } finally {
       refreshing = null;
@@ -296,12 +323,17 @@ export const stoop = {
   twoFactorDisable: (totp: string) => call<void>('POST', '/api/stoop/2fa/disable', { totp }),
 
   browse: (query: StoopBrowseQuery) => {
+    const type = query.type ?? 'all';
     const params = new URLSearchParams({
       sort: query.sort ?? 'newest',
-      type: query.type ?? 'all',
+      type,
       page: String(query.page ?? 0),
       take: String(query.take ?? 24),
     });
+    // Desktop always opts in with types=solo,group,world when type=all
+    // because the server keeps type=all as solo+group forever. Without this
+    // Living Worlds never appear on web browse (audit P2.15).
+    if (type === 'all') params.set('types', 'solo,group,world');
     if (query.q) params.set('q', query.q);
     if (query.pick) params.set('pick', 'true');
     if (query.following) params.set('following', 'true');
@@ -329,7 +361,10 @@ export const stoop = {
     }),
 
   creator: (id: string) =>
-    call<StoopCreator>('GET', `/api/stoop/creators/${encodeURIComponent(id)}`),
+    call<StoopCreator>(
+      'GET',
+      `/api/stoop/creators/${encodeURIComponent(id)}?types=solo,group,world`,
+    ),
   setFollow: (id: string, follow: boolean) =>
     call<{ following: boolean; followers: number }>(
       'POST',
@@ -338,8 +373,16 @@ export const stoop = {
     ),
   myFollowing: () =>
     call<{ items: StoopFollowedCreator[] }>('GET', '/api/stoop/me/following'),
-  myCharacters: () => call<{ items: StoopMine[] }>('GET', '/api/stoop/me/characters'),
-  myDownloads: () => call<{ items: StoopCard[] }>('GET', '/api/stoop/me/downloads'),
+  myCharacters: () =>
+    call<{ items: StoopMine[] }>(
+      'GET',
+      '/api/stoop/me/characters?types=solo,group,world',
+    ),
+  myDownloads: () =>
+    call<{ items: StoopCard[] }>(
+      'GET',
+      '/api/stoop/me/downloads?types=solo,group,world',
+    ),
 
   messages: () => call<{ items: StoopMessage[] }>('GET', '/api/stoop/me/messages'),
   unreadCount: async (): Promise<number> =>

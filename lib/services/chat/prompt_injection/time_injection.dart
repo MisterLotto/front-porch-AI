@@ -26,22 +26,17 @@ import 'package:front_porch_ai/services/chat/chat.dart';
 class TimeInjection {
   final TimeService timeService;
 
-  /// Optional one-shot real-absence note (living-time-features.md §2).
-  /// Null (the default, and whenever the opt-in is off or nothing is
-  /// pending) appends nothing — the fragment stays byte-identical to the
-  /// pre-absence block. State/gating live in ChatService; this leaf only
-  /// renders words.
-  final String? Function()? getAbsenceNote;
+  TimeInjection({required this.timeService});
 
-  TimeInjection({required this.timeService, this.getAbsenceNote});
-
-  String buildTimeInjection() {
-    final clock = timeService.clock;
-    final line =
-        'It is ${StoryClock.clockPhrase(clock)} on '
-        '${timeService.displayDate} '
-        '(day ${timeService.dayCount} of the story).';
-    final note = getAbsenceNote?.call();
-    return (note == null || note.isEmpty) ? line : '$line\n$note';
-  }
+  /// The real-absence note used to ride this fragment. It was lifted out on
+  /// 2026-08-07 (docs/design/feature-independence.md, "Notices your absence"):
+  /// the note is computed from your last message's WALL-CLOCK timestamp and
+  /// its own opt-in, and has nothing to do with story time — but riding here
+  /// meant it inherited the scene-facts gate, so with the story clock frozen
+  /// the feature was silently dead. It is now its own fragment in
+  /// RealismStateInjection, emitted in this same position.
+  String buildTimeInjection() =>
+      'It is ${StoryClock.clockPhrase(timeService.clock)} on '
+      '${timeService.displayDate} '
+      '(day ${timeService.dayCount} of the story).';
 }

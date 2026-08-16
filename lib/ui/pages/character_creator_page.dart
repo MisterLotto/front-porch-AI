@@ -21,7 +21,6 @@ import 'package:provider/provider.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/character_creator/character_creator.dart';
 import 'package:front_porch_ai/services/services.dart';
-import 'package:front_porch_ai/ui/character_creator/steps/setup_step.dart';
 import 'package:front_porch_ai/ui/character_creator/steps/mode_select_step.dart';
 import 'package:front_porch_ai/ui/character_creator/steps/quick_config_step.dart';
 import 'package:front_porch_ai/ui/character_creator/steps/guided_config_step.dart';
@@ -265,6 +264,14 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
             ? 'Next: ${labels[currentStep]}'
             : 'Save & Finish');
 
+    // Same lock the AppBar's back arrow and reset action already take. Without
+    // it, Back → Generate started a SECOND generation over the first (only the
+    // newest one is reachable from Abort, and whichever finished last stomped
+    // the card + review fields), and Next jumped to the Realism step, which
+    // reports "Generation failed" for a null card while the first is still
+    // streaming. Abort Generation on the step itself remains the way out.
+    final busy = creatorState.isGenerating;
+
     return Padding(
       padding: const EdgeInsets.only(top: 32),
       child: Center(
@@ -275,7 +282,9 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
               SizedBox(
                 height: 52,
                 child: OutlinedButton.icon(
-                  onPressed: () => creatorState.currentStep = currentStep - 1,
+                  onPressed: busy
+                      ? null
+                      : () => creatorState.currentStep = currentStep - 1,
                   icon: const Icon(Icons.arrow_back, size: 18),
                   label: const Text('Back', style: TextStyle(fontSize: 14)),
                   style: OutlinedButton.styleFrom(
@@ -292,8 +301,9 @@ class _CharacterCreatorPageState extends State<CharacterCreatorPage> {
               width: 280,
               height: 52,
               child: ElevatedButton.icon(
-                onPressed:
-                    onNext ??
+                onPressed: busy
+                    ? null
+                    : onNext ??
                     () {
                       if (currentStep == 2) {
                         creatorState.generateFromMode(

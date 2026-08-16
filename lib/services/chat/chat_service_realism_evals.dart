@@ -39,7 +39,14 @@ extension ChatServiceRealismEvals on ChatService {
   Future<String?> _fireLLMEval(
     String prompt, {
     void Function(String)? onChunk,
-  }) => _llmEvalEngine.fireLLMEval(prompt, onChunk: onChunk);
+    double repeatPenalty = 1.15,
+    String label = 'eval',
+  }) => _llmEvalEngine.fireLLMEval(
+    prompt,
+    onChunk: onChunk,
+    repeatPenalty: repeatPenalty,
+    label: label,
+  );
 
   String _stripThinkBlocks(String text) =>
       _llmEvalEngine.stripThinkBlocks(text);
@@ -56,7 +63,7 @@ extension ChatServiceRealismEvals on ChatService {
   // internally) processes evals in our intended order rather than
   // reverse or interleaved. Zero wall time added — KoboldCpp serializes
   // anyway, so the stagger just ensures already-in-flight ordering.
-  // (_kEvalDispatchStagger lives on the ChatService class body; see note there.)
+  // (_kEvalDispatchStagger is a library-top-level const in chat_service_defaults.dart.)
 
   Future<void> _evaluateRelationshipCall({void Function(String)? onChunk}) =>
       _realismEvals.evaluateRelationshipCall(onChunk: onChunk);
@@ -64,14 +71,28 @@ extension ChatServiceRealismEvals on ChatService {
   Future<void> _evaluateEmotionalStateCall({void Function(String)? onChunk}) =>
       _realismEvals.evaluateEmotionalStateCall(onChunk: onChunk);
 
-  Future<void> _evaluatePhysicalStateCall({void Function(String)? onChunk}) =>
-      _realismEvals.evaluatePhysicalStateCall(onChunk: onChunk);
+  /// [postureOnly] is the post-generation spatial pass — the same eval leaf,
+  /// asked the one question that can only be answered once the reply exists.
+  Future<void> _evaluatePhysicalStateCall({
+    void Function(String)? onChunk,
+    bool postureOnly = false,
+    bool skipClockAdvance = false,
+  }) => _realismEvals.evaluatePhysicalStateCall(
+    onChunk: onChunk,
+    postureOnly: postureOnly,
+    skipClockAdvance: skipClockAdvance,
+  );
 
   Future<void> _evaluateNarrativeCall({void Function(String)? onChunk}) =>
       _realismEvals.evaluateNarrativeCall(onChunk: onChunk);
 
-  Future<void> _evaluateOneShotCall({void Function(String)? onChunk}) =>
-      _realismEvals.evaluateOneShotCall(onChunk: onChunk);
+  Future<void> _evaluateOneShotCall({
+    void Function(String)? onChunk,
+    bool skipClockAdvance = false,
+  }) => _realismEvals.evaluateOneShotCall(
+    onChunk: onChunk,
+    skipClockAdvance: skipClockAdvance,
+  );
 
   /// One-shot trust repair evaluator.
   ///
@@ -85,11 +106,6 @@ extension ChatServiceRealismEvals on ChatService {
     void Function(String)? onChunk,
   }) async {
     if (!_realismEnabled || _activeCharacter == null) return;
-
-    if (_activeCharacter == null) {
-      // Group chat or other mode — relationship evals not supported in this path yet
-      return;
-    }
     final charName = _activeCharacter!.name;
     final persona = _activeCharacter!.personality;
     final recentCount = _messages.length < 10 ? _messages.length : 10;
@@ -120,7 +136,7 @@ extension ChatServiceRealismEvals on ChatService {
 
     try {
       debugPrint('[Realism:TrustRepair] Evaluating repair attempt...');
-      final raw = await _fireLLMEval(prompt, onChunk: onChunk);
+      final raw = await _fireLLMEval(prompt, onChunk: onChunk, label: 'trust_repair');
       if (raw == null) return;
 
       final text = _stripThinkBlocks(raw).trim();
@@ -169,7 +185,13 @@ extension ChatServiceRealismEvals on ChatService {
       'longTermTier': _relationshipService.longTermTier,
       'turnsSinceLongTermCheck': _relationshipService.turnsSinceLongTermCheck,
       'shortTermDeltasSummary': _relationshipService.shortTermDeltasSummary,
-      'moodDecayCounter': _moodDecayCounter,
+      // The decay cadence + the group's hidden inter-character feelings. These
+      // are the eval inputs that used to be missing from this snapshot, so a
+      // group regen could not rewind them; see captureCadenceAndFeelings.
+      // (They replaced 'moodDecayCounter', which was captured, persisted and
+      // restored while no decay logic read it — the real counter was, and is,
+      // RelationshipService's.)
+      ..._relationshipService.captureCadenceAndFeelings(),
       'characterEmotion': _characterEmotion,
       'emotionIntensity': _emotionIntensity,
       'timeOfDay': _timeService.timeOfDay,
@@ -184,6 +206,20 @@ extension ChatServiceRealismEvals on ChatService {
       'activeFixation': _relationshipService.activeFixation,
       'fixationLifespan': _relationshipService.fixationLifespan,
       'spatialStance': _relationshipService.spatialStance,
+      // Pockets & Wardrobe rides the rewind contract like every other
+      // per-turn scalar. Without this a regenerate re-runs the detection pass
+      // on a NEW reply while the record still carries the discarded reply's
+      // changes — she picks the keys up twice, or is left holding something
+      // from a version of the scene that no longer exists. Found in review by
+      // Grok, 2026-08-07, and required by the design doc in as many words.
+      ...(() {
+        final c = _activeCharacter;
+        if (c == null) return const <String, dynamic>{};
+        final p = pocketsFor(_getCharacterIdFromCard(c));
+        return p == null
+            ? const <String, dynamic>{}
+            : {'pockets': p.toJson()};
+      })(),
     };
 
     // Include needs snapshot when the simulation is active (clean port).
@@ -223,21 +259,134 @@ extension ChatServiceRealismEvals on ChatService {
   /// (`beginCollect`/`finalize`) — that wrapping currently differs between the
   /// two paths and is deliberately left to the caller until that divergence is
   /// reconciled.
-  Future<void> _fireStaggeredRealismEvals(void Function(String) onChunk) async {
+  Future<void> _fireStaggeredRealismEvals(
+    void Function(String) onChunk, {
+    bool skipClockAdvance = false,
+  }) async {
+    // Dispatch order is a caching decision, not a semantics one (maintainer,
+    // 2026-08-10: firing order is free to change; eval PHASE is not — all
+    // four remain pre-generation). Relationship, emotional and narrative
+    // open with the byte-identical judgePrefix, so on KoboldCpp's FIFO
+    // queue the first pays the prefill and the next two fast-forward
+    // through it — but only if they arrive CONSECUTIVELY. Scene-time's
+    // prompt is deliberately lean and shares nothing; dispatched in the
+    // middle it would evict the shared prefix between two judges, so it
+    // fires last. (test/services/chat/realism_shared_prefix_test.dart pins
+    // both the prefix and this order.)
     await Future.wait([
       _evaluateRelationshipCall(onChunk: onChunk),
       Future.delayed(
-        ChatService._kEvalDispatchStagger,
+        _kEvalDispatchStagger,
         () => _evaluateEmotionalStateCall(onChunk: onChunk),
       ),
       Future.delayed(
-        ChatService._kEvalDispatchStagger * 2,
-        () => _evaluatePhysicalStateCall(onChunk: onChunk),
-      ),
-      Future.delayed(
-        ChatService._kEvalDispatchStagger * 3,
+        _kEvalDispatchStagger * 2,
         () => _evaluateNarrativeCall(onChunk: onChunk),
       ),
+      Future.delayed(
+        _kEvalDispatchStagger * 3,
+        () => _evaluatePhysicalStateCall(
+          onChunk: onChunk,
+          skipClockAdvance: skipClockAdvance,
+        ),
+      ),
     ]);
+  }
+
+  /// Emotion + narrative + scene-time only — the remaining judges after a
+  /// trust-repair relationship substitute (audit P1.11). Same stagger /
+  /// scene-time-last order as [_fireStaggeredRealismEvals].
+  Future<void> _fireTrustRepairRemainingEvals(
+    void Function(String) onChunk, {
+    bool skipClockAdvance = false,
+  }) async {
+    await Future.wait([
+      _evaluateEmotionalStateCall(onChunk: onChunk),
+      Future.delayed(
+        _kEvalDispatchStagger,
+        () => _evaluateNarrativeCall(onChunk: onChunk),
+      ),
+      Future.delayed(
+        _kEvalDispatchStagger * 2,
+        () => _evaluatePhysicalStateCall(
+          onChunk: onChunk,
+          skipClockAdvance: skipClockAdvance,
+        ),
+      ),
+    ]);
+  }
+
+  /// beginCollect → [fireEvals] → finalize → verifyBatch → apply.
+  ///
+  /// The three multi-call sites (dance normal, dance trust-repair remainder,
+  /// regen) share this so the item-map / verifier wiring cannot drift
+  /// (second-look).
+  Future<void> _runBatchedRealismVerification(
+    Future<void> Function() fireEvals, {
+    String? logSpeakerName,
+  }) async {
+    _realismEvals.beginCollectForBatchedVerification();
+    await fireEvals();
+    await _realismEvals.finalizeBatchedRealismVerifications();
+    final collected = _realismEvals.getCollectedForBatch();
+    if (collected.isEmpty) return;
+    if (logSpeakerName != null) {
+      debugPrint(
+        '[Realism:Unified] Verifying ${collected.length} eval(s) for '
+        '$logSpeakerName',
+      );
+    }
+    final items = collected
+        .map(
+          (p) => (
+            evalKind: p['kind'] as String,
+            rawOutput: p['raw'] as String,
+            sceneResponse: p['scene'] as String,
+            preState: null,
+            activeChar: _activeCharacter,
+            activeGroup: _activeGroup,
+            recentMessages: _messages,
+            promptText: p['prompt'] as String?,
+            injections: (p['injections'] as Map?)?.cast<String, String>(),
+            strictnessOverride: null,
+            maxPassesOverride: null,
+          ),
+        )
+        .toList();
+    final batchRes = await _realismVerifier.verifyBatch(items);
+    await _realismEvals.applyBatchResults(batchRes);
+
+    // The Director's receipt. Every eval on this path defers to the batch and
+    // returns BEFORE the per-eval wrapper that normally stamps the chip
+    // (_verifyAndApply), so with the feature on the deltas were quietly
+    // corrected and the user was shown nothing — the chip only ever appeared
+    // in one-shot mode. One summary for the turn: corrected wins over
+    // accepted, with the corrections' reasons in the tooltip.
+    if (batchRes.isNotEmpty &&
+        _realismVerifier.getRealismVerificationEnabled()) {
+      final corrected = batchRes.values.where((v) => v.status == 'corrected');
+      final passes = batchRes.values.fold<int>(
+        0,
+        (m, v) => v.passes > m ? v.passes : m,
+      );
+      final reasons = corrected
+          .map((v) => v.reason)
+          .where((r) => r.isNotEmpty)
+          .join('; ');
+      // Built through the same factories the single-eval path stamps, so the
+      // metadata shape cannot drift from what the bubble reads (correctedRaw
+      // is unused here — only toMetadata() is).
+      final summary = corrected.isEmpty
+          ? VerificationResult.accepted(raw: '', passes: passes)
+          : VerificationResult.corrected(
+              raw: '',
+              passes: passes,
+              reason: reasons,
+            );
+      _pendingRealismMetadata = {
+        ...?_pendingRealismMetadata,
+        RealismVerification.kMetaKey: summary.toMetadata(),
+      };
+    }
   }
 }
