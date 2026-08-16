@@ -4,7 +4,6 @@
 // V2 creator / creator_notes / character_version must survive import+export.
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/v2_card_service.dart';
 
 void main() {

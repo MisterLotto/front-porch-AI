@@ -4,7 +4,8 @@
 // Tests for the extracted ExpressionService (plain class).
 // Covers: label resolution (manual priority, LLM direct+cache, nuanced, unmapped trigger (post-reclass assert + prompt readable form assert added; guard + !ready edges tested); reclass public),
 // ONNX path (outer getter trigger conditions/cache hit/isGenerating keep-prior/msg change; debounce/classify/last-AI/cancel/cache-post/JSON variants no unit coverage here (see comments; rely on low-level expression_classifier_test.dart + manual; no fake seam for full ONNX dispatch in this wrapper)),
-// resolveExpressionAvatar (no-match/neutral/prime, single, multi + rerollIfSame (deterministic via inter capture of prior result for isNot(last) using real Random; documented)),
+// resolveExpressionAvatar (no-match/neutral/prime, single, multi + same-turn
+// stable + next-reply rerollIfSame avoids last reply's pick),
 // setManual + lastAvatar clear, resetForFreshChat + invalidate (smoke + explicit re-query), public surface, 1:1 vs group parity note (label derived from current-emotion + chat-scoped; owner emotion swap simulated via live ref; no per-speaker expr state).
 // Uses createTestExpression factory (modeled exactly on relationship_service_test.dart / needs / chaos).
 // Real owner dispatch: reset sites passively via pre-existing startNew/setActive/load in key suites (group/session/realism_engine); full label reads, /expression commands, avatar resolve on labeled-avatar cards, regen invalidate, ONNX full (debounce etc) exercised in dedicated unit (partial) + manual smoke (aug edits in key tests add only qualified header notes per review: "reset sites passively hit; full label/command/avatar/regen/ONNX only in dedicated + manual").
@@ -33,6 +34,7 @@ ExpressionService createTestExpression({
   bool isGenerating = false,
   String characterEmotion = '',
   List<ChatMessage> messages = const [],
+  List<ChatMessage>? liveMessages,
   bool isThinking = false,
   bool realismEvalCancelled = false,
   List<String>? handledCancels,
@@ -49,7 +51,7 @@ ExpressionService createTestExpression({
   final storage = _FakeStorageForExpression(mode: storageMode);
 
   // Live messages list for mutation in tests if needed
-  final liveMessages = List<ChatMessage>.from(messages);
+  final live = liveMessages ?? List<ChatMessage>.from(messages);
 
   var cancelled = realismEvalCancelled;
   var evaluating = isEvaluatingRealism;
@@ -68,7 +70,7 @@ ExpressionService createTestExpression({
     getLlmServiceForReclass: () => fakeLlm,
     getIsGenerating: () => generating,
     getCharacterEmotion: () => emoRef.first,
-    getMessages: () => liveMessages,
+    getMessages: () => live,
     getIsThinkingModelForReclass: () => isThinking,
     getRealismEvalCancelled: () => cancelled,
     setRealismEvalCancelled: (v) => cancelled = v,
@@ -230,7 +232,11 @@ void main() {
     test(
       'resolveExpressionAvatar: label match, neutral fallback, prime fallback, multi + reroll',
       () {
-        final svc = createTestExpression(characterEmotion: 'happy');
+        final live = <ChatMessage>[];
+        final svc = createTestExpression(
+          characterEmotion: 'happy',
+          liveMessages: live,
+        );
         final avatars = <AvatarImage>[
           AvatarImage(
             id: 'a1',
@@ -276,13 +282,20 @@ void main() {
         final m1 = svc.resolveExpressionAvatar(card);
         expect(m1?.id, anyOf('a2', 'a3'));
 
-        // rerollIfSame avoids last (capture intermediate for deterministic isNot(last) proof using real Random)
-        final inter = svc.resolveExpressionAvatar(card, rerollIfSame: true);
-        final m2 = svc.resolveExpressionAvatar(card, rerollIfSame: true);
+        // Same reply, even with the reroll setting on: this resolver runs
+        // from build() per streamed token. A second call must not flicker.
         expect(
-          m2?.id,
-          isNot(inter?.id),
-        ); // picked different from the one just shown (proves avoid logic)
+          svc.resolveExpressionAvatar(card, rerollIfSame: true)?.id,
+          m1?.id,
+        );
+
+        // A new assistant reply is a new turn: reroll avoids last reply's pick.
+        live.add(
+          ChatMessage(text: 'next', sender: 'char', isUser: false),
+        );
+        final m2 = svc.resolveExpressionAvatar(card, rerollIfSame: true);
+        expect(m2?.id, anyOf('a2', 'a3'));
+        expect(m2?.id, isNot(m1?.id));
 
         // no match for current -> neutral (use unmapped emotion so no joy match)
         final svc2 = createTestExpression(characterEmotion: 'flibberty');

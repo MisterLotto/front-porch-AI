@@ -3,6 +3,19 @@
 
 # Changelog
 
+## 2026-08-16 — fix(ci): leftover-close unused import + expression test + ImageGen goldens
+- **Why:** Promote PR analyze died on unused import in
+  character_card_credits_test. Rawhide leftover-close unit job died
+  because the expression test still asserted per-call flicker
+  (Expected: not 'a3'). Linux goldens died: hiding Draw Things off
+  macOS changed ImageGen Settings pixels.
+- **What:** drop unused models barrel; same-turn resolve stays put,
+  next-reply reroll still avoids last pick; regenerate the two
+  image_gen_settings goldens in the Linux container.
+- **Files:** character_card_credits_test, expression_classifier_test,
+  image_gen_settings.{dark,light}.png
+- **Commit:** 0f17d636
+
 ## 2026-08-16 — fix(sweep): closed the 1.3 skip list + mediums-review leftovers
 - **Why:** Agent-collision skips plus confirmed partials from
   watch-the-mediums. Users still hit Enhance-after-restore, wrong
@@ -7730,7 +7743,7 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
   - `docs/Rawhide.md` — extended the burst bullet to mention the size slider.
 - **Design notes:** no new private methods (public setter follows the established `setExpression*` convention). Slider persists on `onChanged`; `divisions` keep writes to discrete steps so no drag-buffer plumbing into the stateless tab was needed. Badge size is now identical for all users per maintainer direction — no conditional sizing.
 - **Verification:** dart/flutter toolchain is unavailable in this environment, so `flutter analyze`/`format` could NOT be run here — changes were verified by manual review against the compiler rules (const removed where a non-const field is now used; all new refs resolve; AppColors honored). Analyze/format must be run before merge.
-- **Commit:** (pending)
+- **Commit:** 0f17d636
 ## 2026-07-09 — Stories: friendly AI-backend errors + up-front readiness check
 
 - **Reason:** Discord user hit "OS Error: The remote computer refused the network connection" (Windows errno 1225 = connection refused, worded as "Connection refused, errno = 61" on macOS) when running story stages without their AI backend running. Story pages surfaced raw `e.toString()` and the pipeline attempted the connection with no readiness check, so the failure read as scary network jargon instead of "start your engine".
