@@ -76,11 +76,16 @@ class _MemoryPanelState extends State<MemoryPanel> {
     try {
       final repo = Provider.of<CharacterRepository>(context, listen: false);
       final sources = await repo.getMemorySources(activeChar.dbId!);
+      // The read crosses the DB isolate, and the panel dies on an accordion
+      // collapse or a chat switch — setState on a defunct State throws.
+      if (!mounted) return;
       setState(() {
         _selectedSources = sources.toSet();
         _sourcesLoaded = true;
       });
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[RAG:UI] Failed to load memorySources: $e');
+      if (!mounted) return;
       setState(() => _sourcesLoaded = true);
     }
   }

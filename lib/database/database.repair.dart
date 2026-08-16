@@ -26,6 +26,34 @@ extension AppDatabaseMaintenance on AppDatabase {
     }
   }
 
+  /// True when this database holds no library content at all — no characters,
+  /// no chats, no groups.
+  ///
+  /// This is the "is this a brand-new install?" question the beta stable-DB
+  /// import needs. It used to ask whether the beta `.db` FILE existed, which
+  /// can never be false by the time any UI runs: startup opens (and therefore
+  /// creates) the database before the first frame. Emptiness is the honest
+  /// signal, and it also refuses to offer an import that would overwrite a
+  /// beta library the user has already put work into.
+  ///
+  /// Personas are deliberately not counted — startup seeds a default one, so
+  /// a fresh database always has exactly one.
+  Future<bool> hasNoUserContent() async {
+    try {
+      final row = await customSelect(
+        'SELECT (SELECT COUNT(*) FROM characters) '
+        '+ (SELECT COUNT(*) FROM sessions) '
+        '+ (SELECT COUNT(*) FROM groups) AS n',
+      ).getSingle();
+      return (row.data['n'] as int? ?? 0) == 0;
+    } catch (e) {
+      // Unreadable counts must not be read as "empty" — that would offer to
+      // overwrite a library we simply failed to measure.
+      debugPrint('[DB] Could not count library content: $e');
+      return false;
+    }
+  }
+
   /// Ensures all columns that the current Dart schema and application code expect
   /// are physically present in the database. This is the robust, always-on safety
   /// net for users whose databases predate recent features (group cards, per-character
@@ -50,11 +78,42 @@ extension AppDatabaseMaintenance on AppDatabase {
     bool anyRepairDone = false;
 
     // Physical table -> list of "col_name TYPE [NOT NULL DEFAULT 'lit']" fragments.
-    // These are exactly the columns that were added (or re-added) via the old
-    // silent-catch ALTERs in onUpgrade for schema versions 9 through 32.
+    // These are the columns that were added (or re-added) via the old
+    // silent-catch ALTERs in onUpgrade — v5 onward, not just the v9-v32 window
+    // this comment used to name; the v5/v6/v10/v12-v19/v24 columns are on the
+    // same fragile pattern and are listed below for exactly that reason.
     // The presence of these in the list is what guarantees 1:1 + group chat parity
     // features will not produce "no such column" on real user databases.
     const Map<String, List<String>> columnsToEnsure = {
+      'characters': [
+        // Every one of these was added by a bare `try { ALTER } catch (_) {}`
+        // in the ladder, so a failure (disk full, DB locked by a second
+        // instance) leaves the column permanently absent — and Drift's
+        // generated SELECT for `characters` names them all, so the library
+        // then throws "no such column" on every read with no way back.
+        "memory_sources TEXT NOT NULL DEFAULT '[]'", // v5
+        "evolved_personality TEXT NOT NULL DEFAULT ''", // v10
+        "evolved_scenario TEXT NOT NULL DEFAULT ''", // v10
+        'evolution_count INTEGER NOT NULL DEFAULT 0', // v10
+        'prime_avatar_index INTEGER NOT NULL DEFAULT 1', // v24
+      ],
+      'messages': [
+        // v14 — same silent-catch pattern. Without these the whole transcript
+        // is unreadable, not merely un-annotated.
+        'metadata TEXT',
+        'swipe_metadata TEXT',
+      ],
+      'personas': [
+        // v6. Dormant since the Journal replaced auto-persona, but Drift still
+        // names it in every personas SELECT.
+        "learned_facts TEXT NOT NULL DEFAULT '[]'",
+        // v3 (the UUID rebuild). Epoch 0 rather than "now" because SQLite
+        // rejects a non-constant DEFAULT in ALTER TABLE ADD COLUMN; a 1970
+        // timestamp on a row that would otherwise be unreadable is the better
+        // of the two outcomes.
+        'updated_at INTEGER NOT NULL DEFAULT 0',
+        'deleted_at INTEGER',
+      ],
       'objectives': [
         'chat_id TEXT', // v29 — the one that was actively crashing group objective loads
         'is_primary INTEGER NOT NULL DEFAULT 1', // v20
@@ -95,8 +154,43 @@ extension AppDatabaseMaintenance on AppDatabase {
         'folder_id TEXT',
         // v34 — portable group stable id (Stoop update-in-place)
         'stable_id TEXT',
+        // v3 (the UUID rebuild) — see the personas note on the epoch default.
+        'updated_at INTEGER NOT NULL DEFAULT 0',
+        'deleted_at INTEGER',
       ],
       'sessions': [
+        // v12–v19 Realism columns. All added with the same silent catch, and
+        // all named unconditionally by Drift's generated SELECT for sessions —
+        // one missing column makes every chat open and every session-list
+        // query throw "no such column". Defaults match the Sessions Table
+        // class; where the historical ALTER disagreed (v12 wrote
+        // relationship_tier DEFAULT 2, a scale that no longer exists) the
+        // Table class wins, because that is the value every fresh install has.
+        // v4 — the Journal's "Where we are" recap reuses these two.
+        'summary TEXT',
+        'summary_last_index INTEGER',
+        'affection_score INTEGER NOT NULL DEFAULT 0', // v12
+        'relationship_tier INTEGER NOT NULL DEFAULT 0', // v12
+        'realism_enabled INTEGER NOT NULL DEFAULT 0', // v13
+        'short_term_mood INTEGER NOT NULL DEFAULT 0', // v13
+        'mood_decay_counter INTEGER NOT NULL DEFAULT 0', // v13
+        "character_emotion TEXT NOT NULL DEFAULT ''", // v13
+        "emotion_intensity TEXT NOT NULL DEFAULT ''", // v13
+        "time_of_day TEXT NOT NULL DEFAULT 'morning'", // v13
+        'day_count INTEGER NOT NULL DEFAULT 1', // v13
+        'arousal_level INTEGER NOT NULL DEFAULT 0', // v15
+        'long_term_score INTEGER NOT NULL DEFAULT 0', // v16
+        'long_term_tier INTEGER NOT NULL DEFAULT 0', // v16
+        'turns_since_long_term_check INTEGER NOT NULL DEFAULT 0', // v16
+        'short_term_deltas_summary INTEGER NOT NULL DEFAULT 0', // v16
+        'trust_level INTEGER NOT NULL DEFAULT 0', // v17
+        "active_fixation TEXT NOT NULL DEFAULT ''", // v17
+        'fixation_lifespan INTEGER NOT NULL DEFAULT 0', // v17
+        "spatial_stance TEXT NOT NULL DEFAULT ''", // v17
+        'trust_repair_pending INTEGER NOT NULL DEFAULT 0', // v18
+        "evolved_personality TEXT NOT NULL DEFAULT ''", // v19
+        "evolved_scenario TEXT NOT NULL DEFAULT ''", // v19
+        'evolution_count INTEGER NOT NULL DEFAULT 0', // v19
         // v30 — the live per-group-member realism state (clean replacement for hidden checkpoint msgs)
         'group_realism_state TEXT NOT NULL DEFAULT "{}"',
         // Additional columns added with the same fragile pattern that group/per-char

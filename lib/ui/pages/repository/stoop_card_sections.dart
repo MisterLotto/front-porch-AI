@@ -115,8 +115,11 @@ List<Widget> stoopWorldSections(
         ]
       : const <String>[];
   final lore = card['lorebook'];
-  final entries = (lore is Map ? lore['entries'] : null) as List?;
-  final valid = entries?.whereType<Map>().toList() ?? const [];
+  // Stranger-uploaded JSON: `is`-check, never `as` — a wrong-typed 'entries'
+  // (string, map) crashed the whole detail panel (1.3 sweep).
+  final rawEntries = lore is Map ? lore['entries'] : null;
+  final valid =
+      rawEntries is List ? rawEntries.whereType<Map>().toList() : const <Map>[];
   return [
     stoopTextSection(
       context,
@@ -139,12 +142,13 @@ Widget _defaultFirstMessage(
   String name,
 ) {
   final first = stoopResolveMacros((card['first_mes'] ?? '').toString(), name);
-  final alts =
-      (card['alternate_greetings'] as List?)
-          ?.map((e) => stoopResolveMacros(e.toString(), name))
-          .where((x) => x.isNotEmpty)
-          .toList() ??
-      const [];
+  final rawAlts = card['alternate_greetings'];
+  final alts = rawAlts is List
+      ? rawAlts
+            .map((e) => stoopResolveMacros(e.toString(), name))
+            .where((x) => x.isNotEmpty)
+            .toList()
+      : const <String>[];
   final greetings = [if (first.isNotEmpty) first, ...alts];
   if (greetings.isEmpty) return const SizedBox.shrink();
   return stoopTextSection(
@@ -259,8 +263,11 @@ Widget stoopLorebookSection(
   String name,
 ) {
   final book = card['character_book'];
-  final entries = (book is Map ? book['entries'] : null) as List?;
-  final valid = entries?.whereType<Map>().toList() ?? const [];
+  // Stranger JSON: `is`, never `as` (1.3 sweep — the sibling builders kept
+  // crashing after the detail panel was hardened).
+  final rawEntries = book is Map ? book['entries'] : null;
+  final valid =
+      rawEntries is List ? rawEntries.whereType<Map>().toList() : const <Map>[];
   if (valid.isEmpty) return const SizedBox.shrink();
   return stoopLorebookEntries(context, 'Lorebook (${valid.length})', valid, name);
 }
@@ -304,7 +311,10 @@ Widget stoopLorebookEntries(
 
 // The entry's trigger keywords as little chips (falls back to its name/label).
 Widget _lorebookTriggers(BuildContext context, Map e) {
-  final keys = (e['keys'] as List?)?.map((k) => k.toString()).toList() ?? const [];
+  final rawKeys = e['keys'];
+  final keys = rawKeys is List
+      ? rawKeys.map((k) => k.toString()).toList()
+      : const <String>[];
   if (keys.isEmpty) {
     return Text(
       (e['name'] ?? e['comment'] ?? 'Entry').toString(),

@@ -79,7 +79,14 @@ extension ChatServiceClimax on ChatService {
       if (meta['climax_triggered'] != true) {
         meta['climax_triggered'] = true;
         meta['pre_climax_arousal'] = preClimaxArousal;
-        msg.swipeMetadata[msg.swipeIndex] = meta;
+        // Through the setter, never `swipeMetadata[swipeIndex] = ...`: the
+        // list is persisted only when some entry is non-null, so a reloaded
+        // (or imported) message that has 4 swipes and no metadata comes back
+        // with a ONE-element list and swipeIndex 3. The raw write threw
+        // RangeError inside the post-gen phase, which surfaced as a bogus
+        // "generation failed" banner and skipped pockets/posture/restamp.
+        // The setter pads first (chat_message.dart).
+        msg.activeMetadata = meta;
       }
     }
     _nsfwService.applyClimaxEffects(turns: turns);

@@ -21,6 +21,9 @@ import { MessageEditModal } from '../components/MessageEditModal';
 import { type Message, type Realism, type LoreEntry, type ChatThemeOverrides } from '../components/chatTypes';
 import { ChatThemeSettings, resolveThemeColors } from '../components/ChatThemeSettings';
 import { postChatSend } from './chatSend';
+import { describeChatLoadFailure } from './chatLoad';
+import { useAuth } from '../auth/AuthContext';
+import { useLayout } from '../hooks/useBreakpoint';
 
 interface ChatState {
   character: { name: string; id: string } | null;
@@ -68,7 +71,17 @@ interface ChatState {
 
 export function ChatPage() {
   const navigate = useNavigate();
+  const { setAuthenticated } = useAuth();
+  // The insight column is desktop-only (CSS hides it below 1024px) and the
+  // Stats drawer is its phone/tablet stand-in — mount whichever one is on
+  // screen. `display:none` does not unmount, so rendering both meant every
+  // chat refresh fired the sidebar's GETs (tools / journal / growth / places)
+  // for a panel nobody could see, twice over with the drawer open.
+  const { isDesktop } = useLayout();
   const [state, setState] = useState<ChatState | null>(null);
+  // Why the chat could not be loaded — shown instead of a spinner that would
+  // otherwise never resolve.
+  const [loadError, setLoadError] = useState('');
   const [streaming, setStreaming] = useState('');
   // Living Time §2: sessions whose welcome-back banner was dismissed (ephemeral).
   const [absenceDismissed, setAbsenceDismissed] = useState<Set<string>>(new Set());
@@ -129,7 +142,19 @@ export function ChatPage() {
   const canMic = !!voice?.sttAvailable && typeof window !== 'undefined' && window.isSecureContext;
 
   const refresh = useCallback(async () => {
-    const s = await api.get<ChatState>('/api/chat/state');
+    let s: ChatState;
+    try {
+      s = await api.get<ChatState>('/api/chat/state');
+    } catch (e) {
+      // Never rethrow: every caller fires this and walks away, so a rejection
+      // here used to be an unhandled promise AND a permanent spinner.
+      const failure = describeChatLoadFailure(e);
+      if (failure.signedOut) setAuthenticated(false);
+      else console.warn('[chat] state refresh failed', e);
+      setLoadError(failure.message);
+      return;
+    }
+    setLoadError('');
     setState(s);
     // Recover the Chance Time modal after a reconnect — a phone may have slept
     // through the live `chance_time` event while the engine stayed parked.
@@ -145,7 +170,7 @@ export function ChatPage() {
     if (!s.isEvaluatingRealism && !s.isCheckingCompletion && !s.isGenerating) {
       setProcessing(NO_PROCESSING);
     }
-  }, []);
+  }, [setAuthenticated]);
 
   // Trailing-debounced refresh for high-frequency `chat_updated` bursts: fires
   // ~80ms after the last event so a flurry collapses into a single re-render
@@ -466,13 +491,28 @@ export function ChatPage() {
       setLoadingSessions(false);
     }
   };
+  // Switching chats abandons whatever the old one was doing on screen. The
+  // server may still be finishing that generation (its settle wait gives up
+  // after 15s), and its tokens keep arriving on the shared socket — without
+  // this the previous character's half-written reply stayed on screen as a
+  // live bubble under the NEW conversation and kept growing. Same reasoning as
+  // the `connected` handler above; the chance-time modal belongs to the chat
+  // being left, too.
+  const clearLiveTurnUi = () => {
+    setStreaming('');
+    setGenStatus(null);
+    setImageProg(null);
+    setChance(null);
+  };
   const loadSession = async (sessionId: string) => {
     setShowSessions(false);
+    clearLiveTurnUi();
     await api.post('/api/chat/session', { sessionId });
     await refresh();
   };
   const newChat = async () => {
     setShowSessions(false);
+    clearLiveTurnUi();
     await api.post('/api/chat/session', { action: 'new' });
     await refresh();
   };
@@ -487,7 +527,19 @@ export function ChatPage() {
     [state?.cast],
   );
 
-  if (!state) return <div className="centered"><div className="spinner" /></div>;
+  if (!state) {
+    if (loadError) {
+      return (
+        <div className="page centered-col">
+          <p className="muted">⚠️ {loadError}</p>
+          <button className="primary" onClick={() => void refresh()}>
+            Try again
+          </button>
+        </div>
+      );
+    }
+    return <div className="centered"><div className="spinner" /></div>;
+  }
 
   const cast = state.cast ?? [];
   // A chat is active if there's a cast (group or 1:1) or a host character.
@@ -743,16 +795,19 @@ export function ChatPage() {
         />
       )}
 
-      {/* Persistent insight column on desktop (CSS-hidden on phones). */}
-      {insight && (
+      {/* Persistent insight column — desktop only. The 1024px here is the same
+          line `.chat-aside`'s media query draws; below it the column is
+          display:none, and a hidden mount still ran every sidebar fetch. */}
+      {isDesktop && insight && (
         <aside className="chat-aside" style={{ width: asideWidth }}>
           <div className="aside-resizer" onMouseDown={startAsideResize} title="Drag to resize" />
           {insight}
         </aside>
       )}
 
-      {/* Insight as a slide-over drawer on phones. */}
-      {showStats && insight && (
+      {/* Insight as a slide-over drawer below desktop. Also gated, so widening
+          the window past 1024 with the drawer still open can't mount it twice. */}
+      {!isDesktop && showStats && insight && (
         <div className="drawer-backdrop" onClick={() => setShowStats(false)}>
           <div className="sessions-drawer stats-drawer" onClick={(e) => e.stopPropagation()}>
             <div className="drawer-head">

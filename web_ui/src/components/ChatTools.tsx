@@ -190,6 +190,37 @@ function NumField({
   );
 }
 
+/** Free-text field that commits on blur, keeping the half-typed draft alive
+ *  across a refetch. The tools sidebar reloads its WHOLE snapshot on every
+ *  chat refresh (a finished journal pass, a message from another device, a
+ *  socket reconnect), so binding a textarea straight to that object threw away
+ *  everything typed since the last blur. Syncing on the primitive text — the
+ *  NumField rule — means an identical refetch is a no-op. */
+export function TextField({
+  value,
+  rows,
+  placeholder,
+  onCommit,
+}: {
+  value: string;
+  rows: number;
+  placeholder?: string;
+  onCommit: (v: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  return (
+    <textarea
+      className="note-input"
+      rows={rows}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => draft !== value && onCommit(draft)}
+      placeholder={placeholder}
+    />
+  );
+}
+
 /** Hand-add row for Pockets & Wardrobe (desktop dialog parity, 2026-08-13).
  *  "Give" hands the item over in-scene — it lands in her hands and she knows
  *  it came from you. "Add" is the quiet drop (the Easter egg): it lands in
@@ -798,13 +829,11 @@ export function ChatTools({
       <details className="tool-section">
         <summary>Where we are</summary>
         <div className="tool-body">
-          <textarea
-            className="note-input"
-            rows={4}
+          <TextField
             value={t.summary.text}
-            onChange={(e) => setT({ ...t, summary: { ...t.summary, text: e.target.value } })}
-            onBlur={() => apply(api.post<ToolsState>(`/api/chat/tools/summary${q}`, { text: t.summary.text }))}
+            rows={4}
             placeholder="The character's recap of where things stand…"
+            onCommit={(text) => apply(api.post<ToolsState>(`/api/chat/tools/summary${q}`, { text }))}
           />
           <div className="tool-row">
             <button

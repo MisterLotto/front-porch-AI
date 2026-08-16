@@ -197,8 +197,14 @@ extension ChatServiceSpeakerObjectives on ChatService {
         final list = entry.value as List? ?? [];
         for (final objData in list) {
           final objMap = objData as Map<String, dynamic>? ?? {};
-          final newId =
-              'obj_${DateTime.now().millisecondsSinceEpoch}_${charId.hashCode}';
+          // Uuid, like every other objective write (chat_service_objectives).
+          // The old id was `obj_<millis>_<charId.hashCode>`, built INSIDE this
+          // loop from the OUTER key — so two objectives for the same member
+          // written in the same millisecond (routinely: the inserts are
+          // adjacent) collided on the primary key. The insert threw, the bare
+          // catch below ate it, and every remaining member's quests were
+          // dropped with no log.
+          final newId = const Uuid().v4();
           await _db.insertObjective(
             ObjectivesCompanion.insert(
               id: newId,
@@ -220,11 +226,17 @@ extension ChatServiceSpeakerObjectives on ChatService {
         }
       }
 
-      // Remove the marker so it doesn't seed again
+      // Remove the marker so it doesn't seed again. The marker lives on the
+      // GROUP row, and _saveChat only upserts the session — so the in-memory
+      // clear used to evaporate on the next launch and every re-entry seeded
+      // the same quests all over again. Save the group too.
       map.remove('imported_member_objectives');
       _activeGroup!.defaultMemberRealismState = jsonEncode(map);
+      await _groupChatRepository?.save(_activeGroup!);
       await _saveChat();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[ChatService] Imported member objectives seed failed: $e');
+    }
   }
 
   String _getRealismStateInjection() {

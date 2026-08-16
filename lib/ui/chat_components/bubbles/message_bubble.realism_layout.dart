@@ -52,29 +52,46 @@ extension _BubbleRealismLayout on _MessageBubbleState {
       mainAxisSize: MainAxisSize.min,
       children: classicSpaced,
     );
+    final classicBox = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.resolve(
+          context,
+          AppColors.resolve(
+            context,
+            Colors.black12,
+            Colors.black.withValues(alpha: 0.06),
+          ),
+          Colors.black.withValues(alpha: 0.06),
+        ),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: classicRow,
+    );
+
+    // Built once so BOTH layouts below can render them — see _reprocessPills.
+    final pills = _reprocessPills();
 
     if (needsChipList.isEmpty) {
       // Nothing classic and no needs chips → nothing to show (guard should have caught most,
       // but be defensive after 0-delta filtering in needs).
-      if (classicSpaced.isEmpty) return const SizedBox.shrink();
+      if (classicSpaced.isEmpty && pills.isEmpty) return const SizedBox.shrink();
+      if (pills.isEmpty) {
+        return Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: classicBox,
+        );
+      }
       return Padding(
         padding: const EdgeInsets.only(top: 10),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: AppColors.resolve(
-              context,
-              AppColors.resolve(
-                context,
-                Colors.black12,
-                Colors.black.withValues(alpha: 0.06),
-              ),
-              Colors.black.withValues(alpha: 0.06),
-            ),
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: Colors.white10),
-          ),
-          child: classicRow,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (classicSpaced.isNotEmpty) classicBox,
+            ...pills,
+          ],
         ),
       );
     }
@@ -90,24 +107,7 @@ extension _BubbleRealismLayout on _MessageBubbleState {
         mainAxisSize: MainAxisSize.min,
         children: [
           // Row 1: Classic Realism (Bond, Trust, Lust, Mood, Time, Chance Time, Director status, etc.)
-          if (classicSpaced.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColors.resolve(
-                  context,
-                  AppColors.resolve(
-                    context,
-                    Colors.black12,
-                    Colors.black.withValues(alpha: 0.06),
-                  ),
-                  Colors.black.withValues(alpha: 0.06),
-                ),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: Colors.white10),
-              ),
-              child: classicRow,
-            ),
+          if (classicSpaced.isNotEmpty) classicBox,
 
           if (classicSpaced.isNotEmpty) const SizedBox(height: 4),
 
@@ -126,151 +126,166 @@ extension _BubbleRealismLayout on _MessageBubbleState {
           ),
 
           // Row 3: Manual Reprocess / Revert buttons (only for last non-user msg with usable needs state)
-          if (widget.chatService != null &&
-              index == widget.chatService!.messages.length - 1 &&
-              !message.isUser &&
-              !widget.chatService!.isGenerating) ...[
-            // A guard: only show reprocess affordance if this msg carries realism_state['needs']
-            if (() {
-              final m = message.activeMetadata;
-              final rs = m?['realism_state'];
-              return rs is Map && rs['needs'] != null;
-            }()) ...[
-              const SizedBox(height: 6),
-              Tooltip(
-                message: 'Reprocess Needs with critique',
-                preferBelow: false,
-                textStyle: const TextStyle(fontSize: 12, color: Colors.white),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1F2937),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.white12),
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () => showReprocessNeedsDialog(context, index),
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.resolve(
-                          context,
-                          AppColors.optionalAccent.withValues(alpha: 0.15),
-                          AppColors.optionalAccent.withValues(alpha: 0.15),
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: AppColors.resolve(
-                            context,
-                            AppColors.optionalAccent.withValues(alpha: 0.4),
-                            AppColors.optionalAccent.withValues(alpha: 0.4),
-                          ),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.rate_review,
-                            size: 12,
-                            color: AppColors.optionalAccent,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Manual Reprocess',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.optionalAccent,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-            // D: Revert pill shown only when pre-reprocess stash exists on this (last) msg
-            if (message.activeMetadata != null &&
-                (message.activeMetadata!['needs_deltas_pre_reprocess']
-                    is Map)) ...[
-              const SizedBox(height: 4),
-              Tooltip(
-                message:
-                    'Restore previous Needs deltas and live state before the last reprocess',
-                preferBelow: false,
-                textStyle: const TextStyle(fontSize: 12, color: Colors.white),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1F2937),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.white12),
-                ),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () async {
-                      final chat = widget.chatService;
-                      if (chat != null) {
-                        try {
-                          await chat.revertNeedsReprocess(index);
-                        } catch (e) {
-                          debugPrint('[Realism:Needs] revert error: $e');
-                        }
-                      }
-                    },
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.resolve(
-                          context,
-                          AppColors.optionalAccent.withValues(alpha: 0.12),
-                          AppColors.optionalAccent.withValues(alpha: 0.12),
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: AppColors.resolve(
-                            context,
-                            AppColors.optionalAccent.withValues(alpha: 0.35),
-                            AppColors.optionalAccent.withValues(alpha: 0.35),
-                          ),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.undo,
-                            size: 11,
-                            color: AppColors.optionalAccent,
-                          ),
-                          SizedBox(width: 4),
-                          Text(
-                            'Revert reprocess',
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.optionalAccent,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ],
+          ...pills,
         ],
       ),
     );
+  }
+
+  /// The Manual Reprocess / Revert-reprocess pills, or an empty list when this
+  /// message cannot be reprocessed.
+  ///
+  /// They used to be nested inside the needs-chip branch of the layout above,
+  /// so they only existed on a turn that produced at least one NON-ZERO need
+  /// delta. A reprocess whose correction nets to zero writes an empty
+  /// `needs_deltas` while keeping `needs_deltas_pre_reprocess` — which drew no
+  /// needs chip and therefore stranded Revert, the one control whose whole job
+  /// is undoing what the user just did. The web twin (ChipsRow.tsx) already
+  /// renders them as a sibling of both chip rows; this matches it.
+  List<Widget> _reprocessPills() {
+    final chat = widget.chatService;
+    if (chat == null ||
+        index != chat.messages.length - 1 ||
+        message.isUser ||
+        chat.isGenerating) {
+      return const <Widget>[];
+    }
+    final meta = message.activeMetadata;
+    // Only show the reprocess affordance if this msg carries realism_state['needs']
+    final rs = meta?['realism_state'];
+    final canReprocess = rs is Map && rs['needs'] != null;
+    // Revert is offered only when a pre-reprocess stash exists on this (last) msg
+    final canRevert = meta != null && meta['needs_deltas_pre_reprocess'] is Map;
+    if (!canReprocess && !canRevert) return const <Widget>[];
+
+    return [
+      if (canReprocess) ...[
+        const SizedBox(height: 6),
+        Tooltip(
+          message: 'Reprocess Needs with critique',
+          preferBelow: false,
+          textStyle: const TextStyle(fontSize: 12, color: Colors.white),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1F2937),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: Colors.white12),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () => showReprocessNeedsDialog(context, index),
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.resolve(
+                    context,
+                    AppColors.optionalAccent.withValues(alpha: 0.15),
+                    AppColors.optionalAccent.withValues(alpha: 0.15),
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: AppColors.resolve(
+                      context,
+                      AppColors.optionalAccent.withValues(alpha: 0.4),
+                      AppColors.optionalAccent.withValues(alpha: 0.4),
+                    ),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.rate_review,
+                      size: 12,
+                      color: AppColors.optionalAccent,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Manual Reprocess',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.optionalAccent,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+      if (canRevert) ...[
+        const SizedBox(height: 4),
+        Tooltip(
+          message:
+              'Restore previous Needs deltas and live state before the last reprocess',
+          preferBelow: false,
+          textStyle: const TextStyle(fontSize: 12, color: Colors.white),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1F2937),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: Colors.white12),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: () async {
+                try {
+                  await chat.revertNeedsReprocess(index);
+                } catch (e) {
+                  debugPrint('[Realism:Needs] revert error: $e');
+                }
+              },
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 3,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.resolve(
+                    context,
+                    AppColors.optionalAccent.withValues(alpha: 0.12),
+                    AppColors.optionalAccent.withValues(alpha: 0.12),
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: AppColors.resolve(
+                      context,
+                      AppColors.optionalAccent.withValues(alpha: 0.35),
+                      AppColors.optionalAccent.withValues(alpha: 0.35),
+                    ),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.undo,
+                      size: 11,
+                      color: AppColors.optionalAccent,
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      'Revert reprocess',
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.optionalAccent,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    ];
   }
 }

@@ -306,6 +306,18 @@ class UpdateService extends ChangeNotifier {
           expectedBytes: totalBytes,
         );
         if (invalid != null) throw Exception(invalid);
+        // A complete fake 200 (a captive portal / CDN error page big enough
+        // to pass the size floor) must still not become the installer: an
+        // HTML body is text, real installers are binary. First byte '<' (or
+        // a leading doctype after whitespace) = not an installer.
+        final head = await file.openRead(0, 64).fold<List<int>>(
+          <int>[],
+          (a, b) => a..addAll(b),
+        );
+        final headText = String.fromCharCodes(head).trimLeft().toLowerCase();
+        if (headText.startsWith('<')) {
+          throw Exception('installer download is an HTML page, not a binary');
+        }
 
         _pendingInstallerPath = installerPath;
         _downloadComplete = true;

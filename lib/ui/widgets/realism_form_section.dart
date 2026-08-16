@@ -21,6 +21,7 @@ import 'package:flutter/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/identity_chip_lists.dart';
 import 'package:front_porch_ai/ui/widgets/story_begins_row.dart';
+import 'package:front_porch_ai/ui/widgets/synced_text_field.dart';
 
 /// Shared Realism Engine configuration form.
 ///
@@ -400,14 +401,13 @@ class RealismFormSection extends StatelessWidget {
                               color: AppColors.borderOf(context),
                             ),
                           ),
-                          child: TextField(
-                            controller:
-                                TextEditingController(text: dayCount.toString())
-                                  ..selection = TextSelection.fromPosition(
-                                    TextPosition(
-                                      offset: dayCount.toString().length,
-                                    ),
-                                  ),
+                          // SyncedTextField, not a TextField with an inline
+                          // controller: every caller rebuilds this section on
+                          // each keystroke, and a controller built in build()
+                          // loses the caret (and any IME composition) every
+                          // frame.
+                          child: SyncedTextField(
+                            value: dayCount.toString(),
                             keyboardType: TextInputType.number,
                             inputFormatters: [
                               FilteringTextInputFormatter.digitsOnly,
@@ -539,11 +539,10 @@ class RealismFormSection extends StatelessWidget {
                             color: AppColors.borderOf(context),
                           ),
                         ),
-                        child: TextField(
-                          controller: TextEditingController(text: emotion)
-                            ..selection = TextSelection.fromPosition(
-                              TextPosition(offset: emotion.length),
-                            ),
+                        // See the Day Number field: the controller must be
+                        // owned, or mid-word edits jump to the end of the text.
+                        child: SyncedTextField(
+                          value: emotion,
                           style: TextStyle(
                             color: AppColors.textPrimary(context),
                             fontSize: 14,

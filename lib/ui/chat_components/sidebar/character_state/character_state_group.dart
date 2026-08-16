@@ -17,6 +17,7 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/services/chat/chat.dart'
     show AmbitionService, Pockets;
@@ -95,6 +96,17 @@ class _CharacterStateGroupState extends State<CharacterStateGroup> {
     final ambitions = chat.activeCharacter == null
         ? const <({String text, int progress})>[]
         : chat.ambitionsFor(chat.activeCharacter!);
+    // Mirrors ChatService._clockRunning: the clock has TWO drivers, the engine
+    // or the opt-in standalone clock. Porch Life only OFFERS that switch with
+    // the engine off, so gating the strip on realism alone hid the clock in
+    // the one configuration where a user can turn the standalone one on — it
+    // was spending a model call per turn with nothing to show for it.
+    final clockRunning =
+        chat.timeService.passageOfTimeEnabled &&
+        (chat.realismEnabled ||
+            Provider.of<StorageService>(
+              context,
+            ).realismSettings.standaloneClockEnabled);
 
     return PorchAccordion(
       key: _accordionKey,
@@ -308,7 +320,7 @@ class _CharacterStateGroupState extends State<CharacterStateGroup> {
               },
             ),
           ],
-          if (realismOn || widget.isGroup) ...[
+          if (realismOn || widget.isGroup || clockRunning) ...[
             const SizedBox(height: 10),
             TimeStrip(chat: chat),
           ],

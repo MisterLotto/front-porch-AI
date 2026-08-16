@@ -40,6 +40,21 @@ class _GroupSettingsDialogState extends State<GroupSettingsDialog>
     super.dispose();
   }
 
+  /// Flushes the General tab's controllers onto the live group and persists.
+  ///
+  /// Shared by Save and Done. Every other tab edits the live [GroupChat] as the
+  /// user types, so closing keeps those edits; General holds name / scenario /
+  /// first message / turn rules in controllers until this runs — which is why
+  /// the primary "Done" button used to throw away everything typed there.
+  /// Returns true when the group was actually written to the repository.
+  bool _commitEdits() {
+    _generalTabKey.currentState?.applyToLiveGroup();
+    final g = widget.chatService.activeGroup;
+    if (g == null || widget.groupRepo == null) return false;
+    widget.groupRepo!.save(g);
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -161,10 +176,7 @@ class _GroupSettingsDialogState extends State<GroupSettingsDialog>
                     OutlinedButton(
                       onPressed: () {
                         // General tab edits live in controllers until Save.
-                        _generalTabKey.currentState?.applyToLiveGroup();
-                        final g = widget.chatService.activeGroup;
-                        if (g != null) {
-                          widget.groupRepo!.save(g);
+                        if (_commitEdits()) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('Group settings saved.'),
@@ -181,6 +193,9 @@ class _GroupSettingsDialogState extends State<GroupSettingsDialog>
                   const SizedBox(width: 8),
                   ElevatedButton(
                     onPressed: () {
+                      // Done is the primary action: commit, then close. It used
+                      // to pop straight out, silently losing the General tab.
+                      _commitEdits();
                       Navigator.pop(context);
                     },
                     child: const Text('Done'),

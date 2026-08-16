@@ -683,18 +683,43 @@ extension _AppDatabaseMigrationLadder on AppDatabase {
         // repeat old messages. Strips all bleed-era keys, keeps only the
         // post-bleed output_sanitizer_* keys. Full rationale + key list in
         // session_gen_overrides_heal.dart.
-        try {
-          final healed = await healBledSessionGenOverrides(this);
-          if (healed > 0) {
-            debugPrint(
-              '[DB] v39: cleared bled generation overrides '
-              'from $healed session(s)',
-            );
+        //
+        // RE-RUN GUARD. Drift rewrites user_version even when an OLDER binary
+        // opens a NEWER DB (rollback / the Windows beta+nightly pair that
+        // share one data folder), so this block can legally re-enter with
+        // `from = 38` on a database that was healed months ago. The heal's
+        // "anything but the sanitizer keys is bleed junk" rule is only true
+        // BEFORE v39 shipped: on a second pass it deletes the per-chat
+        // temperature / repeat-penalty / DRY / stop-sequence overrides the
+        // user has deliberately set since. There is no ALTER here to use as
+        // the "this is the real upgrade" signal the way v40 does, so the
+        // signal is the next version's columns: if v40's worlds columns are
+        // already physically present, this database has been past v39 before
+        // and the heal has already run.
+        final worldsCols = await _getExistingColumnNames('worlds');
+        final alreadyPastV39 =
+            worldsCols.contains('inject_description') ||
+            worldsCols.contains('biome_json');
+        if (alreadyPastV39) {
+          debugPrint(
+            '[DB] v39: gen-overrides heal skipped — this database has '
+            'already been upgraded past v39 (re-entry after a rollback); '
+            "per-chat sampler settings are the user's and stay put",
+          );
+        } else {
+          try {
+            final healed = await healBledSessionGenOverrides(this);
+            if (healed > 0) {
+              debugPrint(
+                '[DB] v39: cleared bled generation overrides '
+                'from $healed session(s)',
+              );
+            }
+          } catch (e) {
+            // Non-fatal: stale overrides just stay active for this install.
+            // Never abort the migration chain (and thereby DB open) over it.
+            debugPrint('[DB] v39 gen-overrides heal failed: $e');
           }
-        } catch (e) {
-          // Non-fatal: stale overrides just stay active for this install.
-          // Never abort the migration chain (and thereby DB open) over it.
-          debugPrint('[DB] v39 gen-overrides heal failed: $e');
         }
       }
       if (from < 40) {

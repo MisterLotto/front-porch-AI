@@ -517,6 +517,41 @@ extension ChatServiceCast on ChatService {
           ),
         );
       }
+      // Journal cards -> the host MEMBER instance id in the new group session,
+      // the diary twin of the growth carry above. The fork copies EVERY message
+      // into the new session (so no card can cite a message that no longer
+      // happened) and carries the recap cursor with it, meaning a skipped diary
+      // could never be rebuilt: the host would open the conversation she is
+      // visibly mid-way through with an empty Journal. Copy, not move — the
+      // preserved 1:1 stays the revert snapshot.
+      try {
+        for (final card in await _journalStore.cardsFor(
+          hostSessionId,
+          originalCharId,
+        )) {
+          await _db.insertJournalCard(
+            JournalMemoriesCompanion(
+              sessionId: drift.Value(_currentSessionId!),
+              characterId: drift.Value(hostId),
+              content: drift.Value(card.content),
+              category: drift.Value(card.category),
+              emotionLabel: drift.Value(card.emotionLabel),
+              emotionIntensity: drift.Value(card.emotionIntensity),
+              originalEmotionLabel: drift.Value(card.originalEmotionLabel),
+              sourceMessageIds: drift.Value(card.sourceMessageIds),
+              metadata: drift.Value(card.metadata),
+              heat: drift.Value(card.heat),
+              pinned: drift.Value(card.pinned),
+              accessCount: drift.Value(card.accessCount),
+              embedding: drift.Value(card.embedding),
+              dimensions: drift.Value(card.dimensions),
+              lastAccessedAt: drift.Value(card.lastAccessedAt),
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint('[Cast] host journal carry-on-fork (non-fatal): $e');
+      }
       // RAG memory -> the GROUP's shared pool (keyed 'group_<id>' via
       // _getCharacterId, not per-member) so the cast can recall pre-conversion
       // events that scrolled out of context.

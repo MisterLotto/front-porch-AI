@@ -66,14 +66,14 @@ DateTime? clockNamedInReply(String reply, DateTime current) {
   if (claims.isEmpty) {
     final dawn = _bareDawn.firstMatch(text);
     if (dawn != null && !_boundIsNotPresent(text, dawn.start)) {
-      return _closestOnCalendar(current, 6, 0);
+      return _namedTimeToday(current, 6, 0);
     }
     return null;
   }
 
   claims.sort((a, b) => a.index.compareTo(b.index));
   final last = claims.last;
-  return _closestOnCalendar(current, last.hour, last.minute);
+  return _namedTimeToday(current, last.hour, last.minute);
 }
 
 final _ampm = RegExp(
@@ -101,8 +101,11 @@ final _bareDawn = RegExp(
 /// it "footpath " ends in "at " and would reject the very Senjumaru
 /// "at six in the morning" claim this file was written for.
 final _notPresent = RegExp(
+  // `was`/`were` (1.3 sweep, independent review): "It was 5 a.m. when we
+  // left" is a memory, not the present moment — it teleported the clock just
+  // like the appointment leads did.
   r'(?:^|\W)(until|by|before|after|past|around|about|tomorrow|tonight|'
-  r'another|for|in|at|till|til|since|from|toward|towards)\s+$',
+  r'another|for|in|at|till|til|since|from|toward|towards|was|were)\s+$',
   caseSensitive: false,
 );
 
@@ -124,7 +127,13 @@ int _hourInPeriod(int hour12, String period) {
   };
 }
 
-DateTime? _closestOnCalendar(DateTime current, int hour, int minute) {
+/// The named hour placed on the CURRENT story day only. Neighbouring days
+/// are deliberately not candidates: a 12:45 AM scene whose reply says
+/// "11 p.m." would otherwise be pulled back onto yesterday, dropping the
+/// sidebar's Day N by one (and re-firing the day rollover when the next
+/// turn crosses midnight again). A claim that only fits another calendar
+/// day stays put — same rule the 6h window states for a 2pm/midnight reply.
+DateTime? _namedTimeToday(DateTime current, int hour, int minute) {
   final today = DateTime.utc(
     current.year,
     current.month,
@@ -132,20 +141,10 @@ DateTime? _closestOnCalendar(DateTime current, int hour, int minute) {
     hour,
     minute,
   );
-  final yesterday = today.subtract(const Duration(days: 1));
-  final tomorrow = today.add(const Duration(days: 1));
-  DateTime? best;
-  var bestAbs = 1 << 30;
-  for (final c in [today, yesterday, tomorrow]) {
-    final abs = (c.difference(current).inMinutes).abs();
-    if (abs < bestAbs) {
-      bestAbs = abs;
-      best = c;
-    }
-  }
-  if (best == null || bestAbs > kNamedClockMaxDeltaHours * 60) return null;
-  if (bestAbs == 0) return null; // already agrees
-  return best;
+  final abs = today.difference(current).inMinutes.abs();
+  if (abs > kNamedClockMaxDeltaHours * 60) return null;
+  if (abs == 0) return null; // already agrees
+  return today;
 }
 
 String _stripThink(String raw) => raw.replaceAll(

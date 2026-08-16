@@ -158,15 +158,22 @@ extension GenParsing on CharacterGenService {
     // Look past the opening quote
     final contentStart = start + 1;
 
-    // Find the end by looking for the next key pattern or closing brace
+    // Find the end by looking for the nearest following key, or the closing
+    // brace. EVERY other key is considered and the earliest match in the TEXT
+    // wins: stopping at the first hit in `keys` order assumed the model emits
+    // fields in canonical order, so a reply that put scenario before
+    // personality made description run all the way to "personality" — the
+    // whole scenario field, quotes and commas included, ended up inside the
+    // description. Nothing downstream re-checks it (the length guards are
+    // floors), so the bloated value shipped on the card.
     int? nextBoundary;
-    for (int j = currentIdx + 1; j < keys.length; j++) {
+    for (int j = 0; j < keys.length; j++) {
+      if (j == currentIdx) continue;
       final nextKeyPattern = RegExp('"${keys[j]}"\\s*:');
       final nextMatch = nextKeyPattern.firstMatch(raw.substring(contentStart));
-      if (nextMatch != null) {
-        nextBoundary = contentStart + nextMatch.start;
-        break;
-      }
+      if (nextMatch == null) continue;
+      final at = contentStart + nextMatch.start;
+      if (nextBoundary == null || at < nextBoundary) nextBoundary = at;
     }
 
     // If no next key found, look for final }

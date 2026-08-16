@@ -80,6 +80,19 @@ extension ChatServiceGroupEntry on ChatService {
     // stale values in the brief window before group per-speaker loads take over.
     // (Full reset happens on return to any 1:1 via setActiveCharacter.)
     _characterEmotion = '';
+    _emotionIntensity = '';
+    // Realism/Needs are per-chat and were never zeroed here. The promotion
+    // block below only fires when the group definition carries member realism
+    // seeds, so a group authored without them simply INHERITED the previous
+    // chat's flags and needs vector — and the `_saveChat()` at the end of this
+    // method baked them onto the group's first session row for good. Same
+    // zeros the 1:1 twin does in setActiveCharacter; a stored session still
+    // wins, because _loadLastSession hydrates both flags below.
+    _realismEnabled = false;
+    _needsSimEnabled = false;
+    _enjoysLowHygiene = false;
+    _needsSimulation.clearVector();
+    _needsSimulation.resetBuffers();
     // Relationship scalars/fixation (affection/trust/tiers/fixation/spatial/pending) via extracted service.
     // Expression manual/caches via service. Time (clock/day/passage/anchor/turns) via service.
     // Nsfw (arousal/cooldown) via service.
@@ -172,6 +185,13 @@ extension ChatServiceGroupEntry on ChatService {
 
     // Seed group definition defaults for Chaos (can be overridden by per-session values loaded below).
     // This makes the chaosModeEnabled / chaosNsfwEnabled on the GroupChat model actually functional.
+    //
+    // Reset FIRST, exactly as the 1:1 twin does: seedFromGroupOrExt sets only
+    // the two switches ("pressure left as-is or explicitly zeroed by caller"),
+    // so without this the previous chat's chance-time pressure — and an
+    // un-delivered manual "SPIN NOW" event, which injects as CANON with no
+    // chaos-enabled gate — walked into the group.
+    _chaosModeService.resetForFreshChat();
     _chaosModeService.seedFromGroupOrExt(
       // OR-override, matching the two 1:1 seed sites: the group asks, or the
       // Porch Life global default does. A user who switched Chaos on globally
@@ -198,10 +218,15 @@ extension ChatServiceGroupEntry on ChatService {
         // Presence-inference — see the matching note in
         // group_realism_dynamics_editor. An explicit flag belongs at the blob's
         // top level, not in the per-member seed; that is a schema change.
-        _needsSimEnabled = _groupRealism.values.any((state) {
-          final n = state.needs;
-          return n != null && n.isNotEmpty;
-        });
+        // AND-gated by the global Needs switch (Porch Life tab), like all four
+        // 1:1/import seed sites. Without it the global was quietly 1:1-only:
+        // every group still ran the full simulation and its per-turn eval.
+        _needsSimEnabled =
+            _storageService.realismSettings.needsSimDefault &&
+            _groupRealism.values.any((state) {
+              final n = state.needs;
+              return n != null && n.isNotEmpty;
+            });
         if (_needsSimEnabled) {
           // Seed from group definition's per-char needs baselines (falls back to 80 when absent).
           final defaults = <String, int>{

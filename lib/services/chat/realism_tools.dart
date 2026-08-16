@@ -183,7 +183,20 @@ final List<Map<String, dynamic>> kOneShotEvalTools = [
     kOneShotTool,
     'Report the full realism evaluation for this exchange in one call.',
     _oneShotFields,
-    const ['relationship_delta', 'trust_delta', 'emotion', 'emotion_intensity'],
+    // `minutes_elapsed` is required for the same reason `is_climax` is: a
+    // model fills in what the schema demands and skips what it does not. When
+    // one-shot fuses, this call is the story clock's ONLY driver — an omitted
+    // minutes_elapsed makes TimeService fall back to failureDriftMinutes, so
+    // every turn advanced a flat 5 minutes while the multi-call path (whose
+    // twin kSceneTimeOnlyEvalTools demands it) got a real estimate. `new_day`
+    // stays optional exactly as it is on that twin.
+    const [
+      'relationship_delta',
+      'trust_delta',
+      'emotion',
+      'emotion_intensity',
+      'minutes_elapsed',
+    ],
   ),
 ];
 

@@ -139,9 +139,15 @@ async function raw<T>(
 let refreshing: Promise<boolean> | null = null;
 
 async function tryRefresh(): Promise<boolean> {
+  // The "no refresh token" answer is decided BEFORE the latch is armed. An
+  // early return from inside the IIFE never reaches its `finally`, and even if
+  // it did, a body with no `await` runs to completion (clearing the latch)
+  // BEFORE `??=` assigns the resolved promise — either way the latch would be
+  // left holding a permanent `false`, silently killing refresh-and-retry for
+  // the rest of the page's life (survives an in-place sign-out/sign-in).
+  const refresh = localStorage.getItem(REFRESH_KEY);
+  if (!refresh) return false;
   refreshing ??= (async () => {
-    const refresh = localStorage.getItem(REFRESH_KEY);
-    if (!refresh) return false;
     try {
       const r = await raw<{ accessToken: string; refreshToken: string }>(
         'POST',
@@ -151,8 +157,15 @@ async function tryRefresh(): Promise<boolean> {
       );
       saveTokens(r.accessToken, r.refreshToken);
       return true;
-    } catch {
-      clearStoopSession();
+    } catch (e) {
+      // Only a genuine 401 means the refresh token is dead. A network blip,
+      // a 5xx or a proxy 502 is a hiccup — keep the tokens so a later call
+      // can retry, the same rule the desktop AuthState refresh follows. The
+      // phone/PWA twin used to clear on ANY failure, signing users out over
+      // one dropped packet (1.3 sweep, independent review).
+      if (e instanceof StoopError && e.status === 401) {
+        clearStoopSession();
+      }
       return false;
     } finally {
       refreshing = null;

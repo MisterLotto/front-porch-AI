@@ -48,6 +48,13 @@ abstract final class StoryJson {
       if (jsonStart != -1) {
         // Only keep from the first { onward
         result = result.substring(jsonStart);
+      } else {
+        // No JSON to anchor on — the prose and timeline calls. Everything from
+        // the open tag to the end IS the truncated reasoning, so it has to go:
+        // otherwise raw chain-of-thought is stored as a beat's finished prose
+        // (reader/ePub/audiobook) or as the canon timeline injected into every
+        // later stage prompt. Matches utils/think_tags.dart's `<think>.*$` rule.
+        result = result.substring(0, openTagIdx);
       }
     }
     return result.trim();

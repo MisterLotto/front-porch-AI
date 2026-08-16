@@ -34,12 +34,28 @@ extension StoryPipelineProse on StoryPipelineService {
     _isRunning = true;
     final sId = '$actIndex-$sceneIndex';
     final bId = '$sId-$beatIndex';
-    final beat = project.beats[sId]![beatIndex];
-    final scene = project.scenes[actIndex]![sceneIndex];
-
-    _setStatus('Drafter', 'Writing beat ${beatIndex + 1}: ${beat.type}...');
 
     try {
+      // These reads MUST stay inside the try: only the `finally` below clears
+      // `_isRunning`, so a stale index (a deep-linked web writer URL, or a beat
+      // list the validator shortened mid-run) escaping here latched the flag on
+      // and froze every story page on the spinner until app restart.
+      final sceneBeats = project.beats[sId];
+      final actScenes = project.scenes[actIndex];
+      if (sceneBeats == null ||
+          beatIndex < 0 ||
+          beatIndex >= sceneBeats.length ||
+          actScenes == null ||
+          sceneIndex < 0 ||
+          sceneIndex >= actScenes.length) {
+        _setStatus('Drafter', 'That beat is no longer part of this scene.');
+        return;
+      }
+      final beat = sceneBeats[beatIndex];
+      final scene = actScenes[sceneIndex];
+
+      _setStatus('Drafter', 'Writing beat ${beatIndex + 1}: ${beat.type}...');
+
       // Gather context
       final prevBeatText = beatIndex > 0
           ? project.prose['$sId-${beatIndex - 1}']?.final_ ?? ''
@@ -286,10 +302,24 @@ Next Beat Plan: ${nextBeat.description}''';
     int sceneIndex,
   ) async {
     final sId = '$actIndex-$sceneIndex';
-    final beats = project.beats[sId];
-    if (beats == null || beats.isEmpty) return;
+    if (project.beats[sId]?.isEmpty ?? true) return;
 
-    for (int i = 0; i < beats.length; i++) {
+    // The length is re-read every iteration on purpose: runBeatValidator
+    // REPLACES project.beats[sId] with a different list (kept + rectified
+    // beats), so a captured local goes stale — it either overran the new,
+    // shorter list or silently dropped the tail of a longer one.
+    //
+    // The ceiling is what keeps that re-read safe: a model that answers
+    // "still invalid, here are three more beats" every single time grows the
+    // list exactly as fast as the loop consumes it, and nothing in this loop
+    // is cancellable, so the user would watch it burn tokens forever. A scene
+    // is a handful of beats; this only ever trips on a runaway.
+    final beatCeiling = (project.beats[sId]?.length ?? 0) + 24;
+    for (
+      int i = 0;
+      i < (project.beats[sId]?.length ?? 0) && i < beatCeiling;
+      i++
+    ) {
       final bId = '$sId-$i';
       if (project.prose[bId]?.final_ != null) continue; // Skip already written
 
@@ -300,7 +330,7 @@ Next Beat Plan: ${nextBeat.description}''';
       _isRunning = true;
 
       // Run validator after each beat (except the last)
-      if (i < beats.length - 1) {
+      if (i < (project.beats[sId]?.length ?? 0) - 1) {
         await runBeatValidator(project, actIndex, sceneIndex, i);
       }
     }

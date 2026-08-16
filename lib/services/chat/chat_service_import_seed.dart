@@ -135,6 +135,35 @@ extension ChatServiceImportSeed on ChatService {
       _needsSimulation.clearVector();
       _needsSimulation.resetBuffers();
       _pockets = null;
+      if (_activeGroup != null) {
+        // The zeroing above is the right starting point for the no-group path
+        // but was the FINAL word for a group: an imported group transcript
+        // landed with Needs hard-off and saved false onto its new session row,
+        // so the rest of that conversation had blank needs grids and no decay.
+        // Re-derive from the member seeds exactly as fresh group entry and the
+        // startNewChat group branch do (presence-inference: the creator omits
+        // the per-member 'needs' sub-map when Needs was off in the wizard),
+        // AND-gated by the Porch Life global like every other seed site.
+        _needsSimEnabled = _storageService.realismSettings.needsSimDefault &&
+            _groupRealism.values.any((state) {
+              final n = state.needs;
+              return n != null && n.isNotEmpty;
+            });
+        if (_needsSimEnabled) {
+          // Placeholder vector only — the first per-speaker
+          // _loadGroupRealismIntoScalars replaces it with that member's own
+          // needs. Same flat baseline both group twins use.
+          _needsSimulation.initializeFreshWithDefaults(const {
+            'hunger': 80,
+            'bladder': 80,
+            'energy': 80,
+            'social': 80,
+            'fun': 80,
+            'hygiene': 80,
+            'comfort': 80,
+          });
+        }
+      }
     }
     seedPocketsFromCards();
     _growthStore.invalidate();

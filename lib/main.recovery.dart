@@ -347,38 +347,67 @@ extension _MainDbRecovery on _MyAppState {
   }
 
   /// Show the stable DB import dialog on first beta launch.
-  /// Only shown when a stable DB exists and no beta DB has been created yet.
-  /// If the user chooses Import, the stable DB is manually copied to the
-  /// beta location and all repositories are reloaded with the new data.
+  ///
+  /// Offered when a stable DB exists and this beta install's library is still
+  /// EMPTY. It deliberately does NOT use `StableDbImportDialog.shouldShow()`,
+  /// which asks whether the beta `.db` file is absent: `main()` opens — and so
+  /// creates — the beta database before the first frame (`_openDatabaseGuarded`
+  /// even runs a `SELECT 1` probe to force it open), so by the time this
+  /// post-first-frame callback runs the file ALWAYS exists and the offer could
+  /// never be made. Emptiness is the honest question, and it additionally
+  /// refuses to overwrite a beta library the user has already built up.
+  ///
+  /// If the user chooses Import, the stable DB replaces the freshly-created
+  /// beta DB and all repositories are reloaded with the new data.
   Future<void> _showStableDbImportIfNeeded() async {
     if (!isPreRelease) return;
-    final shouldShow = await StableDbImportDialog.shouldShow();
-    if (!shouldShow || !mounted) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('beta_stable_import_shown') ?? false) return;
+
+    final stablePath = await StableDbImportDialog.stableDbPath();
+    if (stablePath == null) return;
+
+    // The dialog's path helpers assume the default documents-dir layout, so
+    // the source it hands us is only ever the default stable location. Refuse
+    // to act if startup actually opened the beta DB somewhere else (a moved
+    // beta storage root): copying onto the default path would leave a stray
+    // file the rebind never opens, and the user would be told nothing.
+    final betaDbPath = p.join(
+      (await getApplicationDocumentsDirectory()).path,
+      'FrontPorchAI-Beta',
+      'KoboldManager',
+      'front_porch_beta.db',
+    );
+    final db = AppDatabase.current;
+    if (db == null || AppDatabase.dbFilePath != betaDbPath) return;
+    if (!await db.hasNoUserContent()) return;
+    if (!mounted) return;
 
     // Show the dialog — it's modal and blocks further initialization
     await StableDbImportDialog.show(context);
 
-    // If user chose Import, manually copy the stable DB and reinitialize
-    final stablePath = await StableDbImportDialog.stableDbPath();
-    if (stablePath == null) return;
+    // Import unless the user chose Skip (the dialog writes both prefs).
+    if (prefs.getBool('beta_stable_import_skipped') ?? false) return;
 
-    final prefs = await SharedPreferences.getInstance();
-    final skipped = prefs.getBool('beta_stable_import_skipped') ?? false;
-    if (skipped) return;
-
-    final betaRoot = p.join(
-      (await getApplicationDocumentsDirectory()).path,
-      'FrontPorchAI-Beta',
-    );
-    final betaDbDir = p.join(betaRoot, 'KoboldManager');
-    final betaDb = File(p.join(betaDbDir, 'front_porch_beta.db'));
-    final stableDb = File(stablePath);
-
-    if (betaDb.existsSync()) return; // another process already copied
-
-    await Directory(betaDbDir).create(recursive: true);
-    await stableDb.copy(betaDb.path);
-    debugPrint('[DB] Pre-release build — imported stable DB to beta DB');
+    try {
+      // Same order the backup restore uses: close the live handle first, then
+      // replace the file, then clear the stale WAL/SHM sidecars that belong to
+      // the database we just replaced.
+      await AppDatabase.closeAndReset();
+      await File(stablePath).copy(betaDbPath);
+      for (final sidecar in ['$betaDbPath-wal', '$betaDbPath-shm']) {
+        try {
+          await File(sidecar).delete();
+        } catch (_) {}
+      }
+      debugPrint('[DB] Pre-release build — imported stable DB to beta DB');
+    } catch (e) {
+      // The copy failed; the beta DB is still whatever was there. Fall through
+      // to the rebind so the app reopens a database instead of running on the
+      // closed handle.
+      debugPrint('[DB] Stable DB import failed (non-fatal): $e');
+    }
 
     // Reinitialize the database and reload all repositories. The imported DB
     // is the new source of truth, so unreferenced portraits really are junk.

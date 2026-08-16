@@ -338,6 +338,19 @@ class LlmEvalEngine {
     if (unclosed >= 0) {
       cleaned = cleaned.substring(0, unclosed).trim();
     }
+    // Third leak shape (utils/think_tags.dart names all three): a bare orphan
+    // `</think>` whose opening tag the transport/chat template consumed, so
+    // everything BEFORE it is reasoning. Unlike the user-prose strip — which
+    // only drops the tag, because wiping prose would blank a legit message —
+    // the eval lane must drop that reasoning: every extractor below is a
+    // firstMatch over the whole string, so leaving it in hands the parse the
+    // model's DRAFT numbers instead of its final JSON. Kept only when
+    // something follows; otherwise callers' existing raw fallback applies.
+    final orphan = cleaned.lastIndexOf('</think>');
+    if (orphan >= 0) {
+      final after = cleaned.substring(orphan + '</think>'.length).trim();
+      if (after.isNotEmpty) cleaned = after;
+    }
     return cleaned;
   }
 

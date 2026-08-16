@@ -63,6 +63,19 @@ extension ChatServiceSend on ChatService {
     // keep the wider _isTurnBusy guard, because that is where the race
     // actually corrupts something.
     if (_isGenerating) return;
+    // A send that lands in the previous turn's SETTLING window must QUEUE
+    // behind it, not race it: the new turn's pre-gen work (mood decay, needs
+    // tick, the group per-speaker scalar re-point) otherwise runs before the
+    // old turn's _saveScalarsIntoGroupRealism / snapshot restamp / chip
+    // attach, cross-writing speaker A's realism state with speaker B's.
+    // Bounded (15s deadline) and drains the save chain — the same
+    // serialization point setActiveCharacter/setActiveGroup/loadSession
+    // already use. The composer deliberately stays LIVE during settling
+    // (greying it was rejected twice); this waits instead of refusing.
+    // Also closes the _isPostGenerating latch: a turn started mid-settle
+    // captured callerHeldSettling=true and wedged _isTurnBusy for the
+    // session.
+    await _waitForTurnToSettle();
     // [EvalTraffic]: whatever the fire-and-forget passes (journal, growth,
     // promises, cast…) spent since the last turn's print, reported now so
     // the turn's own line stays a clean measure of the turn.

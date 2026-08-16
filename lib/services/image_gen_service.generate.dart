@@ -251,6 +251,21 @@ extension _ImageGenGenerate on ImageGenService {
               }
               if (detail.length > 240) detail = '${detail.substring(0, 240)}…';
               safe = 'Draw Things couldn’t generate: $detail';
+            } else if (msg.contains('libfpzip')) {
+              // The fpzip pre-flight fires BEFORE any socket is opened, so
+              // the connection hint below would send the user off checking a
+              // host/port that just tested green. Draw Things returns its
+              // pictures as fpzip-compressed tensors and only the macOS build
+              // carries that decoder.
+              safe = Platform.isMacOS
+                  ? 'Draw Things pictures can’t be unpacked — this copy of '
+                        'Front Porch AI is missing its image decoder. '
+                        'Reinstalling usually fixes it; until then, pick '
+                        'another image backend.'
+                  : 'Draw Things pictures can only be unpacked on macOS. '
+                        'Front Porch AI on ${Platform.operatingSystem} can '
+                        'talk to Draw Things but can’t turn its output into '
+                        'an image — use ComfyUI or Automatic1111 instead.';
             } else if (msg.contains('CLI returned no parseable') ||
                 msg.contains('connect') ||
                 msg.contains('gRPC') ||

@@ -25,6 +25,12 @@ import 'package:front_porch_ai/services/engine_health.dart';
 import 'package:front_porch_ai/services/model_fetch.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 
+/// Unwinds [EmbeddingService.runSetup] when the user presses Cancel. Not an
+/// error: the setup path treats it as a plain stop, never a failure.
+class _SetupCancelled implements Exception {
+  const _SetupCancelled();
+}
+
 /// Service that generates text embeddings (numerical vectors) for RAG memory retrieval.
 ///
 /// Runs nomic-embed-text-v1.5 fully in-process via onnxruntime (phase 5 of
@@ -80,6 +86,7 @@ class EmbeddingService extends ChangeNotifier {
   // ---- Setup / download state (consumed by RagSetupDialog) ----
 
   bool _settingUp = false;
+  bool _setupCancelled = false;
   String _setupStatus = '';
   double _setupProgress = -1; // -1 = indeterminate
   String? _setupError;
@@ -100,6 +107,7 @@ class EmbeddingService extends ChangeNotifier {
   Future<bool> runSetup() async {
     if (_settingUp) return false;
     _settingUp = true;
+    _setupCancelled = false;
     _setupError = null;
     _setupProgress = -1;
     _setupStatus = 'Checking for the embedding model...';
@@ -123,10 +131,18 @@ class EmbeddingService extends ChangeNotifier {
           '$_hfBase/tokenizer.json',
           File(p.join(dir.path, 'tokenizer.json')),
         );
+        if (_setupCancelled) throw const _SetupCancelled();
         await ModelFetch.fetch(
           '$_hfBase/onnx/model.onnx',
           File(p.join(dir.path, 'model.onnx')),
           onProgress: (done, total) {
+            // The progress callback is the only lever ModelFetch gives us to
+            // stop a 550 MB stream that is already flowing: throwing here
+            // cancels the response subscription. ModelFetch still burns its
+            // two retries (each aborts again at the next ~1% tick), which is
+            // a few MB — against downloading the whole model after the user
+            // pressed Cancel.
+            if (_setupCancelled) throw const _SetupCancelled();
             if (total > 0) {
               _setupProgress = done / total;
               _setupStatus =
@@ -144,10 +160,12 @@ class EmbeddingService extends ChangeNotifier {
         }
       }
 
+      if (_setupCancelled) throw const _SetupCancelled();
       _setupStatus = 'Loading the model (first run takes a moment)...';
       _setupProgress = -1;
       notifyListeners();
       await checkAvailability();
+      if (_setupCancelled) throw const _SetupCancelled();
       if (!_available) {
         // Surface the engine's actual failure — a bare "self-test failed"
         // gives the user (and us) nothing to act on.
@@ -158,6 +176,14 @@ class EmbeddingService extends ChangeNotifier {
       }
       _setupStatus = 'Memory is ready.';
       return true;
+    } on _SetupCancelled {
+      // The user asked for this — no error banner, and no latched
+      // `_setupError` (that would make ensureReady/Retry think the engine
+      // is broken).
+      _setupStatus = 'Setup cancelled.';
+      _setupProgress = -1;
+      _setupError = null;
+      return false;
     } catch (e) {
       _setupError = '$e';
       _setupStatus = 'Setup failed.';
@@ -172,11 +198,16 @@ class EmbeddingService extends ChangeNotifier {
     }
   }
 
-  /// Aborts setup from the dialog's Cancel: releases the (possibly
-  /// half-warmed) session. A partial download is left as a .part file that
-  /// the next attempt resumes past.
+  /// Aborts setup from the dialog's Cancel: stops an in-flight download at
+  /// its next progress tick, releases the (possibly half-warmed) session,
+  /// and lets [runSetup] unwind so `isSettingUp` clears and a later Retry
+  /// isn't refused by the re-entrancy guard. The partial `.part` file is
+  /// discarded by the next attempt (ModelFetch has no resume) — the old doc
+  /// here promised a resume that never existed.
   void cancelSetup() {
+    _setupCancelled = true;
     _native.shutdown();
+    notifyListeners();
   }
 
   /// True while [checkAvailability] is in flight — prevents parallel re-tests

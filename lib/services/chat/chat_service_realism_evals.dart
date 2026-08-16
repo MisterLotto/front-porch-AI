@@ -355,5 +355,38 @@ extension ChatServiceRealismEvals on ChatService {
         .toList();
     final batchRes = await _realismVerifier.verifyBatch(items);
     await _realismEvals.applyBatchResults(batchRes);
+
+    // The Director's receipt. Every eval on this path defers to the batch and
+    // returns BEFORE the per-eval wrapper that normally stamps the chip
+    // (_verifyAndApply), so with the feature on the deltas were quietly
+    // corrected and the user was shown nothing — the chip only ever appeared
+    // in one-shot mode. One summary for the turn: corrected wins over
+    // accepted, with the corrections' reasons in the tooltip.
+    if (batchRes.isNotEmpty &&
+        _realismVerifier.getRealismVerificationEnabled()) {
+      final corrected = batchRes.values.where((v) => v.status == 'corrected');
+      final passes = batchRes.values.fold<int>(
+        0,
+        (m, v) => v.passes > m ? v.passes : m,
+      );
+      final reasons = corrected
+          .map((v) => v.reason)
+          .where((r) => r.isNotEmpty)
+          .join('; ');
+      // Built through the same factories the single-eval path stamps, so the
+      // metadata shape cannot drift from what the bubble reads (correctedRaw
+      // is unused here — only toMetadata() is).
+      final summary = corrected.isEmpty
+          ? VerificationResult.accepted(raw: '', passes: passes)
+          : VerificationResult.corrected(
+              raw: '',
+              passes: passes,
+              reason: reasons,
+            );
+      _pendingRealismMetadata = {
+        ...?_pendingRealismMetadata,
+        RealismVerification.kMetaKey: summary.toMetadata(),
+      };
+    }
   }
 }

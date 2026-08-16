@@ -30,6 +30,17 @@ import 'package:front_porch_ai/services/services.dart';
 class DataMigrationService {
   final AppDatabase _db;
 
+  /// Absolute paths of legacy files this run could NOT import.
+  ///
+  /// Every per-item import swallows its exception and moves on, and the
+  /// cleanup that follows used to delete every legacy `.json` it could find —
+  /// so one malformed chat file was logged to a console the user never sees
+  /// and then deleted from disk, having never reached the database. Migration
+  /// is also marked complete before the cleanup, so there is no second
+  /// attempt: whatever is deleted here is gone for good. Anything recorded in
+  /// this set is therefore kept on disk, which is the only copy left.
+  final Set<String> _unimportedFiles = <String>{};
+
   DataMigrationService(this._db);
 
   /// Returns true if migration has already been completed.
@@ -43,6 +54,14 @@ class DataMigrationService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('db_migration_complete', true);
   }
+
+  /// Persisted copy of [_unimportedFiles].
+  ///
+  /// [cleanupLegacyFiles] is ALSO called with no arguments on every launch
+  /// (main.dart), long after this object is gone. Without a durable skip list
+  /// that second call would delete on launch 2 exactly the files migration
+  /// spared on launch 1, which is the same data loss by a slower route.
+  static const String _unimportedPrefsKey = 'db_migration_unimported_files';
 
   /// Run the full migration. Reports progress via [onProgress].
   /// Format: (step description, current, total)
@@ -80,10 +99,22 @@ class DataMigrationService {
 
     await _markComplete();
 
-    // Clean up old JSON files now that data lives in the DB
+    // Clean up old JSON files now that data lives in the DB — except the ones
+    // that never made it in. Deleting those would destroy the only copy.
     onProgress?.call('Cleaning up old files...', totalSteps, totalSteps);
-    await cleanupLegacyFiles();
+    if (_unimportedFiles.isNotEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList(_unimportedPrefsKey, _unimportedFiles.toList());
+    }
+    await cleanupLegacyFiles(preserve: _unimportedFiles);
 
+    if (_unimportedFiles.isNotEmpty) {
+      debugPrint(
+        'DB_MIGRATION: ${_unimportedFiles.length} legacy file(s) could not be '
+        'imported and were LEFT ON DISK (not deleted): '
+        '${_unimportedFiles.join(', ')}',
+      );
+    }
     debugPrint('DB_MIGRATION: Migration complete!');
   }
 
@@ -236,7 +267,20 @@ class DataMigrationService {
           if (decoded is List) {
             msgList = decoded;
           } else if (decoded is Map) {
-            msgList = decoded['messages'] ?? [];
+            final rawMessages = decoded['messages'];
+            if (rawMessages is! List) {
+              // A map-shaped session file whose transcript is not under
+              // 'messages' used to import as a 0-message session and then have
+              // its file deleted — the conversation vanished from disk and
+              // from the DB at once. Treat it as un-imported and keep it.
+              _unimportedFiles.add(entity.path);
+              debugPrint(
+                'DB_MIGRATION: Session ${entity.path} has no "messages" list '
+                '— keeping the file instead of importing it empty',
+              );
+              continue;
+            }
+            msgList = rawMessages;
             authorNote = decoded['author_note'] ?? '';
             authorNoteDepth = decoded['author_note_depth'] ?? 4;
             sessionName = decoded['session_name'];
@@ -296,6 +340,7 @@ class DataMigrationService {
             'DB_MIGRATION: Imported session $sessionId with ${msgList.length} messages',
           );
         } catch (e) {
+          _unimportedFiles.add(entity.path);
           debugPrint(
             'DB_MIGRATION: Failed to import session ${entity.path}: $e',
           );
@@ -340,6 +385,7 @@ class DataMigrationService {
         );
         debugPrint('DB_MIGRATION: Imported group: ${json['name']}');
       } catch (e) {
+        _unimportedFiles.add(entity.path);
         debugPrint('DB_MIGRATION: Failed to import group ${entity.path}: $e');
       }
     }
@@ -377,6 +423,7 @@ class DataMigrationService {
         );
         debugPrint('DB_MIGRATION: Imported world: ${json['name']}');
       } catch (e) {
+        _unimportedFiles.add(entity.path);
         debugPrint('DB_MIGRATION: Failed to import world ${entity.path}: $e');
       }
     }
@@ -448,6 +495,7 @@ class DataMigrationService {
 
       debugPrint('DB_MIGRATION: Imported ${foldersList.length} folders');
     } catch (e) {
+      _unimportedFiles.add(foldersFile.path);
       debugPrint('DB_MIGRATION: Failed to import folders: $e');
     }
   }
@@ -497,13 +545,40 @@ class DataMigrationService {
   /// Delete legacy JSON files that are no longer needed after migration.
   /// Safe to call multiple times — skips files that don't exist.
   /// Preserves character PNGs (still needed for images).
-  static Future<void> cleanupLegacyFiles() async {
+  ///
+  /// Files in [preserve], plus anything a previous run recorded under
+  /// [_unimportedPrefsKey], are NEVER deleted: those never reached the
+  /// database, so the file on disk is the only copy of that conversation.
+  static Future<void> cleanupLegacyFiles({
+    Set<String> preserve = const <String>{},
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     final rootPath = prefs.getString('root_path');
     final docsDir = await getApplicationDocumentsDirectory();
     final basePath = rootPath ?? docsDir.path;
 
+    final keep = <String>{
+      ...preserve,
+      ...?prefs.getStringList(_unimportedPrefsKey),
+    };
+
     int deleted = 0;
+    int kept = 0;
+
+    // One place decides whether a legacy file dies, so the skip list cannot be
+    // honoured in three of the four sweeps and forgotten in the fourth.
+    Future<void> deleteUnlessKept(File file) async {
+      if (keep.contains(file.path)) {
+        kept++;
+        return;
+      }
+      try {
+        await file.delete();
+        deleted++;
+      } catch (e) {
+        debugPrint('Cleanup: failed to delete ${file.path}: $e');
+      }
+    }
 
     // 1. Delete chat session JSONs: {root}/chats/{charId}/*.json
     final chatsDir = Directory('$basePath/chats');
@@ -514,15 +589,11 @@ class DataMigrationService {
         if (charDir.path.endsWith('groups')) continue;
         await for (final entity in charDir.list()) {
           if (entity is File && entity.path.endsWith('.json')) {
-            try {
-              await entity.delete();
-              deleted++;
-            } catch (e) {
-              debugPrint('Cleanup: failed to delete ${entity.path}: $e');
-            }
+            await deleteUnlessKept(entity);
           }
         }
-        // Remove the character chat directory if now empty
+        // Remove the character chat directory if now empty. A preserved file
+        // keeps its directory alive, which is what we want.
         try {
           if (await charDir.list().isEmpty) {
             await charDir.delete();
@@ -536,12 +607,7 @@ class DataMigrationService {
     if (await groupsDir.exists()) {
       await for (final entity in groupsDir.list()) {
         if (entity is File && entity.path.endsWith('.json')) {
-          try {
-            await entity.delete();
-            deleted++;
-          } catch (e) {
-            debugPrint('Cleanup: failed to delete ${entity.path}: $e');
-          }
+          await deleteUnlessKept(entity);
         }
       }
       // Remove groups dir if now empty
@@ -557,12 +623,7 @@ class DataMigrationService {
     if (await worldsDir.exists()) {
       await for (final entity in worldsDir.list()) {
         if (entity is File && entity.path.endsWith('.json')) {
-          try {
-            await entity.delete();
-            deleted++;
-          } catch (e) {
-            debugPrint('Cleanup: failed to delete ${entity.path}: $e');
-          }
+          await deleteUnlessKept(entity);
         }
       }
     }
@@ -570,16 +631,17 @@ class DataMigrationService {
     // 4. Delete character_folders.json
     final foldersFile = File('$basePath/KoboldManager/character_folders.json');
     if (await foldersFile.exists()) {
-      try {
-        await foldersFile.delete();
-        deleted++;
-      } catch (e) {
-        debugPrint('Cleanup: failed to delete character_folders.json: $e');
-      }
+      await deleteUnlessKept(foldersFile);
     }
 
     if (deleted > 0) {
       debugPrint('Cleanup: deleted $deleted legacy JSON file(s)');
+    }
+    if (kept > 0) {
+      debugPrint(
+        'Cleanup: kept $kept legacy file(s) that never imported — they are '
+        'the only copy of that data left',
+      );
     }
   }
 }

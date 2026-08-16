@@ -139,6 +139,14 @@ extension _CreatorCore on CreatorState {
     if (provider.activeBackend == BackendType.kobold &&
         provider.koboldService.isReady) {
       freeContextLimit = storage.contextSize - 3000; // leave 3K for generation
+      if (freeContextLimit <= 0) {
+        // A context window at or under that 3K reservation (the app's own
+        // low-VRAM recommendation is 2048) made the limit negative, and the
+        // clamp below then truncated EVERY character of lore away — the model
+        // got the bare "[TRUNCATED…]" marker and nothing else, silently. Give
+        // the lore half a small window instead of none of it.
+        freeContextLimit = storage.contextSize ~/ 2;
+      }
     } else {
       freeContextLimit = 120000;
     }

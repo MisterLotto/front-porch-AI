@@ -41,15 +41,28 @@ extension ChatServiceMessageOps on ChatService {
     // guest who has since left the scene, hence the authoritative check.
     final isGuestMsg = _isGuestAuthoredMessage(msg);
 
+    // …and the state rewind belongs to the TIP of the chat only. Re-reading an
+    // OLD variant is navigation, not time travel: restoring that message's
+    // snapshot rewound bond/trust/emotion/arousal/needs/story clock/pockets to
+    // that turn while every later message stayed, and the `_saveChat()` below
+    // wrote the rewind onto the session row permanently. Same rule the delete
+    // door states out loud ("restore from the NEW LAST message"). Guest
+    // replies are transparent here — they stamp no Realism/Needs — so a host
+    // buried only under guest chime-ins is still the tip, matching
+    // regenerableHostBelowGuestsIndex.
+    final isTip =
+        !isGuestMsg &&
+        _messages.skip(messageIndex + 1).every(_isGuestAuthoredMessage);
+
     // Swiping left
     if (direction < 0) {
       if (newIndex >= 0) {
         msg.swipeIndex = newIndex;
-        if (!isGuestMsg) _syncRealismStateForSwipe(msg);
+        if (isTip) _syncRealismStateForSwipe(msg);
         // Pockets follow the selected variant too — this swipe's own
         // post-turn record, or the shared pre-turn base when this variant's
         // pass changed nothing (hostile review 2026-08-11).
-        if (!isGuestMsg) _restorePocketsFromStamp(msg, after: true);
+        if (isTip) _restorePocketsFromStamp(msg, after: true);
         // Timeline integrity: the active variant at this position changed —
         // cards journaled from the other swipe are now phantom.
         _invalidateJournalFrom(messageIndex);
@@ -63,9 +76,9 @@ extension ChatServiceMessageOps on ChatService {
     if (newIndex < msg.swipes.length) {
       // Navigate to existing swipe
       msg.swipeIndex = newIndex;
-      if (!isGuestMsg) _syncRealismStateForSwipe(msg);
+      if (isTip) _syncRealismStateForSwipe(msg);
       // Same pockets rewind as the left branch.
-      if (!isGuestMsg) _restorePocketsFromStamp(msg, after: true);
+      if (isTip) _restorePocketsFromStamp(msg, after: true);
       // Timeline integrity — same as the left-swipe branch above.
       _invalidateJournalFrom(messageIndex);
       await _saveChat();
@@ -383,19 +396,13 @@ extension ChatServiceMessageOps on ChatService {
         );
         // Rebuild cache — a bare invalidate() left injection empty until
         // reload. Journal twin re-reads the DB; Growth cannot.
-        final ids = [
-          if (_activeCharacter != null)
-            _getCharacterIdFromCard(_activeCharacter!),
-          for (final c in _groupCharacters) _getCharacterIdFromCard(c),
-        ];
-        await _growthStore.refresh(
-          sessionId,
-          charIds: ids,
-          activeCharId: _activeCharacter != null
-              ? _getCharacterIdFromCard(_activeCharacter!)
-              : null,
-          isGroup: _activeGroup != null,
-        );
+        //
+        // Through the CANONICAL builder, not a hand-rolled id list: refresh()
+        // clears the cache and repopulates only the ids it is handed while
+        // marking it valid, so the copy here (which forgot Scene Guests) made
+        // a guest's rings read as "none" — silently dropping their growth from
+        // the injection after any regen/edit/delete that purged a ring.
+        await _refreshGrowthCache();
         notifyListeners();
       }
     } catch (e) {

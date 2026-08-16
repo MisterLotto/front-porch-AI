@@ -18,6 +18,30 @@
 
 part of '../chat_service.dart';
 
+// ── Stable identities for the two listeners this library registers on other
+// notifiers ────────────────────────────────────────────────────────────────
+//
+// EXTENSION-METHOD TEAR-OFFS ARE NOT CANONICALIZED IN DART. For a plain
+// instance method `a.m == a.m` is true; for an extension member it is FALSE —
+// each mention builds a fresh closure. Both callbacks below live in the
+// extension in this file, so every `removeListener(_onSomething)` here was
+// handed a closure the notifier had never seen and silently removed
+// nothing: ChatService.dispose left itself attached to StorageService, the
+// LLMProvider and the CharacterRepository (a leaked service kept receiving
+// notifications for the rest of the run), and swapping either dependency
+// stacked a second live callback on top of the first.
+//
+// An Expando holds ONE closure per service — weakly, so it cannot itself keep
+// a disposed ChatService alive — which is the thing removeListener can find
+// again. Anything registered on another notifier from this library must go
+// through these; a bare `_onFoo` tear-off is unremovable.
+final Expando<VoidCallback> _backendIdentityListener = Expando(
+  'ChatService backend-identity listener',
+);
+final Expando<VoidCallback> _characterLibraryListener = Expando(
+  'ChatService character-library listener',
+);
+
 /// Grab-bag of small, single-purpose accessors and one-shot setup setters that
 /// had no other natural home when the god file was shrunk toward the 1,000-line
 /// ratchet (docs/design/god-file-elimination.md). Extracted verbatim (zero
@@ -186,6 +210,15 @@ extension ChatServiceAccessors on ChatService {
     _toolSupportTester.onBackendMaybeChanged();
   }
 
+  /// The removable identity of [_onBackendIdentityMaybeChanged] — see the
+  /// Expando note at the top of this file. Register/unregister ONLY this.
+  VoidCallback get _onBackendIdentity =>
+      _backendIdentityListener[this] ??= _onBackendIdentityMaybeChanged;
+
+  /// The removable identity of [_onCharacterLibraryChanged].
+  VoidCallback get _onCharacterLibrary =>
+      _characterLibraryListener[this] ??= _onCharacterLibraryChanged;
+
   /// Human-readable mood label containing exact emotion string and valence direction.
   String get moodLabel {
     if (_characterEmotion.isEmpty) return 'Neutral';
@@ -230,9 +263,9 @@ extension ChatServiceAccessors on ChatService {
   /// Set the CharacterRepository so group mode can look up characters.
   void setCharacterRepository(CharacterRepository repo) {
     if (identical(_characterRepository, repo)) return;
-    _characterRepository?.removeListener(_onCharacterLibraryChanged);
+    _characterRepository?.removeListener(_onCharacterLibrary);
     _characterRepository = repo;
-    _characterRepository!.addListener(_onCharacterLibraryChanged);
+    _characterRepository!.addListener(_onCharacterLibrary);
   }
 
   /// Silently prune Scene Guests whose library card no longer exists. Deleting a
@@ -262,10 +295,15 @@ extension ChatServiceAccessors on ChatService {
 
   /// Set the LLMProvider after construction (to break circular dependency in provider tree).
   void setLLMProvider(LLMProvider provider) {
+    // Idempotent like [setCharacterRepository]: the ProxyProvider `update` that
+    // owns this wiring re-runs on every Kobold log line, so an unguarded
+    // addListener would append one callback per frame, forever.
+    if (identical(_llmProvider, provider)) return;
+    _llmProvider?.removeListener(_onBackendIdentity);
     _llmProvider = provider;
     // Backend switches and local-engine ready transitions flow through the
     // provider — retest tool support when the identity changes and is ready.
-    provider.addListener(_onBackendIdentityMaybeChanged);
+    provider.addListener(_onBackendIdentity);
   }
 
   /// Set the TtsService after construction (for TTS-aware auto-play delay).
@@ -554,25 +592,28 @@ extension ChatServiceAccessors on ChatService {
     _cancelIdleTimer();
     _cancelStreamNotifyThrottle();
     _sceneGuest.statusClearTimer?.cancel();
-    _characterRepository?.removeListener(_onCharacterLibraryChanged);
-    _storageService.removeListener(_onBackendIdentityMaybeChanged);
-    _llmProvider?.removeListener(_onBackendIdentityMaybeChanged);
+    _characterRepository?.removeListener(_onCharacterLibrary);
+    _storageService.removeListener(_onBackendIdentity);
+    _llmProvider?.removeListener(_onBackendIdentity);
     _toolProbe.removeListener(notifyListeners);
   }
 
   /// Everything the [ChatService] constructor does. Called as the
-  /// constructor's single statement (round-4b shrink) — safe because the
-  /// listener tear-offs registered here (`notifyListeners`,
-  /// `_onBackendIdentityMaybeChanged`) are instance-method tear-offs on
-  /// `this`; Dart canonicalizes those, so they stay `==`-equal to the
-  /// tear-offs [_disposeCleanupImpl] later passes to `removeListener`
-  /// regardless of which method body took the tear-off.
+  /// constructor's single statement (round-4b shrink).
+  ///
+  /// `notifyListeners` is a plain instance method, so its tear-off IS
+  /// canonicalized and stays `==`-equal to the one [_disposeCleanupImpl]
+  /// passes to `removeListener`. [_onBackendIdentityMaybeChanged] is NOT —
+  /// it is an extension member, so it is registered through the Expando-backed
+  /// [_onBackendIdentity] instead (see the note at the top of this file). The
+  /// comment that used to sit here claimed both were canonicalized; the
+  /// removals it blessed were silently doing nothing.
   void _initImpl() {
     // Probe verdicts land from background passes and the manual test alike —
     // rebroadcast so the sidebar's tool-calling pill repaints live.
     _toolProbe.addListener(notifyListeners);
     // Local model path / remote model name changes alter the eval identity —
     // retest tool support for the new model (sidebar pill contract).
-    _storageService.addListener(_onBackendIdentityMaybeChanged);
+    _storageService.addListener(_onBackendIdentity);
   }
 }

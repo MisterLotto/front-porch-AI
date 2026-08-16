@@ -210,6 +210,10 @@ extension _GroupPromptEditors on _GroupPromptEngineeringTabState {
               TextButton(
                 onPressed: () {
                   promptCtrl.clear();
+                  // A programmatic clear() never fires TextField.onChanged, so
+                  // without this the box looked empty while the old override
+                  // kept being injected every turn (and came back on reopen).
+                  widget.chatService.setSystemPromptForGroupCharacter(c, '');
                 },
                 child: const Text('Clear', style: TextStyle(fontSize: 11)),
               ),

@@ -25,6 +25,15 @@ part of 'story_dashboard_page.dart';
 /// become `rebuildState` since extensions cannot touch a State's protected
 /// members directly. NOTE: `_showRawMessages` itself stays a shell field
 /// (see story_dashboard_page.dart) — extensions cannot hold fields.
+///
+/// Number of `[EVENT N]` markers in a distilled timeline — the badge's count.
+/// The pattern must stay byte-identical to the one the distiller itself
+/// counts with (`story_pipeline_service.llm.dart`) and to the web twin's
+/// `/\[EVENT \d+\]/g`; the badge used to carry a double-escaped copy inside a
+/// raw string, which matched nothing and always reported 0 events.
+int distilledEventCount(String timeline) =>
+    RegExp(r'\[EVENT \d+\]').allMatches(timeline).length;
+
 extension _StoryDashboardChatHistory on _StoryDashboardPageState {
   Widget _buildChatHistorySection(StoryProject project) {
     final hasTimeline = project.distilledTimeline.isNotEmpty;
@@ -77,7 +86,7 @@ extension _StoryDashboardChatHistory on _StoryDashboardPageState {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
-                        '${RegExp(r'\\[EVENT \\d+\\]').allMatches(project.distilledTimeline).length} events distilled',
+                        '${distilledEventCount(project.distilledTimeline)} events distilled',
                         style: TextStyle(
                           color: AppColors.bondHighOf(context),
                           fontSize: 11,

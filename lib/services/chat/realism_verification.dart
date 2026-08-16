@@ -365,7 +365,13 @@ class RealismVerification {
     final scene = (bundle['scene'] as String? ?? '').toLowerCase();
     final strictFactor = (strict / 3.0).clamp(0.6, 1.4);
     final pre = (bundle['pre_state'] as Map?) ?? {};
+    // 'affectionScore' FIRST: that is the key ChatService._captureRealismState
+    // actually writes the bond under, and it is the only producer of
+    // `pre_state` in production. Probing the other two alone left preBond
+    // pinned at 0, so the 'extreme bond swing' damper below could never fire.
+    // The legacy names stay as fallbacks (card extension / hand-built states).
     final preBond =
+        (pre['affectionScore'] as num?)?.toInt() ??
         (pre['short_term_bond'] as num?)?.toInt() ??
         (pre['bond'] as num?)?.toInt() ??
         0;
@@ -465,9 +471,28 @@ class RealismVerification {
     }
 
     if (kind == 'emotional_state' || kind == 'oneShot') {
-      final em = (_extractJsonString(raw, 'character_emotion') ?? '')
-          .toLowerCase();
-      final inten = extractJsonInt(raw, 'emotion_intensity') ?? 1;
+      // 'emotion' is the key every producer emits (the prompt's emotion
+      // section and the tools schema alike), and emotion_intensity is a
+      // STRING enum (mild|moderate|strong) — probing 'character_emotion' and
+      // reading the intensity as an int made this rule dead for every real
+      // eval output, the same class as the hunger_delta case below. Legacy
+      // shapes stay as fallbacks.
+      final em =
+          (_extractJsonString(raw, 'emotion') ??
+                  _extractJsonString(raw, 'character_emotion') ??
+                  '')
+              .toLowerCase();
+      final numericInten = extractJsonInt(raw, 'emotion_intensity');
+      final intenWord = numericInten != null
+          ? ''
+          : (_extractJsonString(raw, 'emotion_intensity') ?? '').toLowerCase();
+      final inten =
+          numericInten ??
+          (intenWord.startsWith('strong')
+              ? 3
+              : intenWord.startsWith('moderate')
+              ? 2
+              : 1);
       if (em.isNotEmpty &&
           !_sceneSupportsEmotion(scene, em) &&
           inten >= 2 &&
@@ -475,7 +500,15 @@ class RealismVerification {
         return _RuleResult(
           false,
           'strong emotion w/o support',
-          _correctedJson(raw, 'emotion_intensity', 1),
+          // Damp in whichever shape the model used — writing a number back
+          // over `"strong"` would leave the raw untouched, since the eval
+          // parse only reads the quoted enum.
+          numericInten != null
+              ? _correctedJson(raw, 'emotion_intensity', 1)
+              : raw.replaceAll(
+                  RegExp('"emotion_intensity"\\s*:\\s*"[^"]*"'),
+                  '"emotion_intensity": "mild"',
+                ),
         );
       }
     }

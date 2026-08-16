@@ -146,12 +146,22 @@ class TtsService extends ChangeNotifier {
       // (scheduled as a new event — refresh notifies, and this getter can
       // run during build).
       unawaited(Future(refreshAvailableVoices));
-      return activeEngine.availableVoices;
+      return _piperSafeFallback;
     }
     return _currentAvailableVoices.isNotEmpty
         ? _currentAvailableVoices
-        : activeEngine.availableVoices;
+        : _piperSafeFallback;
   }
+
+  /// Built-in voices to serve when the cache is empty or stale.
+  ///
+  /// Piper has none: its voices live on disk, and [activeEngine] falls through
+  /// to `_kokoroEngine` for Piper (see its `default:` branch), so the old
+  /// fallback offered the 53-entry Kokoro catalog under the Piper engine.
+  /// Picking one of those produced silence — Piper has no such model and never
+  /// can. An empty list is honest, and every picker already handles it.
+  List<TtsVoiceInfo> get _piperSafeFallback =>
+      _isPiperEngine ? const [] : activeEngine.availableVoices;
 
   /// Refreshes the voice list for the currently selected engine.
   /// Particularly important for Piper, where voices can be added manually
@@ -216,6 +226,9 @@ class TtsService extends ChangeNotifier {
     stop();
     _clearCache();
     _piperNative.shutdown();
+    // The Kokoro worker isolate holds the ~380MB ONNX model; without this it
+    // outlived the service for the whole process life (1.3 sweep).
+    _kokoroEngine.shutdown();
     _audioPlayer.dispose();
     super.dispose();
   }

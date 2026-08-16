@@ -240,8 +240,17 @@ class JournalMaintenance {
       String? parkedRecap;
       var anySucceeded = false;
 
-      for (var i = 0; i < owners.length; i++) {
-        final owner = owners[i];
+      // The recap is asked of the first owner whose call COMES BACK, not
+      // rigidly of owner 0. It used to be `i == 0`, and a failed first call
+      // then lost the window's recap for good: a later owner succeeding still
+      // advanced the cursor past the window, so nothing ever re-read those
+      // turns and "Where we are" silently aged behind the story — exactly the
+      // frozen-recap failure the window-cap comment above documents, but
+      // reached one flaky call at a time. Still exactly ONE owner is asked per
+      // pass, so the prompt cost is unchanged.
+      var recapOwed = true;
+
+      for (final owner in owners) {
         final ownerId = getCharacterIdFromCard(owner);
         if (ownerId.isEmpty) continue;
 
@@ -251,13 +260,15 @@ class JournalMaintenance {
           cards: cards,
           window: window,
           windowStart: start,
-          includeRecap: i == 0,
+          includeRecap: recapOwed,
         );
         if (exchange == null) {
           debugPrint('[Journal] ✗ ${owner.name}: empty eval response');
           continue;
         }
         final (ops, recapText) = exchange;
+        final isRecapOwner = recapOwed;
+        recapOwed = false;
 
         // Emotional physics: cool the existing cards one step first
         // (flashbulb decay — strong feelings barely fade), so adds and
@@ -280,12 +291,14 @@ class JournalMaintenance {
 
         if (reviewMode) {
           if (ownerProposals.ops.isNotEmpty) parked.add(ownerProposals);
-          if (i == 0) parkedRecap = recapText;
+          if (isRecapOwner) parkedRecap = recapText;
         } else {
           await review.applyOwnerProposals(sessionToken, ownerProposals);
-          if (i == 0 && recapText != null && getSessionId() == sessionToken) {
+          if (isRecapOwner &&
+              recapText != null &&
+              getSessionId() == sessionToken) {
             setRecap(recapText);
-          } else if (i == 0 &&
+          } else if (isRecapOwner &&
               recapText == null &&
               ownerProposals.ops.isNotEmpty) {
             debugPrint(
@@ -298,7 +311,7 @@ class JournalMaintenance {
         anySucceeded = true;
         debugPrint(
           '[Journal] ✓ ${owner.name}: ${ownerProposals.ops.length} op(s)'
-          '${i == 0 && recapText != null ? ' + recap' : ''}'
+          '${isRecapOwner && recapText != null ? ' + recap' : ''}'
           '${reviewMode ? ' (for review)' : ''}',
         );
       }

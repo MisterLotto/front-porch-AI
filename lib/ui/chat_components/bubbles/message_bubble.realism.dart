@@ -39,6 +39,19 @@ extension _BubbleRealism on _MessageBubbleState {
     final timeReversal = metadata['time_reversal'] as bool? ?? false;
     final needsDeltas = metadata['needs_deltas'] as Map<String, dynamic>?;
 
+    // Pockets & Wardrobe receipts, read BEFORE the early return below: Pockets
+    // answers to its own switch and runs with the Realism Engine off, so a
+    // message can legitimately carry receipts and no realism/needs keys at all.
+    // Bailing out on the realism keys alone dropped the chip entirely for
+    // exactly those users.
+    final rawPocketChanges = metadata['pocket_changes'];
+    final pocketReceipts = rawPocketChanges is List
+        ? rawPocketChanges
+              .map((raw) => raw is String ? raw.trim() : '')
+              .where((text) => text.isNotEmpty)
+              .toList()
+        : const <String>[];
+
     // Verifier result (attached by realism_verification leaf when feature active for the turn).
     // status: 'accepted' | 'corrected'; passes: reprocess count; reason optional for tooltip.
     final verifData =
@@ -55,7 +68,8 @@ extension _BubbleRealism on _MessageBubbleState {
         timeSkipTo.isEmpty &&
         chanceTimeEvent.isEmpty &&
         !timeReversal &&
-        verifStatus.isEmpty) {
+        verifStatus.isEmpty &&
+        pocketReceipts.isEmpty) {
       return const SizedBox.shrink();
     }
 
@@ -438,36 +452,31 @@ extension _BubbleRealism on _MessageBubbleState {
     // plain phrases ("picked up: car keys"), so nothing here parses or
     // re-derives anything — the applier already decided what changed, and this
     // shows exactly that. Absent on every turn nothing moved, which is most.
-    final pocketChanges = metadata['pocket_changes'];
-    if (pocketChanges is List) {
-      for (final raw in pocketChanges) {
-        final text = raw is String ? raw.trim() : '';
-        if (text.isEmpty) continue;
-        chips.add(
-          maybeTooltip(
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.checkroom_outlined,
-                  size: 11,
+    for (final text in pocketReceipts) {
+      chips.add(
+        maybeTooltip(
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.checkroom_outlined,
+                size: 11,
+                color: AppColors.porchAmberOf(context),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                text,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
                   color: AppColors.porchAmberOf(context),
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  text,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.porchAmberOf(context),
-                  ),
-                ),
-              ],
-            ),
-            'Pockets & Wardrobe',
+              ),
+            ],
           ),
-        );
-      }
+          'Pockets & Wardrobe',
+        ),
+      );
     }
 
     return _realismChipLayout(chips, needsChipList);

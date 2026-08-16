@@ -47,12 +47,14 @@ class StorageService extends ChangeNotifier {
   final Completer<void> _initCompleter = Completer<void>();
   Future<void> get initialized => _initCompleter.future;
 
-  /// True when the persisted data directory was unwritable at startup and we
-  /// fell back to the default root FOR THIS SESSION (the bad path is NOT
-  /// overwritten in prefs, so a re-plugged drive is retried next launch). The
-  /// UI reads this to warn "your data folder was unavailable" instead of the
-  /// user silently seeing an empty/relocated library.
-  bool rootUnavailableFellBack = false;
+  /// True when one of the data subdirectories could not be created at startup
+  /// (a stray file sitting where a folder belongs, a per-folder ACL, Windows
+  /// Controlled Folder Access). The root itself is deliberately NOT changed —
+  /// see [_init] for why relocating was worse than the failure it "fixed".
+  ///
+  /// Nothing surfaces this to the user yet; a "your data folder had a problem"
+  /// banner reading this flag is still owed.
+  bool rootDirectoriesUnavailable = false;
 
   SharedPreferences? _prefs;
   String? _rootPath;
@@ -810,34 +812,41 @@ class StorageService extends ChangeNotifier {
     }
     _binDir = Directory(path.join(_rootPath!, 'koboldcpp_bin'));
 
-    // Ensure directories exist. A bad persisted root_path (unplugged external
-    // drive, revoked permission, a NAS that's offline) would throw here — and
-    // because _init is fire-and-forget, that left _initCompleter hanging
-    // FOREVER, so anything awaiting `initialized` (e.g. the web-server
-    // autostart) blocked and the app came up half-initialized. Fall back to the
-    // default root so a moved-away data dir can't wedge startup.
-    Future<void> makeDirs() async {
-      await chatsDir.create(recursive: true);
-      await modelsDir.create(recursive: true);
-      await worldsDir.create(recursive: true);
-      await charactersDir.create(recursive: true);
-      await groupsDir.create(recursive: true);
-      await customBackgroundDir.create(recursive: true);
-    }
-
-    try {
-      await makeDirs();
-    } catch (e) {
-      debugPrint('[Storage] ⚠ root "$_rootPath" is unwritable ($e) — falling '
-          'back to the default data directory for this session (the setting is '
-          'NOT overwritten; it retries next launch).');
-      rootUnavailableFellBack = true;
-      _rootPath = defaultRoot;
-      _binDir = Directory(path.join(_rootPath!, 'koboldcpp_bin'));
+    // Ensure directories exist. A failure here must not escape: _init is
+    // fire-and-forget, so a throw left _initCompleter hanging FOREVER and
+    // anything awaiting `initialized` (the web-server autostart, groups,
+    // worlds) blocked with the app half-booted.
+    //
+    // Swallowing it is the whole recovery — we do NOT relocate to the default
+    // root any more. Relocating split the app in two: AppDatabase.instance()
+    // already opened `<persisted root>/KoboldManager` back in main()'s
+    // _openDatabaseGuarded (a failure THERE ends the launch in DbInitErrorApp),
+    // so reaching this line proves the persisted root took the database (the
+    // one exception is a pre-release FRONT_PORCH_AI_DATA_DIR run, where a dev
+    // has deliberately split the two roots already).
+    // Pointing storage at a different root then listed the database's rows
+    // while every portrait, chat file, world and background resolved under a
+    // tree that has none of them. Staying put keeps files and rows on one root.
+    //
+    // Each folder is also created independently: one bad entry (a stray file
+    // named `chats`) used to abort the whole run at the first await, so the
+    // five innocent folders were never created either.
+    for (final dir in [
+      chatsDir,
+      modelsDir,
+      worldsDir,
+      charactersDir,
+      groupsDir,
+      customBackgroundDir,
+    ]) {
       try {
-        await makeDirs();
-      } catch (e2) {
-        debugPrint('[Storage] default root also unwritable: $e2');
+        await dir.create(recursive: true);
+      } catch (e) {
+        rootDirectoriesUnavailable = true;
+        debugPrint('[Storage] ⚠ could not create "${dir.path}" ($e). Staying '
+            'on this root anyway — the database is already open here, and '
+            'moving would leave every portrait and chat file resolving '
+            'somewhere the library\'s rows do not live.');
       }
     }
 
@@ -856,44 +865,54 @@ class StorageService extends ChangeNotifier {
     _presetSettings.initializeBase(_prefs, notifyListeners);
     _lorebookSettings.initializeBase(_prefs, notifyListeners);
 
-    _generationSettings.load();
-    _backendSettings.load();
-    _uiSettings.load();
-    _ttsSettings.load();
-    _sttSettings.load();
-    _imageGenSettings.load();
-    _expressionSettings.load();
-    _webServerSettings.load();
-    _realismSettings.load();
-    _memorySettings.load();
-    _presetSettings.load();
-    _lorebookSettings.load();
-    attachReasoningEffortMenuStore(_prefs);
+    // Nothing between here and the completer may escape. _init is
+    // fire-and-forget, so one throw (a corrupt prefs value) would leave
+    // `initialized` unresolved FOREVER — the same wedge the makeDirs fallback
+    // above exists to prevent, and it silently costs the web-server autostart,
+    // groups and worlds. Whatever failed keeps its in-code defaults.
+    try {
+      _generationSettings.load();
+      _backendSettings.load();
+      _uiSettings.load();
+      _ttsSettings.load();
+      _sttSettings.load();
+      _imageGenSettings.load();
+      _expressionSettings.load();
+      _webServerSettings.load();
+      _realismSettings.load();
+      _memorySettings.load();
+      _presetSettings.load();
+      _lorebookSettings.load();
+      attachReasoningEffortMenuStore(_prefs);
 
-    // Ensure default immersive prompt (was in god init; now on preset)
-    if (!_presetSettings.savedPrompts.any(
-      (p) => p['name'] == 'Immersive Roleplay',
-    )) {
-      await _presetSettings.savePrompt(
-        'Immersive Roleplay',
-        PresetSettings.defaultSystemPrompt,
-      );
-    }
+      // Ensure default immersive prompt (was in god init; now on preset)
+      if (!_presetSettings.savedPrompts.any(
+        (p) => p['name'] == 'Immersive Roleplay',
+      )) {
+        await _presetSettings.savePrompt(
+          'Immersive Roleplay',
+          PresetSettings.defaultSystemPrompt,
+        );
+      }
 
-    // Load settings (DELETED in Stage 7 — bodies lifted to the *Settings.load(); see above + shims)
-    // Original load code excised (deletion part of task).
-    final loadedCustom = _prefs?.getString(_k('custom_models_path'));
-    _customModelsPath = (loadedCustom != null && loadedCustom.isNotEmpty)
-        ? loadedCustom
-        : null;
+      // Load settings (DELETED in Stage 7 — bodies lifted to the *Settings.load(); see above + shims)
+      // Original load code excised (deletion part of task).
+      final loadedCustom = _prefs?.getString(_k('custom_models_path'));
+      _customModelsPath = (loadedCustom != null && loadedCustom.isNotEmpty)
+          ? loadedCustom
+          : null;
 
-    // Push the stored spell check language into the service before any text
-    // field can ask for a check. Absent (a fresh install, or an upgrade from
-    // before this setting existed) leaves the English default in place rather
-    // than adopting the OS locale.
-    final loadedSpell = _prefs?.getString(_k('spell_check_language'));
-    if (loadedSpell != null && loadedSpell.isNotEmpty) {
-      DesktopSpellCheckService.activeLanguage = loadedSpell;
+      // Push the stored spell check language into the service before any text
+      // field can ask for a check. Absent (a fresh install, or an upgrade from
+      // before this setting existed) leaves the English default in place rather
+      // than adopting the OS locale.
+      final loadedSpell = _prefs?.getString(_k('spell_check_language'));
+      if (loadedSpell != null && loadedSpell.isNotEmpty) {
+        DesktopSpellCheckService.activeLanguage = loadedSpell;
+      }
+    } catch (e, st) {
+      debugPrint('[Storage] ⚠ settings load failed ($e) — booting with '
+          'defaults for whatever did not load.\n$st');
     }
 
     if (!_initCompleter.isCompleted) _initCompleter.complete();

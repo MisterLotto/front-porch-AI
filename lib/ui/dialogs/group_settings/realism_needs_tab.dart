@@ -12,6 +12,7 @@ import 'package:front_porch_ai/utils/utils.dart';
 import 'package:front_porch_ai/ui/widgets/story_begins_row.dart';
 import 'package:front_porch_ai/ui/dialogs/group_settings/group_settings_support.dart';
 import 'package:front_porch_ai/ui/dialogs/group_settings/member_baseline_seed.dart';
+import 'package:front_porch_ai/ui/dialogs/group_settings/member_ext_persist.dart';
 
 part 'realism_needs_tab.view.dart';
 part 'realism_needs_tab.controls.dart';
@@ -143,6 +144,14 @@ class _GroupRealismNeedsTabState extends State<GroupRealismNeedsTab> {
     }
   }
 
+  // The Director/Verifier settings below live on the member's card ext — the
+  // blob key each one also writes is read at group CREATION only. The ext only
+  // reaches disk through this persister, so without it every one of them was
+  // back to its old value on the next launch.
+  late final GroupMemberExtPersister _extPersister = GroupMemberExtPersister(
+    widget.chatService,
+  );
+
   // --- Per-member Director/Verifier updates ---
   void _updateMemberVerificationEnabled(CharacterCard char, bool value) {
     final id = _getCharId(char);
@@ -156,6 +165,7 @@ class _GroupRealismNeedsTabState extends State<GroupRealismNeedsTab> {
     });
 
     persistGroupMemberPref(widget.chatService, id, 'verificationEnabled', value);
+    _extPersister.schedule(char);
   }
 
   void _updateMemberVerificationMaxReprocesses(CharacterCard char, int value) {
@@ -170,6 +180,7 @@ class _GroupRealismNeedsTabState extends State<GroupRealismNeedsTab> {
     });
 
     persistGroupMemberPref(widget.chatService, id, 'verificationMaxReprocesses', value);
+    _extPersister.schedule(char);
   }
 
   void _updateMemberVerificationStrictness(CharacterCard char, int value) {
@@ -184,6 +195,7 @@ class _GroupRealismNeedsTabState extends State<GroupRealismNeedsTab> {
     });
 
     persistGroupMemberPref(widget.chatService, id, 'verificationStrictness', value);
+    _extPersister.schedule(char);
   }
 
   void _updateMemberNeedsDirectorAuthority(CharacterCard char, bool value) {
@@ -198,6 +210,7 @@ class _GroupRealismNeedsTabState extends State<GroupRealismNeedsTab> {
     });
 
     persistGroupMemberPref(widget.chatService, id, 'needsDirectorAuthority', value);
+    _extPersister.schedule(char);
   }
 
 
@@ -319,6 +332,7 @@ class _GroupRealismNeedsTabState extends State<GroupRealismNeedsTab> {
   void dispose() {
     widget.chatService.removeListener(_onServiceChanged);
     _groupDayCountController.dispose();
+    _extPersister.dispose();
     super.dispose();
   }
 

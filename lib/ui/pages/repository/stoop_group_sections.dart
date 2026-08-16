@@ -32,10 +32,15 @@ List<Widget> stoopGroupOverview(
   final to = (card['turn_order'] ?? card['turnOrder'] ?? 'roundRobin')
       .toString();
   final mode = to == 'random' ? 'Random' : 'Round Robin';
-  final members =
-      (card['raw_member_data'] as List?) ??
-      (card['members'] as List?) ??
-      const [];
+  // Stranger JSON: `is`, never `as` — a wrong-typed member list crashed the
+  // whole group detail page (1.3 sweep).
+  final rawMembers = card['raw_member_data'];
+  final altMembers = card['members'];
+  final members = rawMembers is List
+      ? rawMembers
+      : altMembers is List
+      ? altMembers
+      : const [];
   String s(String key) =>
       stoopResolveMacros((card[key] ?? '').toString(), name);
   return [
@@ -125,8 +130,9 @@ Widget _groupLorebookSection(
   String name,
 ) {
   final lb = _asMap(card['group_lorebook']);
+  final rawEntries = lb?['entries'];
   final entries =
-      (lb?['entries'] as List?)?.whereType<Map>().toList() ?? const [];
+      rawEntries is List ? rawEntries.whereType<Map>().toList() : const <Map>[];
   if (entries.isEmpty) return const SizedBox.shrink();
   return stoopLorebookEntries(
     context,

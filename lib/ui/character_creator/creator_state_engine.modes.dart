@@ -227,11 +227,19 @@ extension _CreatorModes on CreatorState {
       }
     }
 
+    // Fragments are joined with '. ' only when there is something in front of
+    // them: nothing in the wizard requires the concept box to be filled, and
+    // appending unconditionally left a description that literally opened with
+    // a stray period whenever it was empty.
     String enriched = concept;
-    if (appearance.isNotEmpty) {
-      enriched += '. Physical appearance: ${appearance.join(", ")}';
+    void appendSentence(String fragment) {
+      enriched = enriched.isEmpty ? fragment : '$enriched. $fragment';
     }
-    if (nsfwParts.isNotEmpty) enriched += '. ${nsfwParts.join(". ")}';
+
+    if (appearance.isNotEmpty) {
+      appendSentence('Physical appearance: ${appearance.join(", ")}');
+    }
+    if (nsfwParts.isNotEmpty) appendSentence(nsfwParts.join('. '));
 
     final relationship = [
       ...selectedRelationships,

@@ -242,6 +242,13 @@ class KoboldService extends ChangeNotifier
     bool useRocm = false,
   }) async {
     if (_isStarting) return;
+    // Claim the slot BEFORE the stop ladder below, not after it. That ladder
+    // awaits for 1–6s with `_isRunning` already false, and a second caller
+    // arriving in that window used to see both flags clear, walk straight to
+    // Process.start, and have its handle overwritten by the first caller
+    // resuming — one KoboldCpp process left with no owner, holding the port
+    // and the VRAM. Every early return below must clear it again.
+    _isStarting = true;
     // If the previous process is still alive (e.g. stopKobold was not awaited
     // or the stop is racing with start), kill it first to prevent zombie
     // processes from accumulating — especially on Windows where port reuse
@@ -250,11 +257,19 @@ class KoboldService extends ChangeNotifier
       debugPrint(
         '[KoboldService] startKobold called while still running — stopping first.',
       );
-      await stopKobold();
-      // Give the OS a moment to release the port
-      await Future<void>.delayed(const Duration(seconds: 1));
+      try {
+        await stopKobold();
+        // Give the OS a moment to release the port
+        await Future<void>.delayed(const Duration(seconds: 1));
+      } catch (e) {
+        // The slot is claimed above, so a throwing stop must release it or
+        // no launch would ever be possible again this session.
+        _isStarting = false;
+        _addLog('Could not stop the previous backend: $e');
+        notifyListeners();
+        rethrow;
+      }
     }
-    _isStarting = true;
 
     // ── Model file pre-flight ────────────────────────────────────────────────
     // Verify the .gguf is genuinely readable BEFORE spawning KoboldCpp, so a
@@ -351,10 +366,18 @@ class KoboldService extends ChangeNotifier
             }
           });
 
-      _process!.exitCode.then((code) {
+      final launched = _process!;
+      launched.exitCode.then((code) {
+        _addLog('Process exited with code $code');
+        // Only the process we are still tracking may clear the state — a
+        // late-dying orphan from an overlapping start must not report the
+        // LIVE backend as stopped.
+        if (!identical(_process, launched)) {
+          notifyListeners();
+          return;
+        }
         _isRunning = false;
         _process = null;
-        _addLog('Process exited with code $code');
         // Exit 2 is KoboldCpp's "Cannot find text model file" path. The
         // pre-flight above catches most causes, but KoboldCpp resolves the
         // path through Python and can still reject a file we read fine, so
@@ -398,14 +421,25 @@ class KoboldService extends ChangeNotifier
     List<Map<String, dynamic>> tools,
   ) async {
     if (!isReady) return null;
+    http.Client? mine;
     return _runSerialized(
       () => postOpenAiChatWithTools(
         _baseUrl,
         params,
         tools,
         foldSystemIntoUser: _systemRole.foldSystemIntoUser,
-        registerClient: (client) => _activeClient = client,
-        onDone: () => _activeClient = null,
+        registerClient: (client) {
+          mine = client;
+          _activeClient = client;
+        },
+        // Same ownership rule the `_pendingRequest` slot two lines below
+        // already follows (and OpenRouterService already applies to this
+        // very field): a finishing call may only clear the abort handle if
+        // it is still ITS handle. Clearing a newer request's client left
+        // Stop/abort with nothing to close.
+        onDone: () {
+          if (identical(_activeClient, mine)) _activeClient = null;
+        },
       ),
     );
   }
@@ -438,13 +472,21 @@ class KoboldService extends ChangeNotifier
   Stream<String> generateStream(GenerationParams params) async* {
     final completer = Completer<void>();
     _pendingRequest = completer.future;
+    http.Client? mine;
     try {
       yield* streamOpenAiChat(
         _baseUrl,
         params,
         foldSystemIntoUser: _systemRole.foldSystemIntoUser,
-        registerClient: (client) => _activeClient = client,
-        onDone: () => _activeClient = null,
+        registerClient: (client) {
+          mine = client;
+          _activeClient = client;
+        },
+        // Ownership guard — see generateWithTools: this stream's late
+        // teardown must not null a newer request's abort handle.
+        onDone: () {
+          if (identical(_activeClient, mine)) _activeClient = null;
+        },
       );
     } finally {
       if (!completer.isCompleted) completer.complete();

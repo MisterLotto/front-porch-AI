@@ -194,22 +194,48 @@ class V2CardService {
   /// `.json` import paths so the two stay byte-for-byte equivalent.
   CharacterCard? parseCardJson(String jsonStr, {String? imagePath}) {
     try {
-      final jsonMap = jsonDecode(jsonStr);
+      final decoded = jsonDecode(jsonStr);
+      // Not an object at all (a bare array/string) is genuinely "not a card" —
+      // stay null so the importer's own fallback decides what to do.
+      if (decoded is! Map) return null;
+      final jsonMap = Map<String, dynamic>.from(decoded);
 
       // Support both V1 and V2 card formats
       // V2 cards nest data under 'data', V1 cards have it at top level
-      final data = jsonMap.containsKey('data') ? jsonMap['data'] : jsonMap;
+      final nestedData = jsonMap['data'];
+      final data = nestedData is Map
+          ? Map<String, dynamic>.from(nestedData)
+          : jsonMap;
+
+      // THE INPUT IS A STRANGER'S UPLOAD — same doctrine as GroupCard.fromJson.
+      // Every read below is type-CHECKED instead of implicitly cast, because an
+      // implicit cast on ONE wrong-typed field ("tags": ["romance", null], a
+      // numeric name, a bare-string tags list) threw out of this whole factory,
+      // and the file importer then persisted a filename-named EMPTY character
+      // while telling the user the import succeeded.
+      String text(Object? v) =>
+          (v == null || v is Map || v is List) ? '' : v.toString();
+      List<String> strList(Object? v) {
+        if (v is List) {
+          return v.whereType<Object>().map((e) => e.toString()).toList();
+        }
+        return v is String && v.isNotEmpty ? [v] : const [];
+      }
 
       // Parse V2.5 extensions (front_porch namespace + raw third-party keys)
       FrontPorchExtensions? fpExtensions;
       Map<String, dynamic>? rawExtensions;
       final extensionsMap = data['extensions'] ?? jsonMap['extensions'];
       if (extensionsMap is Map<String, dynamic>) {
-        if (extensionsMap.containsKey('front_porch') &&
-            extensionsMap['front_porch'] is Map<String, dynamic>) {
-          fpExtensions = FrontPorchExtensions.fromJson(
-            extensionsMap['front_porch'],
-          );
+        final fp = extensionsMap['front_porch'];
+        if (fp is Map) {
+          try {
+            fpExtensions = FrontPorchExtensions.fromJson(
+              Map<String, dynamic>.from(fp),
+            );
+          } catch (e) {
+            print('Card parse: ignoring malformed front_porch extensions: $e');
+          }
         }
         // Preserve all non-front_porch keys for round-trip safety
         final otherKeys = Map<String, dynamic>.from(extensionsMap)
@@ -217,37 +243,36 @@ class V2CardService {
         if (otherKeys.isNotEmpty) rawExtensions = otherKeys;
       }
 
+      final book = data['character_book'] ?? jsonMap['character_book'];
+      Lorebook? lorebook;
+      if (book is Map) {
+        try {
+          lorebook = Lorebook.fromJson(Map<String, dynamic>.from(book));
+        } catch (e) {
+          print('Card parse: ignoring malformed character_book: $e');
+        }
+      }
+      final voice = data['tts_voice'] ?? jsonMap['tts_voice'];
+
       return CharacterCard(
-        name: data['name'] ?? jsonMap['name'] ?? '',
-        description: data['description'] ?? jsonMap['description'] ?? '',
-        personality: data['personality'] ?? jsonMap['personality'] ?? '',
-        scenario: data['scenario'] ?? jsonMap['scenario'] ?? '',
-        firstMessage: data['first_mes'] ?? jsonMap['first_mes'] ?? '',
-        mesExample: data['mes_example'] ?? jsonMap['mes_example'] ?? '',
-        systemPrompt: data['system_prompt'] ?? jsonMap['system_prompt'] ?? '',
-        postHistoryInstructions:
-            data['post_history_instructions'] ??
-            jsonMap['post_history_instructions'] ??
-            '',
-        alternateGreetings:
-            (data['alternate_greetings'] ?? jsonMap['alternate_greetings']) !=
-                null
-            ? List<String>.from(
-                data['alternate_greetings'] ?? jsonMap['alternate_greetings'],
-              )
-            : const [],
-        tags: (data['tags'] ?? jsonMap['tags']) != null
-            ? List<String>.from(data['tags'] ?? jsonMap['tags'])
-            : const [],
-        lorebook: (data['character_book'] ?? jsonMap['character_book']) != null
-            ? Lorebook.fromJson(
-                data['character_book'] ?? jsonMap['character_book'],
-              )
-            : null,
-        worldNames: (data['world_names'] ?? jsonMap['world_names']) != null
-            ? List<String>.from(data['world_names'] ?? jsonMap['world_names'])
-            : const [],
-        ttsVoice: data['tts_voice'] ?? jsonMap['tts_voice'],
+        name: text(data['name'] ?? jsonMap['name']),
+        description: text(data['description'] ?? jsonMap['description']),
+        personality: text(data['personality'] ?? jsonMap['personality']),
+        scenario: text(data['scenario'] ?? jsonMap['scenario']),
+        firstMessage: text(data['first_mes'] ?? jsonMap['first_mes']),
+        mesExample: text(data['mes_example'] ?? jsonMap['mes_example']),
+        systemPrompt: text(data['system_prompt'] ?? jsonMap['system_prompt']),
+        postHistoryInstructions: text(
+          data['post_history_instructions'] ??
+              jsonMap['post_history_instructions'],
+        ),
+        alternateGreetings: strList(
+          data['alternate_greetings'] ?? jsonMap['alternate_greetings'],
+        ),
+        tags: strList(data['tags'] ?? jsonMap['tags']),
+        lorebook: lorebook,
+        worldNames: strList(data['world_names'] ?? jsonMap['world_names']),
+        ttsVoice: voice is String ? voice : null,
         imagePath: imagePath,
         frontPorchExtensions: fpExtensions,
         rawExtensions: rawExtensions,

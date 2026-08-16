@@ -184,10 +184,24 @@ class _GroupRealismDynamicsEditorState
     _emit();
   }
 
+  // Memoized per editor: _avatar runs once per member card, once per source
+  // row and once per source×target pair, and EVERY relationship-slider drag
+  // frame rebuilds the whole editor — N existsSync per frame is the io-lint
+  // bug class (same shape as scene_guest_picker_dialog's cache).
+  final Map<String, ImageProvider?> _avatarCache = {};
+
   Widget _avatar(GroupRealismMember m, double radius) {
     final path = m.avatarPath;
-    if (path != null && path.isNotEmpty && File(path).existsSync()) {
-      return CircleAvatar(radius: radius, backgroundImage: FileImage(File(path)));
+    final image = (path == null || path.isEmpty)
+        ? null
+        : _avatarCache.putIfAbsent(
+            path,
+            () => File(path).existsSync() // io-ok: memoized per editor
+                ? FileImage(File(path))
+                : null,
+          );
+    if (image != null) {
+      return CircleAvatar(radius: radius, backgroundImage: image);
     }
     return CircleAvatar(
       radius: radius,

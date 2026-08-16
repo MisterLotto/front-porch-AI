@@ -41,7 +41,7 @@ class StoryPipelineService extends ChangeNotifier {
   final LLMService _llmService;
   final MemoryService
   _memoryService; // ignore: unused_field - Reserved for future story RAG / memory injection
-  final AppDatabase _db;
+  AppDatabase _db;
 
   bool _isRunning = false;
   String _currentStep = '';
@@ -62,6 +62,15 @@ class StoryPipelineService extends ChangeNotifier {
     this._db,
   );
 
+  /// Re-point at a reopened database (backup restore, storage move, stable-DB
+  /// import) — same contract as StoryRepository.updateDatabase. Without this
+  /// the pipeline kept the CLOSED startup handle until an unrelated provider
+  /// notification happened to rebuild it, and Porch Stories looked empty (or
+  /// threw) until then.
+  void updateDatabase(AppDatabase db) {
+    _db = db;
+  }
+
   /// Public method for the UI to preview what chat history will be imported.
   /// Always pulls full messages from the DB (not RAG embeddings which are windowed summaries).
   Future<List<String>> getChatPreviewMessages(StoryProject project) async {
@@ -76,6 +85,14 @@ class StoryPipelineService extends ChangeNotifier {
       for (final charId in resolvedIds) {
         final sessions = await _db.getSessionsForCharacter(charId);
         for (final session in sessions) {
+          // Living Time §4: same session scoping as the distiller and the raw
+          // fallback in story_pipeline_service.llm.dart (keep in sync — all
+          // three are "the chat history" for a project, and a preview that
+          // shows chats the story will never use is a lie).
+          if (project.chatHistorySessionIds.isNotEmpty &&
+              !project.chatHistorySessionIds.contains(session.id)) {
+            continue;
+          }
           final msgs = await _db.getMessagesForSession(session.id);
           for (final msg in msgs) {
             try {

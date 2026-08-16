@@ -34,6 +34,7 @@ export 'image_command_service.dart';
 export 'impersonate_prompt.dart';
 export 'journal_maintenance.dart';
 export 'journal_ops.dart';
+export 'item_card_stamps.dart';
 export 'journal_physics.dart';
 export 'journal_prompt.dart';
 export 'journal_review.dart';

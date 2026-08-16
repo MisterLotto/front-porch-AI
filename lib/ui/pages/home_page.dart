@@ -130,30 +130,44 @@ class _HomePageState extends State<HomePage> {
     return storage.resolveCharacterImage(c.imagePath ?? '');
   }
 
+  // The notifiers we subscribed to, held so dispose() can unsubscribe: they
+  // are app-scoped providers, MainLayout swaps HomePage out of the tree on
+  // every sidebar navigation, and a Provider.of lookup is no longer legal
+  // once the element is defunct — so the reference has to be captured here.
+  KoboldService? _koboldListened;
+  CharacterRepository? _charRepoListened;
+  AppState? _appStateListened;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Listen for model-ready events from KoboldService
     try {
       final kobold = Provider.of<KoboldService>(context, listen: false);
+      _koboldListened?.removeListener(_onKoboldUpdate);
       kobold.removeListener(_onKoboldUpdate);
       kobold.addListener(_onKoboldUpdate);
+      _koboldListened = kobold;
     } catch (_) {
       // KoboldService might not be in the provider tree
     }
     // Listen for CharacterRepository changes to refresh cache after characters load
     try {
       final charRepo = Provider.of<CharacterRepository>(context, listen: false);
+      _charRepoListened?.removeListener(_onCharactersChanged);
       charRepo.removeListener(_onCharactersChanged);
       charRepo.addListener(_onCharactersChanged);
+      _charRepoListened = charRepo;
     } catch (_) {}
     // Re-tapping the sidebar's Home entry bumps AppState.homeResetTick —
     // treat it as "take me back to the main screen" (library top level).
     try {
       final appState = Provider.of<AppState>(context, listen: false);
       _lastHomeResetTick ??= appState.homeResetTick;
+      _appStateListened?.removeListener(_onAppStateChanged);
       appState.removeListener(_onAppStateChanged);
       appState.addListener(_onAppStateChanged);
+      _appStateListened = appState;
     } catch (_) {}
   }
 
@@ -346,12 +360,9 @@ class _HomePageState extends State<HomePage> {
     _activityRefreshDebounce?.cancel();
     _searchController.dispose();
     _gridScrollController.dispose();
-    try {
-      Provider.of<AppState>(
-        context,
-        listen: false,
-      ).removeListener(_onAppStateChanged);
-    } catch (_) {}
+    _koboldListened?.removeListener(_onKoboldUpdate);
+    _charRepoListened?.removeListener(_onCharactersChanged);
+    _appStateListened?.removeListener(_onAppStateChanged);
     super.dispose();
   }
 

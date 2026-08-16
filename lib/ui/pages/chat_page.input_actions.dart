@@ -263,6 +263,10 @@ extension _ChatPageInputActions on _ChatPageState {
                   chatService.impersonateUser(
                     prefix: prefix,
                     onToken: (accumulated) {
+                      // ChatService is app-scoped and impersonation keeps
+                      // streaming after the page pops — writing a disposed
+                      // controller here throws inside the stream loop.
+                      if (!mounted) return;
                       _controller.text = accumulated;
                       _controller.selection = TextSelection.fromPosition(
                         TextPosition(offset: accumulated.length),
@@ -306,6 +310,7 @@ extension _ChatPageInputActions on _ChatPageState {
                       if (sttService.isRecording) {
                         final text = await sttService
                             .stopRecordingAndTranscribe();
+                        if (!mounted) return;
                         if (text != null && text.isNotEmpty) {
                           if (storage.autoSendTranscription &&
                               _controller.text.isEmpty) {

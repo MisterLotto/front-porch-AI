@@ -140,13 +140,29 @@ extension TtsServiceStreamingAndHeadless on TtsService {
           // Fire off generation without awaiting — runs concurrently
           final future = () async {
             File? wavFile;
-            if (_isPiperEngine) {
-              wavFile = await _piperGenerateWav(voice, sanitized, idx, speed);
-            } else {
-              kDebugPrint(
-                '[TtsService] Streaming: generating audio for chunk (len=${sanitized.length})',
-              );
-              wavFile = await engine.generateAudio(sanitized, voice, speed);
+            try {
+              if (_isPiperEngine) {
+                wavFile = await _piperGenerateWav(voice, sanitized, idx, speed);
+              } else {
+                kDebugPrint(
+                  '[TtsService] Streaming: generating audio for chunk (len=${sanitized.length})',
+                );
+                wavFile = await engine.generateAudio(sanitized, voice, speed);
+              }
+            } on ElevenLabsApiException catch (e) {
+              // ElevenLabs THROWS where every other engine returns null. An
+              // escaping throw left completedFiles[idx] unwritten, so the
+              // in-order collector wedged at that index forever (the rest of
+              // the reply never played, speakStreaming never returned, and the
+              // orphaned .then below raised an unhandled async error). Convert
+              // to the null the collector is written for, and surface the
+              // message so the user sees the quota/key problem.
+              print('TTS ElevenLabs streaming error: $e');
+              _lastError = e.message;
+              wavFile = null;
+            } catch (e) {
+              print('TTS streaming generation error: $e');
+              wavFile = null;
             }
             return wavFile;
           }();

@@ -67,6 +67,15 @@ class WebServerHost extends ChangeNotifier {
   TunnelManager? _tunnelManager;
   String? _lanIp;
 
+  /// Bumped by every [start] and every [stop]. `startSafely` time-boxes start
+  /// with `Future.timeout`, which does NOT cancel the awaited work — it only
+  /// completes the caller's future early. Without this counter a start that
+  /// timed out (or was stopped mid-bind) would go on to publish a live socket
+  /// AFTER the caller had already persisted "disabled" and reported failure,
+  /// leaving the app listening with the UI insisting it is off. A run that
+  /// finds the generation moved on closes what it just opened and exits.
+  int _startGeneration = 0;
+
   // Realism-eval overlay streaming: a ChatService listener that pushes the
   // accumulating eval text over the hub while the Realism Engine is thinking, so
   // the web shows the same live "processing" overlay the desktop does. Stored so
@@ -255,6 +264,7 @@ class WebServerHost extends ChangeNotifier {
 
   Future<void> start([int? portOverride]) async {
     if (isRunning) return;
+    final int generation = ++_startGeneration;
     final db = _db;
     if (db == null) {
       throw StateError('WebServerHost.start() called before setDatabase()');
@@ -477,12 +487,24 @@ class WebServerHost extends ChangeNotifier {
       imageGen.addListener(onImageProgress);
     }
 
+    final characterFacade = CharacterFacade(
+      db,
+      _storage,
+      _folderService,
+      chatService,
+      _characterRepository,
+    );
+
     // Library live-sync: broadcast a single debounced `library_changed` whenever
     // characters, folders or groups change (from the desktop or a web client),
     // so every browser refreshes its library near-instantly. Debounced ~150ms to
     // coalesce the multiple notifies a single op can fire (e.g. an import).
     if (streamHub != null) {
       void onLibraryChanged() {
+        // Undebounced: the refetch this broadcast triggers must not be served
+        // from a memo that predates the change, or a swapped portrait would
+        // keep its old `v=` token and stay cached in the browser.
+        characterFacade.invalidateAvatarVersions();
         _libraryDebounce?.cancel();
         _libraryDebounce = Timer(const Duration(milliseconds: 150), () {
           streamHub.broadcast({'event': 'library_changed'});
@@ -494,14 +516,6 @@ class WebServerHost extends ChangeNotifier {
       _folderService?.addListener(onLibraryChanged);
       _groupChatRepository?.addListener(onLibraryChanged);
     }
-
-    final characterFacade = CharacterFacade(
-      db,
-      _storage,
-      _folderService,
-      chatService,
-      _characterRepository,
-    );
     // Built before ChatFacade so its saved-image resolver (basename → File
     // with the traversal guard) can be shared for chat image messages.
     final imageFacade = _imageGenService != null
@@ -663,12 +677,31 @@ class WebServerHost extends ChangeNotifier {
     // self-signed cert, whose browser trust warning is worse UX than http.
     // Real HTTPS comes only from a trusted external terminator (Tailscale
     // serve / ngrok); over those our server stays plain http on loopback.
-    _server = await shelf_io.serve(buildWebHandler(deps), bindAddress, bindPort)
-      ..autoCompress = true;
+    final bound =
+        await shelf_io.serve(buildWebHandler(deps), bindAddress, bindPort)
+          ..autoCompress = true;
 
-    if (exposeAll) _lanIp = await detectPrivateLanIp();
+    // The caller gave up on this run while it was binding (startSafely's
+    // timeout, or a stop()). Publishing the socket now would leave the app
+    // listening with "disabled" already persisted and the UI insisting the
+    // server is off — so close what we just opened and leave.
+    if (generation != _startGeneration) {
+      await bound.close(force: true);
+      debugPrint('[WebServerHost] Abandoned start — closed the late socket');
+      return;
+    }
+    _server = bound;
+
+    if (exposeAll) {
+      final ip = await detectPrivateLanIp();
+      // Same race, one await later: a stop() during the LAN lookup already
+      // closed the socket above, so leave rather than report an address (or
+      // open a tunnel) for a server that is gone.
+      if (generation != _startGeneration) return;
+      _lanIp = ip;
+    }
     debugPrint(
-      '[WebServerHost] Listening on http://${exposeAll ? (_lanIp ?? '0.0.0.0') : 'localhost'}:${_server!.port}',
+      '[WebServerHost] Listening on http://${exposeAll ? (_lanIp ?? '0.0.0.0') : 'localhost'}:${bound.port}',
     );
 
     // Re-establish the clean no-port HTTPS URL on launch for opted-in users.
@@ -763,6 +796,11 @@ class WebServerHost extends ChangeNotifier {
   }
 
   Future<void> stop() async {
+    // Disown any start still in flight FIRST — before the early return below,
+    // which is exactly the case a start that has not reached its bind yet hits
+    // (nothing wired, no server): otherwise its socket would surface after we
+    // returned. See [_startGeneration].
+    _startGeneration++;
     final server = _server;
     // `start()` attaches every listener, the 1s heartbeat timer, the StreamHub
     // (which subscribes to the token stream in its constructor) and the

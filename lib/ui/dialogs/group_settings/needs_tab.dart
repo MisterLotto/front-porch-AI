@@ -8,6 +8,7 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/utils/utils.dart';
 import 'package:front_porch_ai/ui/dialogs/group_settings/group_settings_support.dart';
+import 'package:front_porch_ai/ui/dialogs/group_settings/member_ext_persist.dart';
 
 part 'needs_tab.member.dart';
 
@@ -55,6 +56,13 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
   final Map<String, bool> _enjoysLowHygiene = {};
 
   List<CharacterCard> _chars = [];
+
+  // Baselines and "enjoys low hygiene" live on the member's card ext, which
+  // only reaches disk through this persister — the dialog's Save writes the
+  // groups row alone, so these edits used to vanish on the next launch.
+  late final GroupMemberExtPersister _extPersister = GroupMemberExtPersister(
+    widget.chatService,
+  );
 
   // Field name constants for needs baselines map keys.
 
@@ -136,6 +144,7 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
               needsBaselineComfort: _needsBaselines[id]?[_kComfort] ?? 80,
             );
         char.frontPorchExtensions?.ensureStableId();
+        _extPersister.schedule(char);
       }
     });
     // The card's needsBaseline* fields above are the real storage. A second
@@ -163,6 +172,9 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
         char.frontPorchExtensions?.ensureStableId();
     });
     persistGroupMemberPref(widget.chatService, id, 'enjoysLowHygiene', value);
+    // The blob key above is creation-time seeding only; the runtime reads
+    // frontPorchExtensions.enjoysLowHygiene, so the card has to be written.
+    _extPersister.schedule(char);
   }
 
 
@@ -193,6 +205,11 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
     _updateMemberEnjoysLowHygiene(character, false);
     widget.chatService.resetRealismForGroupCharacter(character);
 
+    // The lines above queued this member's ext; write it HERE, before the
+    // decay writes below, so no debounced save is ever in flight at the same
+    // time as one of them — two concurrent saves would race on the same PNG.
+    await _extPersister.flushMember(id);
+
     // The decay persist (member card ext + PNG + GroupMembers row) is the
     // expensive one: only the needs that actually changed are written, and
     // strictly one at a time — two concurrent saves would race on the same PNG.
@@ -210,6 +227,7 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
   @override
   void dispose() {
     widget.chatService.removeListener(_onServiceChanged);
+    _extPersister.dispose();
     super.dispose();
   }
 

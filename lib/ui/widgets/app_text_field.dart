@@ -41,6 +41,17 @@ abstract class SpellCheckResultsProvider {
   SpellCheckResults? get spellCheckResults;
 }
 
+/// The text a spell-check span covers in [text], or null when that span no
+/// longer fits the string — an empty/invalid range, or one whose end is past
+/// the end of the text. Every use of a [SuggestionSpan] range has to be
+/// re-checked against the live text before it is read or replaced, because
+/// spell-check results outlive the text they were measured against.
+String? _spanWord(String text, TextRange range) {
+  if (!range.isValid || range.isCollapsed) return null;
+  if (range.start < 0 || range.end > text.length) return null;
+  return text.substring(range.start, range.end);
+}
+
 /// The standard text input widget for all user-facing **prose** fields across
 /// Front Porch AI (chat input, character descriptions, system prompts, lore
 /// entries, story prose, etc.).
@@ -299,14 +310,23 @@ class AppTextField extends StatelessWidget {
     final TextEditingValue value = editableTextState.textEditingValue;
 
     // Find a misspelled span that contains the current cursor position.
+    //
+    // A span is only usable while the word it measured is still there: results
+    // arrive asynchronously and are never invalidated when the text changes,
+    // so a cached span can describe a longer, older string. Applying one
+    // verbatim would rewrite the wrong characters — or throw, once its end is
+    // past the end of the live text.
     SuggestionSpan? hitSpan;
+    String? hitWord;
     if (results != null && value.selection.isValid) {
       final int cursor = value.selection.baseOffset;
       for (final SuggestionSpan span in results.suggestionSpans) {
-        if (cursor >= span.range.start && cursor <= span.range.end) {
-          hitSpan = span;
-          break;
-        }
+        if (cursor < span.range.start || cursor > span.range.end) continue;
+        final String? word = _spanWord(value.text, span.range);
+        if (word == null) continue;
+        hitSpan = span;
+        hitWord = word;
+        break;
       }
     }
 
@@ -322,16 +342,26 @@ class AppTextField extends StatelessWidget {
     }
 
     final SuggestionSpan span = hitSpan;
+    final String word = hitWord!;
     final List<ContextMenuButtonItem> suggestionItems = span.suggestions
         .take(5)
         .map(
           (String suggestion) => ContextMenuButtonItem(
             label: suggestion,
             onPressed: () {
-              editableTextState.userUpdateTextEditingValue(
-                value.replaced(span.range, suggestion),
-                SelectionChangedCause.tap,
-              );
+              // Read the LIVE value, not the one captured when the menu was
+              // built: the field can be typed into, undone or programmatically
+              // rewritten while the toolbar is open. If the misspelled word is
+              // no longer sitting at that range, the correction no longer
+              // applies — dropping it beats rewriting whatever moved in.
+              final TextEditingValue current =
+                  editableTextState.textEditingValue;
+              if (_spanWord(current.text, span.range) == word) {
+                editableTextState.userUpdateTextEditingValue(
+                  current.replaced(span.range, suggestion),
+                  SelectionChangedCause.tap,
+                );
+              }
               editableTextState.hideToolbar(false);
             },
           ),

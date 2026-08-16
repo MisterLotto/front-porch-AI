@@ -3,6 +3,66 @@
 
 # Changelog
 
+## 2026-08-15 — fix(sweep): 68 verified MEDIUM findings + wave residuals + review leftovers
+- **Why:** the 1.3 sweep's medium wave (16 Opus batches over 95 findings —
+  86 confirmed mediums, 8 re-verified extras incl. two late highs, 1
+  durability follow-up), every danger-zone diff re-read by hand. Plus the
+  four leftovers Grok's independent review of the committed work flagged,
+  all closed by hand: Stoop sibling builders hardened against hostile card
+  JSON, the PWA Stoop session now survives network hiccups (401-only clear,
+  desktop rule), past-tense clock claims ("It was 5 a.m.") no longer
+  teleport the clock, and StoryPipelineService gains updateDatabase +
+  the rebind call (Porch Stories no longer sits on a closed DB after a
+  restore). Also: installer downloads reject HTML masquerading as a binary,
+  TtsService.dispose shuts down the Kokoro isolate, and the orphaned
+  item-card-stamps leaf from the interrupted run was WIRED (retired item
+  diary cards now stamp onto the turn and re-plant on regen/tail-delete —
+  replace/append Continue contract, retire-first dedupe).
+- **My review catches:** SyncedTextField's didUpdateWidget said `if (true)`
+  (mangled half-fix — re-stamped the caret to end on every rebuild; the
+  wave's own guard test went red and the widget was fixed, not the test);
+  three wave tests needed harness repairs (path_provider mock + init drain,
+  createTempSync vs real-async-in-fake-zone, realism seed instead of an
+  ink-asserting tap); one unworkable widget guard deleted with the gap
+  disclosed (group_realism avatar memo — pre-existing debug ink assertion
+  in bare trees; memo reviewed by hand).
+- **Deferred to maintainer (test-change approval needed):** needs
+  enjoys-low-hygiene step inversion (golden pins old behavior),
+  pockets set-aside midnight expiry (day-only contract pinned),
+  ChipListEditor double-commit (existing test pins the old behavior).
+  Out-of-batch skips documented in med_wave_result.json: V2 creator-field
+  round-trip (multi-file), reasoning preset call sites, RAG retrieve
+  session-scoping + per-member priority keys, tunnels sync PATH probes,
+  liveDatabase UI page, sprite re-roll rebuild churn.
+- **Gates:** analyze clean; full unit suite green (sole failure: the
+  gitignored .local_poke live-DB scratch test, missing its Aug-12 /tmp
+  fixture); 94 Linux container goldens green; tsc + 105 vitest green; PWA
+  bundle rebuilt.
+- **Commit:** (this commit)
+
+## 2026-08-15 — fix(sweep): 53 verified HIGH findings (14-batch Opus fix wave)
+- **Why:** the 1.3 sweep's verifier-confirmed highs. Every diff re-read by
+  hand (Fable) before commit; 3 cross-batch residuals finished by hand
+  (settle-race send queue via _waitForTurnToSettle, display-buffer pref
+  one-time reset latch, stoop_card_sections defensive casts) and CLAUDE.md's
+  Story Pipeline directive AMENDED (update now recreates only on a real
+  activeService/db identity change — the old always-recreate rule disposed a
+  running story per Kobold stdout line).
+- **What:** see commit 9741aece for the full area-by-area body (character
+  delete cascade, v40 migration re-run gate, objectives reload on chat
+  switch, RAG invalidation choke point, journal/growth snapshot cursors,
+  cancel-regen state put-back, group New Chat needs re-derivation, fork
+  metadata copy, provider-graph listener leak + story pipeline rebuild storm,
+  web CSRF gate on /api/auth/setup, web card-edit field wipe, WebServerHost
+  db-swap bounce + failed-bind teardown, Windows portrait-cleanup basename
+  fix, Kobold orphan-kill gate, storage-root all-or-nothing move (+ extracted
+  storage/root_relocation.dart to satisfy the 1,000-line ratchet), TTS
+  single-sentence delete + supersede tickets, story pipeline think-strip +
+  running flag, PWA persona-loop + failed-send retry banner).
+- **Tests:** 41 new guard-test files (red-proven where reported), full unit
+  suite + tsc + vitest green, PWA bundle rebuilt.
+- **Commit:** 9741aece (+ residuals ride the medium-wave commit)
+
 ## 2026-08-15 — fix(sweep): the 4 CRITICAL findings from the 1.3 release bug sweep
 - **Why:** 29-agent Opus sweep + adversarial verification ahead of 1.3; I
   (Fable) re-read every cited path by hand before fixing. The four criticals:
@@ -28,7 +88,7 @@
   (red-proven, full-turn FakeBackendServer harness),
   database_rebind_session_reload_test (mechanism; call-site pin flagged as
   follow-up). Analyze clean.
-- **Commit:** (this commit)
+- **Commit:** d1aac53b
 
 ## 2026-08-15 — tune(realism): long-term bond check every 3 applies
 - **Why:** Long-term felt a tad slow at every 5. Every 2 was too

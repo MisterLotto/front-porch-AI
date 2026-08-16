@@ -26,6 +26,7 @@ import 'package:front_porch_ai/services/character_repository.dart';
 import 'package:front_porch_ai/services/chat_service.dart';
 import 'package:front_porch_ai/services/folder_service.dart';
 import 'package:front_porch_ai/services/group_chat_repository.dart';
+import 'package:front_porch_ai/services/story_pipeline_service.dart';
 import 'package:front_porch_ai/services/story_repository.dart';
 import 'package:front_porch_ai/services/user_persona_service.dart';
 import 'package:front_porch_ai/services/web/web_server_host.dart';
@@ -105,6 +106,12 @@ Future<AppDatabase?> reopenAndRebindDatabase(
     final storyRepo = Provider.of<StoryRepository>(context, listen: false);
     chatService.updateDatabase(newDb);
     storyRepo.updateDatabase(newDb);
+    // The pipeline binds its own handle at construction; without this it kept
+    // the CLOSED one until an unrelated rebuild (Porch Stories looked empty).
+    Provider.of<StoryPipelineService>(
+      context,
+      listen: false,
+    ).updateDatabase(newDb);
     Provider.of<WebServerHost>(context, listen: false).setDatabase(newDb);
 
     // Every in-memory cache is now a view of the previous database file.

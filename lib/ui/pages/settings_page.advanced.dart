@@ -158,6 +158,26 @@ extension _SettingsAdvancedTab on _SettingsPageState {
     );
   }
 
+  /// The ONE commit path for the web-server port field — Enter and focus
+  /// loss both land here, so clicking away can no longer discard a typed
+  /// port. Unparseable or out-of-range text leaves the saved port alone
+  /// (see [parseWebServerPort]); an unchanged port is a no-op so a blur
+  /// never restarts a running server for nothing.
+  Future<void> _commitWebServerPort(
+    String value,
+    StorageService storage,
+    WebServerHost webServer,
+  ) async {
+    _pendingWebServerPort = null;
+    final port = parseWebServerPort(value);
+    if (port == null || port == storage.webServerPort) return;
+    await storage.setWebServerPort(port);
+    if (webServer.isRunning) {
+      await webServer.stop();
+      await webServer.start(port);
+    }
+  }
+
   Widget _buildWebServerSection(BuildContext context) {
     final theme = Theme.of(context);
     return Consumer2<StorageService, WebServerHost>(
@@ -223,35 +243,54 @@ extension _SettingsAdvancedTab on _SettingsPageState {
                           const SizedBox(height: 4),
                           SizedBox(
                             width: 120,
-                            child: TextFormField(
-                              // Keyed on the port so the one-tap "Use port N"
-                              // fix in the failure dialog refreshes the field.
-                              key: ValueKey(storage.webServerPort),
-                              initialValue: storage.webServerPort.toString(),
-                              keyboardType: TextInputType.number,
-                              style: TextStyle(
-                                color: AppColors.textPrimary(context),
-                                fontSize: 13,
-                              ),
-                              decoration: InputDecoration(
-                                filled: true,
-                                fillColor: theme.scaffoldBackgroundColor,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 8,
-                                ),
-                              ),
-                              onFieldSubmitted: (val) async {
-                                final port = int.tryParse(val) ?? 8085;
-                                await storage.setWebServerPort(port);
-                                if (webServer.isRunning) {
-                                  await webServer.stop();
-                                  await webServer.start(port);
-                                }
+                            // Enter was the ONLY commit path: a typed port was
+                            // silently dropped when the user clicked away. The
+                            // pending text lives on the State because storage
+                            // and webServer notifications rebuild this field
+                            // mid-edit.
+                            child: Focus(
+                              // Blur listener only — a focusable wrapper would
+                              // add a Tab stop in front of the field that shows
+                              // no caret and swallows typing.
+                              canRequestFocus: false,
+                              onFocusChange: (hasFocus) {
+                                if (hasFocus) return;
+                                final pending = _pendingWebServerPort;
+                                if (pending == null) return;
+                                _commitWebServerPort(
+                                  pending,
+                                  storage,
+                                  webServer,
+                                );
                               },
+                              child: TextFormField(
+                                // Keyed on the port so the one-tap "Use port N"
+                                // fix in the failure dialog refreshes the field.
+                                key: ValueKey(storage.webServerPort),
+                                initialValue: storage.webServerPort.toString(),
+                                keyboardType: TextInputType.number,
+                                style: TextStyle(
+                                  color: AppColors.textPrimary(context),
+                                  fontSize: 13,
+                                ),
+                                decoration: InputDecoration(
+                                  filled: true,
+                                  fillColor: theme.scaffoldBackgroundColor,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 8,
+                                  ),
+                                ),
+                                onChanged: (val) => _pendingWebServerPort = val,
+                                onFieldSubmitted: (val) => _commitWebServerPort(
+                                  val,
+                                  storage,
+                                  webServer,
+                                ),
+                              ),
                             ),
                           ),
                         ],

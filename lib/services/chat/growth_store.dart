@@ -62,6 +62,14 @@ class GrowthStore {
   final Map<String, List<GrowthRingData>> _ringCache = {};
   int _cursorCache = 0;
 
+  /// Bumped by every [refresh] and by [invalidate]. A load that finishes after
+  /// a newer one started (or after an explicit invalidate) drops its result
+  /// instead of stamping the cache with its own — otherwise a chat switch
+  /// during a slow load left the cache tagged with the OLD session and every
+  /// sync reader below returned empty for the live chat, silently dropping the
+  /// [Character Growth] block from the prompt.
+  int _refreshEpoch = 0;
+
   /// charId → (legacy evolved personality, legacy evolved scenario) still
   /// waiting to be distilled into rings (design §8). Injection keeps using
   /// the blob until the distill pass succeeds — no behavior cliff.
@@ -69,6 +77,7 @@ class GrowthStore {
 
   /// Drop the cache (context switches). The next [refresh] repopulates it.
   void invalidate() {
+    _refreshEpoch++;
     _cacheSessionId = null;
     _ringCache.clear();
     _legacyCache.clear();
@@ -86,6 +95,7 @@ class GrowthStore {
   }) async {
     final db = getDb();
     if (db == null) return;
+    final epoch = ++_refreshEpoch;
     final rings = <String, List<GrowthRingData>>{};
     for (final id in charIds) {
       if (id.isEmpty) continue;
@@ -134,7 +144,11 @@ class GrowthStore {
 
     final cursor = await db.getGrowthCursor(sessionId);
 
-    // Swap atomically only if no context switch happened mid-load.
+    // Swap atomically only if no context switch happened mid-load. The comment
+    // said this long before the check existed: the swap was unconditional, so
+    // a load that started first but finished last re-stamped the cache with a
+    // session the user had already left (release audit 2026-08-15).
+    if (epoch != _refreshEpoch) return;
     _cacheSessionId = sessionId;
     _ringCache
       ..clear()
