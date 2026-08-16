@@ -46,7 +46,7 @@ When something goes wrong, this page is the fastest route back to chatting. Find
 - [Where is my data folder?](#where-is-my-data-folder)
 - [Restoring from a backup](#restoring-from-a-backup)
 - [Database corruption](#database-corruption)
-- [Beta vs stable — two apps, two data folders](#beta-vs-stable--two-apps-two-data-folders)
+- [Nightly vs stable — two apps, two data folders](#nightly-vs-stable--two-apps-two-data-folders)
 - [Missing character images](#missing-character-images)
 
 ### Platform Notes
@@ -322,7 +322,7 @@ Everything — characters, chats, memories, backups, models — lives in one fol
 
 - **Windows:** `Documents\FrontPorchAI\`
 - **macOS / Linux:** `~/Documents/FrontPorchAI/`
-- Beta/nightly builds use **`FrontPorchAI-Beta`** instead.
+- Nightlies use **`FrontPorchAI-Beta`** instead (leftover name).
 
 **Not sure? The app will tell you.** Settings → **Advanced** → **Storage Configuration** shows the exact **Data Directory** path. The pencil icon next to it relocates your database, characters, chats, worlds, models and the AI engine to a new home (an external drive, a bigger disk) and reopens everything from there — no restart, no manual copying.
 
@@ -340,7 +340,7 @@ The app automatically snapshots **the database** — your chats, messages, chara
 - **A snapshot is the database file and nothing else.** Portraits and other picture files sit beside the database on disk and are never inside a backup. The practical consequence: a backup will **not** bring back a character you deleted, because deleting one also removes its image file, and no restore puts that back. If there's any chance you'll want a character again, right-click its card on the home grid and **Export PNG** first.
 - Backups live in `KoboldManager/backups/` inside your data folder, named by date and time, if you ever want to copy them elsewhere.
 
-> **Beta and nightly builds:** the **Backups & Restore** page opens but its contents are replaced by a notice, so there is no way to browse or roll back a snapshot there. The automatic snapshots themselves keep running — the 30-minute timer fires on every build. The launch recovery screen still works, so a damaged beta database can still be rescued, and beta snapshots pile up as normal in `FrontPorchAI-Beta/KoboldManager/backups/`.
+> **Nightlies:** the **Backups & Restore** page opens but its contents are replaced by a notice, so there is no way to browse or roll back a snapshot there. The automatic snapshots themselves keep running — the 30-minute timer fires on every build. The launch recovery screen still works, so a damaged nightly database can still be rescued, and nightly snapshots pile up as normal in `FrontPorchAI-Beta/KoboldManager/backups/`.
 
 ### Database corruption
 
@@ -351,14 +351,14 @@ Usually caused by a power cut, disk-full, or force-quitting during a write.
 
 **Prevention:** close the app with its own close button (it shuts the database down cleanly), and don't force-kill it mid-generation.
 
-### Beta vs stable — two apps, two data folders
+### Nightly vs stable — two apps, two data folders
 
-Beta and nightly builds are **fully isolated** from stable on purpose: separate `FrontPorchAI-Beta` folder, separate settings, separate models. A beta can never damage your stable library — but it also means:
+Nightlies are **fully isolated** from stable on purpose: separate `FrontPorchAI-Beta` folder (leftover name), separate settings, separate models. A nightly can never damage your stable library — but it also means:
 
-- Characters don't automatically appear in both. On its first launch, a beta build offers to import a copy of your stable data; take it or skip it, but it's a *copy* either way — the two never sync afterwards.
+- Characters don't automatically appear in both. On its first launch, a nightly offers to import a copy of your stable data; take it or skip it, but it's a *copy* either way — the two never sync afterwards.
 - Models must be downloaded in each, or copied between the two `models` folders by hand.
 - To move data manually: close both apps, copy the folder contents across, relaunch.
-- On beta and nightly builds the Backups & Restore page opens but its contents are replaced by a notice, so there is no way to browse or roll back a snapshot there. The automatic snapshots themselves keep running (see above).
+- On nightlies the Backups & Restore page opens but its contents are replaced by a notice, so there is no way to browse or roll back a snapshot there. The automatic snapshots themselves keep running (see above).
 
 ### Missing character images
 
@@ -418,6 +418,6 @@ Unsigned open-source AI executables get flagged sometimes — the Windows build 
 - **[GitHub Issues](https://github.com/linux4life1/front-porch-AI/issues)** — for reproducible bugs.
 - **[FAQ](faq.md)** — for the "how does this work?" questions.
 
-If you run a **beta or nightly** build and one of the built-in engines fails — Kokoro or Piper voices, voice input, character expressions, memory embeddings, or Draw Things image generation — you'll get an amber notice with a **Copy details** button. Please press it and paste the result on Discord. Those notices only appear on early builds, and they exist precisely so a quietly broken feature doesn't stay quiet.
+If you run a **nightly** and one of the built-in engines fails — Kokoro or Piper voices, voice input, character expressions, memory embeddings, or Draw Things image generation — you'll get an amber notice with a **Copy details** button. Please press it and paste the result on Discord. Those notices only appear on early builds, and they exist precisely so a quietly broken feature doesn't stay quiet.
 
 When you ask, include: your OS, app version, what you did, what happened, and (ideally) the terminal output. That usually turns a week of guessing into a five-minute fix.

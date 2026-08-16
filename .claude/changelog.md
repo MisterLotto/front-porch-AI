@@ -3,6 +3,21 @@
 
 # Changelog
 
+## 2026-08-16 — docs: only Rawhide and main; no beta series, no dev branch
+- **Why:** Beta releases and a third `dev` line meant three installs and
+  too much process. Nightly (Rawhide) and stable (main) are the two
+  channels.
+- **What:** Branch tables, install/faq/guide/troubleshooting, README,
+  SECURITY, CI triggers, nightly first-launch copy. Isolation folder
+  stays `FrontPorchAI-Beta` (historical name) so existing nightlies
+  keep their data.
+- **Files:** CLAUDE.md, CONTRIBUTING.md, README.md, SECURITY.md,
+  docs/install.md, faq.md, getting-started.md, user-guide.md,
+  troubleshooting.md, release-notes.md (intro only), ci.yml,
+  test-integrity.yml comment, stable_db_import_dialog,
+  backups_page
+- **Commit:** 29da33cc
+
 ## 2026-08-16 — fix(ci): leftover-close unused import + expression test + ImageGen goldens
 - **Why:** Promote PR analyze died on unused import in
   character_card_credits_test. Rawhide leftover-close unit job died

@@ -93,8 +93,8 @@ class _BackupsPageState extends State<BackupsPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Database backups are disabled in pre-release builds to prevent '
-            'confusion between beta and stable databases. Backups will be '
+            'Database backups are disabled in nightly builds to prevent '
+            'confusion between nightly and stable databases. Backups will be '
             're-enabled once $stableVersionBase goes stable.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodySmall?.copyWith(color: accent, height: 1.5),

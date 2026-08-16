@@ -73,7 +73,7 @@ The short version:
 
 On Linux you can also install through your package manager (recommended — updates arrive automatically). Full instructions for every platform, including package-manager setup, are in the **[Installation Guide](install.md)**.
 
-> **Curious about new features early?** Nightly builds come out most days — whenever there's new work to ship. They use a completely separate data folder, so they never touch your stable characters and chats. Rough edges are expected — and on beta and nightly builds the **Backups & Restore** page opens but its contents are replaced by a notice, so there is no way to browse or roll back a snapshot there. The automatic snapshots themselves keep running. Keep your real characters and chats on the stable build.
+> **Curious about new features early?** Nightly builds come out most days — whenever there's new work to ship. They use a completely separate data folder, so they never touch your stable characters and chats. Rough edges are expected — and on nightlies the **Backups & Restore** page opens but its contents are replaced by a notice, so there is no way to browse or roll back a snapshot there. The automatic snapshots themselves keep running. Keep your real characters and chats on the stable build.
 
 ---
 
@@ -99,7 +99,7 @@ If setup itself hits a problem, you'll get a plain-English error with **Retry Se
 
 *On an Intel Mac:* local models aren't supported, so the app skips this whole routine — including the "How will you run your AI?" question — and drops you straight on the home screen. **It does not switch you to a remote service for you.** The app is still set to the local engine it can't run, so nothing will answer you until you open **Settings → Backend** and pick **OpenAI-Compatible API** yourself. A warning on that screen tells you the same thing: *"Local inference is not supported on Intel Macs. Only Remote API mode is available."*
 
-*On a beta or nightly build:* you may be offered the option to import a copy of your stable library so your characters are available for testing.
+*On a nightly:* you may be offered the option to import a copy of your stable library so your characters are available for testing.
 
 ![Front Porch AI home screen — your character library](screenshots/home_new.png)
 

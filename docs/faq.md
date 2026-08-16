@@ -91,9 +91,9 @@ You need to be online for: remote AI APIs, cloud voices, The Stoop, and download
 - **Stable** is the recommended download — tested, polished releases. The current one is **v1.2.0, "Occupy Mars"** (released 2026-08-01). The things that used to be nightly-only are in it, including The Stoop and changing a chat's cast on the fly with `/join`.
 - **Nightly** builds come fresh from active development most days. You get new features first, but you may also hit rough edges.
 
-Beta and nightly builds keep their data in a completely separate folder (`FrontPorchAI-Beta`) with their own settings, so trying one never touches your stable characters and chats.
+Nightlies keep their data in a completely separate folder (`FrontPorchAI-Beta` — leftover name) with their own settings, so trying one never touches your stable characters and chats.
 
-One thing to know before you switch: on beta and nightly builds the Backups & Restore page opens but its contents are replaced by a notice, so there is no way to browse or roll back a snapshot there. The automatic snapshots themselves keep running.
+One thing to know before you switch: on nightlies the Backups & Restore page opens but its contents are replaced by a notice, so there is no way to browse or roll back a snapshot there. The automatic snapshots themselves keep running.
 
 ---
 
@@ -290,7 +290,7 @@ Old ones are pruned automatically so it never grows unbounded. If the database i
 Two caveats worth being precise about:
 
 - **A backup is the database and nothing else.** It captures what the database holds — your chats, memories, and Realism history — and not the separate files sitting on disk beside it: character card PNGs, avatar images, or your downloaded AI models. So a restore will *not* undo a deleted character, because deleting one also removes its picture from disk and no backup brings that file back.
-- **On beta and nightly builds the Backups & Restore page opens but its contents are replaced by a notice**, so there is no way to browse or roll back a snapshot there. The automatic snapshots themselves keep running.
+- **On nightlies the Backups & Restore page opens but its contents are replaced by a notice**, so there is no way to browse or roll back a snapshot there. The automatic snapshots themselves keep running.
 
 For an extra off-machine copy, just copy your whole `FrontPorchAI` folder somewhere safe — that's everything.
 
@@ -301,7 +301,7 @@ Everything lives in one folder you control:
 - **Windows:** `Documents\FrontPorchAI\`
 - **macOS / Linux:** `~/Documents/FrontPorchAI/`
 
-(Beta and nightly builds use `FrontPorchAI-Beta` instead, so they never touch stable data.)
+(Nightlies use `FrontPorchAI-Beta` instead — leftover name — so they never touch stable data.)
 
 Inside you'll find your database, character cards, and backups (in `KoboldManager/`), your downloaded AI models (`models/`), plus folders for chats, worlds, and the AI engine itself. Copy the whole folder and you've backed up everything.
 
