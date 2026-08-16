@@ -19,39 +19,23 @@
 part of 'message_bubble.dart';
 
 /// Lays out the two realism chip lists built by `_buildRealismIndicator`
-/// (`message_bubble.realism.dart`): the classic-chips-only single row, or
-/// the two-row layout (classic row above a needs-chips `Wrap`), followed
-/// by the Manual Reprocess / Revert-reprocess pills. The local `_spaced`
-/// helper (the RangeError fix for an empty chip list) and its only call
-/// site move here together, unchanged.
+/// (`message_bubble.realism.dart`): the classic chips `Wrap`, or the
+/// two-row layout (classic `Wrap` above a needs-chips `Wrap`), followed
+/// by the Manual Reprocess / Revert-reprocess pills. BOTH rows wrap: the
+/// needs row learned it first (seven chips, 0.668px on Windows), and the
+/// classic row followed when pocket receipts started rendering beside
+/// bond/trust — four "took off: …" receipts overflowed a bubble by 1086px
+/// (live repro 2026-08-15). Wrap's own spacing also retired the `_spaced`
+/// helper (the old RangeError fix for an empty chip list).
 extension _BubbleRealismLayout on _MessageBubbleState {
   Widget _realismChipLayout(
     List<Widget> chips,
     List<Widget> needsChipList,
   ) {
-    // Safely build a list of children with spacers between them.
-    // The old expand(...).toList()..removeLast() pattern would throw
-    // "RangeError (length): Invalid value: Valid value range is empty: -1"
-    // whenever the source list was empty (chips or needsChipList after 0-delta filtering).
-    // This happened for messages whose realism metadata only contained needs_deltas
-    // (or a needs_deltas map whose deltas all filtered to 0) with no bond/trust/verif/etc.,
-    // or for older messages in history when the indicator was re-built after new realism
-    // metadata started being attached. The crash surfaced in the chat ListView item builder.
-    List<Widget> _spaced(List<Widget> items, double gap) {
-      if (items.isEmpty) return const <Widget>[];
-      final out = <Widget>[];
-      for (int i = 0; i < items.length; i++) {
-        out.add(items[i]);
-        if (i < items.length - 1) out.add(SizedBox(width: gap));
-      }
-      return out;
-    }
-
-    final classicSpaced = _spaced(chips, 10);
-    final classicRow = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: classicSpaced,
-    );
+    // Wrap, not Row — same rule as the needs row below. Pocket receipt
+    // chips ("took off: white long-sleeved haori (Royal Guard white)") are
+    // sentence-length, and a turn can carry several beside bond/trust/mood.
+    final classicRow = Wrap(spacing: 10, runSpacing: 4, children: chips);
     final classicBox = Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -76,7 +60,7 @@ extension _BubbleRealismLayout on _MessageBubbleState {
     if (needsChipList.isEmpty) {
       // Nothing classic and no needs chips → nothing to show (guard should have caught most,
       // but be defensive after 0-delta filtering in needs).
-      if (classicSpaced.isEmpty && pills.isEmpty) return const SizedBox.shrink();
+      if (chips.isEmpty && pills.isEmpty) return const SizedBox.shrink();
       if (pills.isEmpty) {
         return Padding(
           padding: const EdgeInsets.only(top: 10),
@@ -89,7 +73,7 @@ extension _BubbleRealismLayout on _MessageBubbleState {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (classicSpaced.isNotEmpty) classicBox,
+            if (chips.isNotEmpty) classicBox,
             ...pills,
           ],
         ),
@@ -107,9 +91,9 @@ extension _BubbleRealismLayout on _MessageBubbleState {
         mainAxisSize: MainAxisSize.min,
         children: [
           // Row 1: Classic Realism (Bond, Trust, Lust, Mood, Time, Chance Time, Director status, etc.)
-          if (classicSpaced.isNotEmpty) classicBox,
+          if (chips.isNotEmpty) classicBox,
 
-          if (classicSpaced.isNotEmpty) const SizedBox(height: 4),
+          if (chips.isNotEmpty) const SizedBox(height: 4),
 
           // Row 2: Needs Simulation deltas (Energy, Hunger, Bladder, etc.)
           Container(

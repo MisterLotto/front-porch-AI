@@ -3,6 +3,18 @@
 
 # Changelog
 
+## 2026-08-15 — fix(chat): pocket receipt chips overflowed the bubble by 1086px
+- **Why:** live maintainer repro minutes after the medium wave landed: the
+  wave FIXED receipts being silently dropped on realism turns, so
+  sentence-length "took off: …" chips finally rendered — into a
+  non-wrapping Row. The needs row below it learned this exact lesson
+  already ("Wrap, not Row", the 0.668px Windows overflow).
+- **What:** the classic chip row is a Wrap (spacing 10 / runSpacing 4);
+  Wrap's own spacing retired the `_spaced` helper (deleted) and the
+  emptiness checks now read `chips` directly. UI sweep (359) + container
+  goldens (94) green.
+- **Commit:** (this commit)
+
 ## 2026-08-15 — fix(sweep): the 3 maintainer-approved test-change fixes
 - **Why:** each correct fix contradicted a test/golden pinning the broken
   behavior; the maintainer approved the test changes in-conversation.
