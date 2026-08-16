@@ -2,7 +2,7 @@
 
 These notes feed the in-app "Update Available" dialog for stable releases on `main`.
 
-## v1.3
+## v1.3 — Check Your Pockets
 
 - 🎁 **Pockets & Wardrobe** — she has pockets, clothes, and a set-aside pile. Hand her something, take it back, she can pass it to someone else. Authors can send her into a chat already dressed and carrying things. The Journal keeps a Belongings tab of where things went. Own switch — does not need the Realism Engine.
 - ✨ **AI Enhance** — grow a character from a real chat. Walks you through it, and can bring those chats along.
