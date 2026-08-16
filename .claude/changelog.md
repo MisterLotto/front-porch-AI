@@ -13,7 +13,7 @@
   refresh is already cleared inside tryRefresh.
 - **Files:** stoopApi.ts, StoopContext.tsx;
   NEW stoopRestoreSession.test.ts; docs/Rawhide.md
-- **Commit:** (this commit)
+- **Commit:** 0ffa2560
 
 ## 2026-08-15 — fix(chat): pocket receipt chips overflowed the bubble by 1086px
 - **Why:** live maintainer repro minutes after the medium wave landed: the
