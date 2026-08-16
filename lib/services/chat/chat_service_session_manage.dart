@@ -205,14 +205,20 @@ extension ChatServiceSessionManage on ChatService {
     GroupChatRepository? groupRepo,
     required String personaId,
   }) async {
-    if (character != null) {
-      await setActiveCharacter(character);
-    } else if (group != null && groupRepo != null) {
-      await setActiveGroup(group, groupRepo: groupRepo);
-    } else {
-      return;
+    if (character == null && (group == null || groupRepo == null)) return;
+    // Hold the overlay across enter + startNewChat so ChatPage never paints
+    // the previous session's last transcript in between the two awaits.
+    beginSessionLoad();
+    try {
+      if (character != null) {
+        await setActiveCharacter(character);
+      } else {
+        await setActiveGroup(group!, groupRepo: groupRepo!);
+      }
+      await startNewChat(personaId: personaId.isEmpty ? null : personaId);
+    } finally {
+      endSessionLoad();
     }
-    await startNewChat(personaId: personaId.isEmpty ? null : personaId);
   }
 
   /// Write the currently-active persona onto the open session right now.

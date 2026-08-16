@@ -3,6 +3,37 @@
 
 # Changelog
 
+## 2026-08-16 — fix(ui): tap-to-chat no longer freezes the home grid
+- **Why:** Home awaited the full session load (cancel/settle/flush +
+  messages + realism + RAG) before pushing ChatPage, so a character tap
+  sat on the grid for a noticeable beat. ChatPage already had the overlay.
+- **What:** Raise isLoadingSession before the first await; push ChatPage
+  immediately and drain the load after pop. Opaque porch-amber overlay so
+  the previous transcript cannot ghost. Same for group + Start New Chat.
+  Web library navigates to /chat?opening=1 before the select POST.
+- **Files:** lib/ui/pages/home/home_page_chrome.dart, chat_page.dart,
+  lib/services/chat/chat_service_{chat_entry,group_entry,session_manage}.dart,
+  lib/services/web/facade/chat_facade.dart, web_ui/src/hooks/useLibrary.ts,
+  web_ui/src/pages/{ChatPage,CreateCharacterPage,CreateGroupChatPage}.tsx
+
+## 2026-08-16 — build: pin Flutter 3.47.0 / Dart 3.13 on Rawhide
+- **Why:** 3.47 is current stable. Worktree proved analyze + 4136 units +
+  30/30 mac E2E with riverpod still capped. file_picker 12 still explodes.
+- **What:** CI/nightly/release/update-goldens/beta-release → 3.47.0.
+  macOS deploy target 10.15 → 12. Docs + FAQ. Dep caps stay (separate PR).
+  Goldens regenerated for Impeller MetalSDF.
+- **Files:** .github/workflows/{ci,nightly,release,update-goldens,beta-release}.yml,
+  macos/Runner.xcodeproj/project.pbxproj, macos/Podfile, CONTRIBUTING.md,
+  docs/install.md, docs/faq.md, docs/Rawhide.md, pubspec.yaml, test/deps/README.md
+
+## 2026-08-16 — docs: nibble tall style on files you already touch
+- **Why:** A heroic `dart format .` is 856 files and a second wrap on
+  3.13. Same law as barrels: if you edited it, leave it formatted.
+- **What:** CLAUDE.md / CONTRIBUTING.md / AGENTS.md — per-file
+  `dart format path` required; tree/directory format still forbidden;
+  do not format an existing test you weren't already changing.
+- **Files:** CLAUDE.md, CONTRIBUTING.md, AGENTS.md
+
 ## 2026-08-16 — ci: restore AUR publish jobs (freeze lifted)
 - **Why:** AUR writes work again (aurweb v6.5.0). We removed the jobs
   on 2026-08-03 so every nightly/release would not red-X on a frozen

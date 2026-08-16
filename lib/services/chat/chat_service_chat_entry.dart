@@ -54,6 +54,22 @@ extension ChatServiceChatEntry on ChatService {
     notifyListeners();
   }
 
+  /// Raise the ChatPage overlay before any await so a navigate-first open
+  /// never paints the previous transcript. No-op when a caller (home tap,
+  /// startFreshChatWith) already owns the flag for a multi-step load.
+  void beginSessionLoad() {
+    if (_isLoadingSession) return;
+    _isLoadingSession = true;
+    notifyListeners();
+  }
+
+  /// Drop the overlay. Safe to call when the flag is already false.
+  void endSessionLoad() {
+    if (!_isLoadingSession) return;
+    _isLoadingSession = false;
+    notifyListeners();
+  }
+
   /// Wait (bounded) for a finishing turn's settling section to complete.
   ///
   /// [_cancelAndWaitForGeneration] stops the STREAM, but the post-gen work —
@@ -79,6 +95,12 @@ extension ChatServiceChatEntry on ChatService {
   }
 
   Future<void> setActiveCharacter(CharacterCard? character) async {
+    // Overlay on BEFORE cancel/settle/flush so ChatPage can cover the switch
+    // the instant home pushes the route. A caller that already called
+    // beginSessionLoad keeps the flag across a follow-up loadSession.
+    final ownedLoad = !_isLoadingSession;
+    beginSessionLoad();
+    try {
     // Cancel any in-flight generation before switching context, then wait
     // out the settling tail so the reload below reads fully-persisted rows.
     await _cancelAndWaitForGeneration();
@@ -192,8 +214,6 @@ extension ChatServiceChatEntry on ChatService {
     // into a fresh character's first session (see startNewChat for details).
     _parentSessionId = null;
     _forkIndex = null;
-    _isLoadingSession = true;
-    notifyListeners();
 
     if (_activeCharacter != null) {
       // Lorebook trigger reset via extracted service (keeps the keep-sync reset sites correct
@@ -423,7 +443,8 @@ extension ChatServiceChatEntry on ChatService {
       // so _currentSessionId is set)
       await _loadActiveObjectives(); // Awaited (was fire-and-forget); root fix for post-dispose notify races in tests + rapid switches. Central _disposed + notifyListeners override (rec 2) now protects residual unawaited/microtask paths + any other notify-after-async in god/services (see _disposed decl, overrides at end of class, and cleaned per-site guard in _loadActiveObjectives).
     }
-    _isLoadingSession = false;
-    notifyListeners();
+    } finally {
+      if (ownedLoad) endSessionLoad();
+    }
   }
 }

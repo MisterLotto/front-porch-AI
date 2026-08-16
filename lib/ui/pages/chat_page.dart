@@ -781,13 +781,15 @@ class _ChatPageState extends State<ChatPage> {
               ),
             ),
             if (chatService.isLoadingSession)
-              Container(
-                color: AppColors.resolve(
-                  context,
-                  Colors.black54,
-                  Colors.black.withValues(alpha: 0.25),
+              Positioned.fill(
+                child: ColoredBox(
+                  color: AppColors.backgroundOf(context),
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      color: AppColors.porchAmberOf(context),
+                    ),
+                  ),
                 ),
-                child: const Center(child: CircularProgressIndicator()),
               ),
             // Voice call overlay
             if (_isCallActive && character != null && !isGroup)

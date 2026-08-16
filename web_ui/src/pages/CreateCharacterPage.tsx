@@ -73,8 +73,9 @@ export function CreateCharacterPage() {
       });
       // Open the new character so creation is verifiable end-to-end.
       try {
+        navigate('/chat?opening=1');
         await api.post('/api/chat/select', { characterId: res.id });
-        navigate('/chat');
+        navigate('/chat', { replace: true });
       } catch {
         navigate('/');
       }

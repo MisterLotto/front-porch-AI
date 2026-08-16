@@ -7,6 +7,10 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 *Since nightly `20260814` (`cd38e672` — sidebar overflow).*
 
+- ⚡ **Tapping a character opens chat immediately** — the grid used to freeze while the last conversation loaded. You land on chat right away, with a spinner until the messages are ready. Same for groups.
+
+- 🧰 **Built on Flutter 3.47** — smoother desktop graphics (Impeller is now the default). **macOS 12 Monterey** is the floor; Catalina and Big Sur will not run this nightly.
+
 - 💛 **Long-term bond notices a stretch a little sooner** — it now cements every 3 warm turns instead of 5. Existing chats keep the score they already earned; nothing is replayed from old history.
 
 - 🛠️ **Sweep leftovers closed** — Enhance after restore uses the live database; thinking chips follow the .kcpps model not the last picker file; starting the web server no longer freezes the UI looking for Tailscale/ngrok; Memory search no longer loads every other chat's vectors; expressions stop flickering during streaming; Group Settings actually save a member's Needs; "Dinner's 6 p.m." no longer jumps the clock; two Sends during settle cannot pile up; switching chats on the phone mid-reply no longer pastes the old tokens into the new chat; Draw Things hides off macOS; turning TTS off frees the voice engine; imported cards keep the author's name.

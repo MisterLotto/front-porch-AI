@@ -214,10 +214,12 @@ export function useLibrary() {
   // ── Navigation ──────────────────────────────────────────────────────────
   const openCharacter = useCallback(
     async (c: LibChar) => {
+      navigate('/chat?opening=1');
       try {
         await api.post('/api/chat/select', { characterId: c.id });
-        navigate('/chat');
+        navigate('/chat', { replace: true });
       } catch (e) {
+        navigate('/', { replace: true });
         setError(e instanceof Error ? e.message : 'Could not open chat');
       }
     },
@@ -225,10 +227,12 @@ export function useLibrary() {
   );
   const openGroup = useCallback(
     async (g: LibGroup) => {
+      navigate('/chat?opening=1');
       try {
         await api.post('/api/chat/select-group', { groupId: g.id });
-        navigate('/chat');
+        navigate('/chat', { replace: true });
       } catch (e) {
+        navigate('/', { replace: true });
         setError(e instanceof Error ? e.message : 'Could not open group');
       }
     },
@@ -253,10 +257,12 @@ export function useLibrary() {
    *  session) lives in ChatService, not here. */
   const startFreshChat = useCallback(
     async (target: { characterId?: string; groupId?: string }, personaId: string) => {
+      navigate('/chat?opening=1');
       try {
         await api.post('/api/chat/start-fresh', { ...target, personaId });
-        navigate('/chat');
+        navigate('/chat', { replace: true });
       } catch (e) {
+        navigate('/', { replace: true });
         setError(e instanceof Error ? e.message : 'Could not start the chat');
       }
     },

@@ -171,6 +171,8 @@ class ChatFacade {
       // Additive (mixed-fleet safe): older web clients ignore it; newer ones
       // can distinguish "streaming tokens" from "still settling".
       'isSettlingTurn': _chat.isSettlingTurn,
+      // Overlay while setActiveCharacter/Group hydrates (navigate-first open).
+      'isLoadingSession': _chat.isLoadingSession,
       // Processing-overlay state (mirrors the desktop Realism + Objective engine
       // overlays). The WS pushes a live `processing` event during eval; these
       // fields let a client that connects mid-eval render the overlay too.

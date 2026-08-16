@@ -103,6 +103,25 @@ extension _HomePageChrome on _HomePageState {
 
   // ─── CharacterCardGrid Callback Handlers ────────────────────────
 
+  /// Push ChatPage immediately and drain [load] after pop. The session
+  /// overlay covers hydrate — awaiting load first is the home-grid freeze.
+  Future<void> _pushChatWhile(Future<void> load) async {
+    if (!mounted) {
+      await load;
+      return;
+    }
+    final nav = Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const ChatPage()));
+    try {
+      await load;
+    } catch (e, st) {
+      debugPrint('[Home] open chat failed: $e\n$st');
+    }
+    await nav;
+    if (mounted) _refreshLastActivityCache();
+  }
+
   Future<void> _handleTapCharacter(CharacterCard character) async {
     // Use State.mounted — NOT context.mounted. Reading State.context after
     // unmount throws before .mounted is ever evaluated (exit chat → reenter
@@ -126,21 +145,22 @@ extension _HomePageChrome on _HomePageState {
           character.name,
         );
         if (selectedId == null || !mounted) return;
-        await chatService.setActiveCharacter(character);
-        if (!mounted) return;
-        if (selectedId != '__new__') {
-          await chatService.loadSession(selectedId);
-        } else {
-          await chatService.startNewChat();
-        }
+        chatService.beginSessionLoad();
+        await _pushChatWhile(() async {
+          try {
+            await chatService.setActiveCharacter(character);
+            if (selectedId != '__new__') {
+              await chatService.loadSession(selectedId);
+            } else {
+              await chatService.startNewChat();
+            }
+          } finally {
+            chatService.endSessionLoad();
+          }
+        }());
       } else {
-        await chatService.setActiveCharacter(character);
+        await _pushChatWhile(chatService.setActiveCharacter(character));
       }
-      if (!mounted) return;
-      await Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const ChatPage()));
-      if (mounted) _refreshLastActivityCache();
     } finally {
       _openingChat = false;
     }
@@ -164,21 +184,24 @@ extension _HomePageChrome on _HomePageState {
           group.name,
         );
         if (selectedId == null || !mounted) return;
-        await chatService.setActiveGroup(group, groupRepo: groupRepo);
-        if (!mounted) return;
-        if (selectedId != '__new__') {
-          await chatService.loadSession(selectedId);
-        } else {
-          await chatService.startNewChat();
-        }
+        chatService.beginSessionLoad();
+        await _pushChatWhile(() async {
+          try {
+            await chatService.setActiveGroup(group, groupRepo: groupRepo);
+            if (selectedId != '__new__') {
+              await chatService.loadSession(selectedId);
+            } else {
+              await chatService.startNewChat();
+            }
+          } finally {
+            chatService.endSessionLoad();
+          }
+        }());
       } else {
-        await chatService.setActiveGroup(group, groupRepo: groupRepo);
+        await _pushChatWhile(
+          chatService.setActiveGroup(group, groupRepo: groupRepo),
+        );
       }
-      if (!mounted) return;
-      await Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const ChatPage()));
-      if (mounted) _refreshLastActivityCache();
     } finally {
       _openingChat = false;
     }
@@ -200,19 +223,16 @@ extension _HomePageChrome on _HomePageState {
       if (personaId == null || !mounted) return;
 
       final chatService = Provider.of<ChatService>(context, listen: false);
-      await chatService.startFreshChatWith(
-        character: character,
-        group: group,
-        groupRepo: group == null
-            ? null
-            : Provider.of<GroupChatRepository>(context, listen: false),
-        personaId: personaId,
+      await _pushChatWhile(
+        chatService.startFreshChatWith(
+          character: character,
+          group: group,
+          groupRepo: group == null
+              ? null
+              : Provider.of<GroupChatRepository>(context, listen: false),
+          personaId: personaId,
+        ),
       );
-      if (!mounted) return;
-      await Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const ChatPage()));
-      if (mounted) _refreshLastActivityCache();
     } finally {
       _openingChat = false;
     }

@@ -26,6 +26,9 @@ extension ChatServiceGroupEntry on ChatService {
     GroupChat group, {
     GroupChatRepository? groupRepo,
   }) async {
+    final ownedLoad = !_isLoadingSession;
+    beginSessionLoad();
+    try {
     // Cancel any in-flight generation before switching context AND reset author note for new session context
     await _cancelAndWaitForGeneration();
     await _waitForTurnToSettle();
@@ -121,8 +124,6 @@ extension ChatServiceGroupEntry on ChatService {
     // (see startNewChat and setActiveCharacter for rationale).
     _parentSessionId = null;
     _forkIndex = null;
-    _isLoadingSession = true;
-    notifyListeners();
 
     // Resolve characters from decoupled private members (GroupMembers table + private avatars dir).
     // Prefer passed repo, then wired one, then direct DB query as ultimate fallback
@@ -346,9 +347,9 @@ extension ChatServiceGroupEntry on ChatService {
     // Cache growth rings (and any not-yet-distilled legacy evolved blobs)
     // for all group characters so the injection layer can read them sync.
     await _refreshGrowthCache();
-
-    _isLoadingSession = false;
-    notifyListeners();
+    } finally {
+      if (ownedLoad) endSessionLoad();
+    }
   }
 
   /// The LIBRARY character a group member was copied from, matched by NAME — the

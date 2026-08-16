@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { ChatSocket } from '../api/ws';
 import { CastBar, type CastMember } from '../components/CastBar';
@@ -32,6 +32,7 @@ interface ChatState {
   messages: Message[];
   isGenerating: boolean;
   isSettlingTurn?: boolean;
+  isLoadingSession?: boolean;
   isEvaluatingRealism?: boolean;
   isCheckingCompletion?: boolean;
   isProcessingGreeting?: boolean;
@@ -71,6 +72,8 @@ interface ChatState {
 
 export function ChatPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const opening = searchParams.get('opening') === '1';
   const { setAuthenticated } = useAuth();
   // The insight column is desktop-only (CSS hides it below 1024px) and the
   // Stats drawer is its phone/tablet stand-in — mount whichever one is on
@@ -236,6 +239,18 @@ export function ChatPage() {
     if (focusedId) void focusParticipant(focusedId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toolsBump]);
+
+  const wasOpening = useRef(false);
+  useEffect(() => {
+    if (opening) {
+      wasOpening.current = true;
+      return;
+    }
+    if (wasOpening.current) {
+      wasOpening.current = false;
+      void refresh();
+    }
+  }, [opening, refresh]);
 
   useEffect(() => {
     void refresh();
@@ -544,8 +559,8 @@ export function ChatPage() {
     [state?.cast],
   );
 
-  if (!state) {
-    if (loadError) {
+  if (!state || opening || state.isLoadingSession) {
+    if (loadError && !opening) {
       return (
         <div className="page centered-col">
           <p className="muted">⚠️ {loadError}</p>
