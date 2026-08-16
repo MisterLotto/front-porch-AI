@@ -141,6 +141,18 @@ class StoryClock {
     return days < 1 ? 1 : days;
   }
 
+  /// Day count for "until the next story morning" lifetimes (set-aside
+  /// clothing): the small hours belong to the PREVIOUS story day, so a scene
+  /// running past midnight does not expire the outfit set aside at 23:00 —
+  /// [dayCountFor] flips at 00:00, which stranded characters mid-scene with
+  /// no recoverable clothes (1.3 sweep, maintainer-approved 2026-08-15).
+  /// Same 08:00 anchor as [nextMorning].
+  static int morningDayCountFor(DateTime clock, DateTime startDate) =>
+      dayCountFor(
+        clock.hour < 8 ? clock.subtract(const Duration(days: 1)) : clock,
+        startDate,
+      );
+
   // ── Snaps (nudges, AFK steps, stall backstop) ─────────────────────────────
 
   /// The next period's representative time strictly after [clock]

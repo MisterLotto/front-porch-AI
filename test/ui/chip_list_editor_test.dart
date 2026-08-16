@@ -59,9 +59,16 @@ void main() {
     return () => current;
   }
 
+  // UPDATED 2026-08-15 (maintainer-approved test change): the input STAYS
+  // OPEN after a commit now — the duplicate onSubmitted+onEditingComplete
+  // pair used to double-fire on one Enter and the second (empty) commit
+  // closed the box, which this helper silently accommodated by re-tapping
+  // "+ add" before every phrase. Tap it only when the box is not already up.
   Future<void> addPhrase(WidgetTester tester, String text) async {
-    await tester.tap(find.text('+ add'));
-    await tester.pumpAndSettle();
+    if (find.text('+ add').evaluate().isNotEmpty) {
+      await tester.tap(find.text('+ add'));
+      await tester.pumpAndSettle();
+    }
     await tester.enterText(find.byType(TextField), text);
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
@@ -74,6 +81,25 @@ void main() {
 
     expect(read(), ['open her own bakery']);
     expect(find.text('open her own bakery'), findsOneWidget);
+  });
+
+  testWidgets('Enter keeps the box open for rapid entry', (tester) async {
+    final read = await pumpEditor(tester);
+
+    // Two phrases, ONE "+ add" tap: the box must survive the first commit.
+    await addPhrase(tester, 'open her own bakery');
+    expect(
+      find.byType(TextField),
+      findsOneWidget,
+      reason: 'the documented rapid-entry contract — the duplicate '
+          'onSubmitted/onEditingComplete pair used to double-commit and the '
+          'second (empty) pass closed the box (fix approved 2026-08-15)',
+    );
+    await tester.enterText(find.byType(TextField), 'learn the violin');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+
+    expect(read(), ['open her own bakery', 'learn the violin']);
   });
 
   testWidgets('trims whitespace and refuses a blank entry', (tester) async {

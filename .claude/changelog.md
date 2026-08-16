@@ -3,6 +3,31 @@
 
 # Changelog
 
+## 2026-08-15 — fix(sweep): the 3 maintainer-approved test-change fixes
+- **Why:** each correct fix contradicted a test/golden pinning the broken
+  behavior; the maintainer approved the test changes in-conversation.
+  (1) ChipListEditor fired _commit twice per Enter (onSubmitted +
+  onEditingComplete both fire in _finalizeEditing) and the second empty pass
+  closed the box — rapid entry never worked. Deleted onSubmitted; the
+  addPhrase helper no longer re-taps "+ add" and a new rapid-entry guard
+  pins two phrases on one open box. (2) enjoys-low-hygiene inverted the
+  STEP INDEX over asymmetric bands — a filthy character read as freshly
+  washed and never went silent; now VALUE inversion (100 - v), one helper
+  heals selection AND wording; hygiene_inversion.golden.json regenerated
+  (UPDATE_GOLDENS=1). (3) set-aside clothing expired at MIDNIGHT
+  (dayCountFor flips at 00:00) though every doc promised the story morning
+  — a scene past 00:00 stranded her with no outfit. New
+  StoryClock.morningDayCountFor (08:00 anchor, small hours = previous day);
+  ChatService.storyDayCount now forwards to it (every consumer is a
+  set-aside surface; story stamps keep calendar dayCount); the injection
+  wiring matches. Pure pockets tests pin abstract day numbers and needed
+  NO edits; new set_aside_morning_anchor_test guards the anchor.
+- **Files:** chip_list_editor.dart + test (updated helper + new guard),
+  needs_simulation.dart + regenerated golden, story_clock.dart,
+  time_service.dart, chat_service_accessors.dart, wiring_injection,
+  NEW set_aside_morning_anchor_test.dart
+- **Commit:** (this commit)
+
 ## 2026-08-15 — fix(sweep): 68 verified MEDIUM findings + wave residuals + review leftovers
 - **Why:** the 1.3 sweep's medium wave (16 Opus batches over 95 findings —
   86 confirmed mediums, 8 re-verified extras incl. two late highs, 1

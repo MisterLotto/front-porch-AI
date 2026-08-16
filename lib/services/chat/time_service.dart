@@ -171,6 +171,12 @@ class TimeService {
   DateTime get startDate => _startDate;
   String get timeOfDay => StoryClock.periodForHour(_clock.hour);
   int get dayCount => StoryClock.dayCountFor(_clock, _startDate);
+
+  /// The set-aside-clothing day: flips at the story MORNING (08:00), not
+  /// midnight, so a scene running past 00:00 keeps its outfit recoverable.
+  /// See [StoryClock.morningDayCountFor].
+  int get morningAnchoredDayCount =>
+      StoryClock.morningDayCountFor(_clock, _startDate);
   bool get passageOfTimeEnabled => _passageOfTimeEnabled;
   String get narrativeWeekday => StoryClock.weekdayName(_clock);
 

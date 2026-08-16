@@ -606,12 +606,21 @@ class NeedsSimulation {
     int value, {
     bool? enjoysLowHygieneOverride,
   }) {
-    int step = getNeedStep(need, value);
     final enjoysLow = enjoysLowHygieneOverride ?? getEnjoysLowHygiene();
     if (enjoysLow && need == 'hygiene') {
-      step = (5 - step).clamp(0, 5);
+      // VALUE inversion, not index inversion. The step bands are asymmetric
+      // (widths 1/15/15/15/20/35 over [0,15,30,45,65]), so the old `5 - step`
+      // mapped the wide sated band onto "catastrophic" and the 1-point band
+      // onto "sated": a filthy character (value 10) read as mildly
+      // freshly-washed and NEVER reached the silent sated state, while a
+      // merely clean one (value 90) was described as scrubbed-raw
+      // catastrophic. Walking the same bands from the other end
+      // (100 - value) is what the hygieneSteppedTextWhenEnjoysLow doc has
+      // always described. Golden regenerated with maintainer approval
+      // 2026-08-15.
+      return getNeedStep(need, 100 - value);
     }
-    return step;
+    return getNeedStep(need, value);
   }
 
   /// Returns the lowest (worst) needs that should receive background state

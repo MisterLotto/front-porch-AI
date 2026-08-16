@@ -188,7 +188,14 @@ class _ChipListEditorState extends State<ChipListEditor> {
                       borderSide: BorderSide(color: amber),
                     ),
                   ),
-                  onSubmitted: (_) => _commit(),
+                  // onEditingComplete ONLY — never also onSubmitted. Flutter
+                  // fires BOTH on one Enter (_finalizeEditing), and the second
+                  // _commit saw the just-cleared field and closed the box, so
+                  // the documented rapid-entry behavior never happened.
+                  // Keeping onEditingComplete (not the reverse) also
+                  // suppresses the default unfocus, which is what leaves the
+                  // caret in the box for the next phrase. Fix approved with
+                  // its test change 2026-08-15.
                   onTapOutside: (_) {
                     _commit();
                     FocusManager.instance.primaryFocus?.unfocus();

@@ -428,7 +428,13 @@ extension ChatServiceAccessors on ChatService {
   /// Pockets sidebar rows and the web facade filter set-aside clothing by it
   /// (yesterday's outfit must not survive the story's morning). One
   /// forwarder rather than exposing TimeService whole.
-  int get storyDayCount => _timeService.dayCount;
+  ///
+  /// MORNING-anchored since 2026-08-15 (maintainer-approved): every consumer
+  /// of this accessor is a set-aside surface, and the calendar day flipping
+  /// at 00:00 deleted the outfit mid-scene the moment a night ran past
+  /// midnight — the docs always promised "the next story morning". Story
+  /// stamps (journal cards, calendars) keep the calendar `dayCount`.
+  int get storyDayCount => _timeService.morningAnchoredDayCount;
 
   /// Pure recompute from existing state — nothing stored, so save/load and
   /// group re-entry agree for free. Gate: a MOVING clock + the global toggle.

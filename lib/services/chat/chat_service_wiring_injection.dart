@@ -443,7 +443,10 @@ extension ChatServiceWiringInjection on ChatService {
       // pocketsFor — one gate for every surface, rather than each caller
       // remembering to ask (the sidebar forgot).
       getPockets: pocketsFor,
-      getCurrentDay: () => _timeService.dayCount,
+      // Morning-anchored: the prompt's set-aside filter must agree with the
+      // pass/sidebar/facade (all on storySetAside day now) or the injection
+      // would hide an outfit the record still holds after midnight.
+      getCurrentDay: () => _timeService.morningAnchoredDayCount,
       // Get-and-mark: a prompt that carries an intro flags it so the NEXT
       // user turn drops it (see _dropConsumedItemIntros). Marking here and
       // clearing there is what lets a regen rebuild reproduce the reaction.
