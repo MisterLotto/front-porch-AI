@@ -204,9 +204,7 @@ class OpenRouterService extends LLMService {
       final response = await client
           .get(
             uri,
-            headers: {
-              if (key.isNotEmpty) 'Authorization': 'Bearer $key',
-            },
+            headers: {if (key.isNotEmpty) 'Authorization': 'Bearer $key'},
           )
           .timeout(const Duration(seconds: 15));
 
@@ -354,14 +352,14 @@ class OpenRouterService extends LLMService {
     // for models like Kimi K2.6:thinking, DeepSeek hybrids, etc.
     // We always include the 'enabled' key so the disable is explicit.
     if (params.reasoningEnabled || params.reasoningMaxTokens != null) {
-      final reasoning = <String, dynamic>{
-        'enabled': params.reasoningEnabled,
-      };
+      final reasoning = <String, dynamic>{'enabled': params.reasoningEnabled};
       if (params.reasoningEnabled) {
         // User setting stays in prefs; wire value may adapt (learned 400 or
         // :thinking suffix hint — see wireReasoningEffort).
-        reasoning['effort'] =
-            wireReasoningEffort(modelName, params.reasoningEffort);
+        reasoning['effort'] = wireReasoningEffort(
+          modelName,
+          params.reasoningEffort,
+        );
       }
       if (params.reasoningMaxTokens != null) {
         reasoning['max_tokens'] = params.reasoningMaxTokens;
@@ -486,7 +484,7 @@ class OpenRouterService extends LLMService {
             '[RemoteAPI] $modelName cannot disable reasoning — retrying '
             'tool call with reasoning.exclude only',
           );
-          return generateWithTools(params, tools);
+          return await generateWithTools(params, tools);
         }
         debugPrint(
           '[RemoteAPI] Tool call rejected (HTTP ${response.statusCode}) — '
@@ -586,7 +584,8 @@ class OpenRouterService extends LLMService {
         // containsKey guard makes a second rejection for the same model
         // throw instead of loop. Parse message AND raw body — some providers
         // put the listing only in one of the two.
-        final supportedEfforts = supportedReasoningEffortsFromError(errorMsg) ??
+        final supportedEfforts =
+            supportedReasoningEffortsFromError(errorMsg) ??
             supportedReasoningEffortsFromError(body);
         if (supportedEfforts != null &&
             !kLearnedReasoningEffortsByModel.containsKey(modelName)) {
@@ -605,7 +604,8 @@ class OpenRouterService extends LLMService {
         // when the provider's new listing differs (re-tier mid-session).
         if (supportedEfforts != null) {
           final prev = kLearnedReasoningEffortsByModel[modelName];
-          final same = prev != null &&
+          final same =
+              prev != null &&
               prev.length == supportedEfforts.length &&
               prev.containsAll(supportedEfforts);
           if (!same) {

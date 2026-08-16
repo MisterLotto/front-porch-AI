@@ -23,10 +23,9 @@ dart run build_runner build --delete-conflicting-outputs
 # Development
 flutter run                          # Debug run
 flutter analyze                      # Lint (0 warnings on active rules; CI runs on changed .dart files for PRs + full scheduled job)
-dart format --set-exit-if-changed .  # Format check. NOT `flutter format` — that
-                                     #   subcommand was removed; it errors with
-                                     #   "Could not find a command named format".
-                                     #   Do NOT bulk-run this: see "Verification".
+dart format path/to/file.dart        # Tall-style nibble: ONLY files you already
+                                     #   edited. NEVER `dart format .` — see
+                                     #   "Verification". NOT `flutter format`.
 
 # Tests
 flutter test --concurrency=4 --exclude-tags golden
@@ -509,10 +508,12 @@ The user has **no ability to read or evaluate Dart code**. The following rules a
 - Methods deleted (list them)
 - Whether `flutter analyze` is clean
 - Any duplication or dead code you chose not to remove and why
-- **Barrels + boilerplate on every file touched**: confirm each edited file was
-  left on barrel imports (or that its remaining direct imports are all on the
-  exemption list, naming which), and what repetition you collapsed while you
-  were in there. "None found" is a valid answer; silence is not.
+- **Barrels + boilerplate + tall style on every file touched**: confirm each
+  edited Dart file was left on barrel imports (or that its remaining direct
+  imports are all on the exemption list, naming which), that you ran
+  `dart format` on *those paths only* (or "already tall / generated / existing
+  test I must not touch"), and what repetition you collapsed while you were in
+  there. "None found" is a valid answer; silence is not.
 - **Hostile self-review done?** Point at the `### Hostile self-review` section
   in the same response (or "N/A: docs only"). Silence here means the work is
   incomplete — green tests are not a substitute.
@@ -537,7 +538,7 @@ To prevent "God files" (historically some `.dart` files exceeded 9,000 lines):
 
 ### Verification
 - **ALWAYS run `flutter analyze` after making code changes** — the project is at 0 warnings on the active rule set. New code must not introduce warnings. Never claim changes are "verified" without running it. Variables declared inside `try` blocks are not accessible outside — declare them before the `try` with defaults.
-- **Do NOT bulk-run `dart format` / `flutter format` on whole files.** The codebase is mid-migration to the Dart 3.11 "tall style" formatter, so running the new formatter on a not-yet-migrated file rewraps **hundreds of unrelated lines** (and can even introduce lint errors — e.g. splitting a one-line `if (x) return;` trips `curly_braces_in_flow_control_structures`), burying your real change in churn. Match the surrounding style **by hand** in the regions you edit; the Edit tool already preserves it. A whole-file reformat is its own intentional, isolated commit — never a side effect of a feature change.
+- **Tall style is nibble-as-you-go (same law as barrels / Riverpod).** If you already edited a Dart file, leave it on the current SDK's `dart format` output: `dart format path/to/that_file.dart` (one path, or the handful you touched). New files get formatted before you call them done. **NEVER** `dart format .`, never a directory, never "and these siblings while I'm here." A tree-wide format is still a dedicated, intentional commit — and `test/` in that commit needs `approved-test-change`. Do **not** format an existing test you did not otherwise have to change (test-integrity). After a per-file format, fix any lint the wrap just created (`if (x) return;` split → `curly_braces_in_flow_control_structures`). Do not format generated `*.g.dart`. Language version is still 3.10 (`sdk: ^3.10.8`); do not "upgrade" format rules or install the primary-constructors skill as part of touching a file.
 - **Cross-platform verification is mandatory.** Front Porch AI is a Windows + macOS + Linux desktop app. Every non-trivial change must be checked (or have an explicit plan) so it does not regress on any platform — especially file paths, process spawning, native libraries (sherpa-onnx, onnxruntime, libfpzip), and anything touching `dart:io` or native binaries.
 - **Realism & Needs parity is mandatory** (see the dedicated section). Any change to the Realism Engine or Needs simulation must keep 1:1 and group behavior consistent unless explicitly approved otherwise.
 - **Because the user cannot review code**, treat every change as if it will be accepted without scrutiny. Leave the codebase strictly cleaner (or at minimum no worse) than you found it.
@@ -648,6 +649,13 @@ is no longer "opportunistic" and it is not optional. The codebase accumulated
 hundreds of hand-written import lines precisely because "convert it if you
 happen to be in there" had no teeth. **A diff that edits a file and leaves a
 convertible import block behind is incomplete work.**
+
+**Every Dart file you touch, you leave on tall style (mandatory).** Same visit,
+same teeth: `dart format path/to/file.dart` on the files you already edited.
+Not the directory. Not the tree. Not a test you were not already changing.
+Fix lints the wrap introduces in the same change. A heroic `dart format .`
+is still forbidden — this nibble is how the 856-file backlog dies without
+one.
 
 **Same visit, same rule for boilerplate (mandatory).** While you are in that
 file, collapse the repetition you find: an identical widget / `ListTile` /

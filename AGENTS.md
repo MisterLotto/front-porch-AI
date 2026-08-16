@@ -43,10 +43,11 @@ If you read only one thing before touching this codebase:
 - **Use `AppColors`** — no hard-coded `Color(0xFF…)`, no raw
   `Colors.whiteXX`/`Colors.blackXX` in new or refactored UI.
 - **Use the barrel imports** where a barrel covers the file.
-- **Never** run `dart format` over whole files, edit the version in
+- **Never** run `dart format .` (the whole tree), edit the version in
   `pubspec.yaml`, or use destructive git commands (`git checkout -- <file>`,
   `git restore <file>`) that discard uncommitted work — the maintainer and other
-  agents routinely have uncommitted edits in the tree.
+  agents routinely have uncommitted edits in the tree. Per-file `dart format`
+  on a file you already touched is required — see CLAUDE.md "Verification".
 - **Run `flutter analyze` and `flutter test`** before claiming anything is done.
 
 All of the above, with the reasoning, the exceptions and everything omitted here,

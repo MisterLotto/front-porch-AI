@@ -63,7 +63,7 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   audioplayers_darwin: 835ced6edd4c9fc8ebb0a7cc9e294a91d99917d5
   file_picker: 7584aae6fa07a041af2b36a2655122d42f578c1a
-  FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
+  FlutterMacOS: c232990155153907050900a2e175c7773903ba4e
   onnxruntime_v2: 71bdf3f44d1fb6a55468279f8029ffbafceb17ac
   package_info_plus: f0052d280d17aa382b932f399edf32507174e870
   record_macos: 2e43c16b84ce188b8137754ee648322a2dcdf7fa
@@ -73,6 +73,6 @@ SPEC CHECKSUMS:
   url_launcher_macos: f87a979182d112f911de6820aefddaf56ee9fbfd
   window_manager: b729e31d38fb04905235df9ea896128991cad99e
 
-PODFILE CHECKSUM: 54d867c82ac51cbd61b565781b9fada492027009
+PODFILE CHECKSUM: 1e95c36afbfd1cb6423ceca4de7a8e1b256fb6ac
 
 COCOAPODS: 1.16.2

@@ -49,7 +49,16 @@ Final state after the Flutter **3.44.8** pin + 2026-07-28 dep refresh:
 `riverpod_generator` **4.0.4** (4.0.6+ still incompatible with flutter_test
 on 3.44.8 — see below), `meta` **1.18.0**. Riverpod codegen was kept.
 
-### Still blocked on Flutter 3.44.8 (do not force)
+### Flutter 3.47.0 pin (2026-08-16) — do not lift these in the pin PR
+
+The CI pin is now **3.47.0** (Dart 3.13.0). A worktree probe showed:
+
+- `riverpod_generator` **4.0.8** + `drift_dev` **2.34.5** + `analyzer` **13.3** **do** resolve together. Not lifted here — Riverpod 3.4 has lifecycle changes; separate PR.
+- `file_picker` **12** **does not** compile (`FilePickerResult` gone). Stay on 11.
+- `package_info_plus` 10 / `win32` 6 ride file_picker 12. Stay.
+- `image` 4.9 / Syncfusion 34 / `xml` 7 still blocked by `webdav_client` 1.2.2.
+
+### Still blocked on Flutter 3.44.8 (historical — do not force on 3.44)
 
 | Package | Blocker |
 |---------|---------|
