@@ -63,6 +63,16 @@ extension ChatServiceSend on ChatService {
     // keep the wider _isTurnBusy guard, because that is where the race
     // actually corrupts something.
     if (_isGenerating) return;
+    final previousSend = _sendChain;
+    final sendGate = Completer<void>();
+    _sendChain = sendGate.future;
+    try {
+      await previousSend;
+    } catch (_) {}
+    if (_isGenerating) {
+      sendGate.complete();
+      return;
+    }
     // A send that lands in the previous turn's SETTLING window must QUEUE
     // behind it, not race it: the new turn's pre-gen work (mood decay, needs
     // tick, the group per-speaker scalar re-point) otherwise runs before the
@@ -75,7 +85,12 @@ extension ChatServiceSend on ChatService {
     // Also closes the _isPostGenerating latch: a turn started mid-settle
     // captured callerHeldSettling=true and wedged _isTurnBusy for the
     // session.
-    await _waitForTurnToSettle();
+    try {
+      await _waitForTurnToSettle();
+    } finally {
+      if (!sendGate.isCompleted) sendGate.complete();
+    }
+    if (_isGenerating) return;
     // [EvalTraffic]: whatever the fire-and-forget passes (journal, growth,
     // promises, cast…) spent since the last turn's print, reported now so
     // the turn's own line stays a clean measure of the turn.

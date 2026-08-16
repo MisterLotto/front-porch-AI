@@ -9,6 +9,9 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 - 💛 **Long-term bond notices a stretch a little sooner** — it now cements every 3 warm turns instead of 5. Existing chats keep the score they already earned; nothing is replayed from old history.
 
+- 🛠️ **Sweep leftovers closed** — Enhance after restore uses the live database; thinking chips follow the .kcpps model not the last picker file; starting the web server no longer freezes the UI looking for Tailscale/ngrok; Memory search no longer loads every other chat's vectors; expressions stop flickering during streaming; Group Settings actually save a member's Needs; "Dinner's 6 p.m." no longer jumps the clock; two Sends during settle cannot pile up; switching chats on the phone mid-reply no longer pastes the old tokens into the new chat; Draw Things hides off macOS; turning TTS off frees the voice engine; imported cards keep the author's name.
+
+
 - 📱 **Phone Stoop stays signed in through a blip** — opening The Stoop on the phone after a timeout or 502 used to wipe the saved login even though a retry would have worked. It now keeps the session, same as desktop.
 
 - 👗 **Three more, approved by hand:** clothes she set aside now survive past midnight and vanish at the story's next morning (as always promised); a character who enjoys her natural musk finally reads the scale the right way around (filthy = content and quiet, scrubbed = genuinely uncomfortable); and adding list entries (ambitions, likes) keeps the box open for rapid entry instead of closing after every item.

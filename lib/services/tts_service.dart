@@ -220,15 +220,19 @@ class TtsService extends ChangeNotifier {
   /// the notifier is disposed and notifyListeners() would assert in debug.
   bool _disposed = false;
 
+  /// Drop the ~380MB Kokoro isolate when TTS is switched off (dispose only
+  /// ran on app quit, so disable left the worker alive).
+  void releaseLocalEngine() {
+    _kokoroEngine.shutdown();
+    _piperNative.shutdown();
+  }
+
   @override
   void dispose() {
     _disposed = true;
     stop();
     _clearCache();
-    _piperNative.shutdown();
-    // The Kokoro worker isolate holds the ~380MB ONNX model; without this it
-    // outlived the service for the whole process life (1.3 sweep).
-    _kokoroEngine.shutdown();
+    releaseLocalEngine();
     _audioPlayer.dispose();
     super.dispose();
   }

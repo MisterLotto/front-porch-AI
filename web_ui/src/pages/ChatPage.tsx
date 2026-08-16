@@ -79,6 +79,8 @@ export function ChatPage() {
   // for a panel nobody could see, twice over with the drawer open.
   const { isDesktop } = useLayout();
   const [state, setState] = useState<ChatState | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
+  const tokenSessionRef = useRef<string | null>(null);
   // Why the chat could not be loaded — shown instead of a spinner that would
   // otherwise never resolve.
   const [loadError, setLoadError] = useState('');
@@ -156,6 +158,7 @@ export function ChatPage() {
     }
     setLoadError('');
     setState(s);
+    sessionIdRef.current = s.sessionId;
     // Recover the Chance Time modal after a reconnect — a phone may have slept
     // through the live `chance_time` event while the engine stayed parked.
     // Preserve an already-open modal's reveal state; close it once unparked.
@@ -243,6 +246,16 @@ export function ChatPage() {
         setImpersonateFill(null);
         void refresh();
       } else if (e.event === 'token' && e.data) {
+        if (!tokenSessionRef.current) {
+          tokenSessionRef.current = sessionIdRef.current;
+        }
+        if (
+          tokenSessionRef.current &&
+          sessionIdRef.current &&
+          tokenSessionRef.current !== sessionIdRef.current
+        ) {
+          return;
+        }
         setStreaming((prev) => prev + e.data);
       } else if (e.event === 'done' || e.event === 'error') {
         // Refresh FIRST, then drop the live streaming bubble — so the finalized
@@ -251,7 +264,10 @@ export function ChatPage() {
         // old order cleared the bubble, leaving the message blank until the GET
         // returned ~100-300ms later).
         setGenStatus(null);
-        void refresh().finally(() => setStreaming(''));
+        void refresh().finally(() => {
+          setStreaming('');
+          tokenSessionRef.current = null;
+        });
       } else if (e.event === 'gen_status') {
         // Truthful generation status (desktop status-bar parity): live
         // prompt-reading progress + which background pass holds the slot.
@@ -503,6 +519,7 @@ export function ChatPage() {
     setGenStatus(null);
     setImageProg(null);
     setChance(null);
+    tokenSessionRef.current = null;
   };
   const loadSession = async (sessionId: string) => {
     setShowSessions(false);

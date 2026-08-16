@@ -3,6 +3,26 @@
 
 # Changelog
 
+## 2026-08-16 — fix(sweep): closed the 1.3 skip list + mediums-review leftovers
+- **Why:** Agent-collision skips plus confirmed partials from
+  watch-the-mediums. Users still hit Enhance-after-restore, wrong
+  thinking chips on .kcpps, UI hitch on tunnel ctor, RAG loading every
+  session, expression flicker, Group Settings ext no-op, copula clock
+  jumps, double-send during settle, PWA mid-gen token bleed, Draw
+  Things on Win/Linux, TTS isolate after disable, lost card credits.
+- **What:** liveDatabase on Enhance; kcpps model path for thinking;
+  no Process.runSync in tunnel ctors; session-scoped embedding query;
+  expression pick keyed per reply; group toCharacterCard sets dbId;
+  is/'s clock leads; send chain; PWA token session match; hide DT off
+  macOS; TtsService.releaseLocalEngine on disable; V2 creator fields
+  parse+toJson.
+- **Files:** enhance_wizard, thinking_settings_block, expression_classifier,
+  story_clock_claims, group_member, character_card, v2_card_service,
+  database.queries.memory, memory_service, tailscale/ngrok providers,
+  chat_service + send, ChatPage, generation_options, tts_service + dialog;
+  NEW story_clock_claims_copula_test, character_card_credits_test
+- **Commit:** (this commit)
+
 ## 2026-08-15 — fix(web): phone Stoop restore no longer wipes the login on a hiccup
 - **Why:** tryRefresh was already 401-only. StoopContext's first-paint
   `me()` catch still `clearStoopSession()` on ANY failure, so a 502 or

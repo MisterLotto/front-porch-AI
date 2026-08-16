@@ -469,6 +469,8 @@ class MemoryService extends ChangeNotifier {
       // Get all candidate embeddings from the specified characters
       final candidates = await _db.getEmbeddingsForCharacters(
         sourceCharacterIds,
+        currentSessionId: currentSessionId,
+        sessionScopedCharacterIds: sessionScopedCharacterIds,
       );
       debugPrint('[RAG:Memory] Candidates from DB: ${candidates.length}');
 

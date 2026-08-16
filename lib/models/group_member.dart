@@ -233,6 +233,9 @@ class GroupMember {
     if (fpExt?.tier == 'lite') fpExt!.tier = null;
 
     return CharacterCard(
+      // group_members.id — persist paths (setGroupNeedsDecayRate) are
+      // dbId-gated. Leaving this null made Group Settings ext writes no-op.
+      dbId: id,
       name: name,
       description: description,
       personality: personality,

@@ -19,7 +19,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:front_porch_ai/database/database.dart' hide World;
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/chargen/chargen.dart';
@@ -174,7 +173,7 @@ class _EnhanceWizardPageState extends State<EnhanceWizardPage> {
   /// Load the chat's grounding material (transcript, recap, memory cards)
   /// so the Interview step can warn about a too-short chat, then advance.
   Future<void> _loadChatContextAndAdvance() async {
-    final db = Provider.of<AppDatabase>(context, listen: false);
+    final db = liveDatabase(context);
     final ctx = await buildEnhanceContext(
       db: db,
       card: widget.character,

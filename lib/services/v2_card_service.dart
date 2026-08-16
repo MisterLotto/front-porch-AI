@@ -273,6 +273,11 @@ class V2CardService {
         lorebook: lorebook,
         worldNames: strList(data['world_names'] ?? jsonMap['world_names']),
         ttsVoice: voice is String ? voice : null,
+        creator: text(data['creator'] ?? jsonMap['creator']),
+        creatorNotes: text(data['creator_notes'] ?? jsonMap['creator_notes']),
+        characterVersion: text(
+          data['character_version'] ?? jsonMap['character_version'],
+        ),
         imagePath: imagePath,
         frontPorchExtensions: fpExtensions,
         rawExtensions: rawExtensions,

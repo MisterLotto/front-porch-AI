@@ -25,7 +25,15 @@ part of 'generation_options_tab.dart';
 /// inline. AppColors exclusive.
 extension _GenerationOptionsSource on _GenerationOptionsTabState {
   Widget _buildBackendSelector(StorageService st) {
-    final bs = ImageGenBackend.values;
+    final isMac = defaultTargetPlatform == TargetPlatform.macOS;
+    final bs = ImageGenBackend.values
+        .where(
+          (b) =>
+              b != ImageGenBackend.drawThings ||
+              isMac ||
+              st.imageGenBackend == b.key,
+        )
+        .toList();
     final ac = AppColors.formMasterAccent;
     return Row(
       children: bs.map((b) {

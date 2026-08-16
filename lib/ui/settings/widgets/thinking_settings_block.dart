@@ -142,10 +142,16 @@ class _ThinkingSettingsBlockState extends State<ThinkingSettingsBlock> {
     );
   }
 
-  /// The .gguf KoboldCpp has loaded. Empty in preset mode (the .kcpps owns the
-  /// model, so there is no path here to read) — then nothing is claimed and
-  /// the generic chips stand, exactly as before.
-  String get _localModelPath => _storage?.lastUsedModelPath ?? '';
+  /// The .gguf whose thinking template we should read. In .kcpps preset
+  /// mode that is the model the preset loads, not the picker leftover
+  /// (lastUsedModelPath) — otherwise the switch describes the wrong file.
+  String get _localModelPath {
+    final preset = _storage?.activeKcppsPath;
+    if (preset != null && preset.isNotEmpty) {
+      return _storage?.kcppsModelPath ?? '';
+    }
+    return _storage?.lastUsedModelPath ?? '';
+  }
 
   /// The thinking capability already resolved for this backend, or null
   /// while it is still being read / could not be read. Build-safe: peek only.

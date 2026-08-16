@@ -87,13 +87,21 @@ class TailscaleServeResult {
 class TailscaleProvider {
   TailscaleProvider({String? executable}) : _exe = executable ?? _findExe();
 
-  final String _exe;
+  String _exe;
 
   /// Whether a `tailscale` binary was located.
   bool get isInstalled => _exe.isNotEmpty;
 
   /// Run `tailscale status --json` and parse the bits we need.
   Future<TailscaleStatus> status() async {
+    if (_exe.isEmpty) {
+      try {
+        final r = await Process.run('tailscale', ['version']);
+        if (r.exitCode == 0) {
+          _exe = _cachedExe = 'tailscale';
+        }
+      } catch (_) {}
+    }
     if (!isInstalled) return TailscaleStatus.unavailable;
     try {
       // `tailscale status --json` still emits BackendState (e.g. NeedsLogin)
@@ -262,26 +270,21 @@ class TailscaleProvider {
   // on every server start/toggle.
   static String? _cachedExe;
 
+  /// Absolute paths only — never Process.runSync. The PATH name is resolved
+  /// lazily in [status] so constructing this on web-server start cannot
+  /// freeze the UI isolate (Windows antivirus).
   static String _findExe() {
     final cached = _cachedExe;
     if (cached != null) return cached;
     const candidates = [
-      'tailscale',
       '/usr/bin/tailscale',
       '/usr/local/bin/tailscale',
       '/Applications/Tailscale.app/Contents/MacOS/Tailscale',
       r'C:\Program Files\Tailscale\tailscale.exe',
     ];
     for (final c in candidates) {
-      if (c == 'tailscale') {
-        try {
-          final r = Process.runSync(c, ['version']);
-          if (r.exitCode == 0) return _cachedExe = c;
-        } catch (_) {}
-      } else if (File(c).existsSync()) {
-        return _cachedExe = c;
-      }
+      if (File(c).existsSync()) return _cachedExe = c;
     }
-    return _cachedExe = '';
+    return '';
   }
 }

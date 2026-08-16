@@ -591,6 +591,10 @@ class CharacterCard {
   /// (e.g. 'af_heart' for Kokoro, 'en_US-lessac-medium' for Piper, etc.).
   /// The UI now prevents (and warns about) cross-engine assignments.
   String? ttsVoice;
+  /// V2 spec credits — round-trip so Stoop/Chub author names survive import.
+  String creator;
+  String creatorNotes;
+  String characterVersion;
   String? dbId; // UUID primary key (runtime only, not serialized)
   DateTime? createdAt; // library "date added" from DB (runtime only, not serialized)
   FrontPorchExtensions? frontPorchExtensions; // V2.5 Realism Engine defaults
@@ -600,6 +604,10 @@ class CharacterCard {
   int primeAvatarIndex = 1; // 1-based index of the prime (default) avatar
 
   CharacterCard({
+    this.dbId,
+    this.creator = '',
+    this.creatorNotes = '',
+    this.characterVersion = '',
     required this.name,
     this.description = '',
     this.personality = '',
@@ -656,6 +664,9 @@ class CharacterCard {
       'character_book': lorebook == null ? null : encodeCharacterBook(lorebook!),
       'world_names': worldNames,
       if (ttsVoice != null) 'tts_voice': ttsVoice,
+      if (creator.isNotEmpty) 'creator': creator,
+      if (creatorNotes.isNotEmpty) 'creator_notes': creatorNotes,
+      if (characterVersion.isNotEmpty) 'character_version': characterVersion,
       'extensions': ?extensions,
     };
   }

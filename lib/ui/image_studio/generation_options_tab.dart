@@ -3,6 +3,7 @@
 //
 // Generation options (tab content extracted for studio). AppColors only.
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:front_porch_ai/services/services.dart';

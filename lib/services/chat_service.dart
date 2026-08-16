@@ -254,6 +254,9 @@ class ChatService extends ChangeNotifier {
 
   final List<ChatMessage> _messages = [];
   Future<void> _saveChain = Future.value();
+  /// Serializes [sendMessage] so two composer taps during settle cannot
+  /// both pass `_isGenerating` and then both run after the wait.
+  Future<void> _sendChain = Future.value();
   Map<String, dynamic>?
   _pendingRealismMetadata; // stores deltas for the next generation
   bool _isGenerating = false;

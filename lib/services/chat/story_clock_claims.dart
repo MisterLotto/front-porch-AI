@@ -111,7 +111,10 @@ final _notPresent = RegExp(
 
 bool _boundIsNotPresent(String text, int start) {
   final lead = text.substring(start > 24 ? start - 24 : 0, start);
-  return _notPresent.hasMatch(lead);
+  if (_notPresent.hasMatch(lead)) return true;
+  final trimmed = lead.trimRight().toLowerCase();
+  if (trimmed.endsWith('it is')) return false;
+  return trimmed.endsWith(' is') || trimmed.endsWith("'s");
 }
 
 int _to24(int hour12, {required bool pm}) {

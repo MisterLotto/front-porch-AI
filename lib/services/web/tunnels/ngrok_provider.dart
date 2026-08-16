@@ -30,7 +30,7 @@ import 'package:http/http.dart' as http;
 class NgrokProvider {
   NgrokProvider({String? executable}) : _exe = executable ?? _findExe();
 
-  final String _exe;
+  String _exe;
   Process? _process;
   String? _publicUrl;
 
@@ -48,6 +48,14 @@ class NgrokProvider {
   /// Start a tunnel to [port]. Returns the public https URL, or null on
   /// failure (bad token, tunnel limit, etc. — surfaced via debug logs).
   Future<String?> start(int port, {String? authToken}) async {
+    if (_exe.isEmpty) {
+      try {
+        final r = await Process.run('ngrok', ['version']);
+        if (r.exitCode == 0) {
+          _exe = _cachedExe = 'ngrok';
+        }
+      } catch (_) {}
+    }
     if (!isInstalled) return null;
     if (isRunning) return _publicUrl;
     try {
@@ -145,15 +153,9 @@ class NgrokProvider {
       r'C:\Program Files\ngrok\ngrok.exe',
     ];
     for (final c in candidates) {
-      if (c == 'ngrok') {
-        try {
-          final r = Process.runSync(c, ['version']);
-          if (r.exitCode == 0) return _cachedExe = c;
-        } catch (_) {}
-      } else if (File(c).existsSync()) {
-        return _cachedExe = c;
-      }
+      if (c == 'ngrok') continue;
+      if (File(c).existsSync()) return _cachedExe = c;
     }
-    return _cachedExe = '';
+    return '';
   }
 }

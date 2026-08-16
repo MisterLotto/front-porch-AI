@@ -26,14 +26,36 @@ extension AppDatabaseMemoryQueries on AppDatabase {
     await batch((b) => b.insertAll(messageEmbeddings, withIds));
   }
 
-  /// Get all embeddings for a set of character IDs (for cross-character RAG search).
+  /// Embeddings for [characterIds]. When [currentSessionId] is set, owners
+  /// in [sessionScopedCharacterIds] are limited to that chat so retrieve()
+  /// does not load every session's blobs and throw them away in Dart.
+  /// Unscoped ids (opt-in cross-character memory) still span sessions.
   Future<List<MessageEmbedding>> getEmbeddingsForCharacters(
-    List<String> characterIds,
-  ) async {
+    List<String> characterIds, {
+    String? currentSessionId,
+    Set<String> sessionScopedCharacterIds = const {},
+  }) async {
     if (characterIds.isEmpty) return [];
-    return (select(
-      messageEmbeddings,
-    )..where((e) => e.characterId.isIn(characterIds))).get();
+    final scoped = [
+      for (final id in sessionScopedCharacterIds)
+        if (characterIds.contains(id)) id,
+    ];
+    final q = select(messageEmbeddings)
+      ..where((e) => e.characterId.isIn(characterIds));
+    if (currentSessionId != null &&
+        currentSessionId.isNotEmpty &&
+        scoped.isNotEmpty) {
+      final unscoped = [
+        for (final id in characterIds)
+          if (!scoped.contains(id)) id,
+      ];
+      q.where((e) {
+        final thisChat = e.sessionId.equals(currentSessionId);
+        if (unscoped.isEmpty) return thisChat;
+        return thisChat | e.characterId.isIn(unscoped);
+      });
+    }
+    return q.get();
   }
 
   /// Presence-only ranges for one session (+ optional character). Does **not**

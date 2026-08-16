@@ -156,7 +156,12 @@ class _TtsSettingsDialogState extends State<TtsSettingsDialog> {
                           value: storage.ttsEnabled,
                           activeTrackColor: AppColors.formMasterAccent,
                           contentPadding: EdgeInsets.zero,
-                          onChanged: (val) => storage.setTtsEnabled(val),
+                          onChanged: (val) async {
+                            await storage.setTtsEnabled(val);
+                            if (!val && context.mounted) {
+                              context.read<TtsService>().releaseLocalEngine();
+                            }
+                          },
                         ),
 
                         const SizedBox(height: 20),
