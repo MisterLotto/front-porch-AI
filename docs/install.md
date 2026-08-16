@@ -12,7 +12,7 @@ If you're wondering whether your computer can handle it, see [What You Need to R
 - [macOS](#macos)
 - [Linux — Package Managers (Recommended)](#linux--package-managers-recommended)
 - [Linux — AppImage and Manual Packages](#linux--appimage-and-manual-packages)
-- [Beta and Nightly Builds](#beta-and-nightly-builds)
+- [Nightly Builds](#nightly-builds)
 - [After Installing](#after-installing)
 - [Common Install Problems](#common-install-problems)
 - [For Developers: Building from Source](#for-developers-building-from-source)
@@ -29,7 +29,7 @@ A few things the installer quietly handles for you:
 
 - **No admin password needed.** It installs into your own user folder, so Windows has no reason to ask for one.
 - **The Visual C++ runtime** is installed automatically if your PC doesn't already have it — that's the usual culprit behind "missing VCRUNTIME140.dll" errors.
-- **Channels don't collide.** Stable, beta, and nightly each install to their own folder and appear separately in Add/Remove Programs, so you can keep the stable app and try a nightly at the same time.
+- **Channels don't collide.** Stable and nightly each install to their own folder and appear separately in Add/Remove Programs, so you can keep the stable app and try a nightly at the same time.
 
 ## macOS
 
@@ -37,7 +37,7 @@ A few things the installer quietly handles for you:
 2. Double-click it and follow the installer. It places **Front Porch AI** in your **Applications** folder for you.
 3. Launch it from Applications.
 
-> **Tip:** Stable releases are code-signed and **notarized by Apple**, so macOS opens the app without Gatekeeper warnings, "damaged app" scares, or right-click workarounds — on the first launch and every launch after. Very few apps in this space bother with notarization; I do it for every stable release, and for nightly builds too. (The occasional beta build is the exception — see [Beta and Nightly Builds](#beta-and-nightly-builds).)
+> **Tip:** Stable releases are code-signed and **notarized by Apple**, so macOS opens the app without Gatekeeper warnings, "damaged app" scares, or right-click workarounds — on the first launch and every launch after. Very few apps in this space bother with notarization; I do it for every stable release, and for nightly builds too.
 
 The app is built natively for Apple Silicon (M1 and newer), where it runs local AI models beautifully. It also runs on Intel Macs, but those can't run models locally — on an Intel Mac the app skips the AI-engine download entirely and shows a banner in **Settings → Backend** saying local inference isn't supported and only Remote API mode is available. It doesn't switch you over for you: choosing Remote API there is a one-time step you do yourself.
 
@@ -78,7 +78,7 @@ On **openSUSE**, grab the `.rpm` from the [Releases page](https://github.com/lin
 yay -S front-porch-ai-bin        # stable
 ```
 
-There's also `front-porch-ai-beta-bin`, the pre-release package — in practice it tracks the most recent nightly rather than a beta. The two **conflict with each other**, so pick one; installing the pre-release package replaces the stable one.
+There's also `front-porch-ai-beta-bin` on the AUR — the name is leftover; it tracks the most recent nightly. The two **conflict with each other**, so pick one; installing the nightly package replaces the stable one.
 
 **Heads up: the AUR is behind right now.** The AUR packages are pushed automatically when a release goes out, but that push runs against the AUR's own servers, and it is currently being rejected there. `front-porch-ai-bin` is still on **1.1.2** while apt and dnf serve **1.2.0**, and I can't promise a date for the fix. That gap is worth caring about: 1.1.2 can't open `.fpworld` place files at all, so shared Places won't import until the package catches up. Until it does, install the `.AppImage` or `.tar.gz` from the [Releases page](https://github.com/linux4life1/front-porch-AI/releases) — those are always current — and check the installed version rather than assuming `yay -Syu` got you there.
 
@@ -99,26 +99,19 @@ Whichever you choose, you need a normal GTK 3 desktop environment underneath —
 
 ---
 
-## Beta and Nightly Builds
+## Nightly Builds
 
-Everything in the current stable release really is in stable — The Stoop community hub, Worlds and world sharing, weather, the Journal, and the rest all ship in the normal download. The pre-release channels are where the **next** release's work shows up first.
+Everything in the current stable release really is in stable. **Nightly** is the only early-access channel — a fresh build of Rawhide most mornings whenever there's new work to ship; quiet days are skipped. They're tagged `nightly-…` and flagged "Pre-release" on the [Releases page](https://github.com/linux4life1/front-porch-AI/releases). There is no beta series.
 
-There are two of them, both listed on the [Releases page](https://github.com/linux4life1/front-porch-AI/releases) and both flagged "Pre-release":
+**What you can download.** Nightlies come as a Windows installer, a macOS `.pkg`, a Linux AppImage, and a Linux `.tar.gz`. There is no nightly `.deb` or `.rpm`, and nightlies never go into the apt/dnf repositories — those carry stable only. On Arch, `front-porch-ai-beta-bin` in the AUR follows the nightlies (the package name is leftover).
 
-- **Nightly builds** — the everyday early-access channel. A fresh build of the latest development work goes out each morning whenever there's new work to build; quiet days are skipped. They're tagged `nightly-…`.
-- **Beta builds** — cut only while a specific release is being stabilized, so there often isn't a current one.
+**Your stable install stays safe.** Nightlies keep everything — characters, chats, settings, models — in a separate `FrontPorchAI-Beta` folder (the name is leftover from when there was a beta channel) with their own settings, so they never touch your stable data. You can run stable and a nightly side by side. The first time a nightly starts it offers to copy your stable database across, so you can try new features with your existing characters; your stable copy is left untouched either way, and you can decline.
 
-**What you can download.** Nightlies come as a Windows installer, a macOS `.pkg`, a Linux AppImage, and a Linux `.tar.gz`. There is no nightly `.deb` or `.rpm`, and nightlies never go into the apt/dnf repositories — those carry stable only. On Arch, `front-porch-ai-beta-bin` in the AUR follows the nightlies.
+**Backups & Restore is limited on nightlies.** The **Backups & Restore** page opens but its contents are replaced by a notice, so there is no way to browse or roll back a snapshot there. The automatic snapshots themselves keep running: a nightly still saves a copy of its database every half hour, into its own `FrontPorchAI-Beta` folder, on the same schedule stable uses. If you need to restore one while you're on a nightly, the files are sitting in a `backups` folder next to that build's database.
 
-**Your stable install stays safe.** Pre-release builds keep everything — characters, chats, settings, models — in a separate `FrontPorchAI-Beta` folder with their own settings, so they never touch your stable data. You can run stable and a nightly side by side. The first time a pre-release build starts it offers to copy your stable database across, so you can try new features with your existing characters; your stable copy is left untouched either way, and you can decline.
+A backup is a copy of the **database file** only — your chats, your characters' records, and the rest of the database rows. Settings aren't in it (they're stored separately from the database), and neither are image files, so a backup won't bring back a character card image you deleted.
 
-**Beta and nightly share one data folder.** They're both pre-release builds, so they use that same `FrontPorchAI-Beta` folder. Switching between them means they see each other's characters and chats — usually what you want, but worth knowing.
-
-**Backups & Restore is limited in pre-release builds.** On beta and nightly builds the Backups & Restore page opens but its contents are replaced by a notice, so there is no way to browse or roll back a snapshot there. The automatic snapshots themselves keep running: a pre-release build still saves a copy of its database every half hour, into its own `FrontPorchAI-Beta` folder, on the same schedule stable uses. If you need to restore one while you're on a pre-release build, the files are sitting in a `backups` folder next to that build's database.
-
-One thing to know on either channel: a backup is a copy of the **database file** only — your chats, your characters' records, and the rest of the database rows. Settings aren't in it (they're stored separately from the database), and neither are image files, so a backup won't bring back a character card image you deleted.
-
-**One macOS caveat.** Nightly `.pkg` files are signed and notarized just like stable ones. Beta `.pkg` files are not, so macOS will warn you the first time you open a beta.
+**macOS.** Nightly `.pkg` files are signed and notarized just like stable ones.
 
 Expect occasional rough edges — that's the deal with early builds. Bug reports on [Discord](https://discord.gg/e4tET6rpdv) are always welcome.
 
@@ -136,7 +129,7 @@ From there, open **Manage Models** in the sidebar to download your first AI mode
 
 **Voice features.** Text-to-speech and voice input run inside the app itself. There's no Python to install, no helper program, and nothing extra to set up — the first time you switch one on, the app fetches the small voice or speech model it needs.
 
-**Where your files live.** Characters, chats, models, and images all sit in a **FrontPorchAI** folder inside your Documents folder (**FrontPorchAI-Beta** for pre-release builds). You can move it in **Settings → Advanced → Data Directory**.
+**Where your files live.** Characters, chats, models, and images all sit in a **FrontPorchAI** folder inside your Documents folder (**FrontPorchAI-Beta** for nightlies — leftover name). You can move it in **Settings → Advanced → Data Directory**.
 
 **How updates reach you** depends on how you installed:
 

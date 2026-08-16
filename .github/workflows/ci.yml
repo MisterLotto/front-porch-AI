@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [dev, main, Rawhide]
+    branches: [main, Rawhide]
   pull_request:
-    branches: [dev, main, Rawhide]
+    branches: [main, Rawhide]
   schedule:
     # Run full project lint every Monday at 09:00 UTC
     - cron: '0 9 * * 1'

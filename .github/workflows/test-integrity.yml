@@ -35,7 +35,7 @@ name: Test integrity
 # cannot clear their own block — which is the property that was missing.
 #
 # THIS JOB ONLY HAS TEETH IF IT IS A REQUIRED STATUS CHECK.
-# Settings -> Branches -> protect `main`, `Rawhide`, `dev`, `*-Beta` ->
+# Settings -> Branches -> protect `main`, `Rawhide` ->
 # "Require status checks to pass" -> add "Guard protected paths".
 #
 # BASELINE REFRESH 2026-08-07 — the guarded set had drifted from the repo.

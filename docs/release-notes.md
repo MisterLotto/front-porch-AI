@@ -6,7 +6,7 @@ Front Porch AI ships often: a stable release every few weeks, patch releases in 
 
 This page is the long-form history — the headlines of every release, newest first. The [GitHub Releases page](https://github.com/linux4life1/front-porch-ai/releases) is always the complete and most up-to-date record, and it is also where the nightly builds live.
 
-**Pre-release builds** (beta and nightly Rawhide) keep their data in a completely separate `FrontPorchAI-Beta` folder with their own settings, so they never touch a stable installation.
+**Nightly builds** (Rawhide) keep their data in a completely separate `FrontPorchAI-Beta` folder (leftover name) with their own settings, so they never touch a stable installation.
 
 ---
 
@@ -101,7 +101,7 @@ Five months and 1,600+ commits after the first push on 2026-02-14. Everything in
 
 Everything from here down is a record of what shipped at the time, not a description of the app today. A few things those entries mention have since been removed, so don't go hunting for them:
 
-- **Cloud Sync is gone.** Automatic local backups replaced it in 1.0 — rolling half-hourly and daily snapshots of the database, with one-click restore. On beta and nightly builds the Backups & Restore page opens but its contents are replaced by a notice, so there is no way to browse or roll back a snapshot there. The automatic snapshots themselves keep running.
+- **Cloud Sync is gone.** Automatic local backups replaced it in 1.0 — rolling half-hourly and daily snapshots of the database, with one-click restore. On nightlies the Backups & Restore page opens but its contents are replaced by a notice, so there is no way to browse or roll back a snapshot there. The automatic snapshots themselves keep running.
 - **The separate helper programs are gone.** Earlier versions started standalone Python and Rust programs for speech, emotion classification, and memory embeddings. As of 1.0 all of that runs inside the app itself.
 - **Summary and Fact Extraction became The Journal**, a real per-chat diary. Journal memories never cross between chats.
 - **Character evolution became Growth Rings**, which show you what changed and why instead of silently rewriting the character. Scenario evolution retired along with it.

@@ -57,13 +57,11 @@ This matters — PRs opened against the wrong branch will be asked to move.
 
 | Change type | Target branch |
 |---|---|
-| New features, UI changes, refactors, experiments | `Rawhide` |
-| Bug fixes for the current stable release | `dev` |
-| Bug fixes for an active beta | the active `*-Beta` branch |
-| Anything else | ask first |
+| All work (features, fixes, experiments) | `Rawhide` |
+| Tagged stable releases | `main` |
 
-`main` is tagged stable releases only. Direct PRs to `main` are almost never
-accepted.
+Two branches. There is no `dev` line and no beta series. Direct PRs to `main`
+are almost never accepted.
 
 ## Development Setup
 
@@ -117,7 +115,7 @@ of unfinished pieces.
 
 ## Required Checks
 
-CI runs these on every PR to `dev`, `main` and `Rawhide`. Run them locally first.
+CI runs these on every PR to `main` and `Rawhide`. Run them locally first.
 
 ```bash
 flutter analyze                       # must be clean — the project is at 0 warnings

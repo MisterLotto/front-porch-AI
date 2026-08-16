@@ -138,7 +138,7 @@ lib/
 │   ├── kobold_service.dart      # KoboldCpp API client
 │   ├── llm_provider.dart        # Abstraction over Kobold/OpenRouter/external APIs
 │   ├── character_repository.dart # Character CRUD via Drift
-│   ├── storage_service.dart     # File system paths, beta/stable data dir isolation
+│   ├── storage_service.dart     # File system paths, nightly/stable data dir isolation
 │   ├── embedding_service.dart   # In-process RAG embeddings (nomic via onnxruntime)
 │   ├── memory_service.dart      # RAG memory extraction and retrieval
 │   ├── tts_service.dart         # TTS orchestration (Kokoro, ElevenLabs, OpenAI, Piper)
@@ -195,7 +195,7 @@ lib/
 - **The Journal** (`lib/services/chat/journal_maintenance.dart` + `journal_store.dart` + `journal_ops.dart` + `journal_physics.dart` + `prompt_injection/journal_injection.dart`): the unified emotional memory system. One periodic maintenance pass per diary owner produces (a) per-chat, per-character **memory cards** (with emotion label + intensity stamped deterministically from the message metadata the Realism Engine already wrote) and (b) the per-chat **"Where we are" recap**, which reuses the old summary scalars/column (`_summary`, `Sessions.summary`, `summaryLastIndex` as the pass cursor) so EvolutionService, the sidebar, and the web facade surface kept working. Cards are strictly session-scoped — **no memory ever crosses chats** — and are deleted with the chat. XML-tag transport parsed forgivingly (local-model floor); reasoning off + think-strip via LlmEvalEngine. Replaced the deleted `SummaryService` + `FactExtraction` (and the persona learned-facts feature; `Personas.learnedFacts` column is dormant). **Emotional physics** (phase 2, all constants/math in `journal_physics.dart`, pure + deterministic): cards carry heat that cools one step per pass with flashbulb resistance (strong feelings barely fade; pinned never), cold cards (heat < 0.35) leave the always-injected hot set but resurface via cosine search against the recent turn (re-warmed to 0.75 + access recorded), hot-set ordering gets a mood-congruence boost (emotion families via `EmotionLabels.nuancedToStandard`, read from the same `_characterEmotion` scalar the group pre-gen load sets per speaker — parity), cap trims the coldest unpinned card, salient events (|bond/trust delta| ≥ 12, trust repair, Chance Time, objective completion via `ObjectiveProposal.onObjectiveCompleted` → `eventKickPending`) trigger an immediate pass from `_maybeRunJournalPass`, and a virgin journal on a long chat reads only the trailing 50 messages. Card embeddings ride `MemoryService.embedText` and are strictly optional (no-RAG floor: hot/pinned injection never needs the sidecar). **Item-memory cards (2026-08-11):** `kind:'item'` diary lines ("I set my car keys down — on the hallway table.") written DETERMINISTICALLY from applied pocket events — `applyPocketOps` emits `PocketEvent`s with canonical names, `pocket_journal_cards.dart` is the pure salience mapper (setdown/give/drop + outfit-change get cards; undressing and dressing alone stay silent), and `ChatService._writeItemCards` stores them (gated on pockets AND journal switches — the features' intersection, neither core rides the other; one live card per item — a new placement retires the old). They cool at the full base rate (no flashbulb) and resurface through a **keyword floor** in `journal_injection.dart` (`JournalPhysics.itemCardMentioned`, token-intersection via the shared `itemNameTokens` rule — no embeddings, so "where are my keys?" works on every install) with cosine as the oblique-reference upgrade; card receipts enroll them in the existing timeline invalidation. **UI** (phase 3): sidebar peek `ui/chat_components/sidebar/journal_memory/journal_panel.dart` (follows the focused participant — `ChatParticipant.id` IS the cards' storage key) + full diary `ui/dialogs/journal_dialog.dart` + shared plant/edit editor `ui/dialogs/journal_card_editor.dart`; the UI mutates `ChatService.journalStore` directly and the injection builder re-reads the DB each turn, so edits need no extra plumbing. Receipts quote the cited lines AND tap-to-jump: `ui/chat_components/widgets/message_jump.dart` seeks the chat's reverse `ListView.builder` (bubbles keyed by PAGE-OWNED GlobalKeys — `_bubbleKeys` identity map in chat_page.dart, looked up via the `keyOf` callback; a bare `GlobalObjectKey(msg)` is app-global and crashed with duplicate-key storms when two chat routes were alive in one frame, maintainer repro 2026-08-10) by proportional hop + viewport paging until the target key materializes, then `ensureVisible` + a brief `JumpFlash` tint. **Phase 4** — two transports, ONE applier (`journal_review.dart`): the pass (`_runExchange`) probes `LLMService.generateWithTools` once per backend identity per run (`kJournalTools` schemas + `parseJournalToolCalls` in journal_ops; OpenRouterService implements over its shared `_chatPayload`; KoboldCpp + PseudoRemote implement via the shared `postOpenAiChatWithTools` in openai_chat_stream.dart — Qwen3-class local models call tools fine, per user decision 2026-07-03), salvages tags from text-only replies, and remembers XML-only backends per backend+model identity (remote model name AND local model path ride the key). **Review-first mode** (`journal_review_first`, default off, toggle in the recap gear): the pass resolves ops into id-addressed `JournalProposedOp`s and parks a session-guarded `JournalReviewBatch` (blocks further auto passes; cursor moves only on Apply/Discard); sidebar banner → `journal_review_dialog.dart` checkboxes → Apply routes through the same `applyOwnerProposals` normal mode uses. Prompt building lives in `journal_prompt.dart` (XML + tools closing sections over an identical body).
 - **Growth Rings** (`lib/services/chat/growth_service.dart` + `growth_store.dart` + `growth_ops.dart`): character evolution. NOTE: the old `EvolutionService` and `chat/evolution_service.dart` were DELETED — only tombstone comments remain. Scenario evolution was retired with it. Do not reference either name.
 - **KoboldService** (`lib/services/kobold_service.dart`): HTTP client for KoboldCpp (`/api/v1/generate`, `/api/extras/abort`, etc.).
-- **StorageService** (`lib/services/storage_service.dart`): Data directories. Beta builds use `FrontPorchAI-Beta/` with `beta_` prefixed SharedPreferences keys.
+- **StorageService** (`lib/services/storage_service.dart`): Data directories. Nightly / Rawhide builds use `FrontPorchAI-Beta/` (historical folder name) with `beta_` prefixed SharedPreferences keys.
 - **EmbeddingService** (`lib/services/embedding_service.dart`): In-process RAG embeddings — nomic-embed-text-v1.5 via onnxruntime in a persistent worker isolate (`embedding/native_embedding_engine.dart`), golden-pinned to the retired Rust server's exact vectors so stored embeddings stay valid. Owns the model download/setup flow the RAG consent dialog drives.
 
 ### Native Engines (no sidecars at all)
@@ -407,19 +407,17 @@ There is no app-version gating in the backend, and there must not be — the con
 
 ## Branch Workflow
 
-| Change Type                  | Target Branch              |
-|------------------------------|----------------------------|
-| New features & experiments   | `Rawhide`                  |
-| Bug fixes for current stable | `dev`                      |
-| Bug fixes for active beta    | The active `*-Beta` branch |
-| Release tagging              | `main`                     |
+Two branches. That is the whole model.
 
-- **Rawhide** — primary rolling development branch. All new features, UI changes, major refactors, and experimental work target Rawhide.
-- **dev** — bug fixes for the current stable release (when no beta branch is active).
-- **Beta branches** (`0.9.x-Beta`) — created to stabilize an upcoming release. While active, only bug fixes for that beta are accepted; no new features.
-- **main** — final, tagged stable releases only. Direct PRs are almost never accepted.
+| Change Type                                | Target Branch |
+|--------------------------------------------|---------------|
+| All work (features, fixes, experiments)    | `Rawhide`     |
+| Tagged stable releases                     | `main`        |
 
-When a release cycle begins, a beta branch is cut from Rawhide; Rawhide keeps moving forward while the beta stabilizes.
+- **Rawhide** — the only development line. Features, fixes, refactors, experiments.
+- **main** — tagged stable releases. Direct PRs to `main` are almost never accepted.
+
+There is no `dev` branch and no beta series. Cutting a third line and asking users to keep three installs was more process than it was worth.
 
 **Cron gotcha:** GitHub evaluates `schedule:` triggers ONLY from workflow files on the
 repository's DEFAULT branch. `nightly.yml` therefore runs `main`'s copy — any change to
@@ -429,7 +427,7 @@ copy, so it protects only branches that actually carry the file.
 
 ## Important Constraints
 
-- Beta builds MUST isolate data: `FrontPorchAI-Beta/` directory, `beta_` prefixed SharedPreferences keys.
+- Nightly / Rawhide builds MUST isolate data: `FrontPorchAI-Beta/` directory (historical folder name) and `beta_` prefixed SharedPreferences keys, so they never touch a stable library.
 - All AI processing is local/offline by default; cloud APIs (ElevenLabs, OpenRouter) are opt-in.
 - Character cards follow V2/V2.5 spec (PNG/JSON with embedded metadata).
 - Drift database uses UUID primary keys for cloud sync merge compatibility.

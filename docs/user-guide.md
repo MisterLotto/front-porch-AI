@@ -519,7 +519,7 @@ It is **not** a copy of your files on disk. Character card PNGs, avatar and expr
 
 Restoring replaces your current database with the snapshot, so anything you did after that snapshot was taken is gone. The app asks you to confirm first.
 
-> **On beta and nightly builds, snapshots keep running but can't be restored from inside the app.** The **Backups & Restore** page opens but its contents are replaced by a notice, so there is no way to browse or roll back a snapshot there. The automatic snapshots themselves keep running, against the pre-release build's own separate database.
+> **On nightlies, snapshots keep running but can't be restored from inside the app.** The **Backups & Restore** page opens but its contents are replaced by a notice, so there is no way to browse or roll back a snapshot there. The automatic snapshots themselves keep running, against the nightly's own separate database.
 
 **Moving to a new computer:** export your characters as card files and import them on the other machine — or copy your whole data folder, which does include the card images a backup leaves out. Backup snapshots can also be restored on a fresh install.
 
