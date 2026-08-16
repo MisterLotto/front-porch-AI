@@ -26,7 +26,7 @@
   needs_simulation.dart + regenerated golden, story_clock.dart,
   time_service.dart, chat_service_accessors.dart, wiring_injection,
   NEW set_aside_morning_anchor_test.dart
-- **Commit:** (this commit)
+- **Commit:** c3addda0
 
 ## 2026-08-15 — fix(sweep): 68 verified MEDIUM findings + wave residuals + review leftovers
 - **Why:** the 1.3 sweep's medium wave (16 Opus batches over 95 findings —
