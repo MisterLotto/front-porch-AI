@@ -15,6 +15,18 @@
   NEW stoopRestoreSession.test.ts; docs/Rawhide.md
 - **Commit:** 0ffa2560
 
+## 2026-08-16 — fix(tts): use-after-dispose race caught by Linux CI
+- **Why:** the pushed stack's ONE red CI job: speak()'s tail (and
+  downloadModel's progress/finally) resume after async gaps and call
+  notifyListeners() — on the slower Linux runner they landed after test
+  teardown had disposed the service and the debug assertion fired. The
+  dev Mac never lost the race, exactly the platform-asymmetric class
+  CLAUDE.md warns about.
+- **What:** _notify() is disposed-guarded, and every bare
+  notifyListeners() in TtsService (6 sites incl. downloadModel's
+  post-await ones) now routes through it — one rule for the class.
+- **Commit:** (this commit)
+
 ## 2026-08-15 — fix(chat): pocket receipt chips overflowed the bubble by 1086px
 - **Why:** live maintainer repro minutes after the medium wave landed: the
   wave FIXED receipts being silently dropped on realism turns, so

@@ -97,7 +97,7 @@ class TtsService extends ChangeNotifier {
   String? get lastError => _lastError;
   void clearError() {
     _lastError = null;
-    notifyListeners();
+    _notify();
   }
 
   /// The currently active TTS engine instance.
@@ -179,7 +179,7 @@ class TtsService extends ChangeNotifier {
     } else {
       _currentAvailableVoices = activeEngine.availableVoices;
     }
-    notifyListeners();
+    _notify();
   }
 
   /// Manually download / ensure the model for the active engine is ready.
@@ -188,13 +188,13 @@ class TtsService extends ChangeNotifier {
     if (_isDownloadingModel) return false; // already downloading
     _isDownloadingModel = true;
     _modelDownloadProgress = 0.0;
-    notifyListeners();
+    _notify();
 
     try {
       final ready = await activeEngine.ensureModelReady(
         onProgress: (p) {
           _modelDownloadProgress = p;
-          notifyListeners();
+          _notify();
         },
       );
       return ready;
@@ -203,7 +203,7 @@ class TtsService extends ChangeNotifier {
       return false;
     } finally {
       _isDownloadingModel = false;
-      notifyListeners();
+      _notify();
     }
   }
 
@@ -238,7 +238,15 @@ class TtsService extends ChangeNotifier {
   // call it directly without analyzer warnings. Same forwarder pattern as
   // CharacterRepository and StoryPipelineService's split parts — and unlike a
   // public pass-through override, it does not widen the public API.
-  void _notify() => notifyListeners();
+  //
+  // Disposed-guarded: dispose() fires stop() un-awaited (it must stay
+  // synchronous), and speak()'s own tail resumes after async gaps — on a
+  // slow machine either can land after teardown and notifyListeners() on a
+  // disposed ChangeNotifier asserts in debug (Linux CI caught it; the dev
+  // Mac never lost the race).
+  void _notify() {
+    if (!_disposed) notifyListeners();
+  }
 
   /// Stop any active speech.
   Future<void> stop() async {
@@ -253,6 +261,6 @@ class TtsService extends ChangeNotifier {
 
     await _audioPlayer.stop();
     if (_disposed) return;
-    notifyListeners();
+    _notify();
   }
 }
