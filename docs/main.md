@@ -4,15 +4,15 @@ These notes feed the in-app "Update Available" dialog for stable releases on `ma
 
 ## v1.3
 
-- ✍️ **Impersonate is on the phone too** — the same wand as desktop. A start you already typed is continued as you, not answered as the character.
-- 🕐 **If she says it is 6am, the clock becomes 6am** — the sidebar follows a time she actually names in the reply.
-- 🧠 **Local models stop pretending they can think** — no thinking switch for models that have none; on/off when that's all they have; strength chips only when they're real.
-- 🎁 **Hand her something and she actually has it** — an offer she accepts goes into her pockets. Same on a 1:1 as passing an item in a group.
-- 💛 **Long-term bond notices a stretch a little sooner** — every 3 warm turns instead of 5. Existing chats keep the score they already earned.
+- 🎁 **Pockets & Wardrobe** — she has pockets, clothes, and a set-aside pile. Hand her something, take it back, she can pass it to someone else. The Journal keeps a Belongings tab of where things went. Own switch — does not need the Realism Engine.
+- ✨ **AI Enhance** — grow a character from a real chat. Walks you through it, and can bring those chats along.
+- 🏡 **Porch Life** — one Settings home for every living-character switch, instead of hunting them across the app.
+- 🎛️ **À la carte** — Journal, Chaos / Chance Time, the story clock, Pockets, and Objectives each have their own switch. Turn on what you want. Realism Engine is no longer the master key.
+- ✍️ **Impersonate on the phone** — the same wand as desktop. A start you already typed is continued as you.
 
 ### Fixed since 1.2.0.1
 
-- 📖 **"Turn this chat into a story" actually creates the project** — it used to save nothing, then error, on desktop and web.
-- 🛟 **A failed regenerate can no longer eat the message** — the original reply and its swipes come back if the backend errors or you cancel.
-- 💾 **Restoring a backup now really restores the open chat** — it used to write the old conversation back into the snapshot the next time you sent a line.
-- 🐧 **Linux self-update can't uninstall the app** — a bad download no longer deletes the running AppImage first.
+- 📖 **"Turn this chat into a story" actually creates the project.**
+- 🛟 **A failed regenerate can no longer eat the message.**
+- 💾 **Restoring a backup now really restores the open chat.**
+- 🐧 **Linux self-update can't uninstall the app.**
