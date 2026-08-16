@@ -38,7 +38,7 @@
   gitignored .local_poke live-DB scratch test, missing its Aug-12 /tmp
   fixture); 94 Linux container goldens green; tsc + 105 vitest green; PWA
   bundle rebuilt.
-- **Commit:** (this commit)
+- **Commit:** ba32250a
 
 ## 2026-08-15 — fix(sweep): 53 verified HIGH findings (14-batch Opus fix wave)
 - **Why:** the 1.3 sweep's verifier-confirmed highs. Every diff re-read by
