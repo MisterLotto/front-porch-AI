@@ -15,6 +15,41 @@
 - **Files:** porch_life_identity.dart, enhance_review_body.dart,
   enhance_porch_review_test.dart, porch_life_identity_test.dart,
   web enhanceForm + EnhanceReviewModal
+## 2026-08-17 — test(golden): refresh quick_config goldens for voice chips
+- **Why:** TestChampion CI HOLD on #200 — QuickConfigStep's output-settings
+  card grew two Greeting voice chip rows; the committed PNGs still showed
+  the pre-chip layout.
+- **What:** Regenerated only `quick_config.{light,dark}.png` via
+  `--update-goldens --name QuickConfigStep`. `guided_output_settings`
+  was regenerated the same way and is byte-identical (chips sit below
+  that golden's existing clip). No 900px goldens, no tree-wide refresh.
+- **Files:** test/golden/widget/_goldens/creator_steps/quick_config.*.png
+
+## 2026-08-17 — fix(chargen): Enhance keeps Create's narrative voice
+- **Why:** Bug Hunter hold on #200 — `enhanceCharacter` forced
+  `NarrativeVoice.defaults` and empty sex so a prior generate could not
+  leak, which rewrote third/past cards as first-person present. Web
+  `buildEnhancePayload` / `startEnhance` did not forward voice either.
+- **What:** Create stamps perspective/tense/sex on the card. Enhance
+  resolves params → stamp → first-person present. Desktop wizard and
+  `/api/chargen/enhance` carry the same fields. No Enhance Review layout
+  change.
+- **Files:** narrative_voice.dart, character_gen_enhance.dart,
+  character_gen_service.dart, enhance_wizard_page.dart, chargen_facade.dart,
+  character_facade.dart, enhanceForm.ts, EnhanceDialog.tsx
+
+## 2026-08-17 — feat(chargen): perspective + tense for greetings and example dialog
+- **Why:** Issue #194 — first-person present was baked into the greeting and
+  example-dialog prompts, so users who wanted third person or past tense had
+  to rewrite the card or patch source and rebuild.
+- **What:** Output settings gain First/Third and Present/Past chips (default
+  first + present, same wording as before). Third person resolves he/she/they
+  from Sex. Description, personality, example dialogue, and greetings follow
+  the choice. Threaded through desktop (all three modes), the web wizard, and
+  the `/api/chargen/create` facade.
+- **Files:** chargen/narrative_voice.dart, character_gen_prompts.dart,
+  character_gen_steps.dart, character_gen_service.dart, creator_state*,
+  narrative_voice_selector.dart, web OutputSettings + chargenForm
 
 ## 2026-08-17 — test(creator): pin RealismStep Porch Life vs engine split
 - **Why:** Feature Design lock: engine OFF on the AI creator still shows

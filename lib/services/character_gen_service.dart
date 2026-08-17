@@ -17,6 +17,7 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:front_porch_ai/utils/utils.dart';
 import 'package:front_porch_ai/models/models.dart';
@@ -132,6 +133,11 @@ class CharacterGenService {
   /// capable models use them well, weaker ones place them awkwardly.
   bool _includeDynamicMacros = false;
 
+  /// Greeting + example-dialog voice. Default first-person present matches
+  /// the historical baked-in prompts. Set at the start of each generate run.
+  NarrativeVoice _narrativeVoice = NarrativeVoice.defaults;
+  String _narrativeSex = '';
+
   bool get isAborted => _aborted;
 
   /// Abort the current generation. Signals the LLM service to close its
@@ -174,11 +180,21 @@ class CharacterGenService {
     bool nsfwEnabled = false,
     bool reasoningEnabled = false,
     bool includeDynamicMacros = false,
+    String narrativePerspective = 'first',
+    String narrativeTense = 'present',
     bool abortInFlight = true,
     void Function(String accumulated)? onProgress,
     void Function(String error)? onError,
     void Function(String status)? onStatus,
   }) async {
+    // Voice must be set BEFORE the base-card prompt so description /
+    // personality pick up tense and third-person pronouns.
+    _narrativeVoice = NarrativeVoice.parse(
+      perspective: narrativePerspective,
+      tense: narrativeTense,
+    );
+    _narrativeSex = sex;
+
     // ── Step 1: Generate base card ──────────────────────────────
     onStatus?.call('Generating character profile...');
     final basePrompt = _buildBasePrompt(
@@ -516,6 +532,7 @@ class CharacterGenService {
     // mid-chat. Normalize every generated text field to the portable macro.
     // (Logic lives in chargen/char_macro.dart so it stays unit-testable.)
     applyCharMacroToCard(card, name);
+    stampNarrativeVoice(card, voice: _narrativeVoice, sex: _narrativeSex);
 
     onStatus?.call('Character generated!');
     return card;
