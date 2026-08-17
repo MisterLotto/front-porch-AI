@@ -5,6 +5,7 @@
 // and messy text JSON) and must NEVER leak intimate lists when 18+ is off.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/chargen/chargen.dart';
 import 'package:front_porch_ai/services/character_gen_service.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
@@ -66,6 +67,44 @@ thanks
       expect(id.carrying, isNot(contains("{{user}}'s wallet")));
       expect(id.carrying.length, lessThanOrEqualTo(8));
       expect(id.carrying.first, 'car keys');
+    });
+
+    test('isEmpty is all seven lists empty — mute JSON included', () {
+      expect(const PorchLifeIdentity().isEmpty, isTrue);
+      expect(parsePorchLifeIdentity('{}', nsfw: false).isEmpty, isTrue);
+      expect(parsePorchLifeIdentity('thanks', nsfw: false).isEmpty, isTrue);
+      expect(
+        parsePorchLifeIdentity({
+          'ambitions': ['stay fed'],
+        }, nsfw: false).isEmpty,
+        isFalse,
+      );
+    });
+  });
+
+  group('applyPorchLifeProposal', () {
+    final authored = FrontPorchExtensions(
+      ambitions: const ['old goal'],
+      inventory: const {
+        'worn': ['old coat'],
+      },
+    );
+
+    test('mute/empty proposal does not drop authored old coat', () {
+      final out = applyPorchLifeProposal(authored, const PorchLifeIdentity());
+      final id = porchLifeIdentityOf(out);
+      expect(id.ambitions, ['old goal']);
+      expect(id.worn, ['old coat']);
+    });
+
+    test('ambitions-only proposal does not replace authored worn', () {
+      final out = applyPorchLifeProposal(
+        authored,
+        const PorchLifeIdentity(ambitions: ['stay fed']),
+      );
+      final id = porchLifeIdentityOf(out);
+      expect(id.ambitions, ['stay fed']);
+      expect(id.worn, ['old coat']);
     });
   });
 
