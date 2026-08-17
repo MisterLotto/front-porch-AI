@@ -23,7 +23,6 @@ part of '../home_page.dart';
 /// Split out of the _HomePageState god file as a private extension
 /// (part of the same library, so it keeps full access to page state).
 extension _HomePageChrome on _HomePageState {
-
   Widget _buildModeToggle() {
     return HomeModeToggle(
       showStories: _showStories,
@@ -98,27 +97,30 @@ extension _HomePageChrome on _HomePageState {
     );
   }
 
-  /// Shows a dialog letting the user choose which saved session to resume.
-  /// Returns the session ID, '__new__' for a new chat, or null if cancelled.
-
   // ─── CharacterCardGrid Callback Handlers ────────────────────────
 
   /// Push ChatPage immediately and drain [load] after pop. The session
   /// overlay covers hydrate — awaiting load first is the home-grid freeze.
+  /// A failed load pops the ghost ChatPage and snacks the error.
   Future<void> _pushChatWhile(Future<void> load) async {
     if (!mounted) {
       await load;
       return;
     }
-    final nav = Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const ChatPage()));
+    final nav = Navigator.of(context);
+    final route = nav.push(MaterialPageRoute(builder: (_) => const ChatPage()));
     try {
       await load;
     } catch (e, st) {
       debugPrint('[Home] open chat failed: $e\n$st');
+      if (mounted && nav.canPop()) {
+        nav.pop();
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Could not open chat: $e')));
+      }
+      return;
     }
-    await nav;
+    await route;
     if (mounted) _refreshLastActivityCache();
   }
 
@@ -178,7 +180,10 @@ extension _HomePageChrome on _HomePageState {
     _openingChat = true;
     try {
       final chatService = Provider.of<ChatService>(context, listen: false);
-      final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
+      final groupRepo = Provider.of<GroupChatRepository>(
+        context,
+        listen: false,
+      );
       final groupId = 'group_${group.id}';
       final sessions = await chatService.getSessionsForId(groupId);
 
@@ -226,7 +231,10 @@ extension _HomePageChrome on _HomePageState {
     _openingChat = true;
     try {
       final subject = character?.name ?? group?.name ?? '';
-      final personaId = await showPersonaPickerDialog(context, subject: subject);
+      final personaId = await showPersonaPickerDialog(
+        context,
+        subject: subject,
+      );
       if (personaId == null || !mounted) return;
 
       final chatService = Provider.of<ChatService>(context, listen: false);
@@ -392,7 +400,6 @@ extension _HomePageChrome on _HomePageState {
         break;
     }
   }
-
 
   /// One drop handler for both draggable kinds: characters are keyed by image
   /// filename, group casts by their group id (see FolderService).

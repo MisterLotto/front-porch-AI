@@ -85,7 +85,8 @@ extension _ChatPageInputActions on _ChatPageState {
         ),
         PopupMenuItem(
           value: 'import',
-          enabled: !chatService.isGenerating &&
+          enabled:
+              !chatService.isGenerating &&
               !chatService.isSettlingTurn &&
               !chatService.isImporting,
           child: Tooltip(
@@ -221,6 +222,7 @@ extension _ChatPageInputActions on _ChatPageState {
         child: AppTextField(
           controller: _controller,
           focusNode: _chatFocusNode,
+          enabled: !chatService.isLoadingSession,
           maxLines: 10,
           minLines: _inputMinLines,
           textInputAction: TextInputAction.newline,
@@ -441,7 +443,9 @@ extension _ChatPageInputActions on _ChatPageState {
                             ? Colors.amberAccent
                             : AppColors.porchAmberOf(context)),
                 ),
-                onPressed: () => _sendCurrentMessage(chatService),
+                onPressed: chatService.isLoadingSession
+                    ? null
+                    : () => _sendCurrentMessage(chatService),
               ),
             ),
     ];
