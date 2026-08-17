@@ -50,6 +50,25 @@
 - **Files:** chargen/narrative_voice.dart, character_gen_prompts.dart,
   character_gen_steps.dart, character_gen_service.dart, creator_state*,
   narrative_voice_selector.dart, web OutputSettings + chargenForm
+## 2026-08-17 — fix(web): ignore X-Real-IP; unparsed hops are not limiter keys
+- **Why:** With no usable XFF, `requestClientIp` returned caller-supplied
+  `X-Real-IP` as a raw string — a unique value minted a fresh RateLimiter
+  key. `_rightmostNonLoopbackHop` also returned an unparsed token.
+- **What:** Ignore `X-Real-IP` (cannot prove the proxy set it). XFF hops
+  must parse as a non-loopback IP. Unparsed / empty / loopback tokens
+  map to the shared `_unknown` bucket. LAN-direct and `isSecure` unchanged.
+- **Files:** client_ip.dart, rate_limiter.dart, client_ip_real_ip_test.dart
+
+## 2026-08-17 — fix(web): loopback-proxy XFF uses appended hop; empty IP fail-closed
+- **Why:** `requestClientIp` took the leftmost XFF hop when the peer was
+  loopback. ngrok appends the real client, so a caller-supplied first hop
+  minted a fresh login/step-up rate-limit key. `X-Forwarded-For: ,8.8.8.8`
+  became `""`, and `ipAllowed` treated empty as unlimited.
+- **What:** Rightmost non-empty non-loopback hop behind a loopback peer.
+  LAN-direct still ignores XFF. Empty/whitespace/null IP shares one
+  `_unknown` bucket and is recorded — the cap is not skipped.
+- **Files:** client_ip.dart, rate_limiter.dart,
+  client_ip_proxy_xff_test.dart, rate_limiter_empty_ip_test.dart
 
 ## 2026-08-17 — test(creator): pin RealismStep Porch Life vs engine split
 - **Why:** Feature Design lock: engine OFF on the AI creator still shows
@@ -92,6 +111,32 @@
   No product UI change. No goldens.
 - **Files:** enhance_porch_review_test.dart, enhance_porch_life_test.dart,
   porch_life_identity_test.dart, enhance_wizard_test.dart
+## 2026-08-17 — fix(web): gate preview remote-models / test-connection / reasoning-menu
+- **Why:** Persist of remoteApiUrl/apiKey was stepped-up, but the three
+  preview POSTs still accepted a caller-supplied host with only a session.
+  A stolen cookie could fire a live request (with the stored key) at a
+  host the user never saved.
+- **What:** `remoteCredentialPreviewNeedsStepUp` + the same password/TOTP
+  gate as settings persist. Session-only when the body uses the saved
+  URL/key unchanged. PWA Test connection / ModelPicker send the password
+  when the preview host or key differs; they do not auto-fetch without it.
+- **Files:** step_up.dart, backend_routes.dart,
+  backend_preview_step_up_test.dart, SettingsPage.tsx, ModelPicker.tsx,
+  StepUpFields.tsx
+
+## 2026-08-17 — fix(web): harden PWA headers, client IP, settings step-up, Stoop report
+- **Why:** Four web/PWA gaps: no CSP, LAN clients could rotate X-Forwarded-For
+  to bypass the login IP cap, a stolen session cookie could retarget the
+  remote LLM URL/key, and the web Stoop report relay forwarded a blank reason.
+- **What:** CSP header on every response (same-origin PWA; no unsafe-eval).
+  `requestClientIp` honors XFF/X-Real-IP only from a loopback TCP peer.
+  POST /api/settings (and /api/image/config) require password step-up to
+  change remoteApiUrl or apiKey. Report route returns 400 reason_required
+  before relay. Web Settings / Image Gen prompt for the password.
+- **Files:** security_headers.dart, client_ip.dart, step_up.dart,
+  settings_routes.dart, backend_routes.dart, stoop_routes.dart,
+  auth_routes.dart, auth_middleware.dart, remote_routes.dart,
+  SettingsPage.tsx, ImageGen.tsx, StepUpFields.tsx
 
 ## 2026-08-16 — feat(enhance): Porch Life is a keep-or-accept proposal
 - **Why:** AI Create now seeds wardrobe/ambitions, but Enhance is a
