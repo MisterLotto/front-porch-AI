@@ -14,6 +14,7 @@ import {
   inventoryToChips,
 } from '../../components/realism/realismTypes';
 import { stoop, stoopErrorText } from '../../stoop/stoopApi';
+import { useStoop } from '../../stoop/StoopContext';
 import { REPORT_CATEGORIES, type StoopCardDetail } from '../../stoop/stoopTypes';
 
 const CARD_SECTIONS: { key: string; label: string }[] = [
@@ -25,6 +26,8 @@ const CARD_SECTIONS: { key: string; label: string }[] = [
 
 export function StoopCardPage() {
   const { id = '' } = useParams();
+  const { user } = useStoop();
+  const canReport = !!user && user.emailVerified !== false;
   const [detail, setDetail] = useState<StoopCardDetail | null>(null);
   const [score, setScore] = useState(0);
   const [myVote, setMyVote] = useState(0);
@@ -197,9 +200,15 @@ export function StoopCardPage() {
             <button className="primary" disabled={busy} onClick={download}>
               {busy ? 'Adding…' : 'Add to library'}
             </button>
-            <button className="link-btn" onClick={() => setReporting(true)}>
-              Report
-            </button>
+            {canReport ? (
+              <button className="link-btn" onClick={() => setReporting(true)}>
+                Report
+              </button>
+            ) : user ? (
+              <Link className="link-btn" to="/stoop/account">
+                Confirm email to report
+              </Link>
+            ) : null}
           </div>
           {note && <p className="stoop-note">{note}</p>}
           {error && <p className="error">{error}</p>}
@@ -280,7 +289,7 @@ export function StoopCardPage() {
         </section>
       )}
 
-      {reporting && (
+      {reporting && canReport && (
         <ReportDialog
           onClose={() => setReporting(false)}
           onSubmit={async (category, reason) => {
@@ -306,10 +315,15 @@ function ReportDialog({
   const [error, setError] = useState('');
 
   const submit = async () => {
+    const text = reason.trim();
+    if (!text) {
+      setError('Please add a reason.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
-      await onSubmit(category, reason.trim());
+      await onSubmit(category, text);
       setDone(true);
     } catch (e) {
       setError(stoopErrorText(e));
@@ -345,7 +359,7 @@ function ReportDialog({
               </select>
             </label>
             <label>
-              Details (optional)
+              Details (required)
               <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} />
             </label>
             {error && <p className="error">{error}</p>}

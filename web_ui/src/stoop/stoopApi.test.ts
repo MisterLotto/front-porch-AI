@@ -179,6 +179,8 @@ describe('stoopErrorText', () => {
     expect(stoopErrorText(new StoopError(401, 'two_factor_required'))).toMatch(/two-factor/i);
     expect(stoopErrorText(new StoopError(403, 'underage'))).toMatch(/18/);
     expect(stoopErrorText(new StoopError(502, 'stoop_unreachable'))).toMatch(/unreachable/i);
+    expect(stoopErrorText(new StoopError(400, 'reason_required'))).toMatch(/reason/i);
+    expect(stoopErrorText(new StoopError(403, 'email_not_verified'))).toMatch(/email/i);
   });
 
   it('falls back sanely for unknown errors', () => {

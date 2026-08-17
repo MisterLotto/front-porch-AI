@@ -83,7 +83,7 @@
     unsupported_media: 'That image type isn’t supported — use PNG, JPEG, or WebP.',
     unsupported_image_type: 'That image type isn’t supported — use PNG, JPEG, or WebP.',
     invalid_or_expired_token: 'That reset link isn’t valid anymore — request a new one.',
-    email_not_verified: 'Confirm your email first — profile pictures need a verified address.',
+    email_not_verified: 'Confirm your email first — check your inbox, or resend from Account.',
     avatar_locked: 'A moderator has disabled profile pictures for this account.',
     missing_avatar: 'Pick an image first.',
     upload_failed: 'The upload didn’t make it — try again.',

@@ -262,14 +262,11 @@
     ]);
   }
 
-  /** Banner for a signed-in user whose address isn't confirmed yet. Two things
-      stay locked until they confirm: sharing their own cards (the upload
-      endpoint rejects with `email_not_verified`) and setting a profile picture
-      (`canAvatar` in views-inbox.js). Browsing and downloading stay open, so
-      the wording names both blocked things instead of sounding like a total
-      lockout — or, worse, like confirming only matters to uploaders. Returns
-      null when there's nothing to say (verified, or an older server that
-      doesn't report the field at all). */
+  /** Banner for a signed-in user whose address isn't confirmed yet. Sharing,
+      reporting a character, and setting a profile picture stay locked until
+      they confirm. Browsing and downloading stay open. Returns null when
+      there's nothing to say (verified, or an older server that doesn't
+      report the field at all). */
   function verifyBanner(onVerified) {
     Api = Api || window.Stoop.api;
     var u = Api.state.user;
@@ -296,10 +293,10 @@
     return el('div', { class: 'hub-verify-banner' }, [
       el('span', { class: 'hub-verify-ico' }, '\u2709\uFE0F'),
       el('div', { class: 'hub-verify-text' }, [
-        el('strong', null, 'Confirm your email to share cards and set a profile photo.'),
+        el('strong', null, 'Confirm your email to share cards, report characters, and set a profile photo.'),
         el('p', null, 'I sent a link to ' + (u.email || 'your address') +
           '. Browsing and downloading work without it \u2014 confirming is what unlocks ' +
-          'sharing your own cards and adding a profile photo.'),
+          'sharing, reporting, and a profile photo.'),
       ]),
       btn,
     ]);

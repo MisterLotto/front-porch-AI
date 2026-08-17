@@ -437,7 +437,9 @@ export function stoopErrorText(e: unknown): string {
     case 'display_name_taken':
       return 'That display name is already taken — pick another.';
     case 'email_not_verified':
-      return 'Confirm your email first — profile photos need a verified address.';
+      return 'Confirm your email first — check your inbox, or resend from Account.';
+    case 'reason_required':
+      return 'Please add a reason.';
     case 'avatar_locked':
       return 'A moderator has disabled profile pictures for this account.';
     case 'unsupported_image_type':

@@ -15,3 +15,4 @@ export 'stoop_message_socket.dart';
 export 'stoop_analytics.dart';
 export 'stoop_aup.dart';
 export 'stoop_card_completeness.dart';
+export 'stoop_report_gate.dart';
