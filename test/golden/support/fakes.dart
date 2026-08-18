@@ -271,6 +271,10 @@ class FakeChatService extends ChangeNotifier implements ChatService {
     notifyListeners();
   }
   @override
+  void abandonToday() {
+    setTodaySentence(null);
+  }
+  @override
   final CharacterCard? activeCharacter;
 
   // Generation status bar surface.
@@ -488,6 +492,9 @@ class FakeChatService extends ChangeNotifier implements ChatService {
   @override
   List<({String text, int progress})> ambitionsFor(CharacterCard card) =>
       ambitionsValue;
+
+  @override
+  String spatialStanceForGroupCharacter(CharacterCard character) => '';
 
   @override
   dynamic noSuchMethod(Invocation invocation) =>

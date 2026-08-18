@@ -40,6 +40,23 @@ extension ChatServiceWiringRealism on ChatService {
         _pendingRealismMetadata ??= {};
         _pendingRealismMetadata![key] = value;
       },
+      onStoryDayChanged: () {
+        final held = todaySentence;
+        setTodaySentence(null);
+        unawaited(_journalResolvedToday(held, fate: PlannerTodayFate.dayAte));
+      },
+      getPlannerEnabled: () => _storageService.realismSettings.plannerEnabled,
+      onTodayEval: (line) {
+        if (line.isEmpty) {
+          abandonToday();
+        } else {
+          final prev = todaySentence;
+          if (prev != null && prev != line) {
+            unawaited(_journalResolvedToday(prev, fate: PlannerTodayFate.done));
+          }
+          setTodaySentence(line);
+        }
+      },
       onPatchLastMessageRealismState: (tod, dc, clockIso) {
         // Patch the newest REAL message — never a narration banner. Dream /
         // chance-time messages carry only their banner flag; stamping a full
@@ -170,7 +187,8 @@ extension ChatServiceWiringRealism on ChatService {
       getIsGroupRealismActive: () => isGroupRealismActive,
       getGroupAffectionScore: (charId, {int defaultValue = 0}) =>
           _groupRealism[charId]?.affection ?? defaultValue,
-      setGroupAffectionScore: (charId, v) => _memberForWrite(charId).affection = v,
+      setGroupAffectionScore: (charId, v) =>
+          _memberForWrite(charId).affection = v,
       getGroupLongTermScore: (charId, {int defaultValue = 0}) =>
           _groupRealism[charId]?.longTermScore ?? defaultValue,
       setGroupLongTermScore: (charId, v) =>

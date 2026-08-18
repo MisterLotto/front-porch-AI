@@ -59,7 +59,8 @@ extension ChatServiceTurnFlow on ChatService {
     if (_clockRunning) {
       await _realismEvals.evaluatePhysicalStateCall(timeOnly: true);
     }
-    await _generateResponse(GenerationMode.normal);
+    // Already ticked above. Skip and speak must not tick again.
+    await _generateResponse(GenerationMode.normal, skipClockAdvance: true);
   }
 
   /// Trigger the next character to speak in group mode.
@@ -96,6 +97,42 @@ extension ChatServiceTurnFlow on ChatService {
     }
     return _groupManager!.pickNextSpeaker();
   }
+
+  /// At work (and Away when we know they are not in scene). 1:1 never skips.
+  bool _groupSpeakerSkips(CharacterCard card) {
+    if (_activeGroup == null) return false;
+    final ext = card.frontPorchExtensions;
+    final library = originLibraryCardFor(card);
+    final work = workFieldsForGroupMember(
+      copyOccupation: ext?.occupation ?? '',
+      copyHours: ext?.hours ?? '',
+      libraryOccupation: library?.frontPorchExtensions?.occupation,
+      libraryHours: library?.frontPorchExtensions?.hours,
+    );
+    final where = derivePresence(
+      occupation: work.occupation,
+      hours: work.hours,
+      timeOfDay: _timeService.timeOfDay,
+      inScene: _memberInScene(card),
+    );
+    return groupTurnSkips(where);
+  }
+
+  /// Skip path only. 1:1 never skips (caller returns false first).
+  /// Group: recent line, or stance that does not say they left.
+  bool _memberInScene(CharacterCard card) {
+    if (_activeGroup == null) return true;
+    var seen = 0;
+    for (final m in _messages.reversed) {
+      if (m.isUser) continue;
+      if (m.sender == card.name) return true;
+      if (++seen >= 8) break;
+    }
+    final id = _getCharacterIdFromCard(card);
+    final stance = _groupRealism[id]?.spatialStance ?? '';
+    return !stanceSaysAway(stance);
+  }
+
 
   /// Wait for TTS to finish speaking, then apply the configured delay before auto-play.
   void _waitForTtsThenContinue() {

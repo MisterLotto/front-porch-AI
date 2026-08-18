@@ -119,8 +119,9 @@ extension ChatServiceGenerationPostGen on ChatService {
         }
       }
 
-      // Optional [today: …] tag — strip from the visible reply. Live write
-      // stays parked (no holdTodayLine, no plannerEnabled gate).
+      // Leftover [today: …] — strip so it never shows in the bubble.
+      // Do not write todaySentence / abandonToday from the tag; the
+      // scene-time eval owns that via TimeService.onTodayEval.
       final todayParsed = TodayLineTag.parse(finalResponse);
       finalResponse = todayParsed.visible;
 
@@ -181,8 +182,9 @@ extension ChatServiceGenerationPostGen on ChatService {
           // route this member's inter-character feelings to the wrong card.
           final speakerId = _getCharacterIdFromCard(t.speakingCharacter);
           if (speakerId.isNotEmpty) {
-            _relationshipService
-                .updateInterCharacterFeelingsFromRecentExchange(speakerId);
+            _relationshipService.updateInterCharacterFeelingsFromRecentExchange(
+              speakerId,
+            );
             // (old checkpoint call removed in v30) // persist the hidden relationship changes
           }
         }
@@ -234,9 +236,7 @@ extension ChatServiceGenerationPostGen on ChatService {
           // skips this whole block — but continueGeneration re-enters with
           // guestSpeaker null.) Pre-change the blanket skip masked this.
           final scoredReply = t.mode == GenerationMode.continue_
-              ? (_isGuestAuthoredMessage(t.streamTarget)
-                    ? ''
-                    : newPart.trim())
+              ? (_isGuestAuthoredMessage(t.streamTarget) ? '' : newPart.trim())
               : finalResponse;
           if (scoredReply.isNotEmpty) {
             // The needs-impact eval and the fused reply-facts fetch run
@@ -363,8 +363,7 @@ extension ChatServiceGenerationPostGen on ChatService {
           // the merged whole-turn delta — stale first-half chips would
           // misreport the turn the moment the continuation moved a need.
           if (t.mode == GenerationMode.normal ||
-              (t.mode == GenerationMode.continue_ &&
-                  scoredReply.isNotEmpty)) {
+              (t.mode == GenerationMode.continue_ && scoredReply.isNotEmpty)) {
             _attachNeedsDeltaChipToLastMessage();
           }
 
@@ -499,9 +498,7 @@ extension ChatServiceGenerationPostGen on ChatService {
 
     // Restore original model if swapped for call mode
     if (t.originalModelName != null && _llmProvider != null) {
-      _llmProvider!.openRouterService.configure(
-        modelName: t.originalModelName,
-      );
+      _llmProvider!.openRouterService.configure(modelName: t.originalModelName);
     }
   }
 }

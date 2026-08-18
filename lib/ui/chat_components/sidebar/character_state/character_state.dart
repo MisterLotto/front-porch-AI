@@ -16,5 +16,7 @@ export 'character_state_group.dart';
 export 'character_state_settings.dart';
 export 'pockets_row.dart';
 export 'time_strip.dart';
+export 'presence_word.dart';
 export 'today_line.dart';
+export 'calendar_today_hold.dart';
 export 'weather_chip.dart';

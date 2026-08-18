@@ -211,6 +211,24 @@ extension ChatServiceGeneration on ChatService {
       }
       t.speakingCharacter = speakingCharacter;
 
+      if (guestSpeaker == null &&
+          _activeGroup != null &&
+          mode != GenerationMode.continue_ &&
+          _groupSpeakerSkips(speakingCharacter)) {
+        // Time-only: chat-scoped clock still ticks. No realism/needs dance
+        // for a speaker who is not taking the turn. 1:1 never reaches here.
+        if (!skipClockAdvance && _clockRunning) {
+          await _realismEvals.evaluatePhysicalStateCall(timeOnly: true);
+        }
+        debugPrint(
+          '[Presence] skip-turn ${speakingCharacter.name} — clock still runs',
+        );
+        _isGenerating = false;
+        _generationPhase = GenerationPhase.idle;
+        notifyListeners();
+        return;
+      }
+
       // Pin the realism speaker for the whole turn so prompt injection + decay
       // key on the character actually generating — not nextCharacter (the
       // *upcoming* speaker, null for random turn order). Scene guests carry no

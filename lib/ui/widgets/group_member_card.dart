@@ -19,6 +19,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/chat/chat.dart';
@@ -84,7 +85,10 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
   @override
   Widget build(BuildContext context) {
     final chat = widget.chatService;
-    final isRealism = chat.isGroupRealismActive;
+    // Public getters — isGroupRealismActive reads a library-private field
+    // and cannot be faked. Same formula.
+    final isRealism =
+        chat.realismEnabled && chat.isGroupMode && !chat.observerMode;
 
     // Resolve per-character state (only meaningful when realism is on)
     final emotion = isRealism
@@ -140,7 +144,7 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
 
     // Lust visibility follows the stable per-member group flag (the live
     // nsfwService scalar is per-speaker-volatile in groups).
-    final lustOn = chat.isGroupNsfwEnabled;
+    final lustOn = isRealism && chat.isGroupNsfwEnabled;
     // Arousal has its own ±100 ladder (level ÷ 10) and its own vocabulary, and
     // both must be read for THIS member. The tier came from the bond ladder,
     // and the name came from nsfwService.arousalTierName — the LIVE SPEAKER's
@@ -153,8 +157,38 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
         ? AppColors.frostAccentOf(context)
         : AppColors.lustAccentOf(context);
 
+    final ext = widget.character.frontPorchExtensions;
+    CharacterRepository? repo;
+    try {
+      repo = Provider.of<CharacterRepository>(context, listen: false);
+    } on ProviderNotFoundException {
+      repo = null;
+    }
+    final library = MemberOriginResolver.resolve(
+      stampedOriginStableId: null,
+      memberName: widget.character.name,
+      libraryCharacters: repo?.characters ?? const [],
+    );
+    final work = workFieldsForGroupMember(
+      copyOccupation: ext?.occupation ?? '',
+      copyHours: ext?.hours ?? '',
+      libraryOccupation: library?.frontPorchExtensions?.occupation,
+      libraryHours: library?.frontPorchExtensions?.hours,
+    );
+    final presence = PresenceWord(
+      where: derivePresence(
+        occupation: work.occupation,
+        hours: work.hours,
+        timeOfDay: chat.timeService.timeOfDay,
+        inScene: !stanceSaysAway(
+          chat.spatialStanceForGroupCharacter(widget.character),
+        ),
+      ),
+      padTop: false,
+    );
     final isDirector = chat.observerMode;
-    final opacity = isDirector ? 0.38 : 1.0;
+    // Away / At work uses the signed 0.45. Director 0.38 is only for With you.
+    final opacity = presence.dimCard ? 0.45 : (isDirector ? 0.38 : 1.0);
 
     final ringColor = (emotion != null && isRealism)
         ? emotionRingColor(emotion)
@@ -281,6 +315,8 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      presence,
+                      const SizedBox(width: 6),
                       if (widget.isNextSpeaker)
                         Container(
                           padding: const EdgeInsets.symmetric(
