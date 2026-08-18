@@ -43,19 +43,25 @@ extension ChatServiceWiringRealism on ChatService {
       onStoryDayChanged: () {
         final held = todaySentence;
         setTodaySentence(null);
-        unawaited(_journalResolvedToday(held, fate: PlannerTodayFate.dayAte));
+        return () async {
+          await _journalResolvedToday(held, fate: PlannerTodayFate.dayAte);
+          await _deactivateTodayObjective();
+        }();
       },
       getPlannerEnabled: () => _storageService.realismSettings.plannerEnabled,
       onTodayEval: (line) {
         if (line.isEmpty) {
           abandonToday();
-        } else {
-          final prev = todaySentence;
-          if (prev != null && prev != line) {
-            unawaited(_journalResolvedToday(prev, fate: PlannerTodayFate.done));
-          }
-          setTodaySentence(line);
+          return Future<void>.value();
         }
+        final prev = todaySentence;
+        setTodaySentence(line);
+        return () async {
+          if (prev != null && prev != line) {
+            await _journalResolvedToday(prev, fate: PlannerTodayFate.done);
+          }
+          await _upsertTodayObjective(line);
+        }();
       },
       onPatchLastMessageRealismState: (tod, dc, clockIso) {
         // Patch the newest REAL message — never a narration banner. Dream /

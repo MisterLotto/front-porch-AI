@@ -52,6 +52,7 @@ extension ChatServiceObjectives on ChatService {
           false; // secondary zero in _loadActiveObjectives empty (0-session hygiene for summary flag)
       _isGrowthPassRunning =
           false; // growth-pass flag zero in _loadActiveObjectives empty (0-session hygiene; keep reset blocks in sync)
+      _clearTodayPointer();
       return;
     }
     final charId = _getCharacterIdFromCard(_activeCharacter!);
@@ -71,6 +72,7 @@ extension ChatServiceObjectives on ChatService {
       );
       _activeObjectives = [];
     }
+    _rebindTodayObjectiveFromDb();
     notifyListeners(); // Central _disposed guard in ChatService overrides now protects this (and all other) post-async notify sites. Per-site try/catch removed (deletion part of rec 2 task); see god _disposed + notify override + setActiveCharacter:2205 comment.
   }
 
@@ -217,6 +219,42 @@ extension ChatServiceObjectives on ChatService {
         // User can always tap "Generate Tasks" manually.
       }
     }
+  }
+
+  /// Planner today line: one secondary, no tasks, no ambition, no eviction.
+  Future<String?> _insertTodaySideQuest(String goal, {String? id}) async {
+    if (goal.trim().isEmpty || _currentSessionId == null) return null;
+    CharacterCard? target;
+    if (_activeGroup != null) {
+      final currentIsGroupMember =
+          _activeCharacter != null &&
+          _groupCharacters.any(
+            (c) =>
+                _getCharacterIdFromCard(c) ==
+                _getCharacterIdFromCard(_activeCharacter!),
+          );
+      target = currentIsGroupMember
+          ? _activeCharacter
+          : (nextCharacter ?? _groupCharacters.firstOrNull);
+    } else {
+      target = _activeCharacter;
+    }
+    if (target == null) return null;
+    final newId = id ?? const Uuid().v4();
+    await _db.insertObjective(
+      ObjectivesCompanion.insert(
+        id: newId,
+        characterId: _getCharacterIdFromCard(target),
+        objective: goal.trim(),
+        chatId: drift.Value(_currentSessionId),
+        active: const drift.Value(true),
+        isPrimary: const drift.Value(false),
+        servedAmbition: const drift.Value(null),
+      ),
+    );
+    await _persistTodayObjectiveId(newId);
+    await _loadActiveObjectives();
+    return newId;
   }
 
   /// Promote an existing side quest to the primary quest IN PLACE, demoting any

@@ -622,7 +622,10 @@ extension ChatServiceAccessors on ChatService {
     // retest tool support for the new model (sidebar pill contract).
     _storageService.addListener(_onBackendIdentity);
     _onTodayAbandoned = (held) {
-      unawaited(_journalResolvedToday(held, fate: PlannerTodayFate.abandoned));
+      unawaited(() async {
+        await _deactivateTodayObjective();
+        await _journalResolvedToday(held, fate: PlannerTodayFate.abandoned);
+      }());
     };
   }
 }
@@ -631,9 +634,12 @@ extension ChatServiceAccessors on ChatService {
 /// under the 1000-line ratchet. Day-clear is on the clock advance.
 mixin ChatServiceTodaySentence on ChangeNotifier {
   String? _todaySentence;
+  String? _todayObjectiveId;
+  String? _todayObjectiveText;
   void Function(String? held)? _onTodayAbandoned;
 
   String? get todaySentence => _todaySentence;
+  String? get todayObjectiveId => _todayObjectiveId;
 
   void setTodaySentence(String? value) {
     final next = value?.trim();
@@ -649,6 +655,15 @@ mixin ChatServiceTodaySentence on ChangeNotifier {
   }
 
   String? get todayLine => todaySentence;
+
+  /// Drop the RAM hold. Does not touch the DB row.
+  void _clearTodayPointer() {
+    _todaySentence = null;
+    _todayObjectiveId = null;
+    _todayObjectiveText = null;
+    notifyListeners();
+  }
+
 }
 
 enum PlannerTodayFate { done, abandoned, dayAte }
@@ -659,6 +674,104 @@ extension ChatServicePlannerResolve on ChatService {
       PlannerTodayFate.done => 'content',
       PlannerTodayFate.abandoned || PlannerTodayFate.dayAte => 'annoyed',
     };
+  }
+
+  Future<void> _persistTodayObjectiveId(String? id) async {
+    final sid = _currentSessionId;
+    if (sid == null) return;
+    await _db.patchSession(
+      SessionsCompanion(
+        id: drift.Value(sid),
+        todayObjectiveId: drift.Value(id),
+      ),
+    );
+  }
+
+  /// Rebind by the persisted session id. Never guess among secondaries.
+  void _rebindTodayObjectiveFromDb() {
+    final id = _todayObjectiveId;
+    if (id == null) return;
+    final live =
+        _activeObjectives.where((o) => o.id == id).firstOrNull;
+    if (live == null) {
+      _todayObjectiveId = null;
+      _todayObjectiveText = null;
+      return;
+    }
+    _todayObjectiveText = live.objective;
+    if (_todaySentence == null) setTodaySentence(live.objective);
+  }
+
+  bool _isHeldTodayObjective(Objective obj) {
+    return _todayObjectiveId != null && obj.id == _todayObjectiveId;
+  }
+
+  Future<void> _deactivateTodayObjective() async {
+    final id = _todayObjectiveId;
+    if (id == null) return;
+    final live = _activeObjectives.where((o) => o.id == id).firstOrNull;
+    _todayObjectiveId = null;
+    _todayObjectiveText = null;
+    await _persistTodayObjectiveId(null);
+    if (live == null) return;
+    await _db.updateObjective(
+      ObjectivesCompanion(
+        id: drift.Value(id),
+        active: const drift.Value(false),
+      ),
+    );
+    await _loadActiveObjectives();
+  }
+
+  /// One secondary today-row. Match/replace by held id. Never primary,
+  /// never tasks, never an ambition, never evicts other secondaries.
+  Future<void> _upsertTodayObjective(String line) async {
+    final trimmed = line.trim();
+    if (trimmed.isEmpty || _currentSessionId == null) return;
+    final heldId = _todayObjectiveId;
+    if (heldId != null) {
+      final held =
+          _activeObjectives.where((o) => o.id == heldId).firstOrNull;
+      if (held != null && held.objective == trimmed) {
+        _todayObjectiveText = trimmed;
+        await _persistTodayObjectiveId(heldId);
+        return;
+      }
+      if (held == null &&
+          (_todayObjectiveText == trimmed || todaySentence == trimmed)) {
+        // List has not loaded the held row yet. Do not insert a second.
+        await _persistTodayObjectiveId(heldId);
+        return;
+      }
+      if (held != null && held.objective != trimmed) {
+        await _deactivateTodayObjective();
+      } else if (held == null) {
+        _todayObjectiveId = null;
+        _todayObjectiveText = null;
+        await _persistTodayObjectiveId(null);
+      }
+    }
+    final newId = const Uuid().v4();
+    _todayObjectiveId = newId;
+    _todayObjectiveText = trimmed;
+    final inserted = await _insertTodaySideQuest(trimmed, id: newId);
+    if (inserted == null) {
+      _todayObjectiveId = null;
+      _todayObjectiveText = null;
+      await _persistTodayObjectiveId(null);
+    }
+  }
+
+  Future<void> _onTodayObjectiveCompleted(Objective obj) async {
+    if (!_isHeldTodayObjective(obj)) return;
+    final held = todaySentence ?? obj.objective;
+    _todayObjectiveId = null;
+    _todayObjectiveText = null;
+    setTodaySentence(null);
+    unawaited(() async {
+      await _journalResolvedToday(held, fate: PlannerTodayFate.done);
+      await _persistTodayObjectiveId(null);
+    }());
   }
 
   /// Journal a finished or day-eaten line. Capture [held] before clearing.
