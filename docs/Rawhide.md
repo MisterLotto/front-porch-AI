@@ -5,6 +5,10 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🕘 **The story clock stays honest** — she is told what time it is before she writes, then the clock moves after her line so the next person (including a guest) inherits that time. Skip to 2pm lands on 2pm. The strip arrows are 30 minutes; tap the date for the calendar's clock if you want an exact time.
+
+- 🖼️ **Two characters with the same name keep their own faces** — the chat header no longer grabs the first Rachel in your library.
+
 - 🕘 **At work follows the clock on the strip** — 8:00 is not a 9–5, 10:30 is. If a whole group is on shift, you get a line saying so instead of a silent send.
 
 - 📝 **Planner, plan lines, and today's sentence are on the phone too** — same Porch Life switch, same chips on the character, Today on the calendar with a Clear.

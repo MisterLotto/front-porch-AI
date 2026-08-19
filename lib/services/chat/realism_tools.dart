@@ -114,19 +114,8 @@ final Map<String, Map<String, dynamic>> _oneShotFields = {
   // No `posture`: it moved to its own POST-generation pass on 2026-08-08
   // (see kSceneTimeEvalTools below). One-shot fuses the PRE-generation
   // judges, and posture stopped being one of those.
-  // Scene-time fields ride the fused call so one-shot mode needs no separate
-  // per-turn time eval (strict one-shot vs normal parity — same fields, same
-  // clamp/floor/backstop applied by TimeService).
-  'minutes_elapsed': _intField(
-    'In-story minutes the latest exchange took (0-180; 0 only mid-action).',
-  ),
-  'new_day': {
-    'type': 'boolean',
-    'description':
-        'True ONLY if the conversation explicitly transitioned to the next '
-        'day (slept, woke up, scene break). Merely mentioning yesterday or '
-        'tomorrow does NOT count.',
-  },
+  // No scene-time fields: the clock decide is post-generation now (same
+  // time-only call as the multi-call path). Asking here would double-count.
   ..._narrativeFields,
   'reason': _strField(
     'One brief sentence naming the key relationship change, or "none".',
@@ -183,20 +172,7 @@ final List<Map<String, dynamic>> kOneShotEvalTools = [
     kOneShotTool,
     'Report the full realism evaluation for this exchange in one call.',
     _oneShotFields,
-    // `minutes_elapsed` is required for the same reason `is_climax` is: a
-    // model fills in what the schema demands and skips what it does not. When
-    // one-shot fuses, this call is the story clock's ONLY driver — an omitted
-    // minutes_elapsed makes TimeService fall back to failureDriftMinutes, so
-    // every turn advanced a flat 5 minutes while the multi-call path (whose
-    // twin kSceneTimeOnlyEvalTools demands it) got a real estimate. `new_day`
-    // stays optional exactly as it is on that twin.
-    const [
-      'relationship_delta',
-      'trust_delta',
-      'emotion',
-      'emotion_intensity',
-      'minutes_elapsed',
-    ],
+    const ['relationship_delta', 'trust_delta', 'emotion', 'emotion_intensity'],
   ),
 ];
 
@@ -337,23 +313,9 @@ final List<Map<String, dynamic>> kSceneTimeOnlyEvalToolsWithToday = [
   ),
 ];
 
-/// One-shot schema when the planner is on. Same required-field lesson as
-/// minutes_elapsed: a model fills what the schema demands.
-final List<Map<String, dynamic>> kOneShotEvalToolsWithToday = [
-  _tool(
-    kOneShotTool,
-    'Report the full realism evaluation for this exchange in one call.',
-    {..._oneShotFields, 'today_sentence': _todaySentenceField},
-    const [
-      'relationship_delta',
-      'trust_delta',
-      'emotion',
-      'emotion_intensity',
-      'minutes_elapsed',
-      'today_sentence',
-    ],
-  ),
-];
+/// Planner-on one-shot is the same schema as planner-off: Today is written
+/// by the post-generation time-only call, not the fused pre-gen judges.
+final List<Map<String, dynamic>> kOneShotEvalToolsWithToday = kOneShotEvalTools;
 
 final Map<String, Map<String, dynamic>> _expressionFields = {
   'label': {

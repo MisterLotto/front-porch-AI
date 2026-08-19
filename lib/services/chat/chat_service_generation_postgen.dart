@@ -160,9 +160,11 @@ extension ChatServiceGenerationPostGen on ChatService {
 
       // ── Scene Guest (Lite NPC) parity guard ──────────────────────────
       // A guest turn must NOT touch the active character's Realism Engine,
-      // Needs simulation, inter-character feelings, time, chips, or the
+      // Needs simulation, inter-character feelings, chips, or the
       // periodic (facts/evolution/summary/RAG) evaluators. The guest carries
-      // no such state. Everything from here through the periodic evals is
+      // no such state. The chat clock is the exception — it is chat-scoped
+      // and ticks after this guard so the next speaker is told an honest
+      // time. Everything from here through the periodic evals is
       // gated so guest presence/turns leave the primary's state untouched.
       // (Lorebook scan + _saveChat above still ran for the guest.)
       if (t.guestSpeaker == null) {
@@ -325,6 +327,11 @@ extension ChatServiceGenerationPostGen on ChatService {
             _replyFactsRaw = null;
           }
 
+          // Clock decide BEFORE restamp so the snapshot carries the time
+          // the NEXT speaker will be told (bucket brigade). Named-clock
+          // reconcile still runs inside the restamp.
+          await _maybeAdvanceStoryClockAfterReply(t);
+
           // Keep this message's realism_state snapshot TRUTHFUL now that the
           // post-gen checks have run — needs vector AND the NSFW scalars a
           // climax just changed. See the helper for the two bugs this
@@ -434,7 +441,7 @@ extension ChatServiceGenerationPostGen on ChatService {
         }
 
         // Dream prefetch: the clock crossed a night during this turn's
-        // pre-generation advance, so the dream can be generated NOW and
+        // post-reply decide, so the dream can be generated NOW and
         // merely inserted at the next send — see the producer in
         // chat_service_send.dart. The kick itself is synchronous (the park
         // exists before this line returns); only the model call runs in the
@@ -452,6 +459,16 @@ extension ChatServiceGenerationPostGen on ChatService {
           _maybeRunPeriodicEvals();
         }
       } // end Scene Guest parity guard (guestSpeaker == null)
+
+      // Scene Guest: no Realism/Needs, but the chat clock still hands off
+      // to whoever speaks next (host or another guest). The early
+      // `_saveChat` above ran BEFORE this tick — persist the new clock
+      // and the rewind stamp or a reload / guest-regen loses them.
+      if (t.guestSpeaker != null) {
+        await _maybeAdvanceStoryClockAfterReply(t);
+        _maybeKickDreamPrefetch();
+        await _saveChat();
+      }
 
       // (Task completion check now runs pre-generation in sendMessage)
 

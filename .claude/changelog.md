@@ -3,6 +3,31 @@
 
 # Changelog
 
+## 2026-08-18 — fix(avatar): two cards with the same name no longer share a face
+- **Why:** originLibraryCardFor returned the first library card with that
+  name, so a second Rachel stole the AppBar avatar. Bubble speaker lookup
+  was the same first-name-wins walk.
+- **What:** origin uses dbId then unique stableGroupId (MemberOriginResolver).
+  Header/bubbles/TTS resolve by stamped id; name only when unique.
+- **Files:** member_origin_resolver, group_entry, chat_page, message_bubble.header
+
+## 2026-08-18 — feat(clock): announce then decide; 30m chevrons; guest brigade
+- **Why:** At work / Today / skip now read the live clock, so a pre-gen
+  minutes guess jumped the strip before she wrote. Group follow-ups
+  skipped the clock entirely. Chevrons snapped to period hours. OOC
+  "skip to 2pm" added an hour. Standalone regen did not rewind.
+- **What:** OOC lands first; prompt says "It is currently …"; post-reply
+  time-only decide feeds the next speaker (bucket brigade). Scene Guests
+  tick time-only. Continue does not. Regen restores `story_clock_before`.
+  Chevrons ±30m; specific time stays the calendar Set date & time picker.
+  Named OOC clocks/periods land. Corroborated new_day any hour.
+  Hostile review: stamp on activeMetadata (not legacy metadata), persist
+  guest ticks, story_clock_before wins over older host snapshots, tail
+  delete rewinds from the stamp.
+- **Files:** story_clock, time_service, generation/postgen/send/turn_flow,
+  dance/evals/one_shot, reprocess, message_ops, time_injection, time_strip,
+  ChatTools, tests + CLAUDE.md + Rawhide
+
 ## 2026-08-18 — fix(presence): live clock, skip banner, Today pointer, web
 - **Why:** Review of #202–#204: At work used the period's dummy hour, group
   skip ate the send, Today dropped on speaker switch, promote+day-roll

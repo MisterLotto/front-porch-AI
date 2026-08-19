@@ -38,7 +38,7 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_controller.dart';
 import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_dialog.dart';
 import 'package:front_porch_ai/ui/pages/edit_character_page.dart';
-import 'package:front_porch_ai/services/chat/chat_command_handler.dart';
+import 'package:front_porch_ai/services/chat/chat.dart';
 import 'package:front_porch_ai/services/avatar_gallery.dart';
 import 'package:front_porch_ai/services/capability/capability.dart';
 import 'package:front_porch_ai/services/caption/local_caption_service.dart';
@@ -54,7 +54,6 @@ part 'chat_page.input_actions.dart';
 part 'chat_page.input_bar.dart';
 part 'chat_page.sidebar.dart';
 part 'chat_page.sidebar_widgets.dart';
-
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -154,12 +153,18 @@ class _ChatPageState extends State<ChatPage> {
     final nonHost = cast.where((p) => !p.isHost).toList();
 
     ChatParticipant? speaker;
-    for (final p in cast) {
-      if ((msg.characterId != null && p.id == msg.characterId) ||
-          p.name == msg.sender) {
-        speaker = p;
-        break;
+    final stamped = msg.characterId;
+    if (stamped != null && stamped.isNotEmpty) {
+      for (final p in cast) {
+        if (p.id == stamped) {
+          speaker = p;
+          break;
+        }
       }
+    }
+    if (speaker == null) {
+      final byName = cast.where((p) => p.name == msg.sender).toList();
+      if (byName.length == 1) speaker = byName.first;
     }
 
     if (speaker != null && !speaker.isHost) {
@@ -738,11 +743,10 @@ class _ChatPageState extends State<ChatPage> {
                                         onRequestImagePermission:
                                             _requestExternalImagePermission,
                                         character: isGroup && !msg.isUser
-                                            ? chatService.groupCharacters
-                                                  .where(
-                                                    (c) => c.name == msg.sender,
-                                                  )
-                                                  .firstOrNull
+                                            ? resolveGroupSpeakerForMessage(
+                                                chatService.groupCharacters,
+                                                msg,
+                                              )
                                             : character,
                                         chatService: chatService,
                                       );
@@ -990,5 +994,4 @@ class _ChatPageState extends State<ChatPage> {
   /// can't call a State's protected members directly. Same bridge pattern as
   /// settings_page.dart.
   void rebuildState(VoidCallback fn) => setState(fn);
-
 }

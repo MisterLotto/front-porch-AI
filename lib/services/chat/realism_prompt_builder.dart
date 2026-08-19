@@ -365,17 +365,6 @@ class RealismPromptBuilder {
   // TimeService.evaluateTimeProgressAndPostureIfNeeded. Keeping a second
   // rubric here would have been a rubric nobody fires.)
 
-  // Scene-time fields ride the fused one-shot call (strict one-shot vs
-  // normal parity — the dedicated per-turn scene-time eval asks the same).
-  static String _sceneTimeSection({bool plannerToday = false}) =>
-      '- "minutes_elapsed": in-story minutes the LATEST exchange took (integer, 0-180). Most conversational '
-      'exchanges take 2-15 minutes; activities (a meal, a walk, a task, travel) take longer. Use 0 ONLY '
-      'when the scene is a continuous instant (mid-action, mid-sentence).\n'
-      '- "new_day": true ONLY if the conversation explicitly transitioned to the next day (slept, woke up, '
-      'scene break). false otherwise.\n'
-      '${plannerToday ? '- "today_sentence": one sentence of what they are doing or planning today. '
-                'Empty or "none" abandons the current hold. Omit to keep it.\n' : ''}';
-
   /// The ambitions a proposal should be steering toward, numbered with their
   /// stage words. Empty when the character has none — and then the whole
   /// forward-direction block, `serves_ambition` included, is omitted rather
@@ -617,7 +606,6 @@ class RealismPromptBuilder {
     List<({String text, int progress})> ambitions = const [],
     String preferences = '',
     bool toolsMode = false,
-    bool plannerToday = false,
   }) =>
       '${judgePrefix(charName: charName, userName: userName, dossier: dossier, standing: standing, preferences: preferences, ambitions: ambitions)}'
       'Score how this exchange truly landed for $charName across every '
@@ -625,12 +613,11 @@ class RealismPromptBuilder {
       '${_bondSection(charName, userName)}'
       '${_trustSection(charName, userName)}'
       '${_emotionSection(charName, allowedEmotionLabels)}'
-      '${_sceneTimeSection(plannerToday: plannerToday)}'
       '${arousalEnabled ? _arousalSection(charName, userName, arousalLevel, refractoryTurnsLeft) : ''}'
       '${_objectiveSection(charName, userName, primaryObjective, ambitions)}'
       '${_fixationSection(charName)}'
       '${_reasonSection()}'
       '\n'
       '${_recentBlock(recent)}'
-      '${toolsMode ? _toolInstruction('report_realism') : _jsonInstruction(['relationship_delta', 'bond_reason', 'trust_delta', 'trust_reason', 'emotion', 'emotion_intensity', 'minutes_elapsed', 'new_day', if (plannerToday) 'today_sentence', if (arousalEnabled) 'arousal_delta', 'proposed_objective', if (_ambitionRoster(ambitions).isNotEmpty) 'serves_ambition', 'fixation_topic', 'reason'])}';
+      '${toolsMode ? _toolInstruction('report_realism') : _jsonInstruction(['relationship_delta', 'bond_reason', 'trust_delta', 'trust_reason', 'emotion', 'emotion_intensity', if (arousalEnabled) 'arousal_delta', 'proposed_objective', if (_ambitionRoster(ambitions).isNotEmpty) 'serves_ambition', 'fixation_topic', 'reason'])}';
 }

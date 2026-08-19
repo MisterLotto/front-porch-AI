@@ -177,6 +177,111 @@ class StoryClock {
     return representativeTime(date.subtract(const Duration(days: 1)), 'night');
   }
 
+  /// Sidebar / web chevron step. Period snaps were too coarse once At work
+  /// and Today read the live minute.
+  static const int nudgeStepMinutes = 30;
+
+  static DateTime addMinutes(DateTime clock, int minutes) =>
+      clock.add(Duration(minutes: minutes));
+
+  /// Next occurrence of [hour]:[minute] strictly after [clock] (same
+  /// calendar day if that instant is still ahead, otherwise tomorrow).
+  static DateTime nextNamedClock(DateTime clock, int hour, int minute) {
+    final today = DateTime.utc(
+      clock.year,
+      clock.month,
+      clock.day,
+      hour,
+      minute,
+    );
+    return today.isAfter(clock)
+        ? today
+        : DateTime.utc(clock.year, clock.month, clock.day + 1, hour, minute);
+  }
+
+  /// Next occurrence of [period]'s representative time strictly after [clock].
+  static DateTime nextNamedPeriod(DateTime clock, String period) {
+    final canon = period == 'late morning' ? 'late_morning' : period;
+    final today = representativeTime(dateOnly(clock), canon);
+    return today.isAfter(clock)
+        ? today
+        : representativeTime(
+            dateOnly(clock).add(const Duration(days: 1)),
+            canon,
+          );
+  }
+
+  /// OOC / narrative skip destination. [lower] is quote-stripped lowercase.
+  /// Callers still gate on skip language; this only interprets the target.
+  static DateTime resolveSkipTarget(DateTime clock, String lower) {
+    if (RegExp(
+      r'\b(a|one)? ?month (later|passes)|next month\b',
+    ).hasMatch(lower)) {
+      return DateTime.utc(clock.year, clock.month + 1, 1, 9);
+    }
+    if (RegExp(
+      r'\b((a|one) week (later|passes)|next week|weeks? later)\b',
+    ).hasMatch(lower)) {
+      return clock.add(const Duration(days: 7));
+    }
+    if (RegExp(
+      r'\b(next (morning|day)|the following (morning|day)|wake up|woke up|'
+      r'overnight|the next day)\b',
+    ).hasMatch(lower)) {
+      return nextMorning(clock);
+    }
+    final namedPeriod = RegExp(
+      r'\b(?:(?:the )?next |skip(?:\s+ahead)?(?:\s+to)? |to )'
+      r'(dawn|late morning|morning|afternoon|evening|night)\b',
+    ).firstMatch(lower);
+    if (namedPeriod != null) {
+      return nextNamedPeriod(clock, namedPeriod.group(1)!);
+    }
+    final ampm = RegExp(
+      r'\b(?:skip(?:\s+ahead)?(?:\s+to)?|to)\s+'
+      r'(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)\b',
+    ).firstMatch(lower);
+    if (ampm != null) {
+      var hour = int.parse(ampm.group(1)!);
+      final minute = int.tryParse(ampm.group(2) ?? '') ?? 0;
+      final pm = ampm.group(3)!.startsWith('p');
+      if (hour == 12) {
+        hour = pm ? 12 : 0;
+      } else if (pm) {
+        hour += 12;
+      }
+      if (hour <= 23 && minute <= 59) {
+        return nextNamedClock(clock, hour, minute);
+      }
+    }
+    final hhmm = RegExp(
+      r'\b(?:skip(?:\s+ahead)?(?:\s+to)?|to)\s+(\d{1,2}):(\d{2})\b',
+    ).firstMatch(lower);
+    if (hhmm != null) {
+      final hour = int.parse(hhmm.group(1)!);
+      final minute = int.parse(hhmm.group(2)!);
+      if (hour <= 23 && minute <= 59) {
+        return nextNamedClock(clock, hour, minute);
+      }
+    }
+    if (RegExp(
+      r'\b(all day|entire day|full day|day passes|the (whole|entire) day)\b',
+    ).hasMatch(lower)) {
+      return clock.add(const Duration(hours: 8));
+    }
+    if (RegExp(
+      r'\b(several hours|many hours|a long time|hours? pass)\b',
+    ).hasMatch(lower)) {
+      return clock.add(const Duration(hours: 3));
+    }
+    if (RegExp(
+      r'\b(a few hours|couple.{0,5}hours|2.{0,5}hours|two hours)\b',
+    ).hasMatch(lower)) {
+      return clock.add(const Duration(hours: 2));
+    }
+    return clock.add(const Duration(hours: 1));
+  }
+
   // ── Legacy synthesis (design §3) ──────────────────────────────────────────
 
   /// Build a full clock + anchor from period-and-day-only data (legacy

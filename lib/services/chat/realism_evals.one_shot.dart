@@ -32,10 +32,7 @@ extension RealismEvalOneShot on RealismEvals {
   ///
   /// Enable via Settings → Realism → "One-Shot Eval (Experimental)".
   /// Not default because some models struggle with the combined prompt length.
-  Future<void> evaluateOneShotCall({
-    void Function(String)? onChunk,
-    bool skipClockAdvance = false,
-  }) async {
+  Future<void> evaluateOneShotCall({void Function(String)? onChunk}) async {
     if (!getRealismEnabled()) return;
     if (getActiveCharacter() == null && getActiveGroup() == null) return;
     if (getActiveGroup() != null && getIsObserverMode()) return;
@@ -45,10 +42,7 @@ extension RealismEvalOneShot on RealismEvals {
     // Keep the eval prompt lean for local models — use fewer messages and a
     // shorter personality snippet to reduce prefill time on large models.
     // Bond/emotion/narrative score the USER (through last user). Scene-time
-    // apply is skipped on follow-up speakers via skipClockAdvance (Next
-    // Character only), so this window cannot diverge live minutes from the
-    // four-call path (that path still builds a full recentExchange for the
-    // unused follow-up time call).
+    // is post-generation now (same call as the multi-call path).
     final recent = recentExchangeThroughLastUser(getMessages(), take: 6);
 
     if (getActiveCharacter() == null) {
@@ -79,7 +73,6 @@ extension RealismEvalOneShot on RealismEvals {
 
     // Same shared fragments as the multi-call path (strict one-shot vs normal
     // parity by construction — the rubric text cannot drift between paths).
-    final plannerToday = getPlannerEnabled?.call() ?? false;
     String buildPrompt({required bool toolsMode}) =>
         RealismPromptBuilder.oneShotEvalPrompt(
           preferences: getPreferences?.call() ?? '',
@@ -95,7 +88,6 @@ extension RealismEvalOneShot on RealismEvals {
           primaryObjective: primary?.objective,
           ambitions: getAmbitions?.call() ?? const [],
           toolsMode: toolsMode,
-          plannerToday: plannerToday,
         );
     final prompt = buildPrompt(toolsMode: false);
 
@@ -103,41 +95,15 @@ extension RealismEvalOneShot on RealismEvals {
       debugPrint('[Realism:OneShot] Evaluating (fused call)...');
       final raw = await _fireEval(
         toolName: kOneShotTool,
-        tools: plannerToday ? kOneShotEvalToolsWithToday : kOneShotEvalTools,
+        tools: kOneShotEvalTools,
         buildPrompt: buildPrompt,
         onChunk: onChunk,
       );
       if (raw == null) {
-        // PARITY. The four-call path reaches TimeService unconditionally, and
-        // when its own scene-time eval returns nothing it drifts the clock by
-        // StoryClock.failureDriftMinutes — "deterministic drift so time never
-        // freezes", as that path's own comment puts it. One-shot returned here,
-        // more than a hundred lines before its clock call, so ONE failed
-        // evaluation (backend down, empty reply, timeout) froze the story clock
-        // for the whole turn. The project's strictest written rule is that
-        // one-shot must be 1:1 equivalent to the four-call path; this is the
-        // failure case of that rule.
-        //
-        // An empty oneShotText takes the same branch the four-call path takes:
-        // oneShotMode makes no LLM call, minutes parse as null so the drift
-        // applies, and an OOC time skip that already moved the clock this turn
-        // still suppresses it.
-        await timeService.evaluateTimeProgressAndPostureIfNeeded(
-          charName: charName,
-          recent: recent,
-          shortTermTierName: relationshipService.shortTermTierName,
-          onChunk: onChunk,
-          fireLLMEval: fireLLMEval,
-          stripThinkBlocks: stripThinkBlocks,
-          extractJsonBool: extractJsonBool,
-          setSpatialStance: relationshipService.setSpatialStance,
-          getCurrentSpatialStance: () => relationshipService.spatialStance,
-          getCharacterEmotion: getCharacterEmotion,
-          getEmotionIntensity: getEmotionIntensity,
-          oneShotMode: true,
-          oneShotText: '',
-          skipClockAdvance: skipClockAdvance,
-        );
+        // Clock decide is post-generation now (same time-only call as the
+        // multi-call path). A failed one-shot must not freeze OR pre-move
+        // the clock — the post-reply pass owns both the estimate and the
+        // failure drift.
         return;
       }
 
@@ -206,10 +172,7 @@ extension RealismEvalOneShot on RealismEvals {
             (o) => o.objective.toLowerCase() == newObj.toLowerCase(),
           );
           if (!isDuplicate &&
-              !TodayLineTag.proposedCollidesWithToday(
-                newObj,
-                textForOneShot,
-              )) {
+              !TodayLineTag.proposedCollidesWithToday(newObj, textForOneShot)) {
             // Same decision as the narrative path (strict oneShot vs normal parity):
             // claim the main-quest slot when it's free, stay a side quest when a
             // primary already exists — never displace an existing main quest.
@@ -273,26 +236,8 @@ extension RealismEvalOneShot on RealismEvals {
         isOneShot: true,
       );
 
-      // ── Story clock (parity with the multi-call path) ──
-      // The fused JSON above already carries minutes_elapsed/new_day; this
-      // applies the same clamp/floor/backstop clock math the dedicated
-      // per-turn scene-time eval uses — no extra LLM call.
-      await timeService.evaluateTimeProgressAndPostureIfNeeded(
-        charName: charName,
-        recent: recent,
-        shortTermTierName: relationshipService.shortTermTierName,
-        onChunk: onChunk,
-        fireLLMEval: fireLLMEval,
-        stripThinkBlocks: stripThinkBlocks,
-        extractJsonBool: extractJsonBool,
-        setSpatialStance: relationshipService.setSpatialStance,
-        getCurrentSpatialStance: () => relationshipService.spatialStance,
-        getCharacterEmotion: getCharacterEmotion,
-        getEmotionIntensity: getEmotionIntensity,
-        oneShotMode: true,
-        oneShotText: textForOneShot,
-        skipClockAdvance: skipClockAdvance,
-      );
+      // Clock decide is post-generation (time-only eval after the reply).
+      // Applying minutes from this fused JSON would double-advance.
 
       final reasonMatch = RegExp(
         r'"reason"\s*:\s*"([^"]*)"',

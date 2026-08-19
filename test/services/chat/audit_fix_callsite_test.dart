@@ -40,16 +40,19 @@ void main() {
       'lib/services/chat/realism_evals.calls.dart',
     ).readAsStringSync();
     expect(
-      RegExp(r'recentExchangeThroughLastUser\(getMessages\(\), take: 4\)')
-          .allMatches(calls)
-          .length,
+      RegExp(
+        r'recentExchangeThroughLastUser\(getMessages\(\), take: 4\)',
+      ).allMatches(calls).length,
       greaterThanOrEqualTo(2),
     );
     expect(calls, contains('recentExchange(getMessages(), take: 6)'));
     final one = File(
       'lib/services/chat/realism_evals.one_shot.dart',
     ).readAsStringSync();
-    expect(one, contains('recentExchangeThroughLastUser(getMessages(), take: 6)'));
+    expect(
+      one,
+      contains('recentExchangeThroughLastUser(getMessages(), take: 6)'),
+    );
   });
 
   test('pickup retires item cards for the whole session', () {
@@ -59,28 +62,30 @@ void main() {
     expect(pockets, contains('retireItemCardsInSession'));
   });
 
-  test('follow-up speakers skip the clock; Send/regen do not latch', () {
+  test('follow-up speakers stay on the clock bucket brigade', () {
     final turn = File(
       'lib/services/chat/chat_service_turn_flow.dart',
     ).readAsStringSync();
-    expect(turn, contains('skipClockAdvance: true'));
+    expect(turn, isNot(contains('skipClockAdvance: true')));
+    expect(turn, contains('Bucket brigade'));
     final speak = File(
       'lib/services/chat/chat_service_wiring_memory.dart',
     ).readAsStringSync();
-    expect(speak, contains('skipClockAdvance: true'));
+    expect(speak, isNot(contains('skipClockAdvance: true')));
+    final gen = File(
+      'lib/services/chat/chat_service_generation.dart',
+    ).readAsStringSync();
+    expect(gen, contains('_maybeAdvanceStoryClockAfterReply'));
     final regen = File(
       'lib/services/chat/chat_service_reprocess.dart',
     ).readAsStringSync();
-    expect(regen, isNot(contains('skipClockAdvance: true')));
+    expect(regen, contains('story_clock_before'));
     expect(regen, isNot(contains('beginUserTurnClock()')));
     final send = File(
       'lib/services/chat/chat_service_send.dart',
     ).readAsStringSync();
     expect(send, isNot(contains('beginUserTurnClock()')));
-    final time = File(
-      'lib/services/chat/time_service.dart',
-    ).readAsStringSync();
-    expect(time, contains('skipClockAdvance'));
+    final time = File('lib/services/chat/time_service.dart').readAsStringSync();
     expect(time, isNot(contains('_clockMovedThisUserTurn')));
   });
 

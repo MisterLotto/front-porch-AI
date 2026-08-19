@@ -193,7 +193,8 @@ extension ChatServiceMessageOps on ChatService {
       final deletedSpeaker = (!deleted.isUser && deleted.sender != 'System')
           ? _resolveGroupSpeakerForMessage(deleted)
           : null;
-      final String? deletedSid = (_activeGroup != null && deletedSpeaker != null)
+      final String? deletedSid =
+          (_activeGroup != null && deletedSpeaker != null)
           ? _getCharacterIdFromCard(deletedSpeaker)
           : null;
       // In a group, refund ONLY when the speaker resolved unambiguously —
@@ -272,6 +273,13 @@ extension ChatServiceMessageOps on ChatService {
       // character deletes — same contract as before.
       if (wasTail && !deleted.isUser && deleted.sender != 'System') {
         _restorePocketsFromStamp(deleted, after: false);
+        // Clock: previous bot may be a Scene Guest with no realism_state,
+        // so the snapshot restore above is a no-op. This turn's own
+        // story_clock_before is the announce time (pre-decide).
+        final before = deleted.activeMetadata?['story_clock_before'] as String?;
+        if (_clockRunning && StoryClock.parse(before) != null) {
+          _timeService.restoreTimeFromRealismState({'storyClock': before});
+        }
       }
 
       if (wasTail && _history.hasMore) {
@@ -406,8 +414,10 @@ extension ChatServiceMessageOps on ChatService {
           'from $cursor',
         );
       }
-      final removed =
-          await _growthStore.invalidateRingsCitingFrom(sessionId, position);
+      final removed = await _growthStore.invalidateRingsCitingFrom(
+        sessionId,
+        position,
+      );
       if (_disposed) return;
       if (removed > 0) {
         debugPrint(

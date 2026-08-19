@@ -818,7 +818,7 @@ class ChatToolsFacade {
     return {'id': project.dbId, 'title': project.title};
   }
 
-  /// Manually nudge the scene clock forward/back one period (desktop chevrons).
+  /// Manually nudge the scene clock forward/back 30 minutes (desktop chevrons).
   Future<void> nudgeTime(int delta) async {
     await _chat.nudgeTimePeriod(delta);
     _notify();

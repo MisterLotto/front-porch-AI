@@ -76,14 +76,17 @@ void main() {
       expect(r, same(aria));
     });
 
-    test('stamped origin missing from library → best-effort unique name match', () {
-      final r = MemberOriginResolver.resolve(
-        stampedOriginStableId: 'deleted_card_id',
-        memberName: 'Bob',
-        libraryCharacters: library,
-      );
-      expect(r, same(bob)); // stamp not found → name fallback
-    });
+    test(
+      'stamped origin missing from library → best-effort unique name match',
+      () {
+        final r = MemberOriginResolver.resolve(
+          stampedOriginStableId: 'deleted_card_id',
+          memberName: 'Bob',
+          libraryCharacters: library,
+        );
+        expect(r, same(bob)); // stamp not found → name fallback
+      },
+    );
 
     test('stamped origin missing + ambiguous name → null', () {
       final aria2 = _card('Aria', id: 'aria_2');
@@ -103,6 +106,33 @@ void main() {
           libraryCharacters: library,
         ),
         isNull,
+      );
+    });
+
+    test('resolveForCard: dbId wins when two cards share a name', () {
+      final rachelA = CharacterCard(
+        name: 'Rachel',
+        imagePath: '/lib/Rachel_111.png',
+        dbId: 'db-a',
+      );
+      final rachelB = CharacterCard(
+        name: 'Rachel',
+        imagePath: '/lib/Rachel_222.png',
+        dbId: 'db-b',
+      );
+      expect(
+        MemberOriginResolver.resolveForCard(rachelB, [rachelA, rachelB]),
+        same(rachelB),
+      );
+    });
+
+    test('resolveForCard: first-name-wins is refused when ids differ', () {
+      final rachelA = _card('Rachel', id: 'Rachel_111');
+      final rachelB = _card('Rachel', id: 'Rachel_222');
+      // No dbId — stamp is the image basename. Must not return A for B.
+      expect(
+        MemberOriginResolver.resolveForCard(rachelB, [rachelA, rachelB]),
+        same(rachelB),
       );
     });
 

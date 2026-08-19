@@ -140,17 +140,20 @@ void main() {
   });
 
   group('TimeService manual control', () {
-    test('nudge forward/back snaps periods and rolls days', () {
+    test('nudge forward/back is 30 minutes and can roll a day', () {
       String? patchedIso;
       final t = makeService(onPatch: (_, _, iso) => patchedIso = iso);
       seedFixed(t, timeOfDay: 'night'); // Thu 22:30
       t.nudgeTimePeriod(1);
-      expect(t.timeOfDay, 'dawn');
-      expect(t.dayCount, 4); // rolled into Friday
+      expect(t.clock, DateTime.utc(2026, 7, 2, 23, 0));
+      expect(t.dayCount, 3);
       expect(patchedIso, t.storyClockIso);
       t.nudgeTimePeriod(-1);
-      expect(t.timeOfDay, 'night');
-      expect(t.dayCount, 3);
+      expect(t.clock, DateTime.utc(2026, 7, 2, 22, 30));
+      t.setClockDirect(DateTime.utc(2026, 7, 2, 23, 50));
+      t.nudgeTimePeriod(1);
+      expect(t.clock, DateTime.utc(2026, 7, 3, 0, 20));
+      expect(t.dayCount, 4);
     });
 
     test('setStartDate slides the whole timeline (Day N preserved)', () {
@@ -262,6 +265,20 @@ void main() {
       },
     );
 
+    test('(OOC: skip to 2pm) lands on 2pm, not plus an hour', () {
+      final t = makeService();
+      seedFixed(t, timeOfDay: 'morning'); // 09:00
+      t.detectOocTimeSkip('(ooc: skip to 2pm)');
+      expect(t.clock, DateTime.utc(2026, 7, 2, 14, 0));
+    });
+
+    test('"next afternoon" lands on the next afternoon, not plus an hour', () {
+      final t = makeService();
+      seedFixed(t, timeOfDay: 'morning'); // 09:00
+      t.detectOocTimeSkip('the next afternoon they meet again');
+      expect(t.clock, DateTime.utc(2026, 7, 2, 14, 30));
+    });
+
     test('does nothing when passage is disabled or no trigger present', () {
       final t = makeService();
       seedFixed(t);
@@ -340,7 +357,7 @@ void main() {
       },
     );
 
-    test('new_day from evening onward jumps to 08:00 next day', () async {
+    test('corroborated new_day jumps to 08:00 next morning any hour', () async {
       final t = makeService();
       seedFixed(t); // evening 18:30
       await runEval(
@@ -350,14 +367,14 @@ void main() {
       );
       expect(t.clock, DateTime.utc(2026, 7, 3, 8, 0));
 
-      // new_day mid-afternoon is ignored (not a valid transition).
+      // Mid-afternoon sleep is still a night crossed when corroborated.
       t.setClockDirect(DateTime.utc(2026, 7, 3, 14, 0));
       await runEval(
         t,
         oneShotText: '{"minutes_elapsed": 0, "new_day": true}',
-        recent: 'Nia: *she wakes from her nap*',
+        recent: 'Nia: *she falls asleep in the sun*\nUser: *morning comes*',
       );
-      expect(t.clock.hour, 14);
+      expect(t.clock, DateTime.utc(2026, 7, 4, 8, 0));
     });
 
     test(
@@ -420,6 +437,26 @@ void main() {
       },
     );
 
+    test('applyFailureDrift is the skip-banner 5-minute step', () async {
+      final t = makeService();
+      seedFixed(t, timeOfDay: 'morning');
+      await t.applyFailureDrift();
+      expect(
+        t.clock,
+        DateTime.utc(2026, 7, 2, 9, StoryClock.failureDriftMinutes),
+      );
+      t.detectOocTimeSkip('(ooc: skip ahead an hour)');
+      expect(
+        t.clock,
+        DateTime.utc(2026, 7, 2, 10, StoryClock.failureDriftMinutes),
+      );
+      await t.applyFailureDrift();
+      expect(
+        t.clock,
+        DateTime.utc(2026, 7, 2, 10, StoryClock.failureDriftMinutes),
+      );
+    });
+
     test('passage disabled: one-shot is a no-op for the clock', () async {
       final t = makeService();
       seedFixed(t, timeOfDay: 'morning');
@@ -438,7 +475,7 @@ void main() {
       var n = 0;
       final t = makeService(onStoryDayChanged: () => n++);
       seedFixed(t, timeOfDay: 'evening');
-      t.nudgeTimePeriod(1); // evening → night, same day
+      t.nudgeTimePeriod(1); // 18:30 → 19:00, same day
       expect(n, 0);
       expect(t.dayCount, 3);
       t.detectOocTimeSkip('the next morning, sunlight woke them');

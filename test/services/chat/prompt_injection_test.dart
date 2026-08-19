@@ -434,7 +434,10 @@ void main() {
       // Start Tue 2026-06-30; Day 3 = Thu 2026-07-02, evening rep = 6:30 PM.
       final t = createTestTime(timeOfDay: 'evening', dayCount: 3);
       final txt = t.buildTimeInjection();
-      expect(txt, contains('It is 6:30 in the evening on Thursday, July 2nd'));
+      expect(
+        txt,
+        contains('It is currently 6:30 in the evening on Thursday, July 2nd'),
+      );
       expect(txt, contains('(day 3 of the story)'));
     });
 
@@ -819,7 +822,7 @@ void main() {
       // story-calendar.md §7).
       var masked = block
           .replaceAll(
-            RegExp(r'It is .+ \(day \d+ of the story\)\.'),
+            RegExp(r'It is currently .+ \(day \d+ of the story\)\.'),
             '<scene-time>',
           )
           .replaceAll('the promise Ben made last night', '<fixation>')
@@ -847,7 +850,7 @@ void main() {
       );
       final block = composer.buildRealismStateInjection();
       // Start Tue 2026-06-30, Day 1, late-morning rep 11:30.
-      expect(block, contains('It is 11:30 in the late morning'));
+      expect(block, contains('It is currently 11:30 in the late morning'));
       expect(block, contains('merits of the moment'));
       expect(block, isNot(contains('Mood:')));
       expect(block, isNot(contains('Hunger:')));
@@ -856,7 +859,8 @@ void main() {
       expect(block, isNot(contains('generic sweetness')));
       // Well under the ~300 token ceiling — a quiet turn stays quiet.
       // (~130 est. tokens: header + time + bond/trust-0 fold + guard.)
-      expect(block.length / 4, lessThan(150));
+      // "currently" added ~3 tokens to the time line (2026-08-18).
+      expect(block.length / 4, lessThan(160));
     });
 
     test('realism off → empty', () {

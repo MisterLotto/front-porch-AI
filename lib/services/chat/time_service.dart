@@ -35,15 +35,16 @@ import 'package:front_porch_ai/utils/utils.dart' show stripQuotedSpeech;
 /// weekday are all pure derivations; every conversion/snap/synthesis lives in
 /// the [StoryClock] leaf.
 ///
-/// Advancement is continuous and per-turn: the scene-time eval (which fires
-/// every turn, BEFORE generation, so the character knows what time it is
-/// while writing) reports `minutes_elapsed` for the latest exchange,
-/// hard-clamped by
-/// [StoryClock.maxMinutesPerTurn], with [StoryClock.failureDriftMinutes] as
-/// the deterministic floor on eval failure and a
-/// [StoryClock.stallBackstopTurns]-turn backstop that snaps to the next
-/// period so time can never freeze forever. The old 6-turn gate, its
-/// `hold_time` veto, and the eligible/not-eligible prompt branching are gone.
+/// Advancement is announce-then-decide. Pre-turn the prompt says
+/// "It is currently …" (OOC skip lands first so that line is honest). The
+/// scene-time eval fires AFTER the reply, reports `minutes_elapsed` for the
+/// beat that was just written, and that instant is what the NEXT speaker is
+/// told — group bucket brigade, Scene Guests included. Continue does not
+/// tick (same beat). Hard-clamped by [StoryClock.maxMinutesPerTurn], with
+/// [StoryClock.failureDriftMinutes] as the deterministic floor on eval
+/// failure and a [StoryClock.stallBackstopTurns]-turn backstop so time can
+/// never freeze forever. The old 6-turn gate, its `hold_time` veto, and the
+/// eligible/not-eligible prompt branching are gone.
 ///
 /// ── PASSAGE OF TIME AND THE REALISM ENGINE: THE SEAM, AND WHERE IT IS ────
 ///
@@ -89,12 +90,10 @@ import 'package:front_porch_ai/utils/utils.dart' show stripQuotedSpeech;
 /// because it costs one model call per turn — see that flag for why the
 /// existing Passage-of-Time default could not be treated as consent.
 ///
-/// Deliberately NOT changed: nothing rewinds the standalone clock on
-/// swipe/regen, and nothing needs to. The engine path rewinds because it
-/// re-runs its eval and would otherwise double-advance; the standalone eval
-/// fires once per user turn from sendMessage and never re-fires on a
-/// regenerate, so the clock already sits at exactly one advance for the turn.
-/// Adding a rewind there would be a bug, not a parity fix.
+/// Regen/swipe rewind the clock from the rejected reply's
+/// `story_clock_before` stamp, then the post-reply eval decides again —
+/// engine, standalone, and Scene Guest share that receipt. Without it a
+/// swipe would double-advance.
 ///
 /// The OOC time-skip path ([detectOocTimeSkip]) is pure regex and stands on
 /// its own — but it is a narrow fast path over enumerated phrasings and does
@@ -457,18 +456,32 @@ class TimeService {
 
   // ── Manual control (chevrons + calendar dialog) ───────────────────────────
 
-  /// Sidebar chevrons: snap to the previous/next period's representative
-  /// time. delta = +1 (forward) or -1 (back). Signals god to patch the last
-  /// msg realism_state so swipe/regen cannot revert it.
+  /// Sidebar / web chevrons: ±[StoryClock.nudgeStepMinutes]. delta = +1
+  /// (forward) or -1 (back). Signals god to patch the last msg
+  /// realism_state so swipe/regen cannot revert it. Period snaps still
+  /// exist for AFK ([advanceTimePeriods]); the strip needed minute fidelity
+  /// once At work / Today read the live clock.
   Future<void> nudgeTimePeriod(int delta) async {
     final dayBefore = dayCount;
-    _clock = delta >= 0
-        ? StoryClock.snapToNextPeriod(_clock)
-        : StoryClock.snapToPreviousPeriod(_clock);
+    final step = StoryClock.nudgeStepMinutes * (delta >= 0 ? 1 : -1);
+    _clock = StoryClock.addMinutes(_clock, step);
     if (_clock.isBefore(_startDate)) _startDate = StoryClock.dateOnly(_clock);
     _turnsSinceClockMoved = 0;
     onPatchLastMessageRealismState(timeOfDay, dayCount, storyClockIso);
     await _ifDayChanged(dayBefore);
+  }
+
+  /// All-away skip banner: no reply to score, so no LLM. Same 5-minute
+  /// floor the eval uses on failure. An OOC skip that already owned this
+  /// turn is left alone (and consumes the flag, matching the eval).
+  Future<void> applyFailureDrift() async {
+    if (!_passageOfTimeEnabled) return;
+    if (_oocSkipMovedClockThisTurn) {
+      _oocSkipMovedClockThisTurn = false;
+      return;
+    }
+    await _applyElapsed(minutes: null, newDay: false);
+    onNotify();
   }
 
   /// Calendar dialog: set the story's current moment directly. Pulls the
@@ -596,37 +609,7 @@ class TimeService {
     ).hasMatch(lower);
     if (!hasSkipPhrase && !hasDurationHint) return;
 
-    // Most specific duration language first.
-    DateTime next;
-    if (RegExp(
-      r'\b(a|one)? ?month (later|passes)|next month\b',
-    ).hasMatch(lower)) {
-      // The 1st of the following month, mid-morning (design §7).
-      next = DateTime.utc(_clock.year, _clock.month + 1, 1, 9);
-    } else if (RegExp(
-      r'\b((a|one) week (later|passes)|next week|weeks? later)\b',
-    ).hasMatch(lower)) {
-      next = _clock.add(const Duration(days: 7));
-    } else if (RegExp(
-      r'\b(next (morning|day)|the following (morning|day)|wake up|woke up|overnight|the next day)\b',
-    ).hasMatch(lower)) {
-      next = StoryClock.nextMorning(_clock);
-    } else if (RegExp(
-      r'\b(all day|entire day|full day|day passes|the (whole|entire) day)\b',
-    ).hasMatch(lower)) {
-      next = _clock.add(const Duration(hours: 8));
-    } else if (RegExp(
-      r'\b(several hours|many hours|a long time|hours? pass)\b',
-    ).hasMatch(lower)) {
-      next = _clock.add(const Duration(hours: 3));
-    } else if (RegExp(
-      r'\b(a few hours|couple.{0,5}hours|2.{0,5}hours|two hours)\b',
-    ).hasMatch(lower)) {
-      next = _clock.add(const Duration(hours: 2));
-    } else {
-      // "an hour", "a while", "some time", or a bare OOC marker.
-      next = _clock.add(const Duration(hours: 1));
-    }
+    final next = StoryClock.resolveSkipTarget(_clock, lower);
 
     final dayBefore = dayCount;
     _clock = next;
@@ -661,9 +644,11 @@ class TimeService {
       _clock = _clock.add(Duration(minutes: m));
       moved = true;
     }
-    // Explicit next-day transition — valid from evening onward (incl. the
-    // small hours past midnight, which ARE "that night" narratively).
-    if (newDay && (_clock.hour >= 17 || _clock.hour < 5)) {
+    // Corroborated next-day transition. The hour gate (17:00–05:00) was
+    // dropped: a nap that becomes "we slept through to morning" at 2pm is
+    // still a night crossed. Hallucinations are the corroboration regex's
+    // job, not the wall clock's.
+    if (newDay) {
       _clock = StoryClock.nextMorning(_clock);
       moved = true;
     }
@@ -754,8 +739,10 @@ class TimeService {
   /// So posture is now exactly the kind of fact Pockets and Afterglow are —
   /// something the REPLY changed — and it runs where they run, reading the
   /// text that was just written (chat_service_generation_postgen.dart).
-  /// TIME did not move: the clock must advance before the reply so the
-  /// character knows what time it is while writing it.
+  /// TIME now moves AFTER the reply, same family as posture: the prompt
+  /// already announced the current clock, she wrote at that time, and this
+  /// call decides what the NEXT speaker will be told. Pre-gen application
+  /// made At work / Today lie (the strip jumped before she opened her mouth).
   ///
   /// [postureOnly] is that pass. It is the SAME branch that used to serve
   /// "passage of time is off, so ask about posture alone" — promoted to a
@@ -898,7 +885,8 @@ class TimeService {
     // editing one copy.
     final plannerToday = getPlannerEnabled?.call() ?? false;
     final timeRules =
-        '1. "minutes_elapsed": how many in-story minutes passed during the LATEST exchange below (integer, 0-${StoryClock.maxMinutesPerTurn}). '
+        '1. "minutes_elapsed": how many in-story minutes passed during the reply that was JUST written (integer, 0-${StoryClock.maxMinutesPerTurn}). '
+        'This sets the clock the NEXT speaker will be told. '
         'Most conversational exchanges take 2-15 minutes; activities (a meal, a walk, a task, travel) take longer. '
         'Use 0 ONLY when the scene is a continuous instant (mid-action, mid-sentence).\n'
         '2. "new_day": true ONLY if the conversation explicitly transitioned to the next day (slept, woke up, scene break). false otherwise. '

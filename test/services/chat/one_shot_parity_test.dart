@@ -60,7 +60,6 @@ import 'package:front_porch_ai/services/chat/nsfw_service.dart';
 import 'package:front_porch_ai/services/chat/realism_evals.dart';
 import 'package:front_porch_ai/services/chat/realism_prompt_builder.dart';
 import 'package:front_porch_ai/services/chat/relationship_service.dart';
-import 'package:front_porch_ai/services/chat/story_clock.dart';
 import 'package:front_porch_ai/services/chat/time_service.dart';
 import 'package:front_porch_ai/services/chat/pass_support.dart';
 
@@ -158,8 +157,12 @@ class _Rig {
       getPrimaryObjective: () => null,
       getActiveObjectives: () => const <Objective>[],
       setObjective:
-          (t, {isPrimary = false, autoGenerateTasks = false, servedAmbition})
-              async {},
+          (
+            t, {
+            isPrimary = false,
+            autoGenerateTasks = false,
+            servedAmbition,
+          }) async {},
     );
   }
 
@@ -200,7 +203,6 @@ class _Rig {
   Future<void> runFourCall() async {
     await evals.evaluateRelationshipCall();
     await evals.evaluateEmotionalStateCall();
-    await evals.evaluatePhysicalStateCall();
     await evals.evaluateNarrativeCall();
   }
 
@@ -209,64 +211,63 @@ class _Rig {
 
 void main() {
   group('one-shot vs four-call: the failure case', () {
-    test('a failed evaluation must not freeze the story clock on either path',
-        () async {
-      // THE REGRESSION. One-shot bailed before its clock call, so the story
-      // stopped advancing whenever the backend hiccupped, while the same
-      // failure on the default path drifted forward as designed.
-      final four = _Rig(null);
-      final before = four.time.clock;
-      await four.runFourCall();
-      final fourAdvanced = four.time.clock.difference(before).inMinutes;
+    test(
+      'pre-generation judges must not move the story clock on either path',
+      () async {
+        // Clock decide is post-generation now. A failed (or successful)
+        // judge pass that still nudged the clock would jump At work / Today
+        // before she writes.
+        final four = _Rig(null);
+        final before = four.time.clock;
+        await four.runFourCall();
+        final fourAdvanced = four.time.clock.difference(before).inMinutes;
 
-      final one = _Rig(null);
-      final oneBefore = one.time.clock;
-      await one.runOneShot();
-      final oneAdvanced = one.time.clock.difference(oneBefore).inMinutes;
+        final one = _Rig(null);
+        final oneBefore = one.time.clock;
+        await one.runOneShot();
+        final oneAdvanced = one.time.clock.difference(oneBefore).inMinutes;
 
-      expect(
-        fourAdvanced,
-        StoryClock.failureDriftMinutes,
-        reason: 'the four-call path drifts deterministically on failure',
-      );
-      expect(
-        oneAdvanced,
-        fourAdvanced,
-        reason:
-            'one-shot exists only to save tokens. A failed evaluation must '
-            'leave the clock exactly where the four-call path would have — '
-            'it used to leave it frozen.',
-      );
+        expect(fourAdvanced, 0);
+        expect(
+          oneAdvanced,
+          fourAdvanced,
+          reason:
+              'one-shot exists only to save tokens. The judges must leave '
+              'the clock exactly where the three-call path would have.',
+        );
 
-      // The drift must come from oneShotMode's clock-math branch, NOT from
-      // TimeService firing its own scene-time evaluation. Without this, passing
-      // oneShotMode:false would still produce the right clock (that eval would
-      // fail too and drift identically) while silently costing the extra call
-      // the whole optimisation exists to avoid — the clock assertion above
-      // would stay green through that regression.
-      expect(
-        one.firedPrompts.length,
-        1,
-        reason:
-            'the recovery must not fire a second LLM call; only the original '
-            'fused evaluation should appear',
-      );
-    });
+        // The drift must come from oneShotMode's clock-math branch, NOT from
+        // TimeService firing its own scene-time evaluation. Without this, passing
+        // oneShotMode:false would still produce the right clock (that eval would
+        // fail too and drift identically) while silently costing the extra call
+        // the whole optimisation exists to avoid — the clock assertion above
+        // would stay green through that regression.
+        expect(
+          one.firedPrompts.length,
+          1,
+          reason:
+              'the recovery must not fire a second LLM call; only the original '
+              'fused evaluation should appear',
+        );
+      },
+    );
 
-    test('neither path invents relationship movement out of a failure',
-        () async {
-      final four = _Rig(null);
-      await four.runFourCall();
-      final one = _Rig(null);
-      await one.runOneShot();
+    test(
+      'neither path invents relationship movement out of a failure',
+      () async {
+        final four = _Rig(null);
+        await four.runFourCall();
+        final one = _Rig(null);
+        await one.runOneShot();
 
-      expect(four.rel.affectionScore, 0);
-      expect(one.rel.affectionScore, 0);
-      expect(four.rel.trustLevel, 0);
-      expect(one.rel.trustLevel, 0);
-      expect(four.nsfw.arousalLevel, 0);
-      expect(one.nsfw.arousalLevel, 0);
-    });
+        expect(four.rel.affectionScore, 0);
+        expect(one.rel.affectionScore, 0);
+        expect(four.rel.trustLevel, 0);
+        expect(one.rel.trustLevel, 0);
+        expect(four.nsfw.arousalLevel, 0);
+        expect(one.nsfw.arousalLevel, 0);
+      },
+    );
   });
 
   group('one-shot vs four-call: the success case', () {
@@ -298,7 +299,7 @@ void main() {
       }
     });
 
-    test('one-shot really is one call, and four-call really is four', () async {
+    test('one-shot really is one call, and the judge path is three', () async {
       // Guards the whole point of the optimisation: if one-shot ever started
       // firing extra evaluations it would still pass the equivalence test above
       // while quietly costing what it was built to save.
@@ -310,11 +311,11 @@ void main() {
       await four.runFourCall();
       expect(
         four.firedPrompts.length,
-        4,
+        3,
         reason:
-            'relationship, emotional, physical (whose scene-time evaluation '
-            'fires through the same callback) and narrative. greaterThan(1) '
-            'would let the path silently degrade to two.',
+            'relationship, emotional and narrative. Scene-time is '
+            'post-generation now. greaterThan(1) would let the path '
+            'silently degrade to two.',
       );
     });
   });

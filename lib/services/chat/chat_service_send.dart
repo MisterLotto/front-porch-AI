@@ -394,24 +394,10 @@ extension ChatServiceSend on ChatService {
         await _evaluateRealismForUpcomingSpeaker(_activeCharacter!);
       }
     } else if (_standaloneClockActive && addressedGuest == null) {
-      // ── The standalone story clock (engine off, user opted in) ──────────
-      // Deliberately an `else` on the realism branch: exactly one driver
-      // advances the clock per turn, so the two can never double-advance.
-      //
-      // Fired here, once, rather than inside the per-speaker realism dance
-      // because story time is CHAT-scoped, not per-speaker — a group of four
-      // must cost one call per turn, not four. Same position in the turn as
-      // the engine's scene-time eval (before generation, scoring the exchange
-      // so far), so both drivers see the same input and the clock the model is
-      // shown is already this turn's.
-      //
-      // Guests are excluded for the same reason they are above: a direct
-      // address routes the turn away from the host, who never took one.
-      await _realismEvals.evaluatePhysicalStateCall(timeOnly: true);
-      // Stamp the current story day on the latest user turn so RAG's
-      // storyDayAt can ground retrieved lines when the Realism Engine is
-      // off (standalone clock has no realism_state dance). Additive only —
-      // never invents a day when the clock is not running.
+      // Standalone clock: announce the current time in the prompt; the
+      // post-reply decide lives in _finalizeGenerationTurn with the engine
+      // path (bucket brigade, Scene Guests included). Only stamp the user
+      // turn's story day here so RAG can ground retrieved lines.
       if (_messages.isNotEmpty) {
         final last = _messages.last;
         if (last.isUser) {
@@ -439,12 +425,7 @@ extension ChatServiceSend on ChatService {
     if (addressedGuest != null) {
       await generateGuestTurn(addressedGuest);
     } else {
-      await _generateResponse(
-        GenerationMode.normal,
-        // Standalone already ticked above. Engine-on groups tick inside
-        // generate (or the skip banner). Never double-advance.
-        skipClockAdvance: _standaloneClockActive,
-      );
+      await _generateResponse(GenerationMode.normal);
     }
     // Backend-down abort: no response was generated, so none of the
     // post-turn work below may run — no idle-timer arming, no chip attach,
@@ -548,9 +529,9 @@ extension ChatServiceSend on ChatService {
     await _generateResponse(GenerationMode.normal);
   }
 
-  /// The dream PRODUCER — fired from the post-generation phase, because the
-  /// clock crosses a night during a turn's pre-generation advance, which
-  /// makes the rollover visible one whole phase before the dream is shown.
+  /// The dream PRODUCER — fired from the post-generation phase, after the
+  /// post-reply clock decide, so a night crossed in this beat is visible
+  /// before the next send shows the dream.
   /// Same detection (checkRollover/pending/clear untouched — the dedicated
   /// unit suite drives those APIs directly), same owner rule (the last
   /// assistant speaker ended the day; ONE rule for 1:1 and group), same

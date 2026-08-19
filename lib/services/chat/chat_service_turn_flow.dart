@@ -56,11 +56,9 @@ extension ChatServiceTurnFlow on ChatService {
     // so this is clear by the time they fire; no re-arm machinery is needed.
     if (_isTurnBusy) return; // wait for the current turn to finish settling
 
-    if (_clockRunning) {
-      await _realismEvals.evaluatePhysicalStateCall(timeOnly: true);
-    }
-    // Already ticked above. Skip and speak must not tick again.
-    await _generateResponse(GenerationMode.normal, skipClockAdvance: true);
+    // Each spoken reply post-decides the clock; the next speaker is
+    // announced at that time (bucket brigade). No pre-tick.
+    await _generateResponse(GenerationMode.normal);
   }
 
   /// Trigger the next character to speak in group mode.
@@ -68,11 +66,9 @@ extension ChatServiceTurnFlow on ChatService {
     if (_activeGroup == null || _groupCharacters.isEmpty || _isTurnBusy) {
       return;
     }
-    // Story time is chat-scoped: Send already advanced it for this user
-    // turn. A follow-up speaker (Next Character and /speak) must not tick
-    // again. Explicit flag — not a TimeService latch — so regen / unit
-    // tests / Director auto-play keep their own advance.
-    await _generateResponse(GenerationMode.normal, skipClockAdvance: true);
+    // Bucket brigade: this speaker announces the time the last reply
+    // decided, then post-decides for whoever speaks next.
+    await _generateResponse(GenerationMode.normal);
   }
 
   /// Manually select which character speaks next in group mode.

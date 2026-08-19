@@ -218,7 +218,7 @@ Key tables (REAL SQL names — verify against `database.g.dart`, not memory): `c
 A multi-component system spanning `chat_service.dart` (orchestration, `_groupRealism`, post-gen hooks, message metadata), the `chat/` domain services, and the LLM provider:
 - Emotion tracking with inertia between turns (ExpressionClassifier)
 - Bond/trust relationship scoring (bond clamped to ±300, arousal ±100) (RelationshipService)
-- Time progression — `lib/services/chat/time_service.dart` (`TimeService`) + `story_clock.dart`. Advancement is CONTINUOUS AND PER-TURN: the scene-time eval reports `minutes_elapsed` for the exchange, clamped by `StoryClock.maxMinutesPerTurn`, with `StoryClock.failureDriftMinutes` as the deterministic floor when the eval fails and a `stallBackstopTurns` backstop so time can never freeze. **The old 6-turn gate and its `hold_time` veto are GONE** — do not reason about a turn counter.
+- Time progression — `lib/services/chat/time_service.dart` (`TimeService`) + `story_clock.dart`. Announce-then-decide (2026-08-18): OOC skip lands first, the prompt says "It is currently …", she writes at that time, then a post-reply `minutes_elapsed` decide sets the clock the NEXT speaker is told (group bucket brigade, Scene Guests included). Continue does not tick. Clamped by `StoryClock.maxMinutesPerTurn`, with `StoryClock.failureDriftMinutes` as the deterministic floor when the eval fails and a `stallBackstopTurns` backstop so time can never freeze. Chevrons are ±30 minutes; specific time is the Story Calendar's existing **Set date & time** analog picker. **The old 6-turn gate and its `hold_time` veto are GONE** — do not reason about a turn counter.
 
   **PASSAGE OF TIME IS DECOUPLED FROM THE ENGINE (2026-08-06).** This AMENDS
   the 2026-08-02 "cannot be decoupled" ruling, which rested on reading the
@@ -237,18 +237,18 @@ A multi-component system spanning `chat_service.dart` (orchestration, `_groupRea
   swipe/regen rewind snapshot.
   How it works now: `standaloneClockEnabled` (default OFF, opt-in — Passage of
   Time already defaults on and could not be treated as consent for a per-turn
-  call) makes `evaluatePhysicalStateCall(timeOnly: true)` fire once per turn
-  from `sendMessage`, chat-scoped so a group costs one call. Everything after
-  the call is SHARED with the engine path (clamp, failure floor, `new_day`
-  corroboration, OOC-skip ownership) — that sharing is the parity guarantee,
-  pinned by `test/services/chat/standalone_clock_test.dart`. Weather and Dreams
-  now gate on `_clockRunning` (either driver), not the engine.
-  COROLLARY, unchanged in spirit: the time PROMPT FRAGMENT gates on
-  `_clockRunning`, never on `passageOfTimeEnabled` alone — that flag defaults on
-  and is inert without a driver, so gating on it would inject the same frozen
-  timestamp every turn. Do NOT add a swipe/regen rewind for the standalone
-  clock: it fires once per user turn and never re-fires on regenerate, so it is
-  already at exactly one advance.
+  call) makes `evaluatePhysicalStateCall(timeOnly: true)` fire AFTER each
+  spoken reply from `_maybeAdvanceStoryClockAfterReply` (same helper as the
+  engine path — group follow-ups, `/speak`, auto-play, and Scene Guests
+  included). Everything after the call is SHARED (clamp, failure floor,
+  `new_day` corroboration, OOC-skip ownership) — that sharing is the parity
+  guarantee, pinned by `test/services/chat/standalone_clock_test.dart`. Weather
+  and Dreams now gate on `_clockRunning` (either driver), not the engine.
+  COROLLARY: the time PROMPT FRAGMENT gates on `_clockRunning`, never on
+  `passageOfTimeEnabled` alone — that flag defaults on and is inert without a
+  driver. Regen/swipe rewind from the rejected reply's `story_clock_before`
+  stamp, then the post-reply decide runs again — engine, standalone, and
+  guests share that receipt. One-shot must NOT apply minutes (would double).
 - Spatial stance / posture — **POST-generation since 2026-08-08.** It is NOT
   part of the pre-generation judges and is not fused with the scene-time eval
   any more. `_evaluatePhysicalStateCall(postureOnly: true)` fires from

@@ -36,7 +36,7 @@ class TimeInjection {
   /// the feature was silently dead. It is now its own fragment in
   /// RealismStateInjection, emitted in this same position.
   String buildTimeInjection() =>
-      'It is ${StoryClock.clockPhrase(timeService.clock)} on '
+      'It is currently ${StoryClock.clockPhrase(timeService.clock)} on '
       '${timeService.displayDate} '
       '(day ${timeService.dayCount} of the story).';
 }

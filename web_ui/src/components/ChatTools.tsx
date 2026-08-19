@@ -921,12 +921,12 @@ export function ChatTools({
           <div className="tool-row">
             <button
               disabled={!t.realismEnabled}
-              title={t.realismEnabled ? undefined : 'Realism Mode is off, so the story clock is paused'}
+              title={t.realismEnabled ? 'Back 30 minutes' : 'Realism Mode is off, so the story clock is paused'}
               onClick={() => apply(api.post<ToolsState>(`/api/chat/tools/time${q}`, { delta: -1 }))}
             >◀ Earlier</button>
             <button
               disabled={!t.realismEnabled}
-              title={t.realismEnabled ? undefined : 'Realism Mode is off, so the story clock is paused'}
+              title={t.realismEnabled ? 'Forward 30 minutes' : 'Realism Mode is off, so the story clock is paused'}
               onClick={() => apply(api.post<ToolsState>(`/api/chat/tools/time${q}`, { delta: 1 }))}
             >Later ▶</button>
           </div>

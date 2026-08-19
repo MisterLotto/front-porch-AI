@@ -161,7 +161,6 @@ extension ChatServiceGeneration on ChatService {
   Future<void> _generateResponse(
     GenerationMode mode, {
     CharacterCard? guestSpeaker,
-    bool skipClockAdvance = false,
     CharacterCard? forceSpeaker,
   }) async {
     if (await _abortIfBackendDown()) {
@@ -222,13 +221,11 @@ extension ChatServiceGeneration on ChatService {
           forceSpeaker == null &&
           _groupSpeakerSkips(speakingCharacter)) {
         // Whole roster (or a forced @name) is Away / At work. Do not eat
-        // the send: write a glance line. Clock ticks once unless send
-        // already advanced it. Skipped speakers do not write Today.
-        if (!skipClockAdvance && _clockRunning) {
-          await _realismEvals.evaluatePhysicalStateCall(
-            timeOnly: true,
-            skipTodayEval: true,
-          );
+        // the send: write a glance line. No reply to score, so the clock
+        // takes the failure-drift step (bucket brigade still moves) and
+        // Today is not rewritten.
+        if (_clockRunning) {
+          await _timeService.applyFailureDrift();
         }
         _messages.add(
           ChatMessage(
@@ -284,10 +281,7 @@ extension ChatServiceGeneration on ChatService {
       } else if (guestSpeaker == null &&
           _activeGroup != null &&
           _realismActiveThisMode) {
-        await _evaluateRealismForUpcomingSpeaker(
-          speakingCharacter,
-          skipClockAdvance: skipClockAdvance,
-        );
+        await _evaluateRealismForUpcomingSpeaker(speakingCharacter);
         // Cancel-aborts-generation, group edition: the dance leaves the
         // cancel flag set for its caller (1:1's sendMessage has the twin
         // check). Consume it and abort the turn before any prompt is built.
@@ -312,8 +306,9 @@ extension ChatServiceGeneration on ChatService {
       await _buildGenerationPlan(t);
       await _retrieveGenerationMemories(t);
       await _dispatchGeneration(t);
-      if (await _consumeGenerationStream(t))
+      if (await _consumeGenerationStream(t)) {
         return; // user cancel: turn halted (H2)
+      }
       await _finalizeGenerationTurn(t);
     } catch (e) {
       final wasCancelled = _cancelRequested;
@@ -393,6 +388,38 @@ extension ChatServiceGeneration on ChatService {
       // Settling over, on EVERY exit — restore the CALLER's hold (regen keeps
       // it raised across its swipe-merge); a latched flag would wedge input.
       _isPostGenerating = callerHeldSettling;
+    }
+  }
+
+  /// Post-reply clock decide. Announced time was already in the prompt;
+  /// this sets what the NEXT speaker is told. Continue is the same beat.
+  /// Scene Guests carry no Realism/Needs but the clock is chat-scoped, so
+  /// they tick time-only (no Today rewrite).
+  Future<void> _maybeAdvanceStoryClockAfterReply(_GenTurn t) async {
+    if (t.mode == GenerationMode.continue_) return;
+    if (!_clockRunning) return;
+    final msg = t.streamTarget;
+    if (!msg.isUser) {
+      // Stamp the LIVE swipe map. Writing `metadata` is a no-op for
+      // regen when swipeMetadata[i] is already set — activeMetadata
+      // returns that slot, not the legacy field.
+      final existing = msg.activeMetadata;
+      if (existing != null) {
+        existing.putIfAbsent(
+          'story_clock_before',
+          () => _timeService.storyClockIso,
+        );
+      } else {
+        msg.activeMetadata = {'story_clock_before': _timeService.storyClockIso};
+      }
+    }
+    await _realismEvals.evaluatePhysicalStateCall(
+      timeOnly: true,
+      skipTodayEval: t.guestSpeaker != null,
+    );
+    if (t.guestSpeaker != null) {
+      final named = clockNamedInReply(msg.text, _timeService.clock);
+      if (named != null) await _timeService.applyReconciledClock(named);
     }
   }
 }

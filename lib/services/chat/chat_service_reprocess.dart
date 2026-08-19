@@ -232,6 +232,21 @@ extension ChatServiceReprocess on ChatService {
         _restorePocketsFromStamp(lastMsg, after: false);
       }
 
+      // Clock rewind for every driver (engine, standalone, Scene Guest).
+      // The post-reply tick stamps story_clock_before; without this a
+      // swipe would double-advance. Manual chevron/calendar nudges on
+      // this bubble survive (same time_nudged flag as the engine path).
+      final clockWasNudged =
+          lastMsg.activeMetadata?['realism_state'] is Map &&
+          (lastMsg.activeMetadata!['realism_state'] as Map)['time_nudged'] ==
+              true;
+      if (_clockRunning && !clockWasNudged) {
+        final before = lastMsg.activeMetadata?['story_clock_before'] as String?;
+        if (StoryClock.parse(before) != null) {
+          _timeService.restoreTimeFromRealismState({'storyClock': before});
+        }
+      }
+
       // Revert realism state from the rejected swipe and re-evaluate.
       // Guest messages carry no Realism/Needs state (regenGuest != null skips).
       //
@@ -618,6 +633,16 @@ extension ChatServiceReprocess on ChatService {
           notifyListeners();
           await _saveChat();
           return;
+        }
+      }
+
+      // story_clock_before wins over previousSessionState. A guest (no
+      // realism_state) can sit between two host lines; restoring the last
+      // stamped host snapshot would rewind PAST that guest's decide.
+      if (_clockRunning && !clockWasNudged) {
+        final before = lastMsg.activeMetadata?['story_clock_before'] as String?;
+        if (StoryClock.parse(before) != null) {
+          _timeService.restoreTimeFromRealismState({'storyClock': before});
         }
       }
 
