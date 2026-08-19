@@ -26,7 +26,6 @@ part of '../chat_service.dart';
 /// messages, and dance helpers exactly as before.
 
 extension ChatServiceReprocess on ChatService {
-
   /// Which cast member said [msg]. See [resolveGroupSpeakerForMessage].
   CharacterCard? _resolveGroupSpeakerForMessage(ChatMessage msg) =>
       resolveGroupSpeakerForMessage(_groupCharacters, msg);
@@ -636,7 +635,13 @@ extension ChatServiceReprocess on ChatService {
       // The duplicate post-generation recompute that used to live here was a
       // second source of truth for the same numbers; deleted 2026-08-04.
       final preGenLen = _messages.length;
-      await _generateResponse(GenerationMode.normal, guestSpeaker: regenGuest);
+      await _generateResponse(
+        GenerationMode.normal,
+        guestSpeaker: regenGuest,
+        forceSpeaker: regenGuest == null && _activeGroup != null
+            ? _resolveGroupSpeakerForMessage(lastMsg)
+            : null,
+      );
 
       // After generation, merge the new response as a swipe on the original
       // message — but ONLY when _generateResponse actually appended one. It

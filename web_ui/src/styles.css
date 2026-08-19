@@ -1641,6 +1641,7 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 }
 .realism-card { display: flex; flex-direction: column; gap: 14px; }
 .realism-grid-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; }
+.work-hours { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .realism-field { display: flex; flex-direction: column; gap: 4px; }
 .realism-field > span { font-size: 0.8rem; color: var(--muted); }
 .realism-slider { display: flex; flex-direction: column; gap: 4px; }
@@ -1854,7 +1855,7 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 .crop-actions .spacer { flex: 1; }
 
 @media (max-width: 640px) {
-  .realism-grid-2, .needs-row { grid-template-columns: 1fr; }
+  .realism-grid-2, .work-hours, .needs-row { grid-template-columns: 1fr; }
 }
 
 /* ── The Stoop (community character hub) ── */

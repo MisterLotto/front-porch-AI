@@ -3,6 +3,39 @@
 
 # Changelog
 
+## 2026-08-18 — fix(presence): live clock, skip banner, Today pointer, web
+- **Why:** Review of #202–#204: At work used the period's dummy hour, group
+  skip ate the send, Today dropped on speaker switch, promote+day-roll
+  killed a primary, day-roll raced the new sentence, web never shipped
+  Planner/presence/Today.
+- **What:** hoursMatch uses live clock minutes. Group skip tries the next
+  With-you member, then a System banner. Standalone send sets
+  skipClockAdvance. Skip-turn time-only does not write Today. At work
+  drops stale stance and suppresses Today's plan. Rebind keeps the
+  session Today id. Promote detaches. Day-roll is awaited. Web: Planner
+  row, plan lines, presence + Today on tools/calendar.
+- **Files:** presence_derive.dart, generation/turn_flow/send, time_service,
+  accessors/objectives, plan/behavioral injection, chat_tools facade+routes,
+  web PorchLife/ChatTools/calendar/RealismForm
+
+## 2026-08-18 — fix(presence): drop "not from the porch" from At work / Away
+- **Why:** 1:1 injection told the model "Reply from there — not from the
+  porch with {{user}}". The porch is the app, not a place in her world.
+- **What:** "Write from there." Same for Away. Tests now fail if "porch"
+  comes back.
+- **Files:** behavioral_injection.dart, prompt_injection_test.dart
+
+## 2026-08-18 — feat(work): hours are a clock range, not free text
+- **Why:** Typing "mornings" / "9-5ish" / "whenever" into Hours was a
+  footgun — At work either never lit or lit for the wrong slice of the
+  day. The story-time dial already exists and cannot misspell a time.
+- **What:** WorkRow Start/End chips open the same `showTimePicker` as
+  "The story opens at…". Stored card `hours` is "9am–5pm". Period words
+  no longer match. Web got the same occupation + `<input type="time">`
+  pair so a phone edit cannot wipe or free-type the shift.
+- **Files:** work_row.dart, presence_derive.dart, RealismFormSection.tsx,
+  realismTypes.ts, workHours.ts, presence_derive_test.dart, work_row_test.dart
+
 ## 2026-08-17 — fix(enhance): empty Porch Life lists do not wipe authored chips
 - **Why:** Bug Hunter: tests never called save(). Dropping `_use['porchLife']`
   from the write gate stayed green, then mute copyWith emptied worn on

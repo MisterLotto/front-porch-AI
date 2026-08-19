@@ -170,7 +170,7 @@ extension ChatServiceControls on ChatService {
   /// + realism guard kept in god wrapper (UI coordination).
   Future<void> nudgeTimePeriod(int delta) async {
     if (!_realismEnabled) return;
-    _timeService.nudgeTimePeriod(delta);
+    await _timeService.nudgeTimePeriod(delta);
     // Day-ate journal rides TimeService.onStoryDayChanged.
     await _saveChat();
     notifyListeners();

@@ -212,6 +212,10 @@ class TimeService {
   DateTime get clock => _clock;
   DateTime get startDate => _startDate;
   String get timeOfDay => StoryClock.periodForHour(_clock.hour);
+
+  /// Live clock as minutes from midnight. Presence matches this, not
+  /// the period's representative hour.
+  int get clockMinutes => _clock.hour * 60 + _clock.minute;
   int get dayCount => StoryClock.dayCountFor(_clock, _startDate);
 
   /// The set-aside-clothing day: flips at the story MORNING (08:00), not
@@ -456,15 +460,15 @@ class TimeService {
   /// Sidebar chevrons: snap to the previous/next period's representative
   /// time. delta = +1 (forward) or -1 (back). Signals god to patch the last
   /// msg realism_state so swipe/regen cannot revert it.
-  void nudgeTimePeriod(int delta) {
+  Future<void> nudgeTimePeriod(int delta) async {
     final dayBefore = dayCount;
     _clock = delta >= 0
         ? StoryClock.snapToNextPeriod(_clock)
         : StoryClock.snapToPreviousPeriod(_clock);
     if (_clock.isBefore(_startDate)) _startDate = StoryClock.dateOnly(_clock);
     _turnsSinceClockMoved = 0;
-    _ifDayChanged(dayBefore);
     onPatchLastMessageRealismState(timeOfDay, dayCount, storyClockIso);
+    await _ifDayChanged(dayBefore);
   }
 
   /// Calendar dialog: set the story's current moment directly. Pulls the
@@ -481,13 +485,13 @@ class TimeService {
     );
     if (_clock.isBefore(_startDate)) _startDate = StoryClock.dateOnly(_clock);
     _turnsSinceClockMoved = 0;
-    await _ifDayChanged(dayBefore);
     onPatchLastMessageRealismState(timeOfDay, dayCount, storyClockIso);
+    await _ifDayChanged(dayBefore);
   }
 
   /// Post-reply: she named a time, so the live clock follows. Not a user
   /// nudge — swipe/regen still rewind from the previous snapshot.
-  void applyReconciledClock(DateTime newClock) {
+  Future<void> applyReconciledClock(DateTime newClock) async {
     final dayBefore = dayCount;
     _clock = DateTime.utc(
       newClock.year,
@@ -498,7 +502,7 @@ class TimeService {
     );
     if (_clock.isBefore(_startDate)) _startDate = StoryClock.dateOnly(_clock);
     _turnsSinceClockMoved = 0;
-    _ifDayChanged(dayBefore);
+    await _ifDayChanged(dayBefore);
   }
 
   /// Calendar dialog: re-anchor "story begins on…". Shifts the clock by the
@@ -558,7 +562,7 @@ class TimeService {
   /// going to sleep" are SPOKEN, so stripping quotes there would delete the
   /// evidence that a night was really crossed and quietly stop day rolls
   /// altogether. Opposite question, opposite answer.
-  void detectOocTimeSkip(String text) {
+  Future<void> detectOocTimeSkip(String text) async {
     if (!_passageOfTimeEnabled) {
       debugPrint(
         '[Realism:OOC] Time-skip requested but passageOfTimeEnabled=false, ignoring',
@@ -627,7 +631,6 @@ class TimeService {
     final dayBefore = dayCount;
     _clock = next;
     _turnsSinceClockMoved = 0;
-    _ifDayChanged(dayBefore);
     _oocSkipMovedClockThisTurn = true;
     onSetPendingRealismMetadata(
       'time_skip_to',
@@ -637,13 +640,17 @@ class TimeService {
     debugPrint(
       '[Realism:OOC] Time-skip → $displayClock $displayShortDate (Day $dayCount)',
     );
+    await _ifDayChanged(dayBefore);
   }
 
   // ── Per-turn time advance (delegated from the physical / one-shot evals) ──
 
   /// Apply one turn's elapsed time. [minutes] null means the eval failed —
   /// deterministic drift applies. Returns whether the clock moved.
-  bool _applyElapsed({required int? minutes, required bool newDay}) {
+  Future<bool> _applyElapsed({
+    required int? minutes,
+    required bool newDay,
+  }) async {
     final dayBefore = dayCount;
     var moved = false;
     final m = (minutes ?? StoryClock.failureDriftMinutes).clamp(
@@ -668,7 +675,7 @@ class TimeService {
       moved = true;
       debugPrint('[Realism:Time] Stall backstop — snapped to $timeOfDay');
     }
-    _ifDayChanged(dayBefore);
+    await _ifDayChanged(dayBefore);
     return moved;
   }
 
@@ -793,6 +800,7 @@ class TimeService {
     bool timeOnly = false,
     bool postureOnly = false,
     bool skipClockAdvance = false,
+    bool skipTodayEval = false,
   }) async {
     // Realism context, and therefore skipped entirely in timeOnly mode.
     final emotionCtx = !timeOnly && getCharacterEmotion().isNotEmpty
@@ -869,16 +877,16 @@ class TimeService {
           '[Realism:Time] OOC skip owns this turn — one-shot clock '
           'movement suppressed',
         );
-        await _maybeApplyTodayEval(text);
+        if (!skipTodayEval) await _maybeApplyTodayEval(text);
         return;
       }
       final saidNewDay = extractJsonBool(text, 'new_day') ?? false;
       if (saidNewDay && !newDayCorroborated) logSuppressedNewDay();
-      _applyElapsed(
+      await _applyElapsed(
         minutes: _extractMinutes(text),
         newDay: saidNewDay && newDayCorroborated,
       );
-      await _maybeApplyTodayEval(text);
+      if (!skipTodayEval) await _maybeApplyTodayEval(text);
       debugPrint(
         '[Realism:Time] One-shot elapsed applied → $displayClock (Day $dayCount)',
       );
@@ -937,20 +945,20 @@ class TimeService {
         } else {
           final saidNewDay = extractJsonBool(text, 'new_day') ?? false;
           if (saidNewDay && !newDayCorroborated) logSuppressedNewDay();
-          _applyElapsed(
+          await _applyElapsed(
             minutes: _extractMinutes(text),
             newDay: saidNewDay && newDayCorroborated,
           );
         }
-        await _maybeApplyTodayEval(text);
+        if (!skipTodayEval) await _maybeApplyTodayEval(text);
       } else if (!skipOwnsClock) {
-        _applyElapsed(minutes: null, newDay: false);
+        await _applyElapsed(minutes: null, newDay: false);
       }
     } catch (e) {
       // Eval failed — deterministic drift so time never freezes (unless the
       // OOC skip already moved this turn's clock).
       if (!skipOwnsClock) {
-        _applyElapsed(minutes: null, newDay: false);
+        await _applyElapsed(minutes: null, newDay: false);
       }
       debugPrint('[Realism:Time] Eval error, drifted to $displayClock: $e');
     }

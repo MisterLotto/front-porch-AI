@@ -38,6 +38,12 @@ export interface RealismValues {
   currentTask: string;
   /** Long-term goals, one per chip (approved sketch §4). */
   ambitions: string[];
+  /** Short plan-line sentences. Identity like ambitions. */
+  planLines: string[];
+  /** What they do. Blank is omitted from the card, same as desktop. */
+  occupation: string;
+  /** Clock range the pickers write ("9am–5pm"). Not "mornings". */
+  hours: string;
   // Likes & Dislikes, and the 18+ pair. Flat over this bridge (the Dart side's
   // frontPorchFromFields expects camelCase keys); the CARD nests the intimate
   // pair under intimate_preferences, which is the Dart model's business.
@@ -97,6 +103,9 @@ export const REALISM_DEFAULTS: RealismValues = {
   chaosModeEnabled: false,
   currentTask: '',
   ambitions: [],
+  planLines: [],
+  occupation: '',
+  hours: '',
   likes: [],
   dislikes: [],
   intimateInto: [],

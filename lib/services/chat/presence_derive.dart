@@ -4,8 +4,9 @@
 // At work is occupation + hours + the clock. Fail closed on hours.
 // With you / Away is last. Never a yes/no switch.
 
-import 'package:front_porch_ai/services/chat/story_clock.dart';
 import 'package:front_porch_ai/ui/chat_components/sidebar/character_state/presence_word.dart';
+export 'package:front_porch_ai/ui/chat_components/sidebar/character_state/presence_word.dart'
+    show PresenceWhere;
 
 /// Group copies often drop occupation/hours (fromJson only reads
 /// realism_engine.*). Blank copy fields fall back to the origin library card.
@@ -25,18 +26,18 @@ import 'package:front_porch_ai/ui/chat_components/sidebar/character_state/presen
 
 /// Derive the glance word.
 ///
-/// Order: at work (occupation + hours match the period) → Away (not
-/// in this scene) → With you. 1:1 may be Away or At work. Skip is
+/// Order: at work (occupation + hours contain the live clock) → Away
+/// (not in this scene) → With you. 1:1 may be Away or At work. Skip is
 /// group-only. [inScene] fails toward true.
 PresenceWhere derivePresence({
   required String occupation,
   required String hours,
-  required String timeOfDay,
+  required int clockMinutes,
   required bool inScene,
 }) {
   if (occupation.trim().isNotEmpty &&
       hours.trim().isNotEmpty &&
-      hoursMatch(hours, timeOfDay)) {
+      hoursMatch(hours, clockMinutes)) {
     return PresenceWhere.atWork;
   }
   if (!inScene) return PresenceWhere.away;
@@ -47,6 +48,12 @@ PresenceWhere derivePresence({
 /// 1:1 never uses this — they stay in the turn.
 bool groupTurnSkips(PresenceWhere where) =>
     where == PresenceWhere.away || where == PresenceWhere.atWork;
+
+String presenceGlanceLabel(PresenceWhere where) => switch (where) {
+  PresenceWhere.withYou => 'With you',
+  PresenceWhere.away => 'Away',
+  PresenceWhere.atWork => 'At work',
+};
 
 /// Empty stance fails toward in-scene. Away-words mean they left.
 bool stanceSaysAway(String spatialStance) {
@@ -70,30 +77,13 @@ bool stanceSaysAway(String spatialStance) {
   return marks.any(s.contains);
 }
 
-/// Fail-closed: period words, or a parseable h-h / hh:mm–hh:mm range
-/// that contains the period's default hour. Unparseable → false.
-bool hoursMatch(String hours, String timeOfDay) {
-  final h = hours.toLowerCase().trim();
-  if (h.isEmpty) return false;
-  if (_periodWordMatch(h, timeOfDay)) return true;
-  final range = _parseHoursRange(h);
+/// Fail-closed: a parseable clock range that contains [clockMinutes]
+/// (minutes from midnight on the live story clock). Period words
+/// ("mornings") and other free text are not hours — they return false.
+bool hoursMatch(String hours, int clockMinutes) {
+  final range = parseWorkHoursRange(hours);
   if (range == null) return false;
-  final hour = StoryClock.representativeTime(
-    DateTime.utc(2000, 1, 1),
-    timeOfDay,
-  ).hour;
-  return _hourInRange(hour, range.$1, range.$2);
-}
-
-bool _periodWordMatch(String hours, String timeOfDay) {
-  final period = timeOfDay.toLowerCase().trim();
-  // late_morning counts as morning for word matching.
-  final key = period == 'late_morning' ? 'morning' : period;
-  const words = ['dawn', 'morning', 'afternoon', 'evening', 'night'];
-  for (final w in words) {
-    if (hours.contains(w) && w == key) return true;
-  }
-  return false;
+  return _minutesInRange(clockMinutes, range.$1, range.$2);
 }
 
 final _rangeRe = RegExp(
@@ -102,35 +92,80 @@ final _rangeRe = RegExp(
   r'(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?',
 );
 
-(int, int)? _parseHoursRange(String hours) {
-  final m = _rangeRe.firstMatch(hours);
+/// Start/end as minutes from midnight. Null for empty, period words
+/// ("mornings"), or anything else that is not a clock range.
+(int, int)? parseWorkHoursRange(String hours) {
+  final h = hours.toLowerCase().trim();
+  if (h.isEmpty) return null;
+  final m = _rangeRe.firstMatch(h);
   if (m == null) return null;
-  final start = _toHour(int.tryParse(m.group(1) ?? ''), m.group(3));
-  final end = _toHour(int.tryParse(m.group(4) ?? ''), m.group(6));
+  final start = _toMinutes(
+    int.tryParse(m.group(1) ?? ''),
+    m.group(2),
+    m.group(3),
+  );
+  final end = _toMinutes(
+    int.tryParse(m.group(4) ?? ''),
+    m.group(5),
+    m.group(6),
+  );
   if (start == null || end == null) return null;
   var s = start;
   var e = end;
-  final startAmPm = m.group(3);
-  final endAmPm = m.group(6);
-  // 9-5 → 9-17. Overnight 22-6 stays a wrap.
-  if (startAmPm == null && endAmPm == null && e <= s && e <= 12 && s <= 12) {
-    e += 12;
+  // 9-5 → 9:00–17:00. Overnight 22-6 stays a wrap.
+  if (m.group(3) == null &&
+      m.group(6) == null &&
+      e <= s &&
+      (e ~/ 60) <= 12 &&
+      (s ~/ 60) <= 12) {
+    e += 12 * 60;
   }
   return (s, e);
 }
 
-int? _toHour(int? h, String? ampm) {
+/// Card `hours` from two minute-of-day values: "9am–5pm" / "9:30am–5:15pm".
+/// The pickers write this; [parseWorkHoursRange] reads it back.
+String formatWorkHoursRange(int startMin, int endMin) =>
+    '${_fmtMin(startMin)}–${_fmtMin(endMin)}';
+
+int? _toMinutes(int? h, String? minuteStr, String? ampm) {
   if (h == null || h < 0 || h > 24) return null;
-  if (h == 24) return 0;
-  if (ampm == null) return h > 23 ? null : h;
-  final pm = ampm.startsWith('p');
-  if (h == 12) return pm ? 12 : 0;
-  if (h > 12) return null;
-  return pm ? h + 12 : h;
+  if (h == 24) {
+    if (minuteStr != null && minuteStr != '00') return null;
+    return 0;
+  }
+  final minute = minuteStr == null || minuteStr.isEmpty
+      ? 0
+      : int.tryParse(minuteStr);
+  if (minute == null || minute < 0 || minute > 59) return null;
+  var hour = h;
+  if (ampm != null) {
+    final pm = ampm.startsWith('p');
+    if (h == 12) {
+      hour = pm ? 12 : 0;
+    } else if (h > 12) {
+      return null;
+    } else {
+      hour = pm ? h + 12 : h;
+    }
+  } else if (h > 23) {
+    return null;
+  }
+  return hour * 60 + minute;
 }
 
-bool _hourInRange(int hour, int start, int end) {
-  if (start == end) return hour == start;
-  if (start < end) return hour >= start && hour < end;
-  return hour >= start || hour < end;
+String _fmtMin(int minutes) {
+  final clamped = ((minutes % 1440) + 1440) % 1440;
+  final h = clamped ~/ 60;
+  final m = clamped % 60;
+  final h12 = h % 12 == 0 ? 12 : h % 12;
+  final suffix = h < 12 ? 'am' : 'pm';
+  if (m == 0) return '$h12$suffix';
+  return '$h12:${m.toString().padLeft(2, '0')}$suffix';
+}
+
+bool _minutesInRange(int minutes, int start, int end) {
+  if (start == end) return minutes == start;
+  if (start < end) return minutes >= start && minutes < end;
+  return minutes >= start || minutes < end;
 }

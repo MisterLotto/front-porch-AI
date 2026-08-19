@@ -80,14 +80,14 @@ void main() {
         width: 300,
         child: WorkRow(
           occupation: 'lighthouse keeper',
-          hours: 'dawn–dusk',
+          hours: '9am–5pm',
           onOccupationChanged: (_) {},
           onHoursChanged: (_) {},
         ),
       ),
       group: 'v2',
       name: 'work_row',
-      surface: const Size(340, 180),
+      surface: const Size(340, 260),
     );
   });
 

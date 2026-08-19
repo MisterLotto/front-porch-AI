@@ -179,7 +179,7 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
       where: derivePresence(
         occupation: work.occupation,
         hours: work.hours,
-        timeOfDay: chat.timeService.timeOfDay,
+        clockMinutes: chat.timeService.clockMinutes,
         inScene: !stanceSaysAway(
           chat.spatialStanceForGroupCharacter(widget.character),
         ),
@@ -560,7 +560,11 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        const Icon(Icons.flag, size: 13, color: AppColors.taskAccent),
+                        const Icon(
+                          Icons.flag,
+                          size: 13,
+                          color: AppColors.taskAccent,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           '${memberObjectives.where((o) => o.active).length} active objectives',
@@ -622,11 +626,26 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                       spacing: 8,
                       runSpacing: 2,
                       children: [
-                        MiniTierChip(label: 'B', value: affection, color: bondColor),
-                        MiniTierChip(label: 'T', value: trust, color: trustColor),
-                        if (lustOn) MiniTierChip(label: 'L', value: arousal, color: arousalColor),
+                        MiniTierChip(
+                          label: 'B',
+                          value: affection,
+                          color: bondColor,
+                        ),
+                        MiniTierChip(
+                          label: 'T',
+                          value: trust,
+                          color: trustColor,
+                        ),
+                        if (lustOn)
+                          MiniTierChip(
+                            label: 'L',
+                            value: arousal,
+                            color: arousalColor,
+                          ),
                         if (topNeeds.isNotEmpty)
-                          ...topNeeds.map((n) => MiniNeedChip(name: n.$1, value: n.$2)),
+                          ...topNeeds.map(
+                            (n) => MiniNeedChip(name: n.$1, value: n.$2),
+                          ),
                       ],
                     ),
                   ],

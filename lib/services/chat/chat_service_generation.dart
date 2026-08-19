@@ -41,7 +41,11 @@ const _kBackendDownNotice =
 /// `LateInitializationError` — deliberate, not silent corruption, because the
 /// skeleton's phase-call order is fixed.
 class _GenTurn {
-  _GenTurn({required this.mode, required this.guestSpeaker, required this.epoch});
+  _GenTurn({
+    required this.mode,
+    required this.guestSpeaker,
+    required this.epoch,
+  });
 
   final GenerationMode mode;
   final CharacterCard? guestSpeaker;
@@ -158,6 +162,7 @@ extension ChatServiceGeneration on ChatService {
     GenerationMode mode, {
     CharacterCard? guestSpeaker,
     bool skipClockAdvance = false,
+    CharacterCard? forceSpeaker,
   }) async {
     if (await _abortIfBackendDown()) {
       // No turn will run — terminate BOTH live streams. The sentence stream
@@ -203,9 +208,9 @@ extension ChatServiceGeneration on ChatService {
                 !_messages.last.isUser)
             ? _groupCharacters.firstWhere(
                 (c) => c.name == _messages.last.sender,
-                orElse: () => _pickNextGroupCharacter(),
+                orElse: () => _pickPresentGroupSpeaker(),
               )
-            : _pickNextGroupCharacter();
+            : (forceSpeaker ?? _pickPresentGroupSpeaker());
       } else {
         speakingCharacter = _activeCharacter!;
       }
@@ -214,17 +219,30 @@ extension ChatServiceGeneration on ChatService {
       if (guestSpeaker == null &&
           _activeGroup != null &&
           mode != GenerationMode.continue_ &&
+          forceSpeaker == null &&
           _groupSpeakerSkips(speakingCharacter)) {
-        // Time-only: chat-scoped clock still ticks. No realism/needs dance
-        // for a speaker who is not taking the turn. 1:1 never reaches here.
+        // Whole roster (or a forced @name) is Away / At work. Do not eat
+        // the send: write a glance line. Clock ticks once unless send
+        // already advanced it. Skipped speakers do not write Today.
         if (!skipClockAdvance && _clockRunning) {
-          await _realismEvals.evaluatePhysicalStateCall(timeOnly: true);
+          await _realismEvals.evaluatePhysicalStateCall(
+            timeOnly: true,
+            skipTodayEval: true,
+          );
         }
+        _messages.add(
+          ChatMessage(
+            text: _presenceSkipBanner(speakingCharacter),
+            sender: 'System',
+            isUser: false,
+          ),
+        );
         debugPrint(
-          '[Presence] skip-turn ${speakingCharacter.name} — clock still runs',
+          '[Presence] skip-turn ${speakingCharacter.name} — banner, no reply',
         );
         _isGenerating = false;
         _generationPhase = GenerationPhase.idle;
+        await _saveChat();
         notifyListeners();
         return;
       }
@@ -294,7 +312,8 @@ extension ChatServiceGeneration on ChatService {
       await _buildGenerationPlan(t);
       await _retrieveGenerationMemories(t);
       await _dispatchGeneration(t);
-      if (await _consumeGenerationStream(t)) return; // user cancel: turn halted (H2)
+      if (await _consumeGenerationStream(t))
+        return; // user cancel: turn halted (H2)
       await _finalizeGenerationTurn(t);
     } catch (e) {
       final wasCancelled = _cancelRequested;

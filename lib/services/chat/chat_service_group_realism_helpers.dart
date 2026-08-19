@@ -214,7 +214,7 @@ extension ChatServiceGroupRealismHelpers on ChatService {
   /// update sticks through the regen swipe merge and persists. 1:1 and group
   /// alike: the speaker's scalars are loaded when this runs. Guests carry no
   /// realism_state, so this no-ops for them.
-  void _restampRealismSnapshotPostGen(ChatMessage msg) {
+  Future<void> _restampRealismSnapshotPostGen(ChatMessage msg) async {
     if (msg.isUser) return;
     // She named a time ("six in the morning") that disagrees with the
     // pre-gen snap (new_day → 08:00). Fiction wins so the sidebar matches
@@ -222,7 +222,7 @@ extension ChatServiceGroupRealismHelpers on ChatService {
     // must not start chasing dialogue.
     if (_clockRunning) {
       final named = clockNamedInReply(msg.text, _timeService.clock);
-      if (named != null) _timeService.applyReconciledClock(named);
+      if (named != null) await _timeService.applyReconciledClock(named);
     }
     final meta = msg.activeMetadata;
     final rs = meta?['realism_state'];

@@ -138,6 +138,8 @@ interface ToolsState {
     dateLong?: string;
     storyClock?: string;
     storyStartDate?: string;
+    presence?: string | null;
+    todaySentence?: string | null;
   };
   objectives: {
     primary: ObjectiveView | null;
@@ -858,6 +860,22 @@ export function ChatTools({
               {t.time.clock ? ` · ${t.time.clock}` : ''}
             </span>
           </div>
+          {t.time.presence && (
+            <div className="stat-line">
+              <span>{t.time.presence}</span>
+            </div>
+          )}
+          {t.time.todaySentence && (
+            <div className="stat-line">
+              <span className="muted" style={{ fontStyle: 'italic' }}>{t.time.todaySentence}</span>
+              <button
+                className="link-btn"
+                onClick={() => apply(api.post<ToolsState>(`/api/chat/tools/time${q}`, { abandonToday: true }))}
+              >
+                Clear today
+              </button>
+            </div>
+          )}
           {t.time.weather && (
             <div className="stat-line">
               <span

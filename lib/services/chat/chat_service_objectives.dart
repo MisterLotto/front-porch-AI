@@ -16,7 +16,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-
 part of '../chat_service.dart';
 
 /// Objective System — load/inject/set/clear objectives, task management
@@ -103,6 +102,7 @@ extension ChatServiceObjectives on ChatService {
     CharacterCard? targetCharacter,
     bool autoGenerateTasks = false,
     bool recordTurnOps = false,
+
     /// v46 — the ambition this quest is a step toward, or null for one that
     /// serves none. Only the autonomous proposal paths pass it; a quest the
     /// user typed has no eval behind it to say which mountain it climbs.
@@ -284,6 +284,12 @@ extension ChatServiceObjectives on ChatService {
         isPrimary: const drift.Value(true),
       ),
     );
+    if (_todayObjectiveId == obj.id) {
+      _todayObjectiveId = null;
+      _todayObjectiveText = null;
+      setTodaySentence(null);
+      await _persistTodayObjectiveId(null);
+    }
     await _loadActiveObjectives();
   }
 
@@ -640,9 +646,7 @@ extension ChatServiceObjectives on ChatService {
     // dance the post-gen checks use, scoped to that member.
     final isGroupMember =
         _activeGroup != null &&
-        _groupCharacters.any(
-          (c) => _getCharacterIdFromCard(c) == characterId,
-        );
+        _groupCharacters.any((c) => _getCharacterIdFromCard(c) == characterId);
     if (isGroupMember) _loadGroupRealismIntoScalars(characterId);
     final ok = await _promiseDebtService.resolveManually(
       sessionId: sessionId,
@@ -716,9 +720,7 @@ extension ChatServiceObjectives on ChatService {
 
   /// Returns the personal objectives for a specific character when in group mode.
   /// Falls back to the global list for 1:1 or when no per-char data exists yet.
-  List<Objective> _getObjectivesForGroupCharacterImpl(
-    CharacterCard character,
-  ) {
+  List<Objective> _getObjectivesForGroupCharacterImpl(CharacterCard character) {
     if (_activeGroup == null) return _activeObjectives;
     final id = _getCharacterIdFromCard(character);
     return _groupObjectives[id] ?? const <Objective>[];

@@ -74,9 +74,7 @@ extension ChatServiceWiringInjection on ChatService {
           for (final m in _messages.sublist(start))
             m.characterId == '__director__'
                 ? '[Director: ${m.text}]'
-                : (includeNames
-                      ? m.toPromptHistoryLine()
-                      : m.promptText),
+                : (includeNames ? m.toPromptHistoryLine() : m.promptText),
         ];
       },
       getGlobalScanDepth: () => _storageService.lorebookSettings.scanDepth,
@@ -271,7 +269,8 @@ extension ChatServiceWiringInjection on ChatService {
       // Objectives off ⇒ nothing about quests reaches the model. Reading the
       // gate here rather than clearing _activeObjectives keeps the rows intact
       // for when the switch comes back on.
-      getActiveObjectives: () => objectivesActive ? _activeObjectives : const [],
+      getActiveObjectives: () =>
+          objectivesActive ? _activeObjectives : const [],
       getPrimaryObjective: () => primaryObjective,
       tasksForObjective: (o) => tasksForObjective(o),
       getSecondaryObjectives: () => secondaryObjectives,
@@ -311,7 +310,7 @@ extension ChatServiceWiringInjection on ChatService {
       getOccupation: () =>
           _activeCharacter?.frontPorchExtensions?.occupation ?? '',
       getHours: () => _activeCharacter?.frontPorchExtensions?.hours ?? '',
-      getTimeOfDay: () => _timeService.timeOfDay,
+      getClockMinutes: () => _timeService.clockMinutes,
       getIsGroup: () => _activeGroup != null,
     );
   }
@@ -402,8 +401,8 @@ extension ChatServiceWiringInjection on ChatService {
   PlanInjection _buildPlanInjection() {
     return PlanInjection(
       getTodayLine: () => todaySentence,
-      getPlannerEnabled: () =>
-          _storageService.realismSettings.plannerEnabled,
+      getPlannerEnabled: () => _storageService.realismSettings.plannerEnabled,
+      getClockMinutes: () => _timeService.clockMinutes,
       getActiveCharacter: () => _activeCharacter,
       getIsGroupNonObserverMode: () => (_activeGroup != null && !_observerMode),
       getCurrentSpeakerIdForRealism: _getCurrentSpeakerIdForRealism,
@@ -435,8 +434,7 @@ extension ChatServiceWiringInjection on ChatService {
       // the After Dark group in Settings. A card may carry intimate
       // preferences; with 18+ off they stay out of the prompt entirely rather
       // than relying on the model's discretion.
-      getNsfwEnabled: () =>
-          _storageService.realismSettings.adultThemesEnabled,
+      getNsfwEnabled: () => _storageService.realismSettings.adultThemesEnabled,
       // BOTH halves resolved here, so there is exactly one place the decision
       // is made. The engine half is a HARD dependency and not the usual
       // inherited gate: the feature is a loop — she asks, the user answers,

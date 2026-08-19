@@ -50,6 +50,7 @@ interface PorchLifeState {
   dreamsEnabled: boolean;
   promiseLedgerEnabled: boolean;
   ambitionsEnabled: boolean;
+  plannerEnabled: boolean;
   absenceBannerEnabled: boolean;
   absenceAckEnabled: boolean;
   absenceThresholdHours: number;
@@ -79,6 +80,7 @@ const DEFAULTS: PorchLifeState = {
   dreamsEnabled: true,
   promiseLedgerEnabled: true,
   ambitionsEnabled: true,
+  plannerEnabled: false,
   absenceBannerEnabled: true,
   absenceAckEnabled: false,
   absenceThresholdHours: 24,
@@ -400,6 +402,16 @@ export function PorchLifeSettings() {
           blurb={"Long-term goals written on the character's card colour how they steer a scene, and finishing an objective moves them a little closer. Costs nothing extra — the goals are already on the card — but finishing a quest is the only thing that moves them, so they need Objectives running."}
           value={st.ambitionsEnabled}
           onChange={(v) => set('ambitionsEnabled', v)}
+        />
+        <FeatureRow
+          icon="📝"
+          label="Planner"
+          need="needs"
+          dependsOn="Passage of Time, Objectives, and the Journal"
+          satisfied={timeOn && objectivesOn && journalOn}
+          blurb="They plan from personality; you only add or delete the line. The character will later remember if it got done (needs time, objectives, journal)."
+          value={st.plannerEnabled}
+          onChange={(v) => set('plannerEnabled', v)}
         />
       </FeatureGroup>
 

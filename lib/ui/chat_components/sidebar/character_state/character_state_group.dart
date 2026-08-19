@@ -302,8 +302,8 @@ class _CharacterStateGroupState extends State<CharacterStateGroup> {
                   child: PocketsRow(
                     pockets: p,
                     day: chat.storyDayCount,
-                    onRemove: ({required section, required index}) =>
-                        chat.removePocketItem(id, section: section, index: index),
+                    onRemove: ({required section, required index}) => chat
+                        .removePocketItem(id, section: section, index: index),
                     onAdd: () async {
                       final add = await showPocketItemDialog(
                         context,
@@ -337,7 +337,7 @@ class _CharacterStateGroupState extends State<CharacterStateGroup> {
                         where: derivePresence(
                           occupation: ext?.occupation ?? '',
                           hours: ext?.hours ?? '',
-                          timeOfDay: chat.timeService.timeOfDay,
+                          clockMinutes: chat.timeService.clockMinutes,
                           inScene: !stanceSaysAway(
                             chat.relationshipService.spatialStance,
                           ),

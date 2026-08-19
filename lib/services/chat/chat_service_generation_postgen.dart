@@ -329,7 +329,7 @@ extension ChatServiceGenerationPostGen on ChatService {
           // post-gen checks have run — needs vector AND the NSFW scalars a
           // climax just changed. See the helper for the two bugs this
           // prevents (hygiene snap-back; climax erased by the regen merge).
-          _restampRealismSnapshotPostGen(t.streamTarget);
+          await _restampRealismSnapshotPostGen(t.streamTarget);
 
           if (prePostActiveChar != null) {
             _activeCharacter = prePostActiveChar;

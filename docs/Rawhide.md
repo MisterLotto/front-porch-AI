@@ -5,6 +5,12 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🕘 **At work follows the clock on the strip** — 8:00 is not a 9–5, 10:30 is. If a whole group is on shift, you get a line saying so instead of a silent send.
+
+- 📝 **Planner, plan lines, and today's sentence are on the phone too** — same Porch Life switch, same chips on the character, Today on the calendar with a Clear.
+
+- 🕘 **Work hours are a clock now** — Start and End open the same time dial as "the story opens at". Type-in words like "mornings" no longer count as being at work.
+
 - 🛡️ **Opening a saved chat no longer accepts a send into the last one** — the loading cover stays up until that chat is actually ready, so a fast Enter cannot write into the wrong conversation.
 
 - ✨ **Enhance Review leaves empty rewrites unticked** — if the model returned a blank description or greeting, Use this starts off so Save cannot wipe what you already wrote.

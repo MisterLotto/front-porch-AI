@@ -282,7 +282,8 @@ extension ChatServiceAccessors on ChatService {
     // self-guards on the token, so a stale resolve can't write the wrong chat.
     final token = _currentSessionId;
     scheduleMicrotask(() {
-      if (_sceneChanged(token) || _sceneGuest.busy || _sceneGuest.ids.isEmpty) return;
+      if (_sceneChanged(token) || _sceneGuest.busy || _sceneGuest.ids.isEmpty)
+        return;
       _resolveSceneGuestCards();
     });
   }
@@ -526,7 +527,8 @@ extension ChatServiceAccessors on ChatService {
     final host = _activeCharacter;
     return [
       if (host != null) ChatParticipant(card: host, isHost: true),
-      for (final g in _sceneGuest.cards) ChatParticipant(card: g, isHost: false),
+      for (final g in _sceneGuest.cards)
+        ChatParticipant(card: g, isHost: false),
     ];
   }
 
@@ -663,7 +665,6 @@ mixin ChatServiceTodaySentence on ChangeNotifier {
     _todayObjectiveText = null;
     notifyListeners();
   }
-
 }
 
 enum PlannerTodayFate { done, abandoned, dayAte }
@@ -691,11 +692,10 @@ extension ChatServicePlannerResolve on ChatService {
   void _rebindTodayObjectiveFromDb() {
     final id = _todayObjectiveId;
     if (id == null) return;
-    final live =
-        _activeObjectives.where((o) => o.id == id).firstOrNull;
+    final live = _activeObjectives.where((o) => o.id == id).firstOrNull;
     if (live == null) {
-      _todayObjectiveId = null;
-      _todayObjectiveText = null;
+      // Chat-scoped hold lives on another member's list. Keep the
+      // pointer so the next upsert/day-ate still finds the row.
       return;
     }
     _todayObjectiveText = live.objective;
@@ -709,11 +709,11 @@ extension ChatServicePlannerResolve on ChatService {
   Future<void> _deactivateTodayObjective() async {
     final id = _todayObjectiveId;
     if (id == null) return;
-    final live = _activeObjectives.where((o) => o.id == id).firstOrNull;
     _todayObjectiveId = null;
     _todayObjectiveText = null;
     await _persistTodayObjectiveId(null);
-    if (live == null) return;
+    // Update by id even when the row is on another member's list —
+    // day-ate after a speaker switch must still retire Ada's row.
     await _db.updateObjective(
       ObjectivesCompanion(
         id: drift.Value(id),
@@ -730,8 +730,7 @@ extension ChatServicePlannerResolve on ChatService {
     if (trimmed.isEmpty || _currentSessionId == null) return;
     final heldId = _todayObjectiveId;
     if (heldId != null) {
-      final held =
-          _activeObjectives.where((o) => o.id == heldId).firstOrNull;
+      final held = _activeObjectives.where((o) => o.id == heldId).firstOrNull;
       if (held != null && held.objective == trimmed) {
         _todayObjectiveText = trimmed;
         await _persistTodayObjectiveId(heldId);

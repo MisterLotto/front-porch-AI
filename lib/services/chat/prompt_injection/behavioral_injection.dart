@@ -18,7 +18,6 @@
 
 import 'package:front_porch_ai/services/chat/presence_derive.dart';
 import 'package:front_porch_ai/services/chat/relationship_service.dart';
-import 'package:front_porch_ai/ui/chat_components/sidebar/character_state/presence_word.dart';
 
 /// Fixation + spatial-stance fragments for the words-only state block
 /// (docs/design/prompt-state-injection.md §3). Both are free-text fields (may
@@ -44,7 +43,7 @@ class BehavioralInjection {
   final bool Function() getRealismEnabled;
   final String Function()? getOccupation;
   final String Function()? getHours;
-  final String Function()? getTimeOfDay;
+  final int Function()? getClockMinutes;
   final bool Function()? getIsGroup;
 
   BehavioralInjection({
@@ -52,7 +51,7 @@ class BehavioralInjection {
     required this.getRealismEnabled,
     this.getOccupation,
     this.getHours,
-    this.getTimeOfDay,
+    this.getClockMinutes,
     this.getIsGroup,
   });
 
@@ -82,24 +81,22 @@ class BehavioralInjection {
     if (!group) {
       final occ = getOccupation?.call() ?? '';
       final hours = getHours?.call() ?? '';
-      final tod = getTimeOfDay?.call() ?? '';
       final where = derivePresence(
         occupation: occ,
         hours: hours,
-        timeOfDay: tod,
+        clockMinutes: getClockMinutes?.call() ?? 0,
         inScene: !stanceSaysAway(stance),
       );
       if (where == PresenceWhere.atWork) {
         final job = occ.trim();
-        final here = stance.isEmpty ? '' : ' ($stance)';
-        return 'At work${job.isEmpty ? '' : ' as a $job'}$here. '
-            'Reply from what you are doing there — not from the porch '
-            'with {{user}}.';
+        // Do not append the last stance — it is often the porch from
+        // before the clock jumped into the shift.
+        return 'At work${job.isEmpty ? '' : ' as a $job'}. '
+            'Write from there.';
       }
       if (where == PresenceWhere.away) {
         final here = stance.isEmpty ? '' : ' ($stance)';
-        return 'Away from {{user}}$here. Reply from there — not from '
-            'the porch.';
+        return 'Away from {{user}}$here. Write from there.';
       }
     }
     if (stance.isEmpty) return '';

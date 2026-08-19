@@ -112,10 +112,55 @@ extension ChatServiceTurnFlow on ChatService {
     final where = derivePresence(
       occupation: work.occupation,
       hours: work.hours,
-      timeOfDay: _timeService.timeOfDay,
+      clockMinutes: _timeService.clockMinutes,
       inScene: _memberInScene(card),
     );
     return groupTurnSkips(where);
+  }
+
+  /// Next member who is With you. A forced @name is not swapped. Random
+  /// turn order must not re-roll the same At-work member and miss the
+  /// only free one — walk the roster once.
+  CharacterCard _pickPresentGroupSpeaker() {
+    final forced = _groupManager?.hasForcedSpeaker ?? false;
+    final first = _pickNextGroupCharacter();
+    if (!_groupSpeakerSkips(first) || forced) return first;
+    for (final card in _groupCharacters) {
+      if (_getCharacterIdFromCard(card) == _getCharacterIdFromCard(first)) {
+        continue;
+      }
+      if (!_groupSpeakerSkips(card)) {
+        _groupManager?.advanceAfterRegeneration(card);
+        return card;
+      }
+    }
+    return first;
+  }
+
+  String _presenceSkipBanner(CharacterCard card) {
+    final ext = card.frontPorchExtensions;
+    final library = originLibraryCardFor(card);
+    final work = workFieldsForGroupMember(
+      copyOccupation: ext?.occupation ?? '',
+      copyHours: ext?.hours ?? '',
+      libraryOccupation: library?.frontPorchExtensions?.occupation,
+      libraryHours: library?.frontPorchExtensions?.hours,
+    );
+    final where = derivePresence(
+      occupation: work.occupation,
+      hours: work.hours,
+      clockMinutes: _timeService.clockMinutes,
+      inScene: _memberInScene(card),
+    );
+    if (where == PresenceWhere.atWork) {
+      final range = parseWorkHoursRange(work.hours);
+      final until = range == null
+          ? ''
+          : ' until ${StoryClock.formatClock(DateTime.utc(2000, 1, 1, range.$2 ~/ 60, range.$2 % 60))}';
+      final job = work.occupation.trim();
+      return '${card.name} is at work${job.isEmpty ? '' : ' as a $job'}$until.';
+    }
+    return '${card.name} is away.';
   }
 
   /// Skip path only. 1:1 never skips (caller returns false first).
@@ -132,7 +177,6 @@ extension ChatServiceTurnFlow on ChatService {
     final stance = _groupRealism[id]?.spatialStance ?? '';
     return !stanceSaysAway(stance);
   }
-
 
   /// Wait for TTS to finish speaking, then apply the configured delay before auto-play.
   void _waitForTtsThenContinue() {
@@ -261,9 +305,11 @@ extension ChatServiceTurnFlow on ChatService {
         if (_messages[i].isUser) userMessagesSincePass++;
       }
       if (userMessagesSincePass == 0) return;
-      final due = userMessagesSincePass >=
+      final due =
+          userMessagesSincePass >=
           _storageService.memorySettings.journalInterval;
-      final eventKick = _journalMaintenance.eventKickPending ||
+      final eventKick =
+          _journalMaintenance.eventKickPending ||
           JournalPhysics.hasSalientEvent(_messages.sublist(windowStart));
       if (due || eventKick) {
         _journalMaintenance.runMaintenancePass();

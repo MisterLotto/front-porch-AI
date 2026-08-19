@@ -5,12 +5,14 @@
 // Live hold is on when the planner flag is on. No habit gate.
 
 import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/services/chat/presence_derive.dart';
 import 'speaker_resolution.dart';
 
 /// Scene-plan fragment. '' when the planner flag is off or there is no card.
 class PlanInjection with SpeakerCardResolver {
   final String? Function() getTodayLine;
   final bool Function() getPlannerEnabled;
+  final int Function()? getClockMinutes;
   @override
   final CharacterCard? Function() getActiveCharacter;
   @override
@@ -25,6 +27,7 @@ class PlanInjection with SpeakerCardResolver {
   PlanInjection({
     required this.getTodayLine,
     required this.getPlannerEnabled,
+    this.getClockMinutes,
     required this.getActiveCharacter,
     required this.getIsGroupNonObserverMode,
     required this.getCurrentSpeakerIdForRealism,
@@ -34,7 +37,20 @@ class PlanInjection with SpeakerCardResolver {
 
   String buildPlanInjection() {
     if (!getPlannerEnabled()) return '';
-    if (speakerCard() == null) return '';
+    final card = speakerCard();
+    if (card == null) return '';
+    if (getClockMinutes != null) {
+      final ext = card.frontPorchExtensions;
+      final atWork =
+          derivePresence(
+            occupation: ext?.occupation ?? '',
+            hours: ext?.hours ?? '',
+            clockMinutes: getClockMinutes!(),
+            inScene: true,
+          ) ==
+          PresenceWhere.atWork;
+      if (atWork) return '';
+    }
     final held = getTodayLine()?.trim();
     if (held == null || held.isEmpty) return '';
     return 'Today\'s plan: "$held".';

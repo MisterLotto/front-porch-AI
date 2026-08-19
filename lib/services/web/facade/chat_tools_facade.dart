@@ -84,8 +84,7 @@ class ChatToolsFacade {
         // Embedding-engine status (desktop RagEngineCard parity). Model
         // download only runs on the host desktop; web surfaces progress
         // and tells the user to use desktop if setup is needed.
-        'embedding':
-            _chat.memoryService?.embeddingService.statusSnapshot,
+        'embedding': _chat.memoryService?.embeddingService.statusSnapshot,
         'journalEnabled': _storage.journalEnabled,
         'journalInterval': _storage.journalInterval,
         // Review-first (audit P2.12) — parks proposals until Apply/Discard.
@@ -209,10 +208,14 @@ class ChatToolsFacade {
                   null => WeatherEngine.label(weather),
                 },
                 'emoji': switch (_chat.currentSegmentWeather) {
-                  final seg? =>
-                    skinnedEmoji(_chat.activeChatBiome, seg.condition),
-                  null =>
-                    skinnedEmoji(_chat.activeChatBiome, weather.condition),
+                  final seg? => skinnedEmoji(
+                    _chat.activeChatBiome,
+                    seg.condition,
+                  ),
+                  null => skinnedEmoji(
+                    _chat.activeChatBiome,
+                    weather.condition,
+                  ),
                 },
                 // Intra-day fields (additive, v3) — day-part identity plus
                 // both units so richer web UIs can format freely.
@@ -246,6 +249,8 @@ class ChatToolsFacade {
         'dateLong': time.displayDate,
         'storyClock': time.storyClockIso,
         'storyStartDate': time.storyStartDateIso,
+        'presence': _presenceWord(),
+        'todaySentence': _chat.todaySentence,
       },
       // Objectives are per-character; scope to the focused participant (lite
       // guests have none). getObjectivesForGroupCharacter returns the global
@@ -450,7 +455,12 @@ class ChatToolsFacade {
   Map<String, dynamic> growth(String? participantId) {
     final owner = _growthOwner(participantId);
     if (owner == null) {
-      return {'name': '', 'ownerId': '', 'rings': const [], 'passRunning': false};
+      return {
+        'name': '',
+        'ownerId': '',
+        'rings': const [],
+        'passRunning': false,
+      };
     }
     final rings = _chat.growthRingsForOwner(owner.id);
     return {
@@ -592,7 +602,6 @@ class ChatToolsFacade {
     return _chat.cast.firstOrNull;
   }
 
-
   Future<void> setChaosEnabled(bool v) async {
     await _chat.setChaosModeEnabled(v);
     _notify();
@@ -638,8 +647,8 @@ class ChatToolsFacade {
     final sessionId = _chat.currentSessionId;
     final time = _chat.timeService;
     final owners = _chat.cast.where((p) => !p.isLite).toList();
-    final owner = owners.where((p) => p.id == ownerId).firstOrNull ??
-        owners.firstOrNull;
+    final owner =
+        owners.where((p) => p.id == ownerId).firstOrNull ?? owners.firstOrNull;
     final days = <Map<String, dynamic>>[];
     if (sessionId != null && owner != null) {
       final cards = await _chat.journalStore.cardsFor(sessionId, owner.id);
@@ -669,6 +678,7 @@ class ChatToolsFacade {
         for (final p in owners) {'id': p.id, 'name': p.name},
       ],
       'days': days,
+      'todaySentence': _chat.todaySentence,
     };
   }
 
@@ -697,11 +707,7 @@ class ChatToolsFacade {
         });
       }
     }
-    return {
-      'owner': owner?.id,
-      'ownerName': owner?.name,
-      'belongings': rows,
-    };
+    return {'owner': owner?.id, 'ownerName': owner?.name, 'belongings': rows};
   }
 
   /// Promise ledger read (web Promises panel — desktop Journal "Promises"
@@ -757,8 +763,8 @@ class ChatToolsFacade {
   Future<Map<String, dynamic>> timeline(String? ownerId) async {
     final sessionId = _chat.currentSessionId;
     final owners = _chat.cast.where((p) => !p.isLite).toList();
-    final owner = owners.where((p) => p.id == ownerId).firstOrNull ??
-        owners.firstOrNull;
+    final owner =
+        owners.where((p) => p.id == ownerId).firstOrNull ?? owners.firstOrNull;
     final entries = <Map<String, dynamic>>[];
     if (sessionId != null && owner != null) {
       for (final e in await _chat.milestoneFeed.entriesFor(
@@ -818,6 +824,25 @@ class ChatToolsFacade {
     _notify();
   }
 
+  void abandonToday() {
+    _chat.abandonToday();
+    _notify();
+  }
+
+  String? _presenceWord() {
+    final card = _chat.activeCharacter;
+    if (card == null || _chat.isGroupMode) return null;
+    final ext = card.frontPorchExtensions;
+    return presenceGlanceLabel(
+      derivePresence(
+        occupation: ext?.occupation ?? '',
+        hours: ext?.hours ?? '',
+        clockMinutes: _chat.timeService.clockMinutes,
+        inScene: !stanceSaysAway(_chat.relationshipService.spatialStance),
+      ),
+    );
+  }
+
   // ── Summary controls ─────────────────────────────────────────────────────
   Future<void> regenerateSummary() async {
     await _chat.forceSummaryUpdate();
@@ -865,11 +890,11 @@ class ChatToolsFacade {
 
   /// Web Journal diary (audit P2.12) — Growth twin for cards + review-first.
   JournalWebSurface get journalWeb => JournalWebSurface(
-        chat: _chat,
-        storage: _storage,
-        notify: _notify,
-        resolveOwner: _growthOwner,
-      );
+    chat: _chat,
+    storage: _storage,
+    notify: _notify,
+    resolveOwner: _growthOwner,
+  );
 
   // ── Objectives (per-character; scoped to the focused cast participant so a
   //    new goal attaches to whoever the sidebar is focused on) ───────────────

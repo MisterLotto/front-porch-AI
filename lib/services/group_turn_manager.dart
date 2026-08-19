@@ -37,6 +37,9 @@ class GroupTurnManager extends ChangeNotifier {
   bool get observerMode => _observerMode;
   bool get autoPlayActive => _autoPlayActive;
 
+  /// True while a user-named speaker is waiting to be consumed.
+  bool get hasForcedSpeaker => _forcedNextSpeakerId != null;
+
   /// The character that will speak on the next generation (respects forced override).
   CharacterCard? get nextSpeaker {
     if (!isActive || _characters.isEmpty) return null;

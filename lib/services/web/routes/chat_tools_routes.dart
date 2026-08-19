@@ -171,10 +171,14 @@ class WebChatToolsRoutes {
       );
       return JsonResponse.ok(_snapshot(request));
     }
+    if (body['abandonToday'] == true) {
+      _facade.abandonToday();
+      return JsonResponse.ok(_snapshot(request));
+    }
     final delta = body['delta'];
     if (delta is! int) {
       return JsonResponse.badRequest(
-        'delta (int), setClock, or setStartDate is required',
+        'delta (int), setClock, setStartDate, or abandonToday is required',
       );
     }
     await _facade.nudgeTime(delta);
@@ -349,7 +353,14 @@ class WebChatToolsRoutes {
         body['participant']?.toString() ??
         request.url.queryParameters['participant'];
     const known = {
-      'plant', 'edit', 'pin', 'retire', 'restore', 'delete', 'reset', 'check',
+      'plant',
+      'edit',
+      'pin',
+      'retire',
+      'restore',
+      'delete',
+      'reset',
+      'check',
     };
     if (!known.contains(action)) {
       return JsonResponse.badRequest('Unknown growth action: $action');

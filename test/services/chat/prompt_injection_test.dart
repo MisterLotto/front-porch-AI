@@ -188,17 +188,18 @@ TimeInjection createTestTime({
   int dayCount = 1,
   String storyStartDate = '2026-06-30', // a Tuesday — deterministic weekday
 }) {
-  final time = TimeService(
-    onNotify: () {},
-    onSaveChat: () async {},
-    onSetPendingRealismMetadata: (_, _) {},
-    onPatchLastMessageRealismState: (_, _, _) {},
-  )..seedFromV2OrExt(
-      dayCount: dayCount,
-      timeOfDay: timeOfDay,
-      passageOfTimeEnabled: true,
-      storyStartDate: storyStartDate,
-    );
+  final time =
+      TimeService(
+        onNotify: () {},
+        onSaveChat: () async {},
+        onSetPendingRealismMetadata: (_, _) {},
+        onPatchLastMessageRealismState: (_, _, _) {},
+      )..seedFromV2OrExt(
+        dayCount: dayCount,
+        timeOfDay: timeOfDay,
+        passageOfTimeEnabled: true,
+        storyStartDate: storyStartDate,
+      );
   return TimeInjection(timeService: time);
 }
 
@@ -321,31 +322,33 @@ void main() {
       expect(txt, contains('Current Task'));
     });
 
-    test('relationship 1:1: words only — no scores, tiers, or mechanic labels',
-        () {
-      final svc = createTestRelSvc();
-      svc.loadScalars(
-        affectionScore: 250, // tier 9 → deeply attached
-        longTermScore: 250, // tier 9 → unbreakable commitment
-        trustLevel: 60, // tier 4 → genuinely trusts
-      );
-      final b = createTestRelationship(
-        relSvc: svc,
-        activeChar: CharacterCard(name: 'Alice'),
-      );
-      final rel = b.buildRelationshipInjection();
-      expect(rel, contains('soulmate or life partner'));
-      expect(rel, contains('deeply attached'));
-      expect(rel, contains('never as generic sweetness')); // voice note
-      expect(rel, isNot(contains('points')));
-      expect(rel, isNot(contains('Tension is')));
-      expect(RegExp(r'\d').hasMatch(rel), isFalse);
+    test(
+      'relationship 1:1: words only — no scores, tiers, or mechanic labels',
+      () {
+        final svc = createTestRelSvc();
+        svc.loadScalars(
+          affectionScore: 250, // tier 9 → deeply attached
+          longTermScore: 250, // tier 9 → unbreakable commitment
+          trustLevel: 60, // tier 4 → genuinely trusts
+        );
+        final b = createTestRelationship(
+          relSvc: svc,
+          activeChar: CharacterCard(name: 'Alice'),
+        );
+        final rel = b.buildRelationshipInjection();
+        expect(rel, contains('soulmate or life partner'));
+        expect(rel, contains('deeply attached'));
+        expect(rel, contains('never as generic sweetness')); // voice note
+        expect(rel, isNot(contains('points')));
+        expect(rel, isNot(contains('Tension is')));
+        expect(RegExp(r'\d').hasMatch(rel), isFalse);
 
-      final trust = b.buildTrustBehaviorInjection();
-      expect(trust, contains('genuinely trusts'));
-      expect(trust, contains('never the baseline temperament')); // tail
-      expect(RegExp(r'\d').hasMatch(trust), isFalse);
-    });
+        final trust = b.buildTrustBehaviorInjection();
+        expect(trust, contains('genuinely trusts'));
+        expect(trust, contains('never the baseline temperament')); // tail
+        expect(RegExp(r'\d').hasMatch(trust), isFalse);
+      },
+    );
 
     test(
       'PARITY: group hostile tiers render real hostility (old group ladder '
@@ -364,7 +367,10 @@ void main() {
           groupRealism: g,
           isGroupNonObs: true,
           speakerId: 'Vex',
-          groupChars: [CharacterCard(name: 'Vex'), CharacterCard(name: 'B')],
+          groupChars: [
+            CharacterCard(name: 'Vex'),
+            CharacterCard(name: 'B'),
+          ],
         );
         final rel = b.buildRelationshipInjection();
         expect(rel, contains('Vex is openly antagonistic'));
@@ -453,8 +459,10 @@ void main() {
       quiet.setNsfwCooldownEnabled(true);
       quiet.setArousalLevel(10);
       expect(
-        createTestNsfw(nsfwSvc: quiet, activeChar: CharacterCard(name: 'A'))
-            .buildNsfwCooldownInjection(),
+        createTestNsfw(
+          nsfwSvc: quiet,
+          activeChar: CharacterCard(name: 'A'),
+        ).buildNsfwCooldownInjection(),
         isEmpty,
       );
 
@@ -469,42 +477,46 @@ void main() {
       expect(txt, contains('never produces an orgasm on its own'));
     });
 
-    test('behavioral: fixation + position fragments; trust anchors deleted',
-        () {
-      final svc = createTestRelSvc();
-      svc.loadScalars(
-        affectionScore: 0,
-        longTermScore: 0,
-        trustLevel: 90, // would have fired old BLIND TRUST anchor
-        activeFixation: 'the promise from 2 nights ago',
-        fixationLifespan: 3,
-        spatialStance: 'sitting on the porch steps',
-      );
-      final b = createTestBehavioral(relSvc: svc);
-      final txt = b.buildBehavioralMechanicsInjection();
-      expect(txt, contains('On the mind lately'));
-      expect(txt, contains('the promise from 2 nights ago'));
-      expect(txt, contains('Position: sitting on the porch steps'));
-      expect(txt.toUpperCase(), isNot(contains('BLIND TRUST')));
-      expect(txt.toUpperCase(), isNot(contains('MISTRUST')));
-    });
+    test(
+      'behavioral: fixation + position fragments; trust anchors deleted',
+      () {
+        final svc = createTestRelSvc();
+        svc.loadScalars(
+          affectionScore: 0,
+          longTermScore: 0,
+          trustLevel: 90, // would have fired old BLIND TRUST anchor
+          activeFixation: 'the promise from 2 nights ago',
+          fixationLifespan: 3,
+          spatialStance: 'sitting on the porch steps',
+        );
+        final b = createTestBehavioral(relSvc: svc);
+        final txt = b.buildBehavioralMechanicsInjection();
+        expect(txt, contains('On the mind lately'));
+        expect(txt, contains('the promise from 2 nights ago'));
+        expect(txt, contains('Position: sitting on the porch steps'));
+        expect(txt.toUpperCase(), isNot(contains('BLIND TRUST')));
+        expect(txt.toUpperCase(), isNot(contains('MISTRUST')));
+      },
+    );
 
-    test('1:1 At work narrates from work, not the porch', () {
+    test('1:1 At work narrates from work', () {
+      // Old copy said "not from the porch" — product name in her world.
       final b = BehavioralInjection(
         relationshipService: createTestRelSvc(),
         getRealismEnabled: () => true,
         getOccupation: () => 'clerk',
         getHours: () => '9-5',
-        getTimeOfDay: () => 'afternoon',
+        getClockMinutes: () => 14 * 60 + 30,
         getIsGroup: () => false,
       );
       final txt = b.buildPositionInjection();
       expect(txt, contains('At work as a clerk'));
-      expect(txt, contains('not from the porch'));
+      expect(txt, contains('Write from there.'));
+      expect(txt.toLowerCase(), isNot(contains('porch')));
       expect(txt, isNot(contains('Position:')));
     });
 
-    test('1:1 Away narrates from the stance, not the porch', () {
+    test('1:1 Away narrates from the stance', () {
       final svc = createTestRelSvc();
       svc.loadScalars(
         affectionScore: 0,
@@ -520,7 +532,8 @@ void main() {
       final txt = b.buildPositionInjection();
       expect(txt, contains('Away from {{user}}'));
       expect(txt, contains('left the kitchen'));
-      expect(txt, contains('not from the porch'));
+      expect(txt, contains('Write from there.'));
+      expect(txt.toLowerCase(), isNot(contains('porch')));
     });
 
     test('group Away keeps the Position line', () {
@@ -536,7 +549,10 @@ void main() {
         getRealismEnabled: () => true,
         getIsGroup: () => true,
       );
-      expect(b.buildPositionInjection(), contains('Position: She left the kitchen'));
+      expect(
+        b.buildPositionInjection(),
+        contains('Position: She left the kitchen'),
+      );
       expect(b.buildPositionInjection(), isNot(contains('Away from')));
     });
 
@@ -599,65 +615,59 @@ void main() {
       expect(RegExp(r'\d').hasMatch(lines.join()), isFalse);
     });
 
-    test(
-      "PARITY: one member's enjoys-low-hygiene never leaks into another "
-      "member's needs (regression: hygiene 88 shown catastrophic)",
-      () {
-        final seraphine = CharacterCard(
-          name: 'Seraphine',
-          frontPorchExtensions: FrontPorchExtensions(enjoysLowHygiene: false),
-        );
-        final iris = CharacterCard(
-          name: 'Iris',
-          frontPorchExtensions: FrontPorchExtensions(enjoysLowHygiene: true),
-        );
-        final gneeds = {
-          'Seraphine': {...satedVector(), 'hygiene': 88, 'hunger': 54},
-        };
-        final b = createTestNeeds(
-          isGroupNonObs: true,
-          speakerId: 'Seraphine',
-          groupChars: [seraphine, iris],
-          groupNeeds: gneeds,
-          enjoys: true, // the LEAKED global (Iris) — must be ignored
-        );
-        final txt = b.buildNeedsInjection();
-        // Seraphine's 88 hygiene is sated for HER — with the words-only
-        // salience gate that means NO hygiene line at all (and certainly not
-        // the inverted too-clean distress text).
-        expect(txt, isNot(contains('Hygiene:')));
-        expect(txt.toLowerCase(), isNot(contains('scrubbed')));
-        expect(txt.toLowerCase(), isNot(contains('filthy')));
-      },
-    );
+    test("PARITY: one member's enjoys-low-hygiene never leaks into another "
+        "member's needs (regression: hygiene 88 shown catastrophic)", () {
+      final seraphine = CharacterCard(
+        name: 'Seraphine',
+        frontPorchExtensions: FrontPorchExtensions(enjoysLowHygiene: false),
+      );
+      final iris = CharacterCard(
+        name: 'Iris',
+        frontPorchExtensions: FrontPorchExtensions(enjoysLowHygiene: true),
+      );
+      final gneeds = {
+        'Seraphine': {...satedVector(), 'hygiene': 88, 'hunger': 54},
+      };
+      final b = createTestNeeds(
+        isGroupNonObs: true,
+        speakerId: 'Seraphine',
+        groupChars: [seraphine, iris],
+        groupNeeds: gneeds,
+        enjoys: true, // the LEAKED global (Iris) — must be ignored
+      );
+      final txt = b.buildNeedsInjection();
+      // Seraphine's 88 hygiene is sated for HER — with the words-only
+      // salience gate that means NO hygiene line at all (and certainly not
+      // the inverted too-clean distress text).
+      expect(txt, isNot(contains('Hygiene:')));
+      expect(txt.toLowerCase(), isNot(contains('scrubbed')));
+      expect(txt.toLowerCase(), isNot(contains('filthy')));
+    });
 
-    test(
-      'enjoys-low-hygiene: HIGH hygiene renders the inverted too-clean text '
-      'and ranks by effective urgency (selection fix)',
-      () {
-        final jenny = CharacterCard(
-          name: 'Jenny',
-          frontPorchExtensions: FrontPorchExtensions(enjoysLowHygiene: true),
-        );
-        final gneeds = {
-          'Jenny': {...satedVector(), 'hygiene': 95},
-        };
-        final b = createTestNeeds(
-          isGroupNonObs: true,
-          speakerId: 'Jenny',
-          groupChars: [jenny],
-          groupNeeds: gneeds,
-          enjoys: false, // her OWN card flag is what matters, not the global
-        );
-        final txt = b.buildNeedsInjection();
-        // 95 inverts to a distressed step for her → the too-clean text shows
-        // (a raw-value sort would have ranked 95 as her LEAST urgent need).
-        expect(txt, contains('Hygiene:'));
-        expect(txt.toLowerCase(), anyOf(contains('scrubbed'), contains('too')));
-        expect(txt.toLowerCase(), isNot(contains('filthy')));
-        expect(RegExp(r'\d').hasMatch(txt), isFalse);
-      },
-    );
+    test('enjoys-low-hygiene: HIGH hygiene renders the inverted too-clean text '
+        'and ranks by effective urgency (selection fix)', () {
+      final jenny = CharacterCard(
+        name: 'Jenny',
+        frontPorchExtensions: FrontPorchExtensions(enjoysLowHygiene: true),
+      );
+      final gneeds = {
+        'Jenny': {...satedVector(), 'hygiene': 95},
+      };
+      final b = createTestNeeds(
+        isGroupNonObs: true,
+        speakerId: 'Jenny',
+        groupChars: [jenny],
+        groupNeeds: gneeds,
+        enjoys: false, // her OWN card flag is what matters, not the global
+      );
+      final txt = b.buildNeedsInjection();
+      // 95 inverts to a distressed step for her → the too-clean text shows
+      // (a raw-value sort would have ranked 95 as her LEAST urgent need).
+      expect(txt, contains('Hygiene:'));
+      expect(txt.toLowerCase(), anyOf(contains('scrubbed'), contains('too')));
+      expect(txt.toLowerCase(), isNot(contains('filthy')));
+      expect(RegExp(r'\d').hasMatch(txt), isFalse);
+    });
 
     test('needs sim disabled → silent', () {
       expect(
@@ -688,10 +698,7 @@ void main() {
           emotion: emotion,
           intensity: 'moderate',
         ),
-        timeInjection: createTestTime(
-          timeOfDay: timeOfDay,
-          dayCount: dayCount,
-        ),
+        timeInjection: createTestTime(timeOfDay: timeOfDay, dayCount: dayCount),
         // Weather off in composer tests — the fragment contributes '' and the
         // block shape stays identical to pre-weather expectations. The
         // weather-on path is covered in weather_engine_test.dart.
@@ -817,8 +824,11 @@ void main() {
           )
           .replaceAll('the promise Ben made last night', '<fixation>')
           .replaceAll('sitting beside Ben on the porch steps', '<stance>');
-      expect(RegExp(r'\d').hasMatch(masked), isFalse,
-          reason: 'simulation scalars must never reach the generation prompt');
+      expect(
+        RegExp(r'\d').hasMatch(masked),
+        isFalse,
+        reason: 'simulation scalars must never reach the generation prompt',
+      );
       expect(block, isNot(contains('/100')));
       expect(block, isNot(contains('points')));
       expect(block, isNot(contains('turns remaining')));
@@ -859,22 +869,24 @@ void main() {
       expect(composer.buildRealismStateInjection(), isEmpty);
     });
 
-    test('fragments may carry {{user}} for the assembly-site macro resolve',
-        () {
-      final relSvc = createTestRelSvc();
-      relSvc.loadScalars(
-        affectionScore: 120,
-        longTermScore: 90,
-        trustLevel: 55,
-      );
-      final composer = createComposer(
-        relSvc: relSvc,
-        nsfwSvc: createTestNsfwSvc(),
-        needsSim: createTestNeedsSim()..initializeFresh(),
-      );
-      // The composer's output is macro-resolved by chat_service_generation —
-      // {{user}} present here proves the builders stayed name-agnostic.
-      expect(composer.buildRealismStateInjection(), contains('{{user}}'));
-    });
+    test(
+      'fragments may carry {{user}} for the assembly-site macro resolve',
+      () {
+        final relSvc = createTestRelSvc();
+        relSvc.loadScalars(
+          affectionScore: 120,
+          longTermScore: 90,
+          trustLevel: 55,
+        );
+        final composer = createComposer(
+          relSvc: relSvc,
+          nsfwSvc: createTestNsfwSvc(),
+          needsSim: createTestNeedsSim()..initializeFresh(),
+        );
+        // The composer's output is macro-resolved by chat_service_generation —
+        // {{user}} present here proves the builders stayed name-agnostic.
+        expect(composer.buildRealismStateInjection(), contains('{{user}}'));
+      },
+    );
   });
 }

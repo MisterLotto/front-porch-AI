@@ -282,7 +282,7 @@ extension ChatServiceSend on ChatService {
     // that ignore it today. Additive only — every case that worked still
     // works, plus the one the user asked for.
     if (_realismActiveThisMode || _standaloneClockActive) {
-      _timeService.detectOocTimeSkip(text);
+      await _timeService.detectOocTimeSkip(text);
     }
 
     // ── Direct-address turn routing (both cast surfaces) ─────────────────
@@ -439,7 +439,12 @@ extension ChatServiceSend on ChatService {
     if (addressedGuest != null) {
       await generateGuestTurn(addressedGuest);
     } else {
-      await _generateResponse(GenerationMode.normal);
+      await _generateResponse(
+        GenerationMode.normal,
+        // Standalone already ticked above. Engine-on groups tick inside
+        // generate (or the skip banner). Never double-advance.
+        skipClockAdvance: _standaloneClockActive,
+      );
     }
     // Backend-down abort: no response was generated, so none of the
     // post-turn work below may run — no idle-timer arming, no chip attach,
@@ -602,9 +607,9 @@ extension ChatServiceSend on ChatService {
         final cards = await _journalStore.cardsFor(sessionId, ownerId);
         final sorted = [...cards]
           ..sort(
-            (a, b) =>
-                JournalPhysics.cooledHeat(b)
-                    .compareTo(JournalPhysics.cooledHeat(a)),
+            (a, b) => JournalPhysics.cooledHeat(
+              b,
+            ).compareTo(JournalPhysics.cooledHeat(a)),
           );
         return await _dreamService.generateDream(
           characterName: ownerCard.name,

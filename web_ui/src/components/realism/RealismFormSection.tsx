@@ -21,6 +21,14 @@ import {
   titleCase,
   trustTier,
 } from './realismTypes';
+import {
+  DEFAULT_END_MIN,
+  DEFAULT_START_MIN,
+  formatWorkHoursRange,
+  hhmmToMinutes,
+  minutesToHHMM,
+  parseWorkHoursRange,
+} from './workHours';
 
 type Patch = (patch: Partial<RealismValues>) => void;
 
@@ -190,6 +198,20 @@ export function RealismFormSection({
             placeholder="e.g. open a bakery"
             helper="What this character is working toward across the whole story. They colour how the character steers a scene, and they inch forward when objectives complete. Not a to-do list — quests live in the chat sidebar."
           />
+
+          {/* ── Work ── mirrors work_row.dart. Occupation is free text;
+              hours is two native time pickers, never "mornings". */}
+          <ChipList
+            label="Plan lines"
+            values={v.planLines}
+            onChange={(a) => set({ planLines: a })}
+            placeholder="e.g. finish the log before the tide"
+            helper="They write the day from who they are. You only add or delete the line. Not a to-do."
+            maxItems={4}
+          />
+
+          <WorkFields v={v} set={set} />
+
           {/* ── Likes & Dislikes ── mirrors identity_chip_lists.dart. Two
               plain (non-accent) chip lists, exactly as the sketch draws them. */}
           <ChipList
@@ -253,6 +275,45 @@ export function RealismFormSection({
               /detail, sent straight back on save) so a card authored before the
               swap keeps its task on disk — the chat now imports it as a starting
               objective instead of asking the author to maintain it by hand. */}
+    </div>
+  );
+}
+
+function WorkFields({ v, set }: { v: RealismValues; set: Patch }) {
+  const parsed = parseWorkHoursRange(v.hours);
+  const start = parsed ? minutesToHHMM(parsed[0]) : '';
+  const end = parsed ? minutesToHHMM(parsed[1]) : '';
+
+  const write = (nextStart: string, nextEnd: string) => {
+    const s = hhmmToMinutes(nextStart) ?? DEFAULT_START_MIN;
+    const e = hhmmToMinutes(nextEnd) ?? DEFAULT_END_MIN;
+    set({ hours: formatWorkHoursRange(s, e) });
+  };
+
+  return (
+    <div className="realism-field">
+      <span className="realism-head" style={{ margin: 0 }}>Work</span>
+      <p className="muted small" style={{ margin: '4px 0 8px' }}>
+        What they do, and when. Not a calendar.
+      </p>
+      <label className="realism-field">
+        <span>Occupation</span>
+        <input
+          value={v.occupation}
+          placeholder="e.g. librarian"
+          onChange={(e) => set({ occupation: e.target.value })}
+        />
+      </label>
+      <div className="work-hours">
+        <label className="realism-field">
+          <span>Start</span>
+          <input type="time" value={start} onChange={(e) => write(e.target.value, end)} />
+        </label>
+        <label className="realism-field">
+          <span>End</span>
+          <input type="time" value={end} onChange={(e) => write(start, e.target.value)} />
+        </label>
+      </div>
     </div>
   );
 }
