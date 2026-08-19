@@ -3,6 +3,13 @@
 
 # Changelog
 
+## 2026-08-19 — test(goldens): restamp Work Hours row + Porch Life step 4
+- **Why:** db9624e added Start/End time chips; work_row grew 340×180 → 340×260
+  and Create Character step 4 (Porch Life) includes that row. Widget Golden
+  Tests went red on Linux; macOS never runs those 18 @TestOn(linux) files.
+- **What:** `./scripts/ci-local.sh update-goldens` in fpai-golden:3.47.0.
+- **Files:** work_row.{dark,light}.png, step_4_realism.{dark,light}.png
+
 ## 2026-08-18 — fix(avatar): two cards with the same name no longer share a face
 - **Why:** originLibraryCardFor returned the first library card with that
   name, so a second Rachel stole the AppBar avatar. Bubble speaker lookup
