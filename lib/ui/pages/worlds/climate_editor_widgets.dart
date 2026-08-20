@@ -23,6 +23,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/services/chat/chat.dart';
+import 'package:front_porch_ai/ui/pages/worlds/climate_season_start.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Artifact palette notes: the amber/ink/surface/text roles map to
@@ -139,6 +140,10 @@ class SeasonCard extends StatelessWidget {
     required this.onAnchorChanged,
     required this.labelController,
     required this.onLabelChanged,
+    required this.startMonth,
+    required this.startDay,
+    required this.onStart,
+    this.clash = false,
   });
 
   final String season;
@@ -150,6 +155,10 @@ class SeasonCard extends StatelessWidget {
   final VoidCallback onAnchorChanged;
   final TextEditingController labelController;
   final VoidCallback onLabelChanged;
+  final int startMonth;
+  final int startDay;
+  final void Function(int month, int day) onStart;
+  final bool clash;
 
   @override
   Widget build(BuildContext context) {
@@ -159,7 +168,9 @@ class SeasonCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerOf(context),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.borderOf(context)),
+        border: Border.all(
+          color: clash ? kClimateDanger : AppColors.borderOf(context),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -179,6 +190,13 @@ class SeasonCard extends StatelessWidget {
               contentPadding: EdgeInsets.zero,
             ),
             onChanged: (_) => onLabelChanged(),
+          ),
+          const SizedBox(height: 6),
+          SeasonStartRow(
+            month: startMonth,
+            day: startDay,
+            onStart: onStart,
+            clash: clash,
           ),
           const SizedBox(height: 8),
           Container(

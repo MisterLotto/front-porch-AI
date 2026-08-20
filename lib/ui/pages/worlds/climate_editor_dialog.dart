@@ -71,14 +71,17 @@ class _ClimateEditorDialog extends StatefulWidget {
 class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
   late String _templateId;
   final Map<String, TempBand> _seasonBand = {};
-  // Controllers are allocated exactly ONCE (template switches only rewrite
-  // their text) — reallocating in _seedFrom leaked the previous set and
-  // could touch disposed fields mid-rebuild (Grok review).
   final Map<String, TextEditingController> _anchorCtls = {
     for (final s in kSeasons) s: TextEditingController(),
   };
   final Map<String, TextEditingController> _labelCtls = {
     for (final s in kSeasons) s: TextEditingController(),
+  };
+  final Map<String, int> _startMonth = {
+    for (final s in kSeasons) s: monthDayFromDoy(kEarthSeasonStarts[s]!).$1,
+  };
+  final Map<String, int> _startDay = {
+    for (final s in kSeasons) s: monthDayFromDoy(kEarthSeasonStarts[s]!).$2,
   };
   final Map<String, List<TextEditingController>> _weightCtls = {
     for (final s in kSeasons)
@@ -123,6 +126,11 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
       final anchor = b.displayAnchorsC[season];
       _anchorCtls[season]!.text = anchor != null ? '${_toDisplay(anchor)}' : '';
       _labelCtls[season]!.text = b.seasonLabels[season] ?? '';
+      final md = monthDayFromDoy(
+        b.seasonStarts[season] ?? kEarthSeasonStarts[season]!,
+      );
+      _startMonth[season] = md.$1;
+      _startDay[season] = md.$2;
       final weights =
           b.weights[season] ?? List<int>.filled(kWeatherConditions.length, 0);
       for (var i = 0; i < kWeatherConditions.length; i++) {
@@ -221,6 +229,13 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
           if (_labelCtls[s]!.text.trim().isNotEmpty)
             s: _labelCtls[s]!.text.trim(),
       },
+      seasonStarts: () {
+        final starts = {
+          for (final s in kSeasons)
+            s: doyFromMonthDay(_startMonth[s]!, _startDay[s]!),
+        };
+        return seasonStartsEqualEarth(starts) ? const <String, int>{} : starts;
+      }(),
       conditionSkin: {
         for (final e in _skins.entries)
           if (e.value.active && e.value.stance != null)
@@ -327,10 +342,8 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
         ClimateSectionHeader(
           'Temperature by season',
           hint:
-              'Extreme steps unlock the display $_unit — you type what the '
-              'weather chip shows. Characters feel words, not numbers. '
-              'Units follow Settings → General (°C/°F, default °C); storage '
-              'stays °C so shared worlds are unit-agnostic.',
+              'Start day, then band. Same start twice cannot save. '
+              'Extreme steps unlock the display $_unit. Storage stays °C.',
         ),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -348,6 +361,14 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
                   onAnchorChanged: () => setState(() {}),
                   labelController: _labelCtls[season]!,
                   onLabelChanged: () => setState(() {}),
+                  startMonth: _startMonth[season]!,
+                  startDay: _startDay[season]!,
+                  clash: _blockingErrors().any((e) => e.contains(season)),
+                  onStart: (m, d) => setState(() {
+                    _startMonth[season] = m;
+                    _startDay[season] = d;
+                    _preview = previewBiome(_buildDraft());
+                  }),
                 ),
               ),
             ],

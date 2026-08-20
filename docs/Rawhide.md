@@ -6,6 +6,7 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 ## Recent improvements (unreleased — ships in the next build)
 
 - 🌍 **Seasons can have other names** — on a world's custom climate, rename summer to High Sun (or whatever the planet uses). The chip and the story use that name. Leave it blank and it stays summer.
+- 📅 **Seasons can start on any day** — make winter long and summer short. Same start twice, or a missing season, blocks save. Leave the dates alone and Earth months stay.
 - 🏡 **"With you" means they are actually with you** — if they are at their own place, the word says Away. At work still follows the clock. This does not move them around the room.
 - 🕘 **The story clock stays honest** — she is told what time it is before she writes, then the clock moves after her line so the next person (including a guest) inherits that time. Skip to 2pm lands on 2pm. The strip arrows are 30 minutes; tap the date for the calendar's clock if you want an exact time.
 

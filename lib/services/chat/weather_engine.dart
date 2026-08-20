@@ -18,6 +18,7 @@
 
 library;
 
+import 'package:front_porch_ai/services/chat/season_calendar.dart';
 import 'package:front_porch_ai/services/chat/season_labels.dart';
 import 'package:front_porch_ai/services/chat/weather_biomes.dart';
 
@@ -175,7 +176,9 @@ class WeatherEngine {
     for (int d = 1; d <= days; d++) {
       final climate = fixed ?? biomeAtDay!(d);
       final dayDate = date.subtract(Duration(days: days - d));
-      season = seasonOf(dayDate);
+      season = climate.seasonStarts.isEmpty
+          ? seasonOf(dayDate)
+          : seasonFromStarts(dayOfYear365(dayDate), climate.seasonStarts);
       final rng = WeatherRng(base ^ (d * 0x9E3779B9));
       final stay = d > 1 && rng.nextPermille() < _stayPermille;
       temp = _tempFor(season, rng, climate);

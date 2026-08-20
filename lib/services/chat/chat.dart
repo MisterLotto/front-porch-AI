@@ -78,6 +78,7 @@ export 'relationship_service.dart';
 export 'relationship_tiers.dart';
 export 'reply_facts_eval.dart';
 export 'scenario_fade.dart';
+export 'season_calendar.dart';
 export 'season_labels.dart';
 export 'scene_guest_director.dart';
 export 'scene_guest_prompt.dart';

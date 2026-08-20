@@ -6,6 +6,7 @@
 
 import 'dart:convert';
 
+import 'package:front_porch_ai/services/chat/season_calendar.dart';
 import 'package:front_porch_ai/services/chat/season_labels.dart';
 
 /// Condition order shared with [WeatherEngine]: clear, cloudy, overcast, fog,
@@ -95,6 +96,9 @@ class Biome {
   /// English id. Never written for built-ins so temperate JSON is unchanged.
   final Map<String, String> seasonLabels;
 
+  /// Optional start day-of-year (1–365) per season. Empty = Earth months.
+  final Map<String, int> seasonStarts;
+
   /// Optional per-condition label/emoji/stance overrides.
   final Map<String, ConditionSkin> conditionSkin;
 
@@ -109,6 +113,7 @@ class Biome {
     this.displayAnchorsC = const {},
     this.diurnalAmplitude = 1.0,
     this.seasonLabels = const {},
+    this.seasonStarts = const {},
     this.conditionSkin = const {},
   });
 
@@ -130,6 +135,8 @@ class Biome {
         for (final e in seasonLabels.entries)
           if (e.value.trim().isNotEmpty) e.key: e.value.trim(),
       },
+    if (seasonStarts.isNotEmpty && !seasonStartsEqualEarth(seasonStarts))
+      'seasonStarts': Map<String, int>.from(seasonStarts),
     if (conditionSkin.isNotEmpty)
       'conditionSkin': {
         for (final e in conditionSkin.entries) e.key: e.value.toJson(),
@@ -215,6 +222,7 @@ class Biome {
         _ => 1.0, // string/garbage degrades, never throws (tryParse-nulls)
       },
       seasonLabels: parseSeasonLabels(json),
+      seasonStarts: parseSeasonStarts(json),
       conditionSkin: skins,
     );
   }
@@ -236,6 +244,7 @@ class Biome {
     displayAnchorsC: displayAnchorsC,
     diurnalAmplitude: diurnalAmplitude,
     seasonLabels: seasonLabels,
+    seasonStarts: seasonStarts,
     conditionSkin: conditionSkin,
   );
 
@@ -294,6 +303,7 @@ class Biome {
         }
       }
     }
+    errors.addAll(validateSeasonStarts(seasonStarts));
     if (bandRange.$1 < kFullBandRange.$1 ||
         bandRange.$2 > kFullBandRange.$2 ||
         bandRange.$1 > bandRange.$2) {
