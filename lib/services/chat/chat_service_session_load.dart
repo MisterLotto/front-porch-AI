@@ -188,9 +188,9 @@ extension ChatServiceSessionLoad on ChatService {
     // Aggregate stats in two queries instead of hydrating every message row
     // of every session — this runs on the tap-to-open-chat path, where the
     // old loop was the dead time before the route push even started.
-    final stats = await _db.getSessionListStats(
-      [for (final s in dbSessions) s.id],
-    );
+    final stats = await _db.getSessionListStats([
+      for (final s in dbSessions) s.id,
+    ]);
 
     List<Map<String, dynamic>> sessions = [];
     for (final s in dbSessions) {
@@ -283,18 +283,15 @@ extension ChatServiceSessionLoad on ChatService {
       List<int> swipeDurations;
       try {
         swipeDurations = List<int>.from(
-          (jsonDecode(m.swipeDurations) as List).map(
-            (e) => (e as num).toInt(),
-          ),
+          (jsonDecode(m.swipeDurations) as List).map((e) => (e as num).toInt()),
         );
       } catch (_) {
         swipeDurations = [0];
       }
 
-      final safeSwipeIndex =
-          (m.swipeIndex >= 0 && m.swipeIndex < swipes.length)
-              ? m.swipeIndex
-              : 0;
+      final safeSwipeIndex = (m.swipeIndex >= 0 && m.swipeIndex < swipes.length)
+          ? m.swipeIndex
+          : 0;
 
       _messages.add(
         ChatMessage(
@@ -366,6 +363,7 @@ extension ChatServiceSessionLoad on ChatService {
       activeFixation: s.activeFixation,
       fixationLifespan: s.fixationLifespan,
       spatialStance: s.spatialStance,
+      withUser: s.withUser,
       trustRepairPending: s.trustRepairPending,
       turnsSinceLongTermCheck: s.turnsSinceLongTermCheck,
       shortTermDeltasSummary: s.shortTermDeltasSummary,
@@ -578,10 +576,12 @@ extension ChatServiceSessionLoad on ChatService {
       await _reloadChatWorldIds();
       // Touch updatedAt so this session becomes the "last active" for the
       // character/group — _loadLastSession sorts by updatedAt DESC.
-      _db.patchSession(SessionsCompanion(
-        id: drift.Value(sessionId),
-        updatedAt: drift.Value(DateTime.now()),
-      ));
+      _db.patchSession(
+        SessionsCompanion(
+          id: drift.Value(sessionId),
+          updatedAt: drift.Value(DateTime.now()),
+        ),
+      );
       // Scene Guests are per-session. Without this, switching to a different
       // session via the history picker leaves the PREVIOUS session's guests
       // (and their evolution/detection state) in place — they keep chiming in
@@ -643,9 +643,7 @@ extension ChatServiceSessionLoad on ChatService {
   Future<List<PorchDiaryTarget>> _buildPorchDiaryTargets() async {
     if (_activeGroup == null && _activeCharacter != null) {
       final id = _getCharacterIdFromCard(_activeCharacter!);
-      return [
-        PorchDiaryTarget(libraryStableGroupId: id, diaryCharacterId: id),
-      ];
+      return [PorchDiaryTarget(libraryStableGroupId: id, diaryCharacterId: id)];
     }
     if (_activeGroup == null) return const [];
 

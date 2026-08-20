@@ -85,7 +85,10 @@ class BehavioralInjection {
         occupation: occ,
         hours: hours,
         clockMinutes: getClockMinutes?.call() ?? 0,
-        inScene: !stanceSaysAway(stance),
+        inScene: inSceneForPresence(
+          stance: stance,
+          withUser: relationshipService.withUser,
+        ),
       );
       if (where == PresenceWhere.atWork) {
         final job = occ.trim();

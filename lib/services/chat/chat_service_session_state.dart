@@ -16,7 +16,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-
 part of '../chat_service.dart';
 
 /// Session-state load/save — scene-guest + group-realism hydration and _saveChat/_doSaveChat. Extracted verbatim (zero behaviour change) to shrink the god file.
@@ -91,10 +90,8 @@ extension ChatServiceSessionState on ChatService {
               map; // support both wrapped and direct formats during transition
           if (perChar is Map) {
             _groupRealism = perChar.map(
-              (k, v) => MapEntry(
-                k.toString(),
-                GroupMemberRealism.fromJson(v as Map),
-              ),
+              (k, v) =>
+                  MapEntry(k.toString(), GroupMemberRealism.fromJson(v as Map)),
             );
           }
 
@@ -383,6 +380,7 @@ extension ChatServiceSessionState on ChatService {
         activeFixation: drift.Value(_relationshipService.activeFixation),
         fixationLifespan: drift.Value(_relationshipService.fixationLifespan),
         spatialStance: drift.Value(_relationshipService.spatialStance),
+        withUser: drift.Value(_relationshipService.withUser),
         chaosModeEnabled: drift.Value(_chaosModeService.chaosModeEnabled),
         chaosPressure: drift.Value(_chaosModeService.chaosPressure),
         trustRepairPending: drift.Value(
@@ -397,10 +395,7 @@ extension ChatServiceSessionState on ChatService {
     // works even before build_runner regenerates database.g.dart.
     await _db.customUpdate(
       'UPDATE sessions SET generation_settings = ? WHERE id = ?',
-      variables: [
-        drift.Variable(genSettingsJson),
-        drift.Variable(sessionId),
-      ],
+      variables: [drift.Variable(genSettingsJson), drift.Variable(sessionId)],
       updates: {_db.sessions},
     );
 

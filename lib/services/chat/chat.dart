@@ -59,6 +59,7 @@ export 'objective_proposal.dart';
 export 'pocket_journal_cards.dart';
 export 'pockets.dart';
 export 'presence_derive.dart';
+export 'with_user_eval.dart';
 export 'pockets_eval.dart';
 export 'pass_support.dart';
 export 'porch_memory_import.dart';

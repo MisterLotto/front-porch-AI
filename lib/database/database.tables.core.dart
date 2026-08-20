@@ -115,10 +115,10 @@ class Sessions extends Table {
   IntColumn get startDayOfWeek => integer().withDefault(
     const Constant(0),
   )(); // 1=Mon..7=Sun; legacy anchor, now WRITTEN as weekday(storyStartDate) so external readers stay consistent
-  TextColumn get storyClock =>
-      text().nullable()(); // ISO-8601 story datetime — canonical clock (design: story-calendar.md)
-  TextColumn get storyStartDate =>
-      text().nullable()(); // ISO-8601 date of Day 1 — canonical anchor; null = legacy row (synthesized on load)
+  TextColumn get storyClock => text()
+      .nullable()(); // ISO-8601 story datetime — canonical clock (design: story-calendar.md)
+  TextColumn get storyStartDate => text()
+      .nullable()(); // ISO-8601 date of Day 1 — canonical anchor; null = legacy row (synthesized on load)
   BoolColumn get nsfwCooldownEnabled =>
       boolean().withDefault(const Constant(false))(); // sub-toggle
   BoolColumn get passageOfTimeEnabled => boolean().withDefault(
@@ -141,6 +141,9 @@ class Sessions extends Table {
       integer().withDefault(const Constant(0))(); // decay turns
   TextColumn get spatialStance =>
       text().withDefault(const Constant(''))(); // physical anchor
+  /// v49 — 1:1 glance bit. NULL = unknown (keyword fallback).
+  /// Group members keep theirs in group_realism_state.
+  BoolColumn get withUser => boolean().nullable()();
   BoolColumn get trustRepairPending => boolean().withDefault(
     const Constant(false),
   )(); // repair window armed after severe trust drop

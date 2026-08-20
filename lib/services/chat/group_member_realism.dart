@@ -63,6 +63,7 @@ abstract final class GroupRealismKeys {
   static const fixation = 'fixation';
   static const fixationLifespan = 'fixationLifespan';
   static const spatialStance = 'spatialStance';
+  static const withUser = 'withUser';
   static const relationshipTier = 'relationshipTier';
   static const longTermTier = 'longTermTier';
   static const turnsSinceLongTermCheck = 'turnsSinceLongTermCheck';
@@ -95,6 +96,7 @@ abstract final class GroupRealismKeys {
     fixation,
     fixationLifespan,
     spatialStance,
+    withUser,
     relationshipTier,
     longTermTier,
     turnsSinceLongTermCheck,
@@ -122,13 +124,14 @@ class GroupMemberRealism {
   GroupMemberRealism.fromJson(Map<dynamic, dynamic> raw)
     : _data = _deepCopy(raw);
 
-  static Map<String, dynamic> _deepCopy(Map<dynamic, dynamic> src) =>
-      <String, dynamic>{
-        for (final e in src.entries)
-          e.key.toString(): e.value is Map
-              ? _deepCopy(e.value as Map)
-              : (e.value is List ? List<dynamic>.from(e.value as List) : e.value),
-      };
+  static Map<String, dynamic> _deepCopy(
+    Map<dynamic, dynamic> src,
+  ) => <String, dynamic>{
+    for (final e in src.entries)
+      e.key.toString(): e.value is Map
+          ? _deepCopy(e.value as Map)
+          : (e.value is List ? List<dynamic>.from(e.value as List) : e.value),
+  };
 
   final Map<String, dynamic> _data;
 
@@ -167,17 +170,23 @@ class GroupMemberRealism {
   String? get fixation => _string(GroupRealismKeys.fixation);
   set fixation(String? v) => _data[GroupRealismKeys.fixation] = v;
   int? get fixationLifespan => _int(GroupRealismKeys.fixationLifespan);
-  set fixationLifespan(int? v) =>
-      _data[GroupRealismKeys.fixationLifespan] = v;
+  set fixationLifespan(int? v) => _data[GroupRealismKeys.fixationLifespan] = v;
   String? get spatialStance => _string(GroupRealismKeys.spatialStance);
   set spatialStance(String? v) => _data[GroupRealismKeys.spatialStance] = v;
+  bool? get withUser => _bool(GroupRealismKeys.withUser);
+  set withUser(bool? v) {
+    if (v == null) {
+      _data.remove(GroupRealismKeys.withUser);
+    } else {
+      _data[GroupRealismKeys.withUser] = v;
+    }
+  }
+
   int? get relationshipTier => _int(GroupRealismKeys.relationshipTier);
-  set relationshipTier(int? v) =>
-      _data[GroupRealismKeys.relationshipTier] = v;
+  set relationshipTier(int? v) => _data[GroupRealismKeys.relationshipTier] = v;
   int? get longTermTier => _int(GroupRealismKeys.longTermTier);
   set longTermTier(int? v) => _data[GroupRealismKeys.longTermTier] = v;
-  bool? get trustRepairPending =>
-      _bool(GroupRealismKeys.trustRepairPending);
+  bool? get trustRepairPending => _bool(GroupRealismKeys.trustRepairPending);
   set trustRepairPending(bool? v) =>
       _data[GroupRealismKeys.trustRepairPending] = v;
 

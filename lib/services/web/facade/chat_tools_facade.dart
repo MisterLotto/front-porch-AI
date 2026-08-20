@@ -838,7 +838,10 @@ class ChatToolsFacade {
         occupation: ext?.occupation ?? '',
         hours: ext?.hours ?? '',
         clockMinutes: _chat.timeService.clockMinutes,
-        inScene: !stanceSaysAway(_chat.relationshipService.spatialStance),
+        inScene: inSceneForPresence(
+          stance: _chat.relationshipService.spatialStance,
+          withUser: _chat.relationshipService.withUser,
+        ),
       ),
     );
   }

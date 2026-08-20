@@ -204,6 +204,7 @@ extension ChatServiceRealismEvals on ChatService {
       'activeFixation': _relationshipService.activeFixation,
       'fixationLifespan': _relationshipService.fixationLifespan,
       'spatialStance': _relationshipService.spatialStance,
+      'withUser': _relationshipService.withUser,
       // Pockets & Wardrobe rides the rewind contract like every other
       // per-turn scalar. Without this a regenerate re-runs the detection pass
       // on a NEW reply while the record still carries the discarded reply's
@@ -357,5 +358,53 @@ extension ChatServiceRealismEvals on ChatService {
         RealismVerification.kMetaKey: summary.toMetadata(),
       };
     }
+  }
+
+  /// Glance bit only. Runs AFTER posture so it can read the stance that
+  /// pass just wrote. Never writes spatial stance.
+  Future<void> _runWithUserPass(String reply) async {
+    if (!_realismEnabled) return;
+    if (reply.trim().isEmpty) return;
+    final speaker = _activeCharacter;
+    if (speaker == null) return;
+    final userName = _userPersonaService.persona.name.trim();
+    final verdict =
+        await WithUserEval(
+          fire:
+              ({
+                required debugLabel,
+                required tools,
+                required buildPrompt,
+              }) async {
+                return fireStructuredEval(
+                  probe: _toolProbe,
+                  backendIdentity: _evalBackendIdentity,
+                  debugLabel: debugLabel,
+                  tools: tools,
+                  buildPrompt: buildPrompt,
+                  callToText: (resp) => realismToolCallToJson(
+                    WithUserEval.kWithUserTool,
+                    resp.calls,
+                  ),
+                  fireToolEval: _fireToolEval,
+                  fireTextEval: (p, {onChunk}) => _fireLLMEval(
+                    p,
+                    repeatPenalty: kScalarEvalRepeatPenalty,
+                    label: 'with_user',
+                  ),
+                );
+              },
+        ).detect(
+          charName: speaker.name,
+          userName: userName.isEmpty ? 'the user' : userName,
+          reply: clampEvalMessage(reply),
+          recentExchange: recentExchange(_messages),
+          stance: _relationshipService.spatialStance,
+        );
+    _relationshipService.applyWithUserVerdict(verdict);
+    debugPrint(
+      '[Presence] with_user=$verdict '
+      '(glance=${_relationshipService.withUser})',
+    );
   }
 }

@@ -221,6 +221,8 @@ extension ChatServiceWiringRealism on ChatService {
           _groupRealism[charId]?.spatialStance ?? defaultValue,
       setGroupSpatialStance: (charId, v) =>
           _memberForWrite(charId).spatialStance = v,
+      getGroupWithUser: (charId) => _groupRealism[charId]?.withUser,
+      setGroupWithUser: (charId, v) => _memberForWrite(charId).withUser = v,
       getGroupInterCharacterRelationships: (charId) =>
           _groupRealism[charId]?.relationships ?? const <String, int>{},
       setGroupInterCharacterRelationships: (charId, rels) =>

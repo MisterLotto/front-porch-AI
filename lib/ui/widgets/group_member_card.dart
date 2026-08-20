@@ -180,8 +180,9 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
         occupation: work.occupation,
         hours: work.hours,
         clockMinutes: chat.timeService.clockMinutes,
-        inScene: !stanceSaysAway(
-          chat.spatialStanceForGroupCharacter(widget.character),
+        inScene: inSceneForPresence(
+          stance: chat.spatialStanceForGroupCharacter(widget.character),
+          withUser: chat.withUserForGroupCharacter(widget.character),
         ),
       ),
       padTop: false,

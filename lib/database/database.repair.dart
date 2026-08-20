@@ -223,6 +223,8 @@ extension AppDatabaseMaintenance on AppDatabase {
         // means this chat has no Today hold, which is true for every row
         // older than the column. Do not guess among secondaries.
         'today_objective_id TEXT',
+        // v49 — 1:1 with-you glance. Nullable; NULL = never judged.
+        'with_user INTEGER',
         // v38 Story Calendar — nullable; NULL = legacy row, synthesized on load
         'story_clock TEXT',
         'story_start_date TEXT',

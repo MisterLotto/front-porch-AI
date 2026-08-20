@@ -160,16 +160,18 @@ extension ChatServiceTurnFlow on ChatService {
   }
 
   /// Skip path only. 1:1 never skips (caller returns false first).
-  /// Group: recent line, or stance that does not say they left.
+  /// Group: judge bit, else recent line, or stance that does not say they left.
   bool _memberInScene(CharacterCard card) {
     if (_activeGroup == null) return true;
+    final id = _getCharacterIdFromCard(card);
+    final judged = _groupRealism[id]?.withUser;
+    if (judged != null) return judged;
     var seen = 0;
     for (final m in _messages.reversed) {
       if (m.isUser) continue;
       if (m.sender == card.name) return true;
       if (++seen >= 8) break;
     }
-    final id = _getCharacterIdFromCard(card);
     final stance = _groupRealism[id]?.spatialStance ?? '';
     return !stanceSaysAway(stance);
   }

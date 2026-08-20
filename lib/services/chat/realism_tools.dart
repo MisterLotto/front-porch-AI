@@ -53,6 +53,7 @@ const String kCastDetectTool = 'report_detected_character';
 const String kClimaxToolName = 'report_climax';
 const String kPocketsToolName = 'report_inventory';
 const String kReplyFactsToolName = 'report_reply_facts';
+const String kWithUserToolName = 'report_with_user';
 
 Map<String, dynamic> _intField(String description) => {
   'type': 'integer',
@@ -367,6 +368,25 @@ final Map<String, Map<String, dynamic>> kClimaxFields = {
   ),
 };
 
+/// Own pass — not fused with posture. See [WithUserEval].
+final Map<String, Map<String, dynamic>> kWithUserFields = {
+  'with_user': {
+    'type': 'boolean',
+    'description':
+        'True ONLY when the character and the user are physically in the '
+        'same place right now. Phone / their own home / another room = false.',
+  },
+};
+
+final List<Map<String, dynamic>> kWithUserEvalTools = [
+  _tool(
+    kWithUserToolName,
+    'Report whether the character is physically with the user.',
+    kWithUserFields,
+    const ['with_user'],
+  ),
+];
+
 final List<Map<String, dynamic>> kClimaxEvalTools = [
   _tool(
     kClimaxToolName,
@@ -443,6 +463,7 @@ final Map<String, Map<String, Map<String, dynamic>>> _fieldsByTool = {
   kClimaxToolName: kClimaxFields,
   kPocketsToolName: kPocketsFields,
   kReplyFactsToolName: kReplyFactsFields,
+  kWithUserToolName: kWithUserFields,
 };
 
 /// Is [toolName] known to the converter?

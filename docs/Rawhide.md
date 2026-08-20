@@ -5,6 +5,7 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🏡 **"With you" means they are actually with you** — if they are at their own place, the word says Away. At work still follows the clock. This does not move them around the room.
 - 🕘 **The story clock stays honest** — she is told what time it is before she writes, then the clock moves after her line so the next person (including a guest) inherits that time. Skip to 2pm lands on 2pm. The strip arrows are 30 minutes; tap the date for the calendar's clock if you want an exact time.
 
 - 🖼️ **Two characters with the same name keep their own faces** — the chat header no longer grabs the first Rachel in your library.

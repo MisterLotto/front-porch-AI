@@ -1765,6 +1765,20 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _withUserMeta = const VerificationMeta(
+    'withUser',
+  );
+  @override
+  late final GeneratedColumn<bool> withUser = GeneratedColumn<bool>(
+    'with_user',
+    aliasedName,
+    true,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("with_user" IN (0, 1))',
+    ),
+  );
   static const VerificationMeta _trustRepairPendingMeta =
       const VerificationMeta('trustRepairPending');
   @override
@@ -2072,6 +2086,7 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
     activeFixation,
     fixationLifespan,
     spatialStance,
+    withUser,
     trustRepairPending,
     chaosModeEnabled,
     chaosPressure,
@@ -2407,6 +2422,12 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
           data['spatial_stance']!,
           _spatialStanceMeta,
         ),
+      );
+    }
+    if (data.containsKey('with_user')) {
+      context.handle(
+        _withUserMeta,
+        withUser.isAcceptableOrUnknown(data['with_user']!, _withUserMeta),
       );
     }
     if (data.containsKey('trust_repair_pending')) {
@@ -2752,6 +2773,10 @@ class $SessionsTable extends Sessions with TableInfo<$SessionsTable, Session> {
         DriftSqlType.string,
         data['${effectivePrefix}spatial_stance'],
       )!,
+      withUser: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}with_user'],
+      ),
       trustRepairPending: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}trust_repair_pending'],
@@ -2893,6 +2918,10 @@ class Session extends DataClass implements Insertable<Session> {
   final String activeFixation;
   final int fixationLifespan;
   final String spatialStance;
+
+  /// v49 — 1:1 glance bit. NULL = unknown (keyword fallback).
+  /// Group members keep theirs in group_realism_state.
+  final bool? withUser;
   final bool trustRepairPending;
   final bool chaosModeEnabled;
   final int chaosPressure;
@@ -2994,6 +3023,7 @@ class Session extends DataClass implements Insertable<Session> {
     required this.activeFixation,
     required this.fixationLifespan,
     required this.spatialStance,
+    this.withUser,
     required this.trustRepairPending,
     required this.chaosModeEnabled,
     required this.chaosPressure,
@@ -3077,6 +3107,9 @@ class Session extends DataClass implements Insertable<Session> {
     map['active_fixation'] = Variable<String>(activeFixation);
     map['fixation_lifespan'] = Variable<int>(fixationLifespan);
     map['spatial_stance'] = Variable<String>(spatialStance);
+    if (!nullToAbsent || withUser != null) {
+      map['with_user'] = Variable<bool>(withUser);
+    }
     map['trust_repair_pending'] = Variable<bool>(trustRepairPending);
     map['chaos_mode_enabled'] = Variable<bool>(chaosModeEnabled);
     map['chaos_pressure'] = Variable<int>(chaosPressure);
@@ -3179,6 +3212,9 @@ class Session extends DataClass implements Insertable<Session> {
       activeFixation: Value(activeFixation),
       fixationLifespan: Value(fixationLifespan),
       spatialStance: Value(spatialStance),
+      withUser: withUser == null && nullToAbsent
+          ? const Value.absent()
+          : Value(withUser),
       trustRepairPending: Value(trustRepairPending),
       chaosModeEnabled: Value(chaosModeEnabled),
       chaosPressure: Value(chaosPressure),
@@ -3275,6 +3311,7 @@ class Session extends DataClass implements Insertable<Session> {
       activeFixation: serializer.fromJson<String>(json['activeFixation']),
       fixationLifespan: serializer.fromJson<int>(json['fixationLifespan']),
       spatialStance: serializer.fromJson<String>(json['spatialStance']),
+      withUser: serializer.fromJson<bool?>(json['withUser']),
       trustRepairPending: serializer.fromJson<bool>(json['trustRepairPending']),
       chaosModeEnabled: serializer.fromJson<bool>(json['chaosModeEnabled']),
       chaosPressure: serializer.fromJson<int>(json['chaosPressure']),
@@ -3354,6 +3391,7 @@ class Session extends DataClass implements Insertable<Session> {
       'activeFixation': serializer.toJson<String>(activeFixation),
       'fixationLifespan': serializer.toJson<int>(fixationLifespan),
       'spatialStance': serializer.toJson<String>(spatialStance),
+      'withUser': serializer.toJson<bool?>(withUser),
       'trustRepairPending': serializer.toJson<bool>(trustRepairPending),
       'chaosModeEnabled': serializer.toJson<bool>(chaosModeEnabled),
       'chaosPressure': serializer.toJson<int>(chaosPressure),
@@ -3419,6 +3457,7 @@ class Session extends DataClass implements Insertable<Session> {
     String? activeFixation,
     int? fixationLifespan,
     String? spatialStance,
+    Value<bool?> withUser = const Value.absent(),
     bool? trustRepairPending,
     bool? chaosModeEnabled,
     int? chaosPressure,
@@ -3488,6 +3527,7 @@ class Session extends DataClass implements Insertable<Session> {
     activeFixation: activeFixation ?? this.activeFixation,
     fixationLifespan: fixationLifespan ?? this.fixationLifespan,
     spatialStance: spatialStance ?? this.spatialStance,
+    withUser: withUser.present ? withUser.value : this.withUser,
     trustRepairPending: trustRepairPending ?? this.trustRepairPending,
     chaosModeEnabled: chaosModeEnabled ?? this.chaosModeEnabled,
     chaosPressure: chaosPressure ?? this.chaosPressure,
@@ -3623,6 +3663,7 @@ class Session extends DataClass implements Insertable<Session> {
       spatialStance: data.spatialStance.present
           ? data.spatialStance.value
           : this.spatialStance,
+      withUser: data.withUser.present ? data.withUser.value : this.withUser,
       trustRepairPending: data.trustRepairPending.present
           ? data.trustRepairPending.value
           : this.trustRepairPending,
@@ -3724,6 +3765,7 @@ class Session extends DataClass implements Insertable<Session> {
           ..write('activeFixation: $activeFixation, ')
           ..write('fixationLifespan: $fixationLifespan, ')
           ..write('spatialStance: $spatialStance, ')
+          ..write('withUser: $withUser, ')
           ..write('trustRepairPending: $trustRepairPending, ')
           ..write('chaosModeEnabled: $chaosModeEnabled, ')
           ..write('chaosPressure: $chaosPressure, ')
@@ -3789,6 +3831,7 @@ class Session extends DataClass implements Insertable<Session> {
     activeFixation,
     fixationLifespan,
     spatialStance,
+    withUser,
     trustRepairPending,
     chaosModeEnabled,
     chaosPressure,
@@ -3853,6 +3896,7 @@ class Session extends DataClass implements Insertable<Session> {
           other.activeFixation == this.activeFixation &&
           other.fixationLifespan == this.fixationLifespan &&
           other.spatialStance == this.spatialStance &&
+          other.withUser == this.withUser &&
           other.trustRepairPending == this.trustRepairPending &&
           other.chaosModeEnabled == this.chaosModeEnabled &&
           other.chaosPressure == this.chaosPressure &&
@@ -3915,6 +3959,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
   final Value<String> activeFixation;
   final Value<int> fixationLifespan;
   final Value<String> spatialStance;
+  final Value<bool?> withUser;
   final Value<bool> trustRepairPending;
   final Value<bool> chaosModeEnabled;
   final Value<int> chaosPressure;
@@ -3976,6 +4021,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.activeFixation = const Value.absent(),
     this.fixationLifespan = const Value.absent(),
     this.spatialStance = const Value.absent(),
+    this.withUser = const Value.absent(),
     this.trustRepairPending = const Value.absent(),
     this.chaosModeEnabled = const Value.absent(),
     this.chaosPressure = const Value.absent(),
@@ -4038,6 +4084,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     this.activeFixation = const Value.absent(),
     this.fixationLifespan = const Value.absent(),
     this.spatialStance = const Value.absent(),
+    this.withUser = const Value.absent(),
     this.trustRepairPending = const Value.absent(),
     this.chaosModeEnabled = const Value.absent(),
     this.chaosPressure = const Value.absent(),
@@ -4100,6 +4147,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Expression<String>? activeFixation,
     Expression<int>? fixationLifespan,
     Expression<String>? spatialStance,
+    Expression<bool>? withUser,
     Expression<bool>? trustRepairPending,
     Expression<bool>? chaosModeEnabled,
     Expression<int>? chaosPressure,
@@ -4168,6 +4216,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       if (activeFixation != null) 'active_fixation': activeFixation,
       if (fixationLifespan != null) 'fixation_lifespan': fixationLifespan,
       if (spatialStance != null) 'spatial_stance': spatialStance,
+      if (withUser != null) 'with_user': withUser,
       if (trustRepairPending != null)
         'trust_repair_pending': trustRepairPending,
       if (chaosModeEnabled != null) 'chaos_mode_enabled': chaosModeEnabled,
@@ -4236,6 +4285,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     Value<String>? activeFixation,
     Value<int>? fixationLifespan,
     Value<String>? spatialStance,
+    Value<bool?>? withUser,
     Value<bool>? trustRepairPending,
     Value<bool>? chaosModeEnabled,
     Value<int>? chaosPressure,
@@ -4301,6 +4351,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
       activeFixation: activeFixation ?? this.activeFixation,
       fixationLifespan: fixationLifespan ?? this.fixationLifespan,
       spatialStance: spatialStance ?? this.spatialStance,
+      withUser: withUser ?? this.withUser,
       trustRepairPending: trustRepairPending ?? this.trustRepairPending,
       chaosModeEnabled: chaosModeEnabled ?? this.chaosModeEnabled,
       chaosPressure: chaosPressure ?? this.chaosPressure,
@@ -4451,6 +4502,9 @@ class SessionsCompanion extends UpdateCompanion<Session> {
     if (spatialStance.present) {
       map['spatial_stance'] = Variable<String>(spatialStance.value);
     }
+    if (withUser.present) {
+      map['with_user'] = Variable<bool>(withUser.value);
+    }
     if (trustRepairPending.present) {
       map['trust_repair_pending'] = Variable<bool>(trustRepairPending.value);
     }
@@ -4569,6 +4623,7 @@ class SessionsCompanion extends UpdateCompanion<Session> {
           ..write('activeFixation: $activeFixation, ')
           ..write('fixationLifespan: $fixationLifespan, ')
           ..write('spatialStance: $spatialStance, ')
+          ..write('withUser: $withUser, ')
           ..write('trustRepairPending: $trustRepairPending, ')
           ..write('chaosModeEnabled: $chaosModeEnabled, ')
           ..write('chaosPressure: $chaosPressure, ')
@@ -17041,6 +17096,7 @@ typedef $$SessionsTableCreateCompanionBuilder =
       Value<String> activeFixation,
       Value<int> fixationLifespan,
       Value<String> spatialStance,
+      Value<bool?> withUser,
       Value<bool> trustRepairPending,
       Value<bool> chaosModeEnabled,
       Value<int> chaosPressure,
@@ -17104,6 +17160,7 @@ typedef $$SessionsTableUpdateCompanionBuilder =
       Value<String> activeFixation,
       Value<int> fixationLifespan,
       Value<String> spatialStance,
+      Value<bool?> withUser,
       Value<bool> trustRepairPending,
       Value<bool> chaosModeEnabled,
       Value<int> chaosPressure,
@@ -17320,6 +17377,11 @@ class $$SessionsTableFilterComposer
 
   ColumnFilters<String> get spatialStance => $composableBuilder(
     column: $table.spatialStance,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get withUser => $composableBuilder(
+    column: $table.withUser,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -17628,6 +17690,11 @@ class $$SessionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get withUser => $composableBuilder(
+    column: $table.withUser,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get trustRepairPending => $composableBuilder(
     column: $table.trustRepairPending,
     builder: (column) => ColumnOrderings(column),
@@ -17919,6 +17986,9 @@ class $$SessionsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get withUser =>
+      $composableBuilder(column: $table.withUser, builder: (column) => column);
+
   GeneratedColumn<bool> get trustRepairPending => $composableBuilder(
     column: $table.trustRepairPending,
     builder: (column) => column,
@@ -18087,6 +18157,7 @@ class $$SessionsTableTableManager
                 Value<String> activeFixation = const Value.absent(),
                 Value<int> fixationLifespan = const Value.absent(),
                 Value<String> spatialStance = const Value.absent(),
+                Value<bool?> withUser = const Value.absent(),
                 Value<bool> trustRepairPending = const Value.absent(),
                 Value<bool> chaosModeEnabled = const Value.absent(),
                 Value<int> chaosPressure = const Value.absent(),
@@ -18148,6 +18219,7 @@ class $$SessionsTableTableManager
                 activeFixation: activeFixation,
                 fixationLifespan: fixationLifespan,
                 spatialStance: spatialStance,
+                withUser: withUser,
                 trustRepairPending: trustRepairPending,
                 chaosModeEnabled: chaosModeEnabled,
                 chaosPressure: chaosPressure,
@@ -18211,6 +18283,7 @@ class $$SessionsTableTableManager
                 Value<String> activeFixation = const Value.absent(),
                 Value<int> fixationLifespan = const Value.absent(),
                 Value<String> spatialStance = const Value.absent(),
+                Value<bool?> withUser = const Value.absent(),
                 Value<bool> trustRepairPending = const Value.absent(),
                 Value<bool> chaosModeEnabled = const Value.absent(),
                 Value<int> chaosPressure = const Value.absent(),
@@ -18272,6 +18345,7 @@ class $$SessionsTableTableManager
                 activeFixation: activeFixation,
                 fixationLifespan: fixationLifespan,
                 spatialStance: spatialStance,
+                withUser: withUser,
                 trustRepairPending: trustRepairPending,
                 chaosModeEnabled: chaosModeEnabled,
                 chaosPressure: chaosPressure,

@@ -497,6 +497,9 @@ class FakeChatService extends ChangeNotifier implements ChatService {
   String spatialStanceForGroupCharacter(CharacterCard character) => '';
 
   @override
+  bool? withUserForGroupCharacter(CharacterCard character) => null;
+
+  @override
   dynamic noSuchMethod(Invocation invocation) =>
       super.noSuchMethod(invocation);
 }

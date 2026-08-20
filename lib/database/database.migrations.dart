@@ -848,5 +848,19 @@ extension _AppDatabaseMigrationLadder on AppDatabase {
           // already present (re-run / dual-version)
         }
       }
+
+      if (from < 49) {
+        // v48→v49: 1:1 With you / Away judge. NULL for every existing
+        // row is right — those chats have never been judged, so the
+        // glance keeps the keyword fallback. Additive and nullable.
+        try {
+          await customStatement(
+            'ALTER TABLE sessions ADD COLUMN with_user INTEGER',
+          );
+          debugPrint('[DB] v49: added sessions.with_user');
+        } catch (_) {
+          // already present (re-run / dual-version)
+        }
+      }
   }
 }

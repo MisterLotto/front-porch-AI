@@ -80,7 +80,11 @@ void main() {
       //      secondary exists, so the session holds the id. The column itself
       //      is guarded by the Table/ladder/repair trio plus
       //      test/services/chat/today_side_quest_test.dart.
-      expect(db.schemaVersion, 48);
+      // v49: sessions.with_user — 1:1 With you / Away judge. NULL means
+      //      never judged; the glance keeps the keyword fallback. The
+      //      column itself is guarded by
+      //      test/database/with_user_persist_migration_test.dart.
+      expect(db.schemaVersion, 49);
     });
 
     test('journal_memories table exists and round-trips (v35)', () async {

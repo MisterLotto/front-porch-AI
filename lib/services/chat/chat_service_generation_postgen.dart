@@ -322,6 +322,9 @@ extension ChatServiceGenerationPostGen on ChatService {
                 await _evaluatePhysicalStateCall(postureOnly: true);
               }
             }
+            // Glance only. After posture so the judge can read where they
+            // already are. Not fused with posture — that mix is the teleport.
+            await _runWithUserPass(scoredReply);
             // Consumed — the carrier must never outlive the passes that read
             // it, or a stale answer could feed the next turn's bookkeeping.
             _replyFactsRaw = null;

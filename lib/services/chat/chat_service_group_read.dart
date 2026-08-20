@@ -33,6 +33,12 @@ extension ChatServiceGroupRead on ChatService {
     return _groupRealism[id]?.spatialStance ?? '';
   }
 
+  /// Glance judge for a group card. Null = unknown (keyword fallback).
+  bool? _withUserForGroupCharacterImpl(CharacterCard character) {
+    final id = _getCharacterIdFromCard(character);
+    return _groupRealism[id]?.withUser;
+  }
+
   /// Returns the current emotion label (e.g. "joy", "sadness", "affection") for
   /// the given character when in a realism-enabled group chat. Returns null otherwise.
   String? getEmotionForGroupCharacter(CharacterCard character) {

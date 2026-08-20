@@ -3,6 +3,15 @@
 
 # Changelog
 
+## 2026-08-19 — feat(presence): With you is a post-reply yes/no
+- **Why:** 1:1 glance said With you whenever they were not on shift —
+  including sitting at their own place. Keyword sniff never saw "at home".
+- **What:** Separate WithUserEval after posture. Never writes spatial
+  stance. At work still from the clock. Fail closed. Schema v49
+  sessions.with_user. Desktop + web facade.
+- **Files:** with_user_eval, presence_derive, postgen, relationship,
+  group_member_realism, session save/load, facade, tests, Rawhide.md
+
 ## 2026-08-19 — test(goldens): restamp Work Hours row + Porch Life step 4
 - **Why:** db9624e added Start/End time chips; work_row grew 340×180 → 340×260
   and Create Character step 4 (Porch Life) includes that row. Widget Golden

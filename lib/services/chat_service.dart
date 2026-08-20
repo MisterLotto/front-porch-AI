@@ -139,6 +139,7 @@ class ChatService extends ChangeNotifier with ChatServiceTodaySentence {
   LLMService? testLlmServiceOverride;
   @visibleForTesting
   bool testIsLocalOverride = false;
+
   /// Test hook: import awaits this before mutating so a Send can race it.
   @visibleForTesting
   Completer<void>? testImportHold;
@@ -244,8 +245,12 @@ class ChatService extends ChangeNotifier with ChatServiceTodaySentence {
     String prompt, {
     String? senderName,
     String? characterId,
-  }) => _addGeneratedImageMessageImpl(path, prompt,
-      senderName: senderName, characterId: characterId);
+  }) => _addGeneratedImageMessageImpl(
+    path,
+    prompt,
+    senderName: senderName,
+    characterId: characterId,
+  );
 
   /// Scene Guests auto-chime after the primary (in-memory default ON).
   bool autoChimeEnabled = true;
@@ -255,6 +260,7 @@ class ChatService extends ChangeNotifier with ChatServiceTodaySentence {
 
   final List<ChatMessage> _messages = [];
   Future<void> _saveChain = Future.value();
+
   /// Serializes [sendMessage] so two composer taps during settle cannot
   /// both pass `_isGenerating` and then both run after the wait.
   Future<void> _sendChain = Future.value();
@@ -563,8 +569,7 @@ class ChatService extends ChangeNotifier with ChatServiceTodaySentence {
   // (chatWorldIds moved to chat_service_accessors.dart)
 
   /// Climate active on the current story day (span override or world default).
-  Biome get activeChatBiome =>
-      _biomeSchedule.biomeAt(_timeService.dayCount);
+  Biome get activeChatBiome => _biomeSchedule.biomeAt(_timeService.dayCount);
 
   /// Central macro resolver for prompt template expansion.
   late final _macroResolver = MacroResolver();
@@ -808,6 +813,7 @@ class ChatService extends ChangeNotifier with ChatServiceTodaySentence {
 
   CharacterCard? get activeCharacter => _activeCharacter;
   List<ChatMessage> get messages => List.unmodifiable(_messages);
+
   /// Token streaming — deliberately the NARROW sense. It drives the send
   /// button, and widening it to cover post-generation was tried and REVERTED:
   /// background evals then held the composer disabled for most of a turn on
@@ -905,10 +911,6 @@ class ChatService extends ChangeNotifier with ChatServiceTodaySentence {
   bool get summaryPaused => _summaryPaused;
   int get summaryLastIndex => _summaryLastIndex;
   bool get isSummaryGenerating => _isSummaryGenerating;
-  // Domain services are read directly by callers (chat.relationshipService /
-  // timeService / nsfwService / etc.); the god keeps ONLY the late finals —
-  // for 1:1+group dispatch, _groupRealism load/save, callbacks, notify and
-  // reset hygiene. Barrel not updated (internal; <3 public cross locations).
   RelationshipService get relationshipService => _relationshipService;
   TimeService get timeService => _timeService;
   NsfwService get nsfwService => _nsfwService;
@@ -916,18 +918,13 @@ class ChatService extends ChangeNotifier with ChatServiceTodaySentence {
   NeedsSimulation get needsSimulation => _needsSimulation;
 
   bool get realismEnabled => _realismEnabled;
-  String spatialStanceForGroupCharacter(CharacterCard character) =>
-      _spatialStanceForGroupCharacterImpl(character);
-  // Fake-pinned (see the class doc): body in accessors, member stays here.
+  String spatialStanceForGroupCharacter(CharacterCard c) =>
+      _spatialStanceForGroupCharacterImpl(c);
+  bool? withUserForGroupCharacter(CharacterCard c) =>
+      _withUserForGroupCharacterImpl(c);
   bool get objectivesActive => _objectivesActiveImpl;
-
-  /// RAG [MemoryService] when wired. Class-pinned for FakeChatService.
   MemoryService? get memoryService => _memoryService;
-
-  /// Last RAG receipt (or null). Class-pinned; body in accessors.
   Map<String, dynamic>? get lastRagReceipt => _lastRagReceiptImpl;
-
-  /// Standing mood line, or ''. Fake-pinned; body in chat_service_mood.dart.
   String get standingMoodSummary => standingMoodSummaryImpl;
 
   bool get isEvaluatingRealism => _isEvaluatingRealism;

@@ -281,6 +281,16 @@ extension RelationshipServiceDynamics on RelationshipService {
     _spatialStance = (v.toLowerCase() == 'none' || v.isEmpty) ? '' : v;
   }
 
+  /// Only a real verdict writes. null from a failed eval is ignored.
+  void applyWithUserVerdict(bool? v) {
+    if (v != null) _withUser = v;
+  }
+
+  /// Restore / reset path — null is allowed (unknown).
+  void setWithUser(bool? v) {
+    _withUser = v;
+  }
+
   /// Consume the one-shot repair window (called on next user turn after armed severe drop).
   void consumePendingTrustRepair() {
     pendingTrustRepair = false;

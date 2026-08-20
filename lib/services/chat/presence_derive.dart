@@ -55,6 +55,19 @@ String presenceGlanceLabel(PresenceWhere where) => switch (where) {
   PresenceWhere.atWork => 'At work',
 };
 
+/// Judge bit wins when present. Else the stance keyword sniff.
+/// Missing [withUser] fails toward [inScene] / keyword so old chats
+/// keep today's glance.
+bool inSceneForPresence({
+  required String stance,
+  bool? withUser,
+  bool inScene = true,
+}) {
+  if (withUser != null) return withUser;
+  if (stanceSaysAway(stance)) return false;
+  return inScene;
+}
+
 /// Empty stance fails toward in-scene. Away-words mean they left.
 bool stanceSaysAway(String spatialStance) {
   final s = spatialStance.toLowerCase().trim();

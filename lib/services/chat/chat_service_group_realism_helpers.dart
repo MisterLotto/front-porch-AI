@@ -246,6 +246,7 @@ extension ChatServiceGroupRealismHelpers on ChatService {
       );
       rs['spatialStance'] = _relationshipService.spatialStance;
     }
+    rs['withUser'] = _relationshipService.withUser;
     // Pockets was captured pre-gen in _captureRealismState and never
     // restamped, so swipe/delete restore put the PRE-ops kit back after a
     // successful pass (release audit 2026-08-11). Mirror needs/arousal:
