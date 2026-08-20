@@ -56,6 +56,14 @@ class WeatherInjection {
     final parts = <String>[
       biome != null ? skinnedProse(w, biome) : WeatherSegments.prose(w),
     ];
+    final customSeason = biome == null
+        ? null
+        : seasonDisplayName(w.day.season, biome.seasonLabels);
+    if (customSeason != null &&
+        customSeason.isNotEmpty &&
+        customSeason != w.day.season) {
+      parts.add('It is $customSeason.');
+    }
     // Within-day change: '' when the sky is unchanged, one sentence when a
     // front moved through since the previous day-part (yesterday's night,
     // for a morning) — characters experience the shift instead of a silent

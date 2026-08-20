@@ -6,6 +6,8 @@
 
 import 'dart:convert';
 
+import 'package:front_porch_ai/services/chat/season_labels.dart';
+
 /// Condition order shared with [WeatherEngine]: clear, cloudy, overcast, fog,
 /// rain, storm, snow.
 const List<String> kWeatherConditions = [
@@ -38,13 +40,7 @@ const (int, int) kFullBandRange = (-1, 6);
 
 /// Stance for condition skins (phase 2 fully authors these; built-ins carry
 /// ordinary/harsh so dressCue can stay one code path).
-enum WeatherStance {
-  pleasant,
-  ordinary,
-  harsh,
-  dangerous,
-  deadly,
-}
+enum WeatherStance { pleasant, ordinary, harsh, dangerous, deadly }
 
 WeatherStance weatherStanceFromName(String? name) {
   switch (name?.toLowerCase()) {
@@ -95,6 +91,10 @@ class Biome {
   /// Scales day–night swing (1.0 = temperate default).
   final double diurnalAmplitude;
 
+  /// Optional authored names (`summer` → `High Sun`). Empty/omitted =
+  /// English id. Never written for built-ins so temperate JSON is unchanged.
+  final Map<String, String> seasonLabels;
+
   /// Optional per-condition label/emoji/stance overrides.
   final Map<String, ConditionSkin> conditionSkin;
 
@@ -108,27 +108,33 @@ class Biome {
     this.bandRange = kClassicBandRange,
     this.displayAnchorsC = const {},
     this.diurnalAmplitude = 1.0,
+    this.seasonLabels = const {},
     this.conditionSkin = const {},
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'displayName': displayName,
-        'description': description,
-        if (feel.isNotEmpty) 'feel': feel,
-        'weights': weights,
-        'baseTemp': baseTemp,
-        // Default (classic) span is omitted so pre-extremes app versions read
-        // this JSON unchanged (mixed-fleet tolerance, living-worlds.md §3).
-        if (bandRange != kClassicBandRange)
-          'bandRange': [bandRange.$1, bandRange.$2],
-        if (displayAnchorsC.isNotEmpty) 'displayAnchorsC': displayAnchorsC,
-        'diurnalAmplitude': diurnalAmplitude,
-        if (conditionSkin.isNotEmpty)
-          'conditionSkin': {
-            for (final e in conditionSkin.entries) e.key: e.value.toJson(),
-          },
-      };
+    'id': id,
+    'displayName': displayName,
+    'description': description,
+    if (feel.isNotEmpty) 'feel': feel,
+    'weights': weights,
+    'baseTemp': baseTemp,
+    // Default (classic) span is omitted so pre-extremes app versions read
+    // this JSON unchanged (mixed-fleet tolerance, living-worlds.md §3).
+    if (bandRange != kClassicBandRange)
+      'bandRange': [bandRange.$1, bandRange.$2],
+    if (displayAnchorsC.isNotEmpty) 'displayAnchorsC': displayAnchorsC,
+    'diurnalAmplitude': diurnalAmplitude,
+    if (seasonLabels.values.any((v) => v.trim().isNotEmpty))
+      'seasonLabels': {
+        for (final e in seasonLabels.entries)
+          if (e.value.trim().isNotEmpty) e.key: e.value.trim(),
+      },
+    if (conditionSkin.isNotEmpty)
+      'conditionSkin': {
+        for (final e in conditionSkin.entries) e.key: e.value.toJson(),
+      },
+  };
 
   factory Biome.fromJson(Map<String, dynamic> json) {
     // Type-checked (not hard-cast) throughout: one string element in a
@@ -193,7 +199,8 @@ class Biome {
     }
     return Biome(
       id: json['id']?.toString() ?? 'custom',
-      displayName: json['displayName']?.toString() ??
+      displayName:
+          json['displayName']?.toString() ??
           json['display_name']?.toString() ??
           'Custom',
       description: json['description']?.toString() ?? '',
@@ -202,11 +209,12 @@ class Biome {
       baseTemp: baseTemp.isEmpty ? Map.from(temperate.baseTemp) : baseTemp,
       bandRange: range,
       displayAnchorsC: anchors,
-      diurnalAmplitude: switch (
-          json['diurnalAmplitude'] ?? json['diurnal_amplitude']) {
+      diurnalAmplitude: switch (json['diurnalAmplitude'] ??
+          json['diurnal_amplitude']) {
         final num v => v.toDouble(),
         _ => 1.0, // string/garbage degrades, never throws (tryParse-nulls)
       },
+      seasonLabels: parseSeasonLabels(json),
       conditionSkin: skins,
     );
   }
@@ -218,17 +226,18 @@ class Biome {
   /// can match the ACTIVE climate to an option by id alone (no name
   /// heuristics).
   Biome withId(String newId) => Biome(
-        id: newId,
-        displayName: displayName,
-        description: description,
-        feel: feel,
-        weights: weights,
-        baseTemp: baseTemp,
-        bandRange: bandRange,
-        displayAnchorsC: displayAnchorsC,
-        diurnalAmplitude: diurnalAmplitude,
-        conditionSkin: conditionSkin,
-      );
+    id: newId,
+    displayName: displayName,
+    description: description,
+    feel: feel,
+    weights: weights,
+    baseTemp: baseTemp,
+    bandRange: bandRange,
+    displayAnchorsC: displayAnchorsC,
+    diurnalAmplitude: diurnalAmplitude,
+    seasonLabels: seasonLabels,
+    conditionSkin: conditionSkin,
+  );
 
   static Biome? tryParse(String? raw) {
     if (raw == null || raw.trim().isEmpty) return null;
@@ -300,7 +309,8 @@ class Biome {
   static const temperate = Biome(
     id: 'temperate',
     displayName: 'Temperate',
-    description: 'Four familiar seasons with mixed rain, sun, and the odd storm.',
+    description:
+        'Four familiar seasons with mixed rain, sun, and the odd storm.',
     feel:
         'Like most of Europe or the US Midwest — jacket weather in spring/fall, '
         'real winter cold, summer heat that can break into thunder.',
@@ -310,12 +320,7 @@ class Biome {
       'summer': [45, 22, 8, 2, 12, 11, 0],
       'autumn': [24, 24, 20, 10, 16, 6, 0],
     },
-    baseTemp: {
-      'winter': 0,
-      'spring': 2,
-      'summer': 3,
-      'autumn': 1,
-    },
+    baseTemp: {'winter': 0, 'spring': 2, 'summer': 3, 'autumn': 1},
     diurnalAmplitude: 1.0,
   );
 
@@ -333,12 +338,7 @@ class Biome {
       'summer': [12, 12, 25, 12, 32, 7, 0],
       'autumn': [10, 15, 28, 16, 26, 5, 0],
     },
-    baseTemp: {
-      'winter': 2,
-      'spring': 3,
-      'summer': 3,
-      'autumn': 2,
-    },
+    baseTemp: {'winter': 2, 'spring': 3, 'summer': 3, 'autumn': 2},
     diurnalAmplitude: 0.7,
   );
 
@@ -355,12 +355,7 @@ class Biome {
       'summer': [80, 12, 4, 0, 2, 2, 0],
       'autumn': [72, 16, 6, 2, 3, 1, 0],
     },
-    baseTemp: {
-      'winter': 1,
-      'spring': 3,
-      'summer': 4,
-      'autumn': 2,
-    },
+    baseTemp: {'winter': 1, 'spring': 3, 'summer': 4, 'autumn': 2},
     diurnalAmplitude: 2.2,
   );
 
@@ -377,12 +372,7 @@ class Biome {
       'summer': [35, 18, 8, 2, 18, 19, 0],
       'autumn': [22, 22, 18, 10, 18, 8, 2],
     },
-    baseTemp: {
-      'winter': 0,
-      'spring': 2,
-      'summer': 4,
-      'autumn': 1,
-    },
+    baseTemp: {'winter': 0, 'spring': 2, 'summer': 4, 'autumn': 1},
     diurnalAmplitude: 1.3,
   );
 
@@ -399,12 +389,7 @@ class Biome {
       'summer': [28, 15, 10, 4, 25, 18, 0],
       'autumn': [32, 18, 12, 5, 22, 11, 0],
     },
-    baseTemp: {
-      'winter': 3,
-      'spring': 4,
-      'summer': 4,
-      'autumn': 3,
-    },
+    baseTemp: {'winter': 3, 'spring': 4, 'summer': 4, 'autumn': 3},
     diurnalAmplitude: 0.6,
   );
 
@@ -421,19 +406,15 @@ class Biome {
       'summer': [70, 18, 5, 1, 4, 2, 0],
       'autumn': [35, 22, 15, 6, 18, 4, 0],
     },
-    baseTemp: {
-      'winter': 1,
-      'spring': 2,
-      'summer': 4,
-      'autumn': 2,
-    },
+    baseTemp: {'winter': 1, 'spring': 2, 'summer': 4, 'autumn': 2},
     diurnalAmplitude: 1.1,
   );
 
   static const highland = Biome(
     id: 'highland',
     displayName: 'Highland',
-    description: 'Colder than the lowlands — snow lingers, fog and quick shifts.',
+    description:
+        'Colder than the lowlands — snow lingers, fog and quick shifts.',
     feel:
         'Thin air and sharp weather changes. Spring can still snow. Characters '
         'dress warmer; valleys and peaks feel different.',
@@ -443,12 +424,7 @@ class Biome {
       'summer': [30, 22, 15, 10, 15, 6, 2],
       'autumn': [18, 18, 18, 14, 16, 5, 11],
     },
-    baseTemp: {
-      'winter': 0,
-      'spring': 1,
-      'summer': 2,
-      'autumn': 0,
-    },
+    baseTemp: {'winter': 0, 'spring': 1, 'summer': 2, 'autumn': 0},
     diurnalAmplitude: 1.5,
   );
 
@@ -462,9 +438,7 @@ class Biome {
     highland,
   ];
 
-  static final Map<String, Biome> _byId = {
-    for (final b in builtIns) b.id: b,
-  };
+  static final Map<String, Biome> _byId = {for (final b in builtIns) b.id: b};
 
   static Biome? builtInById(String? id) {
     if (id == null || id.isEmpty) return null;
@@ -493,16 +467,16 @@ class ConditionSkin {
   });
 
   Map<String, dynamic> toJson() => {
-        'label': label,
-        if (emoji != null) 'emoji': emoji,
-        'stance': stance.name,
-        if (flavour != null && flavour!.isNotEmpty) 'flavour': flavour,
-      };
+    'label': label,
+    if (emoji != null) 'emoji': emoji,
+    'stance': stance.name,
+    if (flavour != null && flavour!.isNotEmpty) 'flavour': flavour,
+  };
 
   factory ConditionSkin.fromJson(Map<String, dynamic> json) => ConditionSkin(
-        label: json['label']?.toString() ?? '',
-        emoji: json['emoji']?.toString(),
-        stance: weatherStanceFromName(json['stance']?.toString()),
-        flavour: json['flavour']?.toString() ?? json['flavor']?.toString(),
-      );
+    label: json['label']?.toString() ?? '',
+    emoji: json['emoji']?.toString(),
+    stance: weatherStanceFromName(json['stance']?.toString()),
+    flavour: json['flavour']?.toString() ?? json['flavor']?.toString(),
+  );
 }

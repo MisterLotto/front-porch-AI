@@ -581,7 +581,10 @@ extension ChatServiceSend on ChatService {
     final recap = _summary.length > 300 ? _summary.substring(0, 300) : _summary;
     final weatherLine = switch (currentWeather) {
       null => null,
-      final w => WeatherEngine.prose(w),
+      final w => WeatherEngine.prose(
+        w,
+        seasonLabels: activeChatBiome.seasonLabels,
+      ),
     };
     Future<String?> generate() async {
       try {

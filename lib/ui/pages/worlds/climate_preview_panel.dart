@@ -91,8 +91,7 @@ class ClimatePreviewPanel extends StatelessWidget {
           const SizedBox(height: 14),
           ClimateSectionHeader('What the preview noticed'),
           for (final e in preview.errors) _notice(context, e, isError: true),
-          for (final w in preview.warnings)
-            _notice(context, w, isError: false),
+          for (final w in preview.warnings) _notice(context, w, isError: false),
         ],
         if (extremeBands.isNotEmpty) ...[
           const SizedBox(height: 14),
@@ -132,7 +131,7 @@ class ClimatePreviewPanel extends StatelessWidget {
           SizedBox(
             width: 58,
             child: Text(
-              s.season,
+              seasonDisplayName(s.season, biome.seasonLabels),
               style: TextStyle(
                 fontSize: 12.5,
                 color: AppColors.textSecondary(context),
@@ -150,7 +149,8 @@ class ClimatePreviewPanel extends StatelessWidget {
                       Expanded(
                         flex: (e.value * 1000).round().clamp(1, 1000),
                         child: ColoredBox(
-                          color: kConditionLegendColors[e.key] ??
+                          color:
+                              kConditionLegendColors[e.key] ??
                               AppColors.surfaceContainerOf(context),
                         ),
                       ),

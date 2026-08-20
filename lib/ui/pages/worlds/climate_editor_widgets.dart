@@ -82,8 +82,7 @@ String stanceLabel(WeatherStance s) => switch (s) {
 Color stanceColor(BuildContext context, WeatherStance? s) => switch (s) {
   null => AppColors.textTertiary(context),
   WeatherStance.pleasant ||
-  WeatherStance.ordinary =>
-    AppColors.textSecondary(context),
+  WeatherStance.ordinary => AppColors.textSecondary(context),
   WeatherStance.harsh => kClimateWarn,
   WeatherStance.dangerous || WeatherStance.deadly => kClimateDanger,
 };
@@ -138,6 +137,8 @@ class SeasonCard extends StatelessWidget {
     required this.unit,
     required this.onBand,
     required this.onAnchorChanged,
+    required this.labelController,
+    required this.onLabelChanged,
   });
 
   final String season;
@@ -147,6 +148,8 @@ class SeasonCard extends StatelessWidget {
   final String unit;
   final ValueChanged<TempBand> onBand;
   final VoidCallback onAnchorChanged;
+  final TextEditingController labelController;
+  final VoidCallback onLabelChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -161,19 +164,27 @@ class SeasonCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            season[0].toUpperCase() + season.substring(1),
+          TextField(
+            controller: labelController,
             style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: season[0].toUpperCase() + season.substring(1),
+              hintStyle: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textTertiary(context),
+              ),
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.zero,
+            ),
+            onChanged: (_) => onLabelChanged(),
           ),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             decoration: BoxDecoration(
-              color: AppColors.resolve(
-                context,
-                Colors.black26,
-                Colors.white54,
-              ),
+              color: AppColors.resolve(context, Colors.black26, Colors.white54),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: AppColors.borderOf(context)),
             ),
@@ -347,8 +358,9 @@ class WeightsGrid extends StatelessWidget {
                           ),
                           decoration: InputDecoration(
                             isDense: true,
-                            contentPadding:
-                                const EdgeInsets.symmetric(vertical: 7),
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 7,
+                            ),
                             filled: true,
                             fillColor: AppColors.surfaceContainerOf(context),
                             enabledBorder: OutlineInputBorder(

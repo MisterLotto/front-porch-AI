@@ -3,6 +3,14 @@
 
 # Changelog
 
+## 2026-08-19 — feat(worlds): rename seasons on a custom climate
+- **Why:** Alien worlds still said "summer". Slice 1 is display names only.
+- **What:** Optional seasonLabels on biome JSON. Editor name field.
+  Chip, web facade, prompt ("It is High Sun.") use the label. Empty =
+  English id. Temperate JSON omits the key. No calendar change.
+- **Files:** season_labels, weather_biomes, climate editor, weather_chip,
+  weather_injection, facade, tests, Rawhide.md
+
 ## 2026-08-19 — feat(presence): With you is a post-reply yes/no
 - **Why:** 1:1 glance said With you whenever they were not on shift —
   including sitting at their own place. Keyword sniff never saw "at home".

@@ -77,6 +77,9 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
   final Map<String, TextEditingController> _anchorCtls = {
     for (final s in kSeasons) s: TextEditingController(),
   };
+  final Map<String, TextEditingController> _labelCtls = {
+    for (final s in kSeasons) s: TextEditingController(),
+  };
   final Map<String, List<TextEditingController>> _weightCtls = {
     for (final s in kSeasons)
       s: [
@@ -97,8 +100,7 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
   BiomePreview? _preview;
 
   int _toDisplay(int c) => widget.fahrenheit ? WeatherSegments.tempF(c) : c;
-  int _fromDisplay(int v) =>
-      widget.fahrenheit ? ((v - 32) * 5 / 9).round() : v;
+  int _fromDisplay(int v) => widget.fahrenheit ? ((v - 32) * 5 / 9).round() : v;
   String get _unit => widget.fahrenheit ? '°F' : '°C';
 
   @override
@@ -113,17 +115,18 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
 
   void _seedFrom(Biome b) {
     for (final season in kSeasons) {
-      final idx =
-          (b.baseTemp[season] ?? 2).clamp(0, TempBand.values.length - 1);
+      final idx = (b.baseTemp[season] ?? 2).clamp(
+        0,
+        TempBand.values.length - 1,
+      );
       _seasonBand[season] = TempBand.values[idx];
       final anchor = b.displayAnchorsC[season];
-      _anchorCtls[season]!.text =
-          anchor != null ? '${_toDisplay(anchor)}' : '';
-      final weights = b.weights[season] ??
-          List<int>.filled(kWeatherConditions.length, 0);
+      _anchorCtls[season]!.text = anchor != null ? '${_toDisplay(anchor)}' : '';
+      _labelCtls[season]!.text = b.seasonLabels[season] ?? '';
+      final weights =
+          b.weights[season] ?? List<int>.filled(kWeatherConditions.length, 0);
       for (var i = 0; i < kWeatherConditions.length; i++) {
-        _weightCtls[season]![i].text =
-            '${i < weights.length ? weights[i] : 0}';
+        _weightCtls[season]![i].text = '${i < weights.length ? weights[i] : 0}';
       }
     }
     _diurnal = b.diurnalAmplitude;
@@ -142,6 +145,9 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
   @override
   void dispose() {
     for (final c in _anchorCtls.values) {
+      c.dispose();
+    }
+    for (final c in _labelCtls.values) {
       c.dispose();
     }
     for (final list in _weightCtls.values) {
@@ -172,8 +178,9 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
   /// anything extreme widens to base±1 around the chosen bands.
   (int, int) _derivedRange() {
     final ranks = [for (final s in kSeasons) _seasonBand[s]!.rank];
-    final anyExtreme = ranks
-        .any((r) => r < kClassicBandRange.$1 || r > kClassicBandRange.$2);
+    final anyExtreme = ranks.any(
+      (r) => r < kClassicBandRange.$1 || r > kClassicBandRange.$2,
+    );
     if (!anyExtreme) return kClassicBandRange;
     final lo = ranks.reduce((a, b) => a < b ? a : b) - 1;
     final hi = ranks.reduce((a, b) => a > b ? a : b) + 1;
@@ -204,18 +211,22 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
         for (final s in kSeasons)
           if (_needsAnchor(s) &&
               int.tryParse(_anchorCtls[s]!.text.trim()) != null)
-            s: _fromDisplay(int.parse(_anchorCtls[s]!.text.trim()))
-                .clamp(-273, 2000),
+            s: _fromDisplay(
+              int.parse(_anchorCtls[s]!.text.trim()),
+            ).clamp(-273, 2000),
       },
       diurnalAmplitude: _diurnal,
+      seasonLabels: {
+        for (final s in kSeasons)
+          if (_labelCtls[s]!.text.trim().isNotEmpty)
+            s: _labelCtls[s]!.text.trim(),
+      },
       conditionSkin: {
         for (final e in _skins.entries)
           if (e.value.active && e.value.stance != null)
             e.key: ConditionSkin(
               label: e.value.label.trim(),
-              emoji: e.value.emoji.trim().isEmpty
-                  ? null
-                  : e.value.emoji.trim(),
+              emoji: e.value.emoji.trim().isEmpty ? null : e.value.emoji.trim(),
               stance: e.value.stance!,
               flavour: e.value.flavour.trim().isEmpty
                   ? null
@@ -283,10 +294,7 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Expanded(flex: 5, child: _leftColumn(context)),
-                  VerticalDivider(
-                    width: 1,
-                    color: AppColors.borderOf(context),
-                  ),
+                  VerticalDivider(width: 1, color: AppColors.borderOf(context)),
                   // The mockup's darker inset preview column.
                   Expanded(
                     flex: 4,
@@ -303,10 +311,8 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
             ClimateEditorFooter(
               canSave: errors.isEmpty,
               onCancel: () => Navigator.pop(context),
-              onSave: () => Navigator.pop(
-                context,
-                jsonEncode(_buildDraft().toJson()),
-              ),
+              onSave: () =>
+                  Navigator.pop(context, jsonEncode(_buildDraft().toJson())),
             ),
           ],
         ),
@@ -340,6 +346,8 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
                   unit: _unit,
                   onBand: (b) => setState(() => _seasonBand[season] = b),
                   onAnchorChanged: () => setState(() {}),
+                  labelController: _labelCtls[season]!,
+                  onLabelChanged: () => setState(() {}),
                 ),
               ),
             ],
@@ -419,9 +427,7 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.porchAmberOf(context),
                 side: BorderSide(
-                  color: AppColors.porchAmberOf(context).withValues(
-                    alpha: 0.6,
-                  ),
+                  color: AppColors.porchAmberOf(context).withValues(alpha: 0.6),
                 ),
                 shape: const StadiumBorder(),
                 padding: const EdgeInsets.symmetric(
@@ -450,10 +456,7 @@ class _ClimateEditorDialogState extends State<_ClimateEditorDialog> {
           for (final e in errors)
             Container(
               margin: const EdgeInsets.only(bottom: 7),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 11,
-                vertical: 8,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
               decoration: BoxDecoration(
                 color: kClimateDanger.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(8),

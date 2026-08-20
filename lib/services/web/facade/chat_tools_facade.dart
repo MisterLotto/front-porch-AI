@@ -185,21 +185,16 @@ class ChatToolsFacade {
         'dayCount': time.dayCount,
         'weekday': time.narrativeWeekday,
         'passageEnabled': time.passageOfTimeEnabled,
-        // Living Time story weather (living-time-features.md §3) — additive
-        // and nullable; older web bundles simply ignore it.
         'weather': weather == null
             ? null
             : {
                 'condition': weather.condition.name,
                 'temp': weather.temp.name,
-                'season': weather.season,
+                'season': seasonDisplayName(
+                  weather.season,
+                  _chat.activeChatBiome.seasonLabels,
+                ),
                 'label': switch (_chat.currentSegmentWeather) {
-                  // Intra-day (v3): the label leads with the CURRENT
-                  // day-part's condition + numeric temp in the user's unit —
-                  // older bundles render it as opaque text, so this upgrade
-                  // reaches every web client with zero TS changes. Skinned
-                  // conditions (phase 2 step ④) surface their renamed label
-                  // through the shared helpers — parity by construction.
                   final seg? => skinnedChipLabel(
                     seg,
                     _chat.activeChatBiome,
@@ -217,8 +212,6 @@ class ChatToolsFacade {
                     weather.condition,
                   ),
                 },
-                // Intra-day fields (additive, v3) — day-part identity plus
-                // both units so richer web UIs can format freely.
                 'segment': _chat.currentSegmentWeather?.segment.name,
                 'segmentCondition': _chat.currentSegmentWeather?.condition.name,
                 'tempC': _chat.currentSegmentWeather?.tempC,
@@ -228,15 +221,15 @@ class ChatToolsFacade {
                 },
                 'unit': _storage.weatherFahrenheit ? 'f' : 'c',
                 'dayLabel': WeatherEngine.label(weather),
-                // Deterministic forecast (additive) — the prefix-stable walk
-                // means tomorrow is already decided, so the web UI can show
-                // incoming fronts exactly like the desktop chip.
                 'tomorrow': switch (_chat.upcomingWeather) {
                   null => null,
                   final n => {
                     'condition': n.condition.name,
                     'temp': n.temp.name,
-                    'season': n.season,
+                    'season': seasonDisplayName(
+                      n.season,
+                      _chat.activeChatBiome.seasonLabels,
+                    ),
                     'label': WeatherEngine.label(n),
                     'emoji': WeatherEngine.emoji(n.condition),
                   },
