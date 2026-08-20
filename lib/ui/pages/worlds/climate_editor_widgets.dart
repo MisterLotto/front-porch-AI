@@ -144,6 +144,7 @@ class SeasonCard extends StatelessWidget {
     required this.startDay,
     required this.onStart,
     this.clash = false,
+    this.onRemove,
   });
 
   final String season;
@@ -159,6 +160,7 @@ class SeasonCard extends StatelessWidget {
   final int startDay;
   final void Function(int month, int day) onStart;
   final bool clash;
+  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -175,21 +177,49 @@ class SeasonCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TextField(
-            controller: labelController,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-            decoration: InputDecoration(
-              isDense: true,
-              hintText: season[0].toUpperCase() + season.substring(1),
-              hintStyle: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textTertiary(context),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: labelController,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: kSeasons.contains(season)
+                        ? season[0].toUpperCase() + season.substring(1)
+                        : 'New season',
+                    hintStyle: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textTertiary(context),
+                    ),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  onChanged: (_) => onLabelChanged(),
+                ),
               ),
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.zero,
-            ),
-            onChanged: (_) => onLabelChanged(),
+              if (onRemove != null)
+                IconButton(
+                  tooltip: 'Remove season',
+                  visualDensity: VisualDensity.compact,
+                  iconSize: 16,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 24,
+                    minHeight: 24,
+                  ),
+                  onPressed: onRemove,
+                  icon: Icon(
+                    Icons.close,
+                    size: 16,
+                    color: AppColors.textTertiary(context),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(height: 6),
           SeasonStartRow(
@@ -311,10 +341,17 @@ class SeasonCard extends StatelessWidget {
 /// The 4-season × 7-condition weights grid, artifact-styled: mono numerals,
 /// dimmed zeros, and an amber-edged cell on each season's dominant weight.
 class WeightsGrid extends StatelessWidget {
-  const WeightsGrid({super.key, required this.controllers});
+  const WeightsGrid({
+    super.key,
+    required this.controllers,
+    required this.seasons,
+    this.labels = const {},
+  });
 
   /// season → 7 controllers in [kWeatherConditions] order.
   final Map<String, List<TextEditingController>> controllers;
+  final List<String> seasons;
+  final Map<String, String> labels;
 
   @override
   Widget build(BuildContext context) {
@@ -341,11 +378,11 @@ class WeightsGrid extends StatelessWidget {
                 ),
             ],
           ),
-          for (final season in kSeasons)
+          for (final season in seasons)
             TableRow(
               children: [
                 Text(
-                  season[0].toUpperCase() + season.substring(1),
+                  seasonDisplayName(season, labels),
                   style: TextStyle(
                     fontSize: 12.5,
                     color: AppColors.textSecondary(context),

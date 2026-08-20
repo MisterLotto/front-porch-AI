@@ -74,16 +74,15 @@ void main() {
     expect(errors.single, contains('Jan 1'));
   });
 
-  test('missing a season is a gap', () {
-    final errors = validateSeasonStarts({
-      'winter': 1,
-      'summer': 152,
-      'autumn': 244,
-    });
+  test('three unique starts cover the year', () {
     expect(
-      errors.any((e) => e.contains('spring') && e.contains('cover')),
-      isTrue,
+      validateSeasonStarts({'winter': 1, 'summer': 152, 'autumn': 244}),
+      isEmpty,
     );
+  });
+
+  test('one season cannot cover the year', () {
+    expect(validateSeasonStarts({'winter': 1}), isNotEmpty);
   });
 
   test('empty starts are valid (Earth)', () {

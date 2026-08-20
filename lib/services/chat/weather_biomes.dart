@@ -21,7 +21,7 @@ const List<String> kWeatherConditions = [
   'snow',
 ];
 
-const List<String> kSeasons = ['winter', 'spring', 'summer', 'autumn'];
+const List<String> kSeasons = kEarthSeasonIds;
 
 /// Thermal rank per TempBand DECLARATION index (0..7). Lives here — the
 /// storage layer — as the single source of truth; the engine's
@@ -248,6 +248,9 @@ class Biome {
     conditionSkin: conditionSkin,
   );
 
+  List<String> get seasonIds =>
+      seasonIdsOf(weightKeys: weights.keys, starts: seasonStarts);
+
   static Biome? tryParse(String? raw) {
     if (raw == null || raw.trim().isEmpty) return null;
     try {
@@ -263,7 +266,18 @@ class Biome {
   /// Validate authoring invariants (phase 1/2 shared).
   List<String> validate() {
     final errors = <String>[];
-    for (final season in kSeasons) {
+    final ids = seasonIds;
+    if (ids.length < kMinSeasons) {
+      errors.add('need at least $kMinSeasons seasons');
+    }
+    if (ids.length > kMaxSeasons) {
+      errors.add('at most $kMaxSeasons seasons');
+    }
+    final earthFour = ids.length == 4 && kSeasons.every(ids.contains);
+    if (!earthFour && seasonStarts.isEmpty) {
+      errors.add('each extra season needs a start day');
+    }
+    for (final season in ids) {
       final w = weights[season];
       if (w == null || w.length != kWeatherConditions.length) {
         errors.add('$season: need ${kWeatherConditions.length} weights');
@@ -283,14 +297,8 @@ class Biome {
       } else {
         final rank = kTempBandRankByIndex[t];
         if (rank < bandRange.$1 || rank > bandRange.$2) {
-          errors.add(
-            '$season: base temperature is outside this climate\'s band range',
-          );
+          errors.add('$season: base temperature is outside this climate band');
         }
-        // An anchor is required for every season that can REACH an extreme —
-        // the daily jitter is ±1 rank, so a hot base with a widened range
-        // jitters into furnace and would otherwise show the generic fallback
-        // °C with zero author input.
         final reachLo = (rank - 1).clamp(bandRange.$1, bandRange.$2);
         final reachHi = (rank + 1).clamp(bandRange.$1, bandRange.$2);
         final extremeReachable =
@@ -309,7 +317,6 @@ class Biome {
         bandRange.$1 > bandRange.$2) {
       errors.add('bandRange must be within (-1..6), low ≤ high');
     }
-    // (Condition-skin rename-needs-stance is enforced at the editor — phase 2.)
     return errors;
   }
 

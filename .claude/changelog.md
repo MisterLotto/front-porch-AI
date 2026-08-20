@@ -3,6 +3,14 @@
 
 # Changelog
 
+## 2026-08-19 — feat(worlds): 2–8 seasons on a custom climate
+- **Why:** Slice 3. Alien worlds are not stuck at four buckets.
+- **What:** Add/remove seasons (min 2, max 8). Each has name, start,
+  weights, band. Same overlap check. Engine + preview follow the list.
+  Temperate stays four Earth months. Not a custom year length.
+- **Files:** season_calendar, weather_biomes, biome_preview, climate
+  editor, tests, Rawhide.md
+
 ## 2026-08-19 — feat(worlds): custom season start days (slice 2)
 - **Why:** Alien years still used Earth month buckets. Slice 2 is length,
   not extra seasons.

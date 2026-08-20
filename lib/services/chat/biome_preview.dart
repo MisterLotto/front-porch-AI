@@ -79,10 +79,11 @@ BiomePreview previewBiome(
   final warnings = <String>[];
   final seasons = <SeasonDistribution>[];
 
-  for (final season in kSeasons) {
-    final date = biome.seasonStarts.isEmpty
-        ? DateTime(2026, _seasonDates[season]!.$1, _seasonDates[season]!.$2)
-        : previewDateForSeason(season, biome.seasonStarts);
+  for (final season in biome.seasonIds) {
+    final date =
+        biome.seasonStarts.isNotEmpty || !_seasonDates.containsKey(season)
+        ? previewDateForSeason(season, biome.seasonStarts)
+        : DateTime(2026, _seasonDates[season]!.$1, _seasonDates[season]!.$2);
     final condCounts = <String, int>{};
     final bandCounts = <String, int>{};
     var total = 0;
@@ -165,7 +166,7 @@ BiomePreview previewBiome(
   // Dead columns: a condition weighted zero in EVERY season could simply be
   // removed from the author's mental model.
   for (final cond in WeatherCondition.values) {
-    final everUsed = kSeasons.any(
+    final everUsed = biome.seasonIds.any(
       (s) => (biome.weights[s]?[cond.index] ?? 0) > 0,
     );
     if (!everUsed && cond == WeatherCondition.rain) {
@@ -181,7 +182,10 @@ BiomePreview previewBiome(
       WeatherSegments.segmentWeatherFor(
         sessionSeed: 'preview-week',
         dayCount: d,
-        date: previewDateForSeason('winter', biome.seasonStarts),
+        date: previewDateForSeason(
+          biome.seasonIds.contains('winter') ? 'winter' : biome.seasonIds.first,
+          biome.seasonStarts,
+        ),
         hour: 13, // midday — the number the chip would lead with
         biome: biome,
       ),

@@ -1,12 +1,13 @@
 // Copyright (C) 2026 Front Porch AI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Slice 2: four seasons, custom start days on a 365-day year.
+// Slice 2–3: custom start days on a 365-day year, 2–8 named seasons.
 // Empty map = Earth months (WeatherEngine.seasonOf). One season may wrap
-// New Year. Same start twice, a missing season, or a day outside 1..365
-// cannot save.
+// New Year. Same start twice, fewer than 2, or more than 8 cannot save.
 
-const List<String> _seasons = ['winter', 'spring', 'summer', 'autumn'];
+const List<String> kEarthSeasonIds = ['winter', 'spring', 'summer', 'autumn'];
+const int kMinSeasons = 2;
+const int kMaxSeasons = 8;
 
 /// Non-leap cumulative days before each month (Jan=0 … Dec=334).
 const List<int> kDoyBeforeMonth = [
@@ -124,18 +125,19 @@ Map<String, int> parseSeasonStarts(Map<String, dynamic> json) {
   return out;
 }
 
-/// Empty = Earth, valid. Otherwise all four seasons, unique days 1..365.
+/// Empty = Earth (valid). Otherwise 2–8 seasons, unique days 1..365.
 List<String> validateSeasonStarts(Map<String, int> starts) {
   if (starts.isEmpty) return const [];
   final errors = <String>[];
-  for (final s in _seasons) {
-    final d = starts[s];
-    if (d == null) {
-      errors.add('$s: missing a start day — seasons must cover the year');
-      continue;
-    }
-    if (d < 1 || d > 365) {
-      errors.add('$s: start must be a day of the year (1–365)');
+  if (starts.length < kMinSeasons) {
+    errors.add('need at least $kMinSeasons seasons');
+  }
+  if (starts.length > kMaxSeasons) {
+    errors.add('at most $kMaxSeasons seasons');
+  }
+  for (final e in starts.entries) {
+    if (e.value < 1 || e.value > 365) {
+      errors.add('${e.key}: start must be a day of the year (1–365)');
     }
   }
   final byDay = <int, List<String>>{};
@@ -154,8 +156,59 @@ List<String> validateSeasonStarts(Map<String, int> starts) {
 
 bool seasonStartsEqualEarth(Map<String, int> starts) {
   if (starts.isEmpty) return true;
-  for (final s in _seasons) {
+  if (starts.length != kEarthSeasonStarts.length) return false;
+  for (final s in kEarthSeasonIds) {
     if (starts[s] != kEarthSeasonStarts[s]) return false;
   }
-  return starts.length == kEarthSeasonStarts.length;
+  return true;
+}
+
+/// Calendar order when starts are set; else Earth four, else weight keys.
+List<String> seasonIdsOf({
+  required Iterable<String> weightKeys,
+  required Map<String, int> starts,
+}) {
+  if (starts.isNotEmpty) {
+    final ids = starts.keys.toList()
+      ..sort((a, b) => starts[a]!.compareTo(starts[b]!));
+    return ids;
+  }
+  final keys = weightKeys.toList();
+  if (keys.length == kEarthSeasonIds.length &&
+      kEarthSeasonIds.every(keys.contains)) {
+    return List<String>.from(kEarthSeasonIds);
+  }
+  if (keys.length >= kMinSeasons) return keys;
+  return List<String>.from(kEarthSeasonIds);
+}
+
+String allocSeasonId(Iterable<String> taken) {
+  final have = taken.toSet();
+  for (var i = 1; i < 40; i++) {
+    final id = 's$i';
+    if (!have.contains(id)) return id;
+  }
+  return 's${taken.length + 1}';
+}
+
+/// Midpoint of the longest gap on the year circle, not colliding.
+int startInLongestGap(Map<String, int> starts) {
+  if (starts.isEmpty) return 1;
+  final days = starts.values.toList()..sort();
+  var bestLen = -1;
+  var bestMid = 1;
+  for (var i = 0; i < days.length; i++) {
+    final a = days[i];
+    final b = days[(i + 1) % days.length];
+    final len = i + 1 == days.length ? (365 - a) + b : b - a;
+    if (len <= bestLen) continue;
+    bestLen = len;
+    bestMid = ((a - 1 + (len ~/ 2)) % 365) + 1;
+  }
+  var d = bestMid;
+  for (var n = 0; n < 365; n++) {
+    if (!days.contains(d)) return d;
+    d = d % 365 + 1;
+  }
+  return 1;
 }
