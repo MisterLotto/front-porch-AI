@@ -3,6 +3,10 @@
 
 # Changelog
 
+## 2026-08-19 — fix: CI unit tests after seasons + with-you
+- Restored climate "band range" error copy (extreme-bands test).
+- Stamp `withUser` on kFpchatRealismStateCoreKeys (fpchat keys test).
+
 ## 2026-08-19 — feat(web): custom seasons on Places (PWA)
 - **Why:** Desktop could author High Sun / extra seasons; the phone
   could only pick temperate.

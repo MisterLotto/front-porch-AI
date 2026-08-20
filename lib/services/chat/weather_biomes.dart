@@ -251,19 +251,6 @@ class Biome {
   List<String> get seasonIds =>
       seasonIdsOf(weightKeys: weights.keys, starts: seasonStarts);
 
-  static Biome? tryParse(String? raw) {
-    if (raw == null || raw.trim().isEmpty) return null;
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) return Biome.fromJson(decoded);
-      if (decoded is Map) {
-        return Biome.fromJson(Map<String, dynamic>.from(decoded));
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  /// Validate authoring invariants (phase 1/2 shared).
   List<String> validate() {
     final errors = <String>[];
     final ids = seasonIds;
@@ -297,7 +284,9 @@ class Biome {
       } else {
         final rank = kTempBandRankByIndex[t];
         if (rank < bandRange.$1 || rank > bandRange.$2) {
-          errors.add('$season: base temperature is outside this climate band');
+          errors.add(
+            '$season: base temperature is outside this climate\'s band range',
+          );
         }
         final reachLo = (rank - 1).clamp(bandRange.$1, bandRange.$2);
         final reachHi = (rank + 1).clamp(bandRange.$1, bandRange.$2);
@@ -460,6 +449,17 @@ class Biome {
   static Biome? builtInById(String? id) {
     if (id == null || id.isEmpty) return null;
     return _byId[id];
+  }
+
+  static Biome? tryParse(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) return Biome.fromJson(decoded);
+      if (decoded is Map)
+        return Biome.fromJson(Map<String, dynamic>.from(decoded));
+    } catch (_) {}
+    return null;
   }
 
   /// Resolve a world/chat biome: custom JSON, then built-in id, else temperate.

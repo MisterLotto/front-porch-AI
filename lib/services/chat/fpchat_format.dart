@@ -53,6 +53,7 @@ const Set<String> kFpchatRealismStateCoreKeys = {
   'activeFixation',
   'fixationLifespan',
   'spatialStance',
+  'withUser',
   // Optional when present:
   'pockets',
   'needs',
@@ -88,11 +89,11 @@ FpchatPayloadKind detectFpchatPayload(Map<String, dynamic> root) {
 
 /// Build Lane A message map from a [ChatMessage] (ST-friendly).
 Map<String, dynamic> laneAMessage(ChatMessage m) => {
-      'name': m.sender,
-      'is_user': m.isUser,
-      'mes': m.text,
-      'send_date': DateTime.now().millisecondsSinceEpoch,
-    };
+  'name': m.sender,
+  'is_user': m.isUser,
+  'mes': m.text,
+  'send_date': DateTime.now().millisecondsSinceEpoch,
+};
 
 /// SillyTavern chat JSONL — one JSON object per line (Phase 2).
 ///
@@ -117,9 +118,7 @@ String encodeSillyTavernJsonl(
     // Interop lane: strip think-blocks so ST does not show monologues.
     // (Full .fpchat keeps raw text for honest FPAI round-trip.)
     final cleanMes = stripThinkTags(m.text);
-    final cleanSwipes = [
-      for (final s in m.swipes) stripThinkTags(s),
-    ];
+    final cleanSwipes = [for (final s in m.swipes) stripThinkTags(s)];
     final line = <String, dynamic>{
       'name': m.sender,
       'is_user': m.isUser,
@@ -168,7 +167,8 @@ Map<String, dynamic>? tryParseSillyTavernJsonl(String text) {
     }
     parsed++;
     final hasMes = obj.containsKey('mes') || obj.containsKey('message');
-    final looksHeader = !hasMes &&
+    final looksHeader =
+        !hasMes &&
         (obj.containsKey('user_name') ||
             obj.containsKey('character_name') ||
             obj.containsKey('chat_metadata'));
@@ -180,7 +180,8 @@ Map<String, dynamic>? tryParseSillyTavernJsonl(String text) {
     if (!hasMes) continue;
     final mes = (obj['mes'] ?? obj['message'] ?? '').toString();
     final name = (obj['name'] ?? obj['send_name'] ?? '').toString();
-    final isUser = obj['is_user'] == true ||
+    final isUser =
+        obj['is_user'] == true ||
         obj['isUser'] == true ||
         (obj['is_name'] == true &&
             name.toLowerCase() == (userName ?? 'user').toLowerCase());
@@ -201,9 +202,7 @@ Map<String, dynamic>? tryParseSillyTavernJsonl(String text) {
     msgs.add(entry);
   }
   if (parsed < 2 || msgs.isEmpty) return null;
-  return {
-    'messages': msgs,
-  };
+  return {'messages': msgs};
 }
 
 /// Build messages_extra entry for index [i].
@@ -252,26 +251,24 @@ List<ChatMessage> messagesFromPackage({
     final isUser = a['is_user'] == true || a['isUser'] == true;
 
     if (extra != null) {
-      final swipes = (extra['swipes'] as List?)
-              ?.map((e) => e.toString())
-              .toList() ??
+      final swipes =
+          (extra['swipes'] as List?)?.map((e) => e.toString()).toList() ??
           [text];
-      final durations = (extra['swipe_durations'] as List?)
+      final durations =
+          (extra['swipe_durations'] as List?)
               ?.map((e) => (e as num).toInt())
               .toList() ??
           List<int>.filled(swipes.length, 0);
       final swipeMeta = (extra['swipe_metadata'] as List?)
-          ?.map(
-            (e) => e != null ? Map<String, dynamic>.from(e as Map) : null,
-          )
+          ?.map((e) => e != null ? Map<String, dynamic>.from(e as Map) : null)
           .toList();
       out.add(
         ChatMessage(
           text: text,
           sender: sender,
           isUser: isUser,
-          characterId: extra['character_id'] as String? ??
-              a['character_id'] as String?,
+          characterId:
+              extra['character_id'] as String? ?? a['character_id'] as String?,
           swipes: swipes,
           swipeIndex: (extra['swipe_index'] as num?)?.toInt() ?? 0,
           swipeDurations: durations,
