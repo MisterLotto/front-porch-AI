@@ -148,6 +148,19 @@ export const REALISM_DEFAULTS: RealismValues = {
 
 const MAX_ITEM_CHARS = 60;
 const MAX_PER_LIST = 8;
+const FILLER = new Set(['a', 'an', 'the', 'her', 'his', 'their', 'my', 'your', 'of']);
+const EMPTY_WARDROBE = new Set([
+  'nothing', 'none', 'nude', 'naked', 'unclothed', 'undressed', 'bare', 'empty',
+]);
+
+function isEmptyWardrobeRef(name: string): boolean {
+  const toks = name
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, '')
+    .split(' ')
+    .filter((t) => t && !FILLER.has(t));
+  return toks.length > 0 && toks.every((t) => EMPTY_WARDROBE.has(t));
+}
 
 function tidy(s: string): string {
   const t = s.replace(/\s+/g, ' ').trim();
@@ -194,7 +207,7 @@ export function inventoryToChips(rec: InventoryRecord | null | undefined): {
 export function chipsToInventory(worn: string[], carrying: string[]): InventoryRecord {
   const list = (v: string[]) =>
     v.slice(0, MAX_PER_LIST).map(chipToEntry).filter((e): e is { name: string; state?: string } => !!e);
-  const w = list(worn);
+  const w = list(worn).filter((e) => !isEmptyWardrobeRef(e.name));
   const c = list(carrying);
   if (!w.length && !c.length) return {};
   return { worn: w, carrying: c };

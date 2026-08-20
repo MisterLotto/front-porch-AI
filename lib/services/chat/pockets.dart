@@ -359,7 +359,8 @@ class Pockets {
   Map<String, dynamic> toJson() => {
     'worn': [for (final i in worn) i.toJson()],
     'carrying': [for (final i in carrying) i.toJson()],
-    if (setAside.isNotEmpty) 'set_aside': [for (final e in setAside) e.toJson()],
+    if (setAside.isNotEmpty)
+      'set_aside': [for (final e in setAside) e.toJson()],
   };
 
   /// [toJson] as the story sees it on [day] — expired clothing filtered the
@@ -419,9 +420,14 @@ class Pockets {
     required List<String> worn,
     required List<String> carrying,
   }) {
+    final wornItems = [
+      for (final s in worn) PocketItem.parseDisplay(s),
+    ].where((i) => !i.isEmpty && !isEmptyWardrobeRef(i.name));
     final p = Pockets.fromJson({
-      'worn': [for (final s in worn) PocketItem.parseDisplay(s).toJson()],
-      'carrying': [for (final s in carrying) PocketItem.parseDisplay(s).toJson()],
+      'worn': [for (final i in wornItems) i.toJson()],
+      'carrying': [
+        for (final s in carrying) PocketItem.parseDisplay(s).toJson(),
+      ],
     });
     return p.isEmpty ? const {} : p.toJson();
   }
@@ -476,11 +482,11 @@ String? resolveRecipient(String to, List<String> names) {
 
 const _filler = {'a', 'an', 'the', 'her', 'his', 'their', 'my', 'your', 'of'};
 
-String _norm(String s) =>
-    s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9 ]'), '');
+String _norm(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9 ]'), '');
 
-Set<String> _contentTokens(String s) =>
-    _norm(s).split(' ').where((t) => t.isNotEmpty && !_filler.contains(t)).toSet();
+Set<String> _contentTokens(String s) => _norm(
+  s,
+).split(' ').where((t) => t.isNotEmpty && !_filler.contains(t)).toSet();
 
 /// Did the model mean the whole outfit rather than one garment?
 ///
@@ -495,9 +501,37 @@ Set<String> _contentTokens(String s) =>
 /// garment token and falls through to ordinary item matching. Real garment
 /// names ("dress", "pajamas") are deliberately absent from this set.
 bool isGenericClothingRef(String raw) {
-  const generic = {'clothes', 'clothing', 'outfit', 'garments', 'everything', 'all'};
+  const generic = {
+    'clothes',
+    'clothing',
+    'outfit',
+    'garments',
+    'everything',
+    'all',
+  };
   final toks = _contentTokens(raw);
   return toks.isNotEmpty && toks.every(generic.contains);
+}
+
+/// Did the model mean "she is wearing nothing" rather than a garment?
+///
+/// `wear "nothing"` is how local models report undressing. Without this the
+/// applier mints a literal item named "nothing" — the sidebar chip and the
+/// `put on: nothing` receipt (2026-08-20). Same shape as [isGenericClothingRef]
+/// minting `"clothes"`. "bare feet" has a real token and falls through.
+bool isEmptyWardrobeRef(String raw) {
+  const empty = {
+    'nothing',
+    'none',
+    'nude',
+    'naked',
+    'unclothed',
+    'undressed',
+    'bare',
+    'empty',
+  };
+  final toks = _contentTokens(raw);
+  return toks.isNotEmpty && toks.every(empty.contains);
 }
 
 /// Did the model mean everything she is CARRYING? The setdown sibling of
@@ -601,6 +635,30 @@ List<String> applyPocketOps(
     }
   }
 
+  void undressAll() {
+    for (final it in p.worn) {
+      park(it, clothing: true);
+      receipts.add('took off: ${it.name}');
+      events?.add(
+        PocketEvent(
+          kind: PocketOpKind.remove,
+          item: it.name,
+          clothing: true,
+          bulk: true,
+        ),
+      );
+    }
+    p.worn.clear();
+    for (final it in p.carrying) {
+      park(it, clothing: false);
+      receipts.add('set aside: ${it.name}');
+      events?.add(
+        PocketEvent(kind: PocketOpKind.remove, item: it.name, bulk: true),
+      );
+    }
+    p.carrying.clear();
+  }
+
   for (final op in ops) {
     switch (op.kind) {
       case PocketOpKind.wear:
@@ -613,6 +671,12 @@ List<String> applyPocketOps(
         // set-aside pile's clothing; with nothing set aside there is
         // nothing to put on, and inventing an item is exactly the failure
         // the no-op rule exists to prevent.
+        if (isEmptyWardrobeRef(op.item)) {
+          // Nude is remove, not a garment named "nothing".
+          if (p.worn.isEmpty && p.carrying.isEmpty) break;
+          undressAll();
+          break;
+        }
         if (isGenericClothingRef(op.item)) {
           final backOn = [
             for (final e in p.setAside)
@@ -669,27 +733,7 @@ List<String> applyPocketOps(
           // carrying lands beside it (pockets are in the clothes; nobody
           // showers holding their phone). Possessions park as
           // non-expiring: the keys are still on the nightstand tomorrow.
-          for (final it in p.worn) {
-            park(it, clothing: true);
-            receipts.add('took off: ${it.name}');
-            events?.add(
-              PocketEvent(
-                kind: op.kind,
-                item: it.name,
-                clothing: true,
-                bulk: true,
-              ),
-            );
-          }
-          p.worn.clear();
-          for (final it in p.carrying) {
-            park(it, clothing: false);
-            receipts.add('set aside: ${it.name}');
-            events?.add(
-              PocketEvent(kind: op.kind, item: it.name, bulk: true),
-            );
-          }
-          p.carrying.clear();
+          undressAll();
           break;
         }
         final w = find(p.worn, op.item);

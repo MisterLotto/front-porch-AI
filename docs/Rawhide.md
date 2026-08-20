@@ -5,6 +5,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 👗 **Wearing nothing is undressed, not a garment named "nothing"** — if she takes everything off, the Wearing row is empty. The clothes go to Set aside. A leftover "nothing" chip on an old chat can be tapped off with the X.
+
 - 🌍 **Seasons can have other names** — on a world's custom climate, rename summer to High Sun (or whatever the planet uses). The chip and the story use that name. Leave it blank and it stays summer.
 - 📅 **Seasons can start on any day** — tap the date on a season card for the same calendar Story begins uses (not a month dropdown). Leap years count; Feb 29 is a real start. Same start twice, or a missing season, blocks save. Leave the dates alone and Earth months stay. Year length is still a normal year.
 - 🌿 **A world can have 2–8 seasons** — add Monsoon, drop spring, whatever fits. Same overlap block. Places on the phone can author this too. Still a normal year.

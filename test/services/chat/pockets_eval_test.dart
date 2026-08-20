@@ -63,16 +63,21 @@ void main() {
       expect(txt, contains('She pockets the keys.'));
     });
 
-    test('an empty record says so rather than showing a blank line', () {
-      final txt = PocketsEval.buildPrompt(
-        charName: 'Alice',
-        current: Pockets(),
-        reply: 'x',
-        recentExchange: '',
-        toolsMode: false,
-      );
-      expect(txt, contains('(nothing recorded)'));
-    });
+    test(
+      'an empty record omits wearing/carrying rather than saying nothing',
+      () {
+        final txt = PocketsEval.buildPrompt(
+          charName: 'Alice',
+          current: Pockets(),
+          reply: 'x',
+          recentExchange: '',
+          toolsMode: false,
+        );
+        expect(txt, isNot(contains('nothing recorded')));
+        expect(txt, isNot(contains('Currently wearing')));
+        expect(txt, contains('never a wear of an item named nothing'));
+      },
+    );
 
     test('it tells the model that "nothing changed" is the usual answer', () {
       // Without this the model invents changes to look useful, and the record
@@ -140,7 +145,11 @@ void main() {
 
     test('junk, empty and null all yield nothing rather than throwing', () {
       for (final raw in [null, '', '   ', 'no changes', '{', '{"a":']) {
-        expect(() => PocketsEval.parseOps(raw), returnsNormally, reason: '$raw');
+        expect(
+          () => PocketsEval.parseOps(raw),
+          returnsNormally,
+          reason: '$raw',
+        );
         expect(PocketsEval.parseOps(raw), isEmpty, reason: '$raw');
       }
     });
@@ -160,16 +169,17 @@ void main() {
   group('applying what it found', () {
     test('the record changes and the receipts describe it', () async {
       final p = Pockets(carrying: [const PocketItem('candy bar')]);
-      final receipts = await evalReturning(
-        '{"inventory_ops":['
-        '{"op":"transform","item":"candy bar","state":"sweet wrapper"},'
-        '{"op":"pickup","item":"car keys"}]}',
-      ).evaluateAndApply(
-        charName: 'Alice',
-        pockets: p,
-        reply: 'She eats it.',
-        recentExchange: '',
-      );
+      final receipts =
+          await evalReturning(
+            '{"inventory_ops":['
+            '{"op":"transform","item":"candy bar","state":"sweet wrapper"},'
+            '{"op":"pickup","item":"car keys"}]}',
+          ).evaluateAndApply(
+            charName: 'Alice',
+            pockets: p,
+            reply: 'She eats it.',
+            recentExchange: '',
+          );
 
       expect(receipts, ['candy bar → sweet wrapper', 'picked up: car keys']);
       expect(
@@ -181,10 +191,15 @@ void main() {
     test('an empty reply never spends a call', () async {
       var fired = false;
       final e = PocketsEval(
-        fire: ({required debugLabel, required tools, required buildPrompt}) async {
-          fired = true;
-          return null;
-        },
+        fire:
+            ({
+              required debugLabel,
+              required tools,
+              required buildPrompt,
+            }) async {
+              fired = true;
+              return null;
+            },
       );
       final out = await e.evaluateAndApply(
         charName: 'Alice',
@@ -196,40 +211,45 @@ void main() {
       expect(fired, isFalse, reason: 'this feature bills per turn — do not');
     });
 
-    test('a thrown transport leaves the record intact and the turn alive', () async {
-      // The reply has already been written and shown to the user. A failed
-      // bookkeeping call must cost one missed update, never the turn.
-      final p = Pockets(carrying: [const PocketItem('car keys')]);
-      final e = PocketsEval(
-        fire: ({required debugLabel, required tools, required buildPrompt}) async =>
-            throw Exception('backend went away mid-call'),
-      );
-      late List<String> out;
-      expect(
-        () async => out = await e.evaluateAndApply(
+    test(
+      'a thrown transport leaves the record intact and the turn alive',
+      () async {
+        // The reply has already been written and shown to the user. A failed
+        // bookkeeping call must cost one missed update, never the turn.
+        final p = Pockets(carrying: [const PocketItem('car keys')]);
+        final e = PocketsEval(
+          fire:
+              ({
+                required debugLabel,
+                required tools,
+                required buildPrompt,
+              }) async => throw Exception('backend went away mid-call'),
+        );
+        late List<String> out;
+        expect(
+          () async => out = await e.evaluateAndApply(
+            charName: 'Alice',
+            pockets: p,
+            reply: 'She looks around.',
+            recentExchange: '',
+          ),
+          returnsNormally,
+        );
+        await Future<void>.delayed(Duration.zero);
+        out = await e.evaluateAndApply(
           charName: 'Alice',
           pockets: p,
           reply: 'She looks around.',
           recentExchange: '',
-        ),
-        returnsNormally,
-      );
-      await Future<void>.delayed(Duration.zero);
-      out = await e.evaluateAndApply(
-        charName: 'Alice',
-        pockets: p,
-        reply: 'She looks around.',
-        recentExchange: '',
-      );
-      expect(out, isEmpty);
-      expect([for (final i in p.carrying) i.name], ['car keys']);
-    });
+        );
+        expect(out, isEmpty);
+        expect([for (final i in p.carrying) i.name], ['car keys']);
+      },
+    );
 
     test('a null answer changes nothing', () async {
       final p = Pockets(worn: [const PocketItem('coat')]);
-      final out = await evalReturning(
-        null,
-      ).evaluateAndApply(
+      final out = await evalReturning(null).evaluateAndApply(
         charName: 'Alice',
         pockets: p,
         reply: 'She waits.',
@@ -254,7 +274,8 @@ void main() {
       expect(
         (opProp['enum'] as List).toSet(),
         {for (final k in PocketOpKind.values) k.name},
-        reason: 'a verb the schema offers but the applier cannot parse would '
+        reason:
+            'a verb the schema offers but the applier cannot parse would '
             'be silently dropped every time a model chose it',
       );
       expect((item['required'] as List).toSet(), {'op', 'item'});

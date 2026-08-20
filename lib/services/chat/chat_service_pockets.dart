@@ -93,7 +93,7 @@ extension ChatServicePockets on ChatService {
     if (!_storageService.realismSettings.pocketsEnabled) return;
     // Same "name (state)" chip convention the character editor teaches.
     final item = PocketItem.parseDisplay(name);
-    if (item.isEmpty) return;
+    if (item.isEmpty || isEmptyWardrobeRef(item.name)) return;
     final p = pocketsFor(characterId) ?? Pockets();
     // Expire first, exactly like the eraser: the stored list must match the
     // day-filtered view the user was looking at.
@@ -115,9 +115,7 @@ extension ChatServicePockets on ChatService {
         // evaporate at the next story morning the way set-aside CLOTHING
         // does — the user put it there; only the user (or the story) moves
         // it.
-        p.setAside.add(
-          SetAsideItem(item, clothing: false, day: storyDayCount),
-        );
+        p.setAside.add(SetAsideItem(item, clothing: false, day: storyDayCount));
         while (p.setAside.length > kMaxSetAside) {
           p.setAside.removeAt(0);
         }
@@ -149,6 +147,7 @@ extension ChatServicePockets on ChatService {
       list.removeWhere((n) => n.included);
     }
   }
+
   /// Strike one item off by hand. The detection eval is a model doing
   /// bookkeeping; when it misses, this is what stops a wrong entry becoming
   /// permanent. Routed through the same setter the pass uses, so there is no
@@ -278,7 +277,6 @@ extension ChatServicePockets on ChatService {
       setPocketsFor(id, seed);
     }
   }
-
 
   /// Runs the detection pass for the speaker who just replied.
   ///
@@ -529,9 +527,7 @@ extension ChatServicePockets on ChatService {
           ? (msg.activeMetadata?['pockets_after_others'] as List?)
           : null;
       if (othersAfter.isNotEmpty || (priorAfterOthers?.isNotEmpty ?? false)) {
-        final newChars = <Object?>{
-          for (final oa in othersAfter) oa['char'],
-        };
+        final newChars = <Object?>{for (final oa in othersAfter) oa['char']};
         afterMeta['pockets_after_others'] = [
           ...?priorAfterOthers?.where(
             (o) => o is Map && !newChars.contains(o['char']),

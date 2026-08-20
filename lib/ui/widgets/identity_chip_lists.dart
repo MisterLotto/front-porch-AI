@@ -19,7 +19,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:front_porch_ai/services/chat/chat.dart' show kMaxWorn;
+import 'package:front_porch_ai/services/chat/chat.dart'
+    show PocketItem, isEmptyWardrobeRef, kMaxWorn;
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 // Sibling in this file's OWN barrel directory — importing widgets.dart here
@@ -55,9 +56,7 @@ bool adultThemesEnabledOf(BuildContext context) {
 
 bool plannerEnabledOf(BuildContext context) {
   try {
-    return Provider.of<StorageService>(
-      context,
-    ).realismSettings.plannerEnabled;
+    return Provider.of<StorageService>(context).realismSettings.plannerEnabled;
   } catch (_) {
     return false;
   }
@@ -165,10 +164,12 @@ class IdentityChipLists extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasAmbitions = ambitions != null && onAmbitionsChanged != null;
-    final hasPlanLines = plannerEnabledOf(context) &&
+    final hasPlanLines =
+        plannerEnabledOf(context) &&
         planLines != null &&
         onPlanLinesChanged != null;
-    final hasWork = occupation != null &&
+    final hasWork =
+        occupation != null &&
         onOccupationChanged != null &&
         hours != null &&
         onHoursChanged != null;
@@ -317,7 +318,11 @@ class IdentityChipLists extends StatelessWidget {
                 ChipListEditor(
                   label: 'Wearing',
                   values: worn!,
-                  onChanged: onWornChanged!,
+                  onChanged: (v) => onWornChanged!([
+                    for (final s in v)
+                      if (!isEmptyWardrobeRef(PocketItem.parseDisplay(s).name))
+                        s,
+                  ]),
                   hintText: 'e.g. flour-dusted apron',
                 ),
                 const SizedBox(height: 16),

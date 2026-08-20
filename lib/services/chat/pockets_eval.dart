@@ -91,9 +91,7 @@ class PocketsEval {
                 'properties': {
                   'op': {
                     'type': 'string',
-                    'enum': [
-                      for (final k in PocketOpKind.values) k.name,
-                    ],
+                    'enum': [for (final k in PocketOpKind.values) k.name],
                   },
                   'item': {'type': 'string'},
                   'to': {
@@ -130,7 +128,7 @@ class PocketsEval {
   /// model. Do not re-inline; the fusion parity test pins both callers.
   static String wardrobeContext(String charName, Pockets current) {
     String list(String label, List<PocketItem> items) => items.isEmpty
-        ? '$label: (nothing recorded)\n'
+        ? ''
         : '$label: ${items.map((i) => i.display).join(', ')}\n';
 
     return 'You are keeping track of what $charName is wearing and carrying.\n\n'
@@ -140,7 +138,7 @@ class PocketsEval {
         // always-on line would be prompt tax for nothing. Callers hand this
         // an already-expired record, so yesterday's clothes never show.
         '${current.setAside.isEmpty ? '' : 'Set aside nearby (still $charName\'s): '
-              '${current.setAside.map((e) => e.item.display).join(', ')}\n'}';
+                  '${current.setAside.map((e) => e.item.display).join(', ')}\n'}';
   }
 
   /// The op vocabulary and rules — the other shared fragment (see
@@ -165,9 +163,10 @@ class PocketsEval {
       'Each change is one op:\n'
       '  wear / remove — clothing put on or taken off. Undressing (for bed, '
       'a bath, a shower) is one remove per worn item, named as listed above — '
-      'or a single remove of "clothes" to mean all of it. Changing clothes is '
-      'a remove for each thing that came off plus a wear for each thing that '
-      'went on\n'
+      'or a single remove of "clothes" to mean all of it. Wearing nothing is '
+      'that remove — never a wear of an item named nothing, nude, or naked. '
+      'Changing clothes is a remove for each thing that came off plus a wear '
+      'for each thing that went on\n'
       '  pickup / drop — something taken up; or gone for GOOD (thrown away, '
       'lost, destroyed, given up). Taking back something set aside is a '
       'pickup; so is accepting something handed over — by the person they '
@@ -177,10 +176,10 @@ class PocketsEval {
       'when it is gone for good. Include "where" when the scene says '
       '("where": "on the nightstand")\n'
       '${others.isEmpty ? '  give — handed to someone else\n' : '  give — handed to someone else. Put their name in "to", spelled EXACTLY '
-            'as it appears here: ${others.join(', ')}. If it went to anyone '
-            'else — the person you are talking to, a passer-by, nobody in '
-            'particular — leave "to" empty rather than guessing a name from '
-            'that list.\n'}'
+                'as it appears here: ${others.join(', ')}. If it went to anyone '
+                'else — the person you are talking to, a passer-by, nobody in '
+                'particular — leave "to" empty rather than guessing a name from '
+                'that list.\n'}'
       '  update — the same item, new condition. Weather, wear and damage '
       'all count, not just food: ("state": "half-eaten"), a dress caught in '
       'the rain ("state": "rain-soaked"), armour after a fight '
@@ -217,7 +216,7 @@ class PocketsEval {
         'The reply:\n$reply\n\n'
         '${recentExchange.trim().isEmpty ? '' : 'Recent exchange for context:\n$recentExchange\n\n'}'
         '${toolsMode ? 'Report by calling the $kPocketsTool tool. Use ONLY the tool — no plain-text reply.' : 'Respond with ONLY a flat JSON object containing "inventory_ops" (an array). '
-              'Do NOT use markdown code blocks — return raw JSON only.'}';
+                  'Do NOT use markdown code blocks — return raw JSON only.'}';
   }
 
   /// Pull the ops out of whatever came back. Forgiving by design: a local model
@@ -239,9 +238,10 @@ class PocketsEval {
     final firstBracket = raw.indexOf('[');
     final objectFirst =
         firstBrace != -1 && (firstBracket == -1 || firstBrace < firstBracket);
-    for (final pattern in objectFirst
-        ? [r'\{[\s\S]*\}', r'\[[\s\S]*\]']
-        : [r'\[[\s\S]*\]', r'\{[\s\S]*\}']) {
+    for (final pattern
+        in objectFirst
+            ? [r'\{[\s\S]*\}', r'\[[\s\S]*\]']
+            : [r'\[[\s\S]*\]', r'\{[\s\S]*\}']) {
       final m = RegExp(pattern).firstMatch(raw);
       if (m == null) continue;
       try {

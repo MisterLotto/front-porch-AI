@@ -3,6 +3,18 @@
 
 # Changelog
 
+## 2026-08-20 — fix(pockets): wear "nothing" is undress, not a garment
+- **Why:** Models report undressing as wear of an item named nothing.
+  The applier minted it — sidebar Wearing chip and "put on: nothing".
+  Same class as wear("clothes") minting a garment named clothes.
+- **What:** isEmptyWardrobeRef (nothing/nude/naked/bare…). wear of that
+  bulk-undresses if she is dressed, no-ops if already nude, never mints.
+  Eval prompt omits empty lists (no "nothing recorded") and says wearing
+  nothing is remove. Editor/web chips drop the name on save. Existing
+  chats keep the chip until the user hits X (maintainer).
+- **Files:** pockets, pockets_eval, chat_service_pockets, identity_chip_lists,
+  realismTypes, tests
+
 ## 2026-08-20 — fix(worlds): season calendar is Gregorian, including leaps
 - **Why:** Picker was pinned to 2001 to hide Feb 29. That was the wrong
   constraint — year LENGTH stays Earth (365/366), leap days are real.

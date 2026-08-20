@@ -84,7 +84,6 @@ describe('wardrobe chip text mirrors the Dart implementation', () => {
     'iron sword (notched, needs sharpening)',
     'pepper spray (small)',
     'a candy bar (half-eaten)',
-    '(nothing)',
     'keys ()',
     'a (b) c',
   ];
@@ -104,8 +103,14 @@ describe('wardrobe chip text mirrors the Dart implementation', () => {
   });
 
   it('an empty half on either side stays part of the name', () => {
-    expect(chipsToInventory(['(nothing)'], []).worn).toEqual([{ name: '(nothing)' }]);
     expect(chipsToInventory(['keys ()'], []).worn).toEqual([{ name: 'keys ()' }]);
+  });
+
+  it('does not save a wearing chip named nothing', () => {
+    expect(chipsToInventory(['nothing', 'red sundress'], []).worn).toEqual([
+      { name: 'red sundress' },
+    ]);
+    expect(chipsToInventory(['nude'], []).worn).toBeUndefined();
   });
 
   it('only the last bracket group is considered', () => {
