@@ -3,6 +3,15 @@
 
 # Changelog
 
+## 2026-08-20 — fix(clock): [6 hours passed] is six hours
+- **Why:** Skip chip stamped a time, strip barely moved. "6 hours" was
+  never read — "hours passed" missed the "hours pass" bucket and defaulted
+  to +1h. Several hours without a number still +3h.
+- **What:** Counted minutes/hours/days (digit or one..twelve) before
+  the vague buckets. `hours passed` is a skip phrase so brackets
+  without OOC still fire. A bare "I waited 6 hours" is not a skip.
+- **Files:** story_clock, time_service, skip_numeric_duration_test
+
 ## 2026-08-20 — docs: generic they/them for characters
 - **Why:** Release notes, Porch Life blurbs, and the user guide treated
   every character as she/her.

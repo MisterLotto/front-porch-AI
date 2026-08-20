@@ -592,7 +592,7 @@ class TimeService {
       r'\b(time.?skip|fast.?forward|skip ahead|several hours|a few hours|hours? later|'
       r'the next (morning|day|evening|afternoon|night|dawn)|'
       r'next (morning|day|evening|afternoon|night|dawn)|'
-      r'hours? pass|time passes|the following (morning|day)|'
+      r'hours? pass(?:ed)?|time passes|the following (morning|day)|'
       r'wake up the next|woke up|the next day|'
       r'(a|one) week (later|passes)|next week|weeks? later|'
       r'(a|one) month (later|passes)|next month)\b',
