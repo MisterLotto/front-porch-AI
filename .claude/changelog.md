@@ -3,6 +3,15 @@
 
 # Changelog
 
+## 2026-08-20 — chore(deps): Riverpod 3.4.2 on Flutter 3.47
+- **Why:** 3.47 pin left generator capped at 4.0.4. flutter run kept
+  offering 4.0.8. Latest Riverpod on this SDK is 3.4.2 / generator 4.0.8.
+- **What:** Lifted the 4.0.6- cap. `flutter pub upgrade` (no majors):
+  flutter_riverpod 3.4.2, generator 4.0.8, drift_dev 2.34.5, analyzer
+  13.3. sqlite3 stayed 3.5.2 + libs 0.6.0+eol. file_picker 11, xml 6.
+- **Files:** pubspec.yaml, pubspec.lock, dependency_floors.json,
+  test/deps/README.md
+
 ## 2026-08-20 — fix(clock): [6 hours passed] is six hours
 - **Why:** Skip chip stamped a time, strip barely moved. "6 hours" was
   never read — "hours passed" missed the "hours pass" bucket and defaulted

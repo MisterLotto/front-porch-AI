@@ -87,14 +87,14 @@ dependencies:
   # sidecar remains as automatic fallback for one release cycle —
   # docs/design/sidecar-retirement.md phase 3).
   sherpa_onnx: ^1.13.4
-  flutter_riverpod: ^3.0.0
-  riverpod_annotation: '>=4.0.0 <4.0.5'
+  flutter_riverpod: ^3.4.2
+  riverpod_annotation: ^4.0.6
   flutter_markdown_plus: ^1.0.12
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  drift_dev: ^2.34.0
+  drift_dev: ^2.34.5
   build_runner: ^2.4.14
 
   # The "flutter_lints" package below contains a set of recommended lints to
@@ -103,11 +103,10 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
-  # Cap kept on the 3.47 pin on purpose (do not lift in the same change).
-  # 3.47 *can* resolve riverpod_generator 4.0.8 + drift_dev 2.34.5 together;
-  # 4.0.6+ still needs a dedicated codegen/lifecycle pass. file_picker stays
-  # 11 — 12 deletes FilePickerResult. xml 7 still blocked by webdav_client.
-  riverpod_generator: '>=4.0.4 <4.0.6'
+  # Flutter 3.47.0 / Dart 3.13: riverpod_generator 4.0.8 + drift_dev 2.34.5
+  # + analyzer 13 resolve together. file_picker stays 11 — 12 deletes
+  # FilePickerResult. xml 7 still blocked by webdav_client 1.2.2.
+  riverpod_generator: ^4.0.8
   integration_test:
     sdk: flutter
   path_provider_platform_interface: ^2.1.3

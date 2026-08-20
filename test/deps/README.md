@@ -42,30 +42,30 @@ cleared by bumping the CI Flutter pin from 3.41.1 to **3.44.8** (Dart 3.12.2)
 and raising the constraints in the same change. The reasoning is kept because
 it is what stops this recurring.
 
-Final state after the Flutter **3.44.8** pin + 2026-07-28 dep refresh:
-`analyzer` **12.1.0**, `drift` **2.34.x**, `drift_dev` **2.34.0** (capped —
-2.34.1+ needs analyzer ^13, which fights `riverpod_generator` 4.0.4),
-`sqlite3` **3.x** (self-bundling), `sqlite3_flutter_libs` **0.6.0+eol**,
-`riverpod_generator` **4.0.4** (4.0.6+ still incompatible with flutter_test
-on 3.44.8 — see below), `meta` **1.18.0**. Riverpod codegen was kept.
+Final state after the Flutter **3.47.0** pin + 2026-08-20 dep refresh:
+`analyzer` **13.3.0**, `drift` **2.34.3**, `drift_dev` **2.34.5**,
+`sqlite3` **3.5.2** (self-bundling), `sqlite3_flutter_libs` **0.6.0+eol**,
+`flutter_riverpod` **3.4.2**, `riverpod_generator` **4.0.8**,
+`riverpod_annotation` **4.0.6**. Riverpod codegen was kept.
 
-### Flutter 3.47.0 pin (2026-08-16) — do not lift these in the pin PR
+### Flutter 3.47.0 pin (2026-08-16) — Riverpod 3.4 lifted 2026-08-20
 
-The CI pin is now **3.47.0** (Dart 3.13.0). A worktree probe showed:
+The CI pin is **3.47.0** (Dart 3.13.0). What the 3.47 worktree probe said
+would resolve, now does:
 
-- `riverpod_generator` **4.0.8** + `drift_dev` **2.34.5** + `analyzer` **13.3** **do** resolve together. Not lifted here — Riverpod 3.4 has lifecycle changes; separate PR.
+- `riverpod_generator` **4.0.8** + `drift_dev` **2.34.5** + `analyzer` **13.3**
 - `file_picker` **12** **does not** compile (`FilePickerResult` gone). Stay on 11.
 - `package_info_plus` 10 / `win32` 6 ride file_picker 12. Stay.
-- `image` 4.9 / Syncfusion 34 / `xml` 7 still blocked by `webdav_client` 1.2.2.
+- Syncfusion 34 / `xml` 7 still blocked by `webdav_client` 1.2.2.
+  (`image` 4.9.2 resolved on xml 6 — the 4.9/xml-7 block is gone.)
 
-### Still blocked on Flutter 3.44.8 (historical — do not force on 3.44)
+### Still blocked (do not force)
 
 | Package | Blocker |
 |---------|---------|
-| `riverpod_generator` ≥4.0.6 / `riverpod` 3.4 | `flutter_test` pins `test_api` 0.7.11; riverpod 3.4 → `test` fights that + our `web_socket_channel` ^3 |
-| `drift_dev` ≥2.34.1 | needs `analyzer` ^13; caps at 2.34.0 with riverpod_generator 4.0.4 |
-| `image` ≥4.9 / `syncfusion_flutter_pdf` ≥34 | need `xml` ^7; `webdav_client` 1.2.2 needs `xml` ^6 |
+| `file_picker` 12 | deletes `FilePickerResult`; we still use it |
 | `package_info_plus` ≥10 | needs `win32` ^6; `file_picker` 11 needs `win32` ^5 |
+| `syncfusion_flutter_pdf` ≥34 | needs `xml` ^7; `webdav_client` 1.2.2 needs `xml` ^6 |
 | ~~`flutter_markdown`~~ | **migrated** to `flutter_markdown_plus` (2026-07-28) |
 
 Majors that **did** land: `file_picker` 11, `record` 7, `grpc` 5, `flat_buffers` 25, `shelf_web_socket` 3.
