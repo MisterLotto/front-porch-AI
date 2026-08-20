@@ -3,11 +3,19 @@
 
 # Changelog
 
+## 2026-08-20 — fix(worlds): season calendar is Gregorian, including leaps
+- **Why:** Picker was pinned to 2001 to hide Feb 29. That was the wrong
+  constraint — year LENGTH stays Earth (365/366), leap days are real.
+- **What:** Same calendar as Story begins (any year). Starts encode on a
+  leap year so Feb 29 is ordinal 60; a non-leap story date rolls it to
+  Mar 1. Web date input uses this year, not 2001.
+- **Files:** season_calendar, climate_season_start, ClimateSeasonEditor,
+  weather_engine, tests
+
 ## 2026-08-20 — fix(worlds): season start uses the calendar picker
 - **Why:** Month + day dropdowns overflowed the Create World climate
   dialog (Jan–Dec menu over the sidebar).
 - **What:** Same showDatePicker Story begins uses. Chip shows "Mar 1".
-  Year pinned to 2001 so there is no Feb 29 (365-day climate year).
   Web: native date input over a Mar 1 chip.
 - **Files:** climate_season_start, ClimateSeasonEditor, styles.css, tests
 

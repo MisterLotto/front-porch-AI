@@ -178,7 +178,7 @@ class WeatherEngine {
       final dayDate = date.subtract(Duration(days: days - d));
       season = climate.seasonStarts.isEmpty
           ? seasonOf(dayDate)
-          : seasonFromStarts(dayOfYear365(dayDate), climate.seasonStarts);
+          : seasonOnDate(dayDate, climate.seasonStarts);
       final rng = WeatherRng(base ^ (d * 0x9E3779B9));
       final stay = d > 1 && rng.nextPermille() < _stayPermille;
       temp = _tempFor(season, rng, climate);

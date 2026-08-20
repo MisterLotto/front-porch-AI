@@ -5,7 +5,10 @@ import { describe, expect, it } from 'vitest';
 import {
   allocSeasonId,
   applyRows,
+  doyFromMonthDay,
   EARTH_STARTS,
+  monthDayFromDoy,
+  seasonPickerIso,
   startInLongestGap,
   validateSeasonStarts,
   type BiomeDraft,
@@ -55,6 +58,18 @@ describe('seasonCalendar', () => {
 
   it('allocSeasonId skips taken', () => {
     expect(allocSeasonId(['s1', 'winter'])).toBe('s2');
+  });
+
+  it('Feb 29 is its own day, not Mar 1', () => {
+    expect(doyFromMonthDay(2, 29)).toBe(60);
+    expect(monthDayFromDoy(60)).toEqual({ month: 2, day: 29 });
+    expect(doyFromMonthDay(3, 1)).toBe(61);
+  });
+
+  it('season picker ISO is this year, not 2001', () => {
+    const iso = seasonPickerIso(3, 1, new Date('2026-08-20'));
+    expect(iso).toBe('2026-03-01');
+    expect(seasonPickerIso(2, 29, new Date('2026-08-20'))).toBe('2028-02-29');
   });
 
   it('applyRows omits Earth-equal starts', () => {

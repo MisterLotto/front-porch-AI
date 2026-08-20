@@ -14,6 +14,7 @@ import {
   MAX_SEASONS,
   MIN_SEASONS,
   monthDayFromDoy,
+  seasonPickerIso,
   rowsFromBiome,
   startInLongestGap,
   type BiomeDraft,
@@ -43,8 +44,7 @@ export function ClimateSeasonEditor({
         {rows.map((row) => {
           const cap = daysInMonth365(row.month);
           const startLabel = formatDoy(doyFromMonthDay(row.month, row.day));
-          const mm = String(row.month).padStart(2, '0');
-          const dd = String(Math.min(row.day, cap)).padStart(2, '0');
+          const iso = seasonPickerIso(row.month, Math.min(row.day, cap));
           return (
           <div
             key={row.id}
@@ -81,10 +81,10 @@ export function ClimateSeasonEditor({
               <span className="climate-season-date">{startLabel}</span>
               <input
                 type="date"
-                min="2001-01-01"
-                max="2001-12-31"
+                min="1900-01-01"
+                max="2100-12-31"
                 aria-label={`Season starts ${startLabel}`}
-                value={`2001-${mm}-${dd}`}
+                value={iso}
                 onChange={(e) => {
                   if (!e.target.value) return;
                   const parts = e.target.value.split('-');

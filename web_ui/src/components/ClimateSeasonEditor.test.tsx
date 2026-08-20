@@ -48,7 +48,8 @@ describe('ClimateSeasonEditor start date', () => {
     expect(container.querySelectorAll('select').length).toBe(0);
     const dates = container.querySelectorAll('input[type="date"]');
     expect(dates.length).toBe(4);
-    expect((dates[1] as HTMLInputElement).value).toBe('2001-03-01');
+    expect((dates[1] as HTMLInputElement).value.endsWith('-03-01')).toBe(true);
+    expect((dates[1] as HTMLInputElement).value.startsWith('2001')).toBe(false);
     expect(container.textContent).toContain('Mar 1');
   });
 });

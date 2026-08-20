@@ -9,12 +9,12 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 /// Matches kClimateDanger on the climate editor cards.
 const Color _clash = Color(0xFFE0644C); // theme-keep: mockup danger
 
-/// Non-leap year so the Material calendar has no Feb 29 — the climate year
-/// is 365 days. first/lastDate pin this year so the picker cannot walk off.
-const int _kSeasonPickerYear = 2001;
+bool _isLeap(int year) => year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
 
 /// Month + day start for one season. Opens the same [showDatePicker]
-/// Story begins uses; stacked Jan/Feb dropdowns overflowed the dialog.
+/// Story begins uses. Year in the picker is which page you are on —
+/// only month and day are stored. Leap years included; year length is
+/// still Gregorian (not a custom 400-day year).
 class SeasonStartRow extends StatelessWidget {
   const SeasonStartRow({
     super.key,
@@ -69,14 +69,24 @@ class SeasonStartRow extends StatelessWidget {
   }
 
   Future<void> _pick(BuildContext context, int safeDay) async {
+    var year = DateTime.now().year;
+    var initialDay = safeDay;
+    if (month == 2 && safeDay == 29) {
+      while (!_isLeap(year)) {
+        year++;
+      }
+    } else {
+      final last = DateTime(year, month + 1, 0).day;
+      initialDay = safeDay.clamp(1, last);
+    }
     final picked = await showDatePicker(
       context: context,
-      initialDate: DateTime(_kSeasonPickerYear, month, safeDay),
-      firstDate: DateTime(_kSeasonPickerYear, 1, 1),
-      lastDate: DateTime(_kSeasonPickerYear, 12, 31),
+      initialDate: DateTime(year, month, initialDay),
+      firstDate: DateTime(1),
+      lastDate: DateTime(9999, 12, 31),
       helpText: 'Season starts',
     );
     if (picked == null) return;
-    onStart(picked.month, picked.day.clamp(1, daysInMonth365(picked.month)));
+    onStart(picked.month, picked.day);
   }
 }

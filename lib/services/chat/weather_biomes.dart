@@ -96,7 +96,8 @@ class Biome {
   /// English id. Never written for built-ins so temperate JSON is unchanged.
   final Map<String, String> seasonLabels;
 
-  /// Optional start day-of-year (1–365) per season. Empty = Earth months.
+  /// Optional start day-of-year (1–366, leap-year ordinal) per season.
+  /// Empty = Earth months. Feb 29 is a real start; year length stays Gregorian.
   final Map<String, int> seasonStarts;
 
   /// Optional per-condition label/emoji/stance overrides.
