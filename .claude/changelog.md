@@ -3,6 +3,14 @@
 
 # Changelog
 
+## 2026-08-20 — fix(e2e): classify with_user glance as EVAL, not CHAT
+- **Why:** 21bfd8c3 added a post-reply With-you judge. The E2E fake had no
+  `"with_user"` branch, so it answered with canned chat prose, bumped
+  chatRequests, and overwrote lastChatBody. group_smoke, group wiring, and
+  lorebook timed out / asserted isolation on 8 of 15 CI shards.
+- **What:** Fake answers `{"with_user": true}`. Guard proven red then green.
+- **Files:** fake_backend.dart, fake_backend_with_user_route_test.dart
+
 ## 2026-08-19 — fix: CI unit tests after seasons + with-you
 - Restored climate "band range" error copy (extreme-bands test).
 - Stamp `withUser` on kFpchatRealismStateCoreKeys (fpchat keys test).
