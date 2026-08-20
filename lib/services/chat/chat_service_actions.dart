@@ -16,13 +16,11 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-
 part of '../chat_service.dart';
 
 /// Action Suggestions — clear + LLM-generated quick-reply actions.
 /// Extracted verbatim (zero behaviour change) to shrink the god file.
 extension ChatServiceActions on ChatService {
-
   // ── Action Suggestions ────────────────────────────────────────────────
 
   /// Clear suggestions (called when user sends any message).
@@ -69,12 +67,12 @@ extension ChatServiceActions on ChatService {
           'Each action must be a BRIEF LABEL (5-10 words max) describing what to do, NOT a full response. '
           'Think of these as button labels or menu items.\n\n'
           'Examples of GOOD actions:\n'
-          '1. Kiss her and pull her closer\n'
-          '2. Ask about her day at work\n'
-          '3. Tease her by pulling away\n'
+          '1. Kiss them and pull them closer\n'
+          '2. Ask about their day at work\n'
+          '3. Tease them by pulling away\n'
           '4. Suggest moving somewhere private\n\n'
           'Examples of BAD actions (too long, too detailed):\n'
-          '1. *I lean in and press my lips against hers, tasting...*\n\n'
+          '1. *I lean in and press my lips against theirs, tasting...*\n\n'
           'Recent conversation:\n$contextText\n\n'
           'Write 4 short action labels for $userName (numbered 1-4, one per line):';
 

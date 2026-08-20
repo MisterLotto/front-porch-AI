@@ -222,11 +222,11 @@ extension _BubbleRealism on _MessageBubbleState {
       // have one: the emotional eval returns a label and an intensity, never a
       // cause.
       //
-      // Standing Mood answers the honest half. Not "why she feels this", which
-      // nothing knows, but what she walked in carrying — so a user can tell
-      // which part of her mood was them and which part was her day. Absent
-      // (and the chip unchanged) when the feature is off or the day was
-      // unremarkable.
+      // Standing Mood answers the honest half. Not "why they feel this", which
+      // nothing knows, but what they walked in carrying — so a user can tell
+      // which part of their mood was the user and which part was their day.
+      // Absent (and the chip unchanged) when the feature is off or the day
+      // was unremarkable.
       final moodReason =
           MoodBaseline.fromJson(metadata['mood_context'])?.summary ?? '';
       chips.add(

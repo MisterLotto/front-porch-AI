@@ -77,7 +77,7 @@ void showReprocessNeedsDialog(BuildContext context, int index) {
                   style: TextStyle(color: AppColors.textPrimary(context)),
                   decoration: InputDecoration(
                     hintText:
-                        'e.g., She rested on the sofa — energy should have improved.',
+                        'e.g., They rested on the sofa — energy should have improved.',
                     hintStyle: TextStyle(
                       color: AppColors.textTertiary(context),
                     ),

@@ -95,7 +95,7 @@ Deleting a message removes that whole turn — and it also **rolls back any Real
 
 ### Suggest Actions
 
-The lightbulb button asks the AI for four short, clickable ideas for what you could do next ("Ask about her day", "Suggest moving somewhere private"…). Click one and it's sent as your message. Perfect for keeping momentum when you're not sure what to say.
+The lightbulb button asks the AI for four short, clickable ideas for what you could do next ("Ask about their day", "Suggest moving somewhere private"…). Click one and it's sent as your message. Perfect for keeping momentum when you're not sure what to say.
 
 ### Branching
 
@@ -439,7 +439,7 @@ These control *how* the AI writes. Set them globally in **Settings → Generatio
 **Three steering tools worth knowing:**
 
 - **System Prompt** — permanent hidden instructions ("always write in third person"). There's a global one in Settings → General (with saveable presets and one-click starting points for API, KoboldCpp and group chats), and each character and group can carry its own.
-- **Author's Note** — temporary scene direction the character experiences as part of *now* ("it's raining hard; she's exhausted"). Lives at the top of the chat sidebar with a strength dial; edit it mid-scene any time.
+- **Author's Note** — temporary scene direction the character experiences as part of *now* ("it's raining hard; they're exhausted"). Lives at the top of the chat sidebar with a strength dial; edit it mid-scene any time.
 - **Output Sanitizer** — rules that clean up a reply *after* the model writes it: strip a tic, fix a formatting habit, delete a phrase. Enable it in Settings → Generation, or just for one chat in Chat Settings. The full rule syntax is written up in [the Output Sanitizer reference](https://github.com/linux4life1/front-porch-AI/blob/main/docs/output-sanitizer-syntax.md).
 
 > **Note:** if a KoboldCpp launch preset (`.kcpps` file) is active, it controls context size and related values — the app locks those fields and shows a tooltip explaining why.

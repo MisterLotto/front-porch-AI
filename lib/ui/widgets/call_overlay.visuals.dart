@@ -92,7 +92,7 @@ extension _CallOverlayVisuals on _CallOverlayState {
     );
   }
 
-  /// The in-call realism window: her current emotion plus the bond/trust
+  /// The in-call realism window: their current emotion plus the bond/trust
   /// movement of the last scored exchange (read straight off the last
   /// reply's chip metadata — the same numbers the bubbles show after the
   /// call). Renders nothing with the engine off or before the first eval.
@@ -250,7 +250,7 @@ extension _CallOverlayVisuals on _CallOverlayState {
     );
   }
 
-  /// Live captions. While she speaks, the EXACT sentence the speaker is
+  /// Live captions. While they speak, the EXACT sentence the speaker is
   /// voicing right now ([TtsService.nowSpeaking] — published by the
   /// streaming consumer as it plays, not as text generates, so the caption
   /// never runs ahead of the audio). Otherwise, what the mic last heard
@@ -334,8 +334,7 @@ extension _CallOverlayVisuals on _CallOverlayState {
 
   Widget _buildControls(BuildContext context, SttService stt) {
     final isMuted = stt.call.isMuted;
-    final canSend =
-        stt.call.status == CallStatus.listening && stt.isRecording;
+    final canSend = stt.call.status == CallStatus.listening && stt.isRecording;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [

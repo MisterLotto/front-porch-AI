@@ -396,9 +396,9 @@ abstract final class CreatorOptions {
 
   // ── Guided "vision" rotating placeholders + scenario seed chips ──
   static const guidedVisionPlaceholders = [
-    'A tall, slender woman with flowing black hair was dancing in a nightclub when she locked eyes with {{user}}...',
+    'A tall dancer with flowing black hair was moving through a nightclub when they locked eyes with {{user}}...',
     'A grizzled old blacksmith with one arm, haunted by the war, but still cracks jokes while forging weapons...',
-    'Shy bookworm, always has cat hair on her sweater, secretly powerful mage, terrible at eye contact...',
+    'Shy bookworm, always has cat hair on their sweater, secretly powerful mage, terrible at eye contact...',
     'Cocky bounty hunter with cybernetic eyes and a debt to the wrong people. Flirts with everyone...',
     'Ancient dragon disguised as a librarian, hoards rare first editions instead of gold...',
   ];

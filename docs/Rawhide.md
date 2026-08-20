@@ -5,13 +5,13 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
-- 👗 **Wearing nothing is undressed, not a garment named "nothing"** — if she takes everything off, the Wearing row is empty. The clothes go to Set aside. A leftover "nothing" chip on an old chat can be tapped off with the X.
+- 👗 **Wearing nothing is undressed, not a garment named "nothing"** — if the character takes everything off, the Wearing row is empty. The clothes go to Set aside. A leftover "nothing" chip on an old chat can be tapped off with the X.
 
 - 🌍 **Seasons can have other names** — on a world's custom climate, rename summer to High Sun (or whatever the planet uses). The chip and the story use that name. Leave it blank and it stays summer.
 - 📅 **Seasons can start on any day** — tap the date on a season card for the same calendar Story begins uses (not a month dropdown). Leap years count; Feb 29 is a real start. Same start twice, or a missing season, blocks save. Leave the dates alone and Earth months stay. Year length is still a normal year.
 - 🌿 **A world can have 2–8 seasons** — add Monsoon, drop spring, whatever fits. Same overlap block. Places on the phone can author this too. Still a normal year.
 - 🏡 **"With you" means they are actually with you** — if they are at their own place, the word says Away. At work still follows the clock. This does not move them around the room.
-- 🕘 **The story clock stays honest** — she is told what time it is before she writes, then the clock moves after her line so the next person (including a guest) inherits that time. Skip to 2pm lands on 2pm. The strip arrows are 30 minutes; tap the date for the calendar's clock if you want an exact time.
+- 🕘 **The story clock stays honest** — the character is told what time it is before they write, then the clock moves after their line so the next person (including a guest) inherits that time. Skip to 2pm lands on 2pm. The strip arrows are 30 minutes; tap the date for the calendar's clock if you want an exact time.
 
 - 🖼️ **Two characters with the same name keep their own faces** — the chat header no longer grabs the first Rachel in your library.
 

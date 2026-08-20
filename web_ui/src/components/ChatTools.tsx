@@ -224,9 +224,9 @@ export function TextField({
 }
 
 /** Hand-add row for Pockets & Wardrobe (desktop dialog parity, 2026-08-13).
- *  "Give" hands the item over in-scene — it lands in her hands and she knows
+ *  "Give" hands the item over in-scene — it lands in their hands and they know
  *  it came from you. "Add" is the quiet drop (the Easter egg): it lands in
- *  the chosen section and her next reply is surprised to find it. Item text
+ *  the chosen section and their next reply is surprised to find it. Item text
  *  follows the same "name (state)" convention as everywhere else. */
 function PocketAddRow({
   onAdd,
@@ -238,7 +238,7 @@ function PocketAddRow({
   const submit = (gift: boolean) => {
     const n = name.trim();
     if (!n) return;
-    // A gift lands in her hands regardless of the selected section — you
+    // A gift lands in their hands regardless of the selected section — you
     // hand someone a sweater, you don't dress them in it (desktop rule).
     onAdd(gift ? 'carrying' : section, n, gift);
     setName('');
@@ -257,13 +257,13 @@ function PocketAddRow({
         <option value="set_aside">Set aside</option>
       </select>
       <button
-        title="Slip it in quietly — she'll be surprised to find it"
+        title="Slip it in quietly — they'll be surprised to find it"
         onClick={() => submit(false)}
       >
         Add
       </button>
       <button
-        title="Hand it over in-scene — she'll know it came from you"
+        title="Hand it over in-scene — they'll know it came from you"
         onClick={() => submit(true)}
       >
         Give
@@ -342,8 +342,8 @@ export function ChatTools({
   const pocketRemove = (section: string, index: number) =>
     apply(api.post<ToolsState>(`/api/chat/tools/pocket-remove${q}`, { section, index }));
   // The other half of the eraser: hand-add an item (desktop dialog parity,
-  // 2026-08-13). gift=true is handed over in-scene (she knows it came from
-  // you); gift=false is the Easter egg (she's surprised to find it).
+  // 2026-08-13). gift=true is handed over in-scene (they know it came from
+  // you); gift=false is the Easter egg (they're surprised to find it).
   const pocketAdd = (section: string, name: string, gift: boolean) =>
     apply(api.post<ToolsState>(`/api/chat/tools/pocket-add${q}`, { section, name, gift }));
   // Same endpoint, string value — the one tri-state control (see the route's
@@ -555,7 +555,7 @@ export function ChatTools({
         </div>
       </details>
 
-      {/* What she walked in carrying, before you said anything. Reads
+      {/* What they walked in carrying, before you said anything. Reads
           "Came in …" so it can never be mistaken for a reaction to something
           the user did — which is the entire point of the feature. */}
       {!!t.standingMood && (
@@ -593,7 +593,7 @@ export function ChatTools({
         if (!t.pockets) return null;
         const worn = t.pockets.worn ?? [];
         const carrying = t.pockets.carrying ?? [];
-        // Parked in the scene, still theirs — greyed so "not on her" reads
+        // Parked in the scene, still theirs — greyed so "not on them" reads
         // at a glance (the desktop sidebar's Set aside group, same rules;
         // the server already filtered out clothing that expired overnight).
         const setAside = t.pockets.set_aside ?? [];

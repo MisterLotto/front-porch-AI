@@ -63,7 +63,7 @@ function CardEditor({
           rows={3}
           autoFocus
           maxLength={400}
-          placeholder='One memory in their words — "She left her keys on the hall table."'
+          placeholder='One memory in their words — "I left my keys on the hall table."'
           value={text}
           onChange={(e) => setText(e.target.value)}
         />

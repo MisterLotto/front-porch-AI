@@ -2437,7 +2437,7 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
   border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
-/* Set aside — parked in the scene, still theirs: dimmed so "not on her"
+/* Set aside — parked in the scene, still theirs: dimmed so "not on them"
    reads at a glance (mirrors the desktop sidebar's greyed group). */
 .pocket-item-aside {
   color: var(--muted);

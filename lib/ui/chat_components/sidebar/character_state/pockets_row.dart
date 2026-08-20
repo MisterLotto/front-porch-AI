@@ -62,7 +62,7 @@ class PocketsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Set-aside things — parked in the scene (the nightstand, the doorway
-    // table), still hers, greyed so "not on her" is legible at a glance.
+    // table), still theirs, greyed so "not on them" is legible at a glance.
     // Rendering this is load-bearing, not decoration: after an undress the
     // Wearing row goes empty, and an empty row with no explanation looks
     // exactly like the missed-update bug this feature used to have.

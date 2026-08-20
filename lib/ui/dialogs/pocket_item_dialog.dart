@@ -27,10 +27,10 @@ typedef PocketItemAdd = ({String name, PocketSection section, bool gift});
 /// Add one item to a character's Pockets & Wardrobe by hand — the other half
 /// of the ✕ eraser, with the two fictions kept honest by the two buttons:
 ///
-///  * **Hand to her** — the user gives it in-scene; it lands in her hands and
-///    the next reply has her accept it knowing where it came from.
+///  * **Hand to them** — the user gives it in-scene; it lands in their hands
+///    and the next reply has them accept it knowing where it came from.
 ///  * **Add quietly** — the Easter egg: the item appears out-of-band in the
-///    chosen section, and the next reply has her SURPRISED by something she
+///    chosen section, and the next reply has them SURPRISED by something they
 ///    cannot account for ("how did I end up with this?").
 ///
 /// Item text follows the same "name (state)" chip convention the character
@@ -67,9 +67,7 @@ class _PocketItemDialogState extends State<_PocketItemDialog> {
   void _submit({required bool gift}) {
     final name = _controller.text.trim();
     if (name.isEmpty) return;
-    Navigator.of(
-      context,
-    ).pop((name: name, section: _section, gift: gift));
+    Navigator.of(context).pop((name: name, section: _section, gift: gift));
   }
 
   @override
@@ -118,8 +116,8 @@ class _PocketItemDialogState extends State<_PocketItemDialog> {
           ),
           const SizedBox(height: 10),
           Text(
-            '"Hand to ${widget.characterName}" gives it in-scene — she\'ll '
-            'know it came from you. "Add quietly" slips it in; she\'ll be '
+            '"Hand to ${widget.characterName}" gives it in-scene — they\'ll '
+            'know it came from you. "Add quietly" slips it in; they\'ll be '
             'surprised to find it.',
             style: TextStyle(
               fontSize: 11,

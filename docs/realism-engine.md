@@ -32,7 +32,7 @@ The Realism Engine is Front Porch AI's signature feature — the system that tur
 
 Without the Realism Engine, every message you send is judged in isolation. A character can pour their heart out one turn and greet you like a stranger the next. Nothing deepens, nothing heals, no time passes.
 
-With it on, the app quietly asks your AI model a few short follow-up questions after each exchange — things like *"Did that change how she feels about him?"* and *"Is she still upset about earlier?"* — and keeps a running score of the relationship. Those scores are then woven back into the next reply, so the character's warmth, guardedness, mood, and sense of time all carry forward naturally.
+With it on, the app quietly asks your AI model a few short follow-up questions after each exchange — things like *"Did that change how they feel about the user?"* and *"Are they still upset about earlier?"* — and keeps a running score of the relationship. Those scores are then woven back into the next reply, so the character's warmth, guardedness, mood, and sense of time all carry forward naturally.
 
 What that feels like in practice:
 

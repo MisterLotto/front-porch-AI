@@ -3,12 +3,21 @@
 
 # Changelog
 
+## 2026-08-20 — docs: generic they/them for characters
+- **Why:** Release notes, Porch Life blurbs, and the user guide treated
+  every character as she/her.
+- **What:** they/them (or "the character") in Rawhide, user-guide,
+  realism-engine, playbook, CLAUDE.md, changelog narration, Porch Life
+  desktop+web, pocket dialogs, ChatTools, and related UI hints. Left
+  he/she/they on the Sex field, and sanitizer sample `she said—hello`.
+- **Files:** docs, porch_life_tab, PorchLifeSettings, ChatTools, others
+
 ## 2026-08-20 — fix(pockets): wear "nothing" is undress, not a garment
 - **Why:** Models report undressing as wear of an item named nothing.
   The applier minted it — sidebar Wearing chip and "put on: nothing".
   Same class as wear("clothes") minting a garment named clothes.
 - **What:** isEmptyWardrobeRef (nothing/nude/naked/bare…). wear of that
-  bulk-undresses if she is dressed, no-ops if already nude, never mints.
+  bulk-undresses if the character is dressed, no-ops if already nude, never mints.
   Eval prompt omits empty lists (no "nothing recorded") and says wearing
   nothing is remove. Editor/web chips drop the name on save. Existing
   chats keep the chip until the user hits X (maintainer).
@@ -103,7 +112,7 @@
 
 ## 2026-08-18 — feat(clock): announce then decide; 30m chevrons; guest brigade
 - **Why:** At work / Today / skip now read the live clock, so a pre-gen
-  minutes guess jumped the strip before she wrote. Group follow-ups
+  minutes guess jumped the strip before the character wrote. Group follow-ups
   skipped the clock entirely. Chevrons snapped to period hours. OOC
   "skip to 2pm" added an hour. Standalone regen did not rewind.
 - **What:** OOC lands first; prompt says "It is currently …"; post-reply
@@ -135,7 +144,7 @@
 
 ## 2026-08-18 — fix(presence): drop "not from the porch" from At work / Away
 - **Why:** 1:1 injection told the model "Reply from there — not from the
-  porch with {{user}}". The porch is the app, not a place in her world.
+  porch with {{user}}". The porch is the app, not a place in the character's world.
 - **What:** "Write from there." Same for Away. Tests now fail if "porch"
   comes back.
 - **Files:** behavioral_injection.dart, prompt_injection_test.dart
@@ -497,7 +506,7 @@
   heals selection AND wording; hygiene_inversion.golden.json regenerated
   (UPDATE_GOLDENS=1). (3) set-aside clothing expired at MIDNIGHT
   (dayCountFor flips at 00:00) though every doc promised the story morning
-  — a scene past 00:00 stranded her with no outfit. New
+  — a scene past 00:00 stranded the character with no outfit. New
   StoryClock.morningDayCountFor (08:00 anchor, small hours = previous day);
   ChatService.storyDayCount now forwards to it (every consumer is a
   set-aside surface; story stamps keep calendar dayCount); the injection
@@ -719,7 +728,7 @@
 
 ## 2026-08-15 — feat(time): reply-named clock wins so sidebar matches the line
 - **Why:** Senjumaru said "six in the morning" while the clock was 8:05.
-  new_day snaps to 08:00; she wrote dawn; the next turn followed her prose.
+  new_day snaps to 08:00; they wrote dawn; the next turn followed their prose.
   The eval on that turn only added 5 minutes. Prompt nagging cannot force
   the model to say 8:05.
 - **What:** After generation, `clockNamedInReply` reads a present-tense
@@ -1189,7 +1198,7 @@
   red-proven ×2: intros neutered, consumption unwired),
   `pocket_item_dialog_test.dart` (3, red-proven: gift flag swap).
 - **Why:** maintainer feature — the panel was ✕-only. Give = in-fiction
-  hand-over (she knows); quiet add = the Easter egg (she's surprised:
+  hand-over (they know); quiet add = the Easter egg (they're surprised:
   "how did I end up with $Item?"). Note is one-shot, regen-honest
   (cleared at next user turn, not at prompt build). Eval recognition is
   free: the record is the bookkeeping prompt's ground truth.
@@ -1969,7 +1978,7 @@
 - **The bug:** spatial stance ("Position: X — ground actions in this") exists to stop
   characters teleporting between turns. It was produced by the FUSED pre-generation
   scene-time+posture eval, which fires before the reply exists — so a position the
-  character established in her own words was invisible, and the next turn's
+  character established in their own words was invisible, and the next turn's
   pre-generation judge simply re-derived a guess and overwrote it. The post-reply
   position could therefore never reach a single prompt. The feature was asserting
   stale positions imperatively, which is precisely the teleporting it was built to
@@ -2043,7 +2052,7 @@
   pockets now ride the realism_state snapshot/restore contract like every other per-turn
   scalar, which the design doc had specified and I had missed. (2) An emptied record was
   stored as ABSENT, and the seed path reads absence as "never promoted from the card" — so a
-  character who dropped everything got her whole starting wardrobe back next turn, forever.
+  character who dropped everything got their whole starting wardrobe back next turn, forever.
   (3) Caps ran only in the applier, so a hostile card's `inventory` loaded whole into session
   state. (4) `wear` of an already-worn item silently dropped a new condition.
 - **Dismissed 3 as excerpt artifacts** (default off, injection gated, web shipped — all
@@ -4339,9 +4348,9 @@ Three related fixes to the "enjoys low hygiene" (prefers-being-dirty) feature.
 - **Bug 1 — cross-chat / cross-member leak.** In the reported Seraphine & Iris group, a member's hygiene showed as **CATASTROPHIC / "feels filthy"** at **88/100** (the model's own reasoning flagged the contradiction). The numeric vector was NOT leaking — hunger 54 and fun 45 rendered at their correct steps; ONLY hygiene was wrong, the unique signature of the inversion (`if (enjoysLow && need == 'hygiene')`). The inversion read the chat's single *global* flag (`ChatService.enjoysLowHygiene` → `_activeCharacter?…enjoysLowHygiene ?? _enjoysLowHygiene`). In a pure group `_activeCharacter` is null (or the realism dance's `finally` restored it to the previous speaker), so it fell through to the stale `_enjoysLowHygiene` scalar. A DB check confirmed neither group member has the flag set — the true value carried in from an earlier **1:1 chat with a "enjoys being dirty" character (Jennifer)** and was never cleared on entering the group. Pure parity break: 1:1 was fine (active == host), group applied one leftover preference to everyone.
 - **Bug 2 — backwards text for genuine filthy-lovers.** Even used correctly, the feature only inverted the *step index* while reusing the normal filthy-phrased text, so a freshly-scrubbed character who truly enjoys being dirty was described as "feeling filthy / grime / smell" — the literal opposite of their state — and nothing told the model a high hygiene number is *unwelcome* for them (they'd "panic about being clean" with the wrong words).
 
-- **How fixed:** (1) `getInjectionEffectiveStep` takes an optional per-character override; both per-turn injections resolve the flag from the SPEAKER card they already look up, never the shared pointer. (2) The `enjoysLowHygiene` getter returns `false` in group mode instead of consulting the 1:1 scalar, closing the leak at the source (no reset-site churn). (3) A dedicated `hygieneSteppedTextWhenEnjoysLow` list describes too-clean distress (scrubbed raw, craving her musk back), and the hygiene line is annotated "this character LIKES being unwashed — a HIGH number is unwelcome" so the model reads the inverted polarity correctly. 1:1 behavior for non-filthy characters is byte-identical (passes null → global). Engine-side only, no DB change, so desktop/web parity holds by construction. The autonomous away-cue's `getLowNeedsForInjection` was left as-is (renders raw values, can't produce the contradiction).
+- **How fixed:** (1) `getInjectionEffectiveStep` takes an optional per-character override; both per-turn injections resolve the flag from the SPEAKER card they already look up, never the shared pointer. (2) The `enjoysLowHygiene` getter returns `false` in group mode instead of consulting the 1:1 scalar, closing the leak at the source (no reset-site churn). (3) A dedicated `hygieneSteppedTextWhenEnjoysLow` list describes too-clean distress (scrubbed raw, craving their musk back), and the hygiene line is annotated "this character LIKES being unwashed — a HIGH number is unwelcome" so the model reads the inverted polarity correctly. 1:1 behavior for non-filthy characters is byte-identical (passes null → global). Engine-side only, no DB change, so desktop/web parity holds by construction. The autonomous away-cue's `getLowNeedsForInjection` was left as-is (renders raw values, can't produce the contradiction).
 - **Verification:** flutter analyze (3 lib + 1 test) — No issues. dart fix — nothing. New leak-regression test fails on old code via the CATASTROPHIC assertion; new filthy-lover test asserts inverted wording. Full chat-service suite 495/495; needs_sim goldens pass.
-- **Follow-up (data, not code):** the same group's Iris genuinely has `enjoys_low_hygiene = true` on her own library card (verified in the card PNG's `chara` metadata); `_createGroupMember` copies extensions verbatim, so her group copy inherited it and her hygiene inverting is correct behavior for her card — a user-toggle choice, not a leak.
+- **Follow-up (data, not code):** the same group's Iris genuinely has `enjoys_low_hygiene = true` on Iris's own library card (verified in the card PNG's `chara` metadata); `_createGroupMember` copies extensions verbatim, so Iris's group copy inherited it and hygiene inverting is correct behavior for that card — a user-toggle choice, not a leak.
 - **Commit:** 7822052
 
 ## 2026-07-07 — Growth Rings: reserved injection slots for in-progress growth + pinned rings survive LLM retire ops
@@ -7296,11 +7305,11 @@ CONSOLIDATION: _addGuestWithStatus is now the SINGLE add path for /create, /join
 
 2026-06-22 (UTC) — Scene Guests: manual /scan now re-resolves the scene list (re-detect a deleted guest)
 Files changed: lib/services/chat_service.dart (runCastDetectionNow re-resolves guests before scanning), .claude/changelog.md.
-Brief reason: User deleted Vanessa's card then /scan-ned for her; the detection eval returned a valid {"name":"Vanessa",...} (confirmed in [Realism:RawEval] log) but the result was "no new recurring character" — i.e. the candidate was rejected by CastDetector._accept's "already a scene guest" filter. Deleting a guest's library card does not remove her from the OPEN chat's in-memory scene-guest list (no re-resolve happens until reload), so she was still counted as present and filtered out. Fix: runCastDetectionNow() now awaits _resolveSceneGuestCards() before the scan, which prunes any guest whose card no longer resolves (deleted) from _sceneGuestIds/_sceneGuestCards — so a deleted-and-re-narrated character is no longer treated as present and can be re-offered. Pairs with the existing manual-scan _offeredOrIgnoredGuestNames.clear(). Guests still genuinely in the scene remain excluded. flutter analyze clean; flutter build macos --debug green. Not committed.
+Brief reason: User deleted Vanessa's card then /scan-ned for Vanessa; the detection eval returned a valid {"name":"Vanessa",...} (confirmed in [Realism:RawEval] log) but the result was "no new recurring character" — i.e. the candidate was rejected by CastDetector._accept's "already a scene guest" filter. Deleting a guest's library card does not remove them from the OPEN chat's in-memory scene-guest list (no re-resolve happens until reload), so they were still counted as present and filtered out. Fix: runCastDetectionNow() now awaits _resolveSceneGuestCards() before the scan, which prunes any guest whose card no longer resolves (deleted) from _sceneGuestIds/_sceneGuestCards — so a deleted-and-re-narrated character is no longer treated as present and can be re-offered. Pairs with the existing manual-scan _offeredOrIgnoredGuestNames.clear(). Guests still genuinely in the scene remain excluded. flutter analyze clean; flutter build macos --debug green. Not committed.
 
 2026-06-22 (UTC) — Scene Guests: auto-remove a guest (silently) when its character card is deleted
 Files changed: lib/services/chat_service.dart (setCharacterRepository manages a listener + _onCharacterLibraryChanged + dispose removal), .claude/changelog.md.
-Brief reason: User deleted Vanessa's card mid-chat; she stayed in the open scene (still "present"), so cast detection wouldn't re-offer her until the user manually /exit'd then /scan'd. Deleting a character PNG is 100% a deliberate user action, so a guest whose card is gone should be removed from the scene automatically and SILENTLY (no /exit departure narration). CharacterRepository is a ChangeNotifier and deleteCharacter() notifies, so ChatService now listens: setCharacterRepository (de-dups via identical(), removes any prior listener, adds the new one) wires _onCharacterLibraryChanged, which — when scene guests exist — calls the existing _resolveSceneGuestCards() to drop any guest id that no longer resolves (the silent prune; no message, no narration). dispose() removes the listener. No loop risk (_resolveSceneGuestCards reads the repo + notifies ChatService, never writes the repo). This makes the deleted-guest case self-heal immediately instead of needing a manual /exit. One new private method (_onCharacterLibraryChanged) — justified: a repo-change handler with no existing equivalent; reuses _resolveSceneGuestCards for the actual prune. flutter analyze clean; 1292 tests pass; flutter build macos --debug green. Not committed.
+Brief reason: User deleted Vanessa's card mid-chat; Vanessa stayed in the open scene (still "present"), so cast detection wouldn't re-offer them until the user manually /exit'd then /scan'd. Deleting a character PNG is 100% a deliberate user action, so a guest whose card is gone should be removed from the scene automatically and SILENTLY (no /exit departure narration). CharacterRepository is a ChangeNotifier and deleteCharacter() notifies, so ChatService now listens: setCharacterRepository (de-dups via identical(), removes any prior listener, adds the new one) wires _onCharacterLibraryChanged, which — when scene guests exist — calls the existing _resolveSceneGuestCards() to drop any guest id that no longer resolves (the silent prune; no message, no narration). dispose() removes the listener. No loop risk (_resolveSceneGuestCards reads the repo + notifies ChatService, never writes the repo). This makes the deleted-guest case self-heal immediately instead of needing a manual /exit. One new private method (_onCharacterLibraryChanged) — justified: a repo-change handler with no existing equivalent; reuses _resolveSceneGuestCards for the actual prune. flutter analyze clean; 1292 tests pass; flutter build macos --debug green. Not committed.
 
 2026-06-22 (UTC) — Scene Guests: creation banner now shows live generation sub-steps
 Files changed: lib/services/chat/scene_guest_factory.dart (mint forwards onStatus to generateCharacter), lib/services/chat_service.dart (_mintSceneGuest + _addGuestWithStatus thread an onStatus step reporter into the banner; both mint call sites updated), .claude/changelog.md.
@@ -8570,7 +8579,7 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 ## 2026-07-13 (UTC) — Revive the Needs catastrophe system + rescope "enjoys low hygiene" (design-approved)
 - **Context:** Maintainer wanted catastrophes back (they'd been silently severed as collateral in the mislabeled `7b4b921` buffer-purge refactor — the trigger scan was deleted from tickDecay while the tables/consumer/docs were left dangling). Design was reviewed by me + Grok, the behavior spec was signed off by the maintainer, and the new prompts got a second Grok pass (verdict: ship-ready, no blockers) before shipping.
 - **Catastrophe revival** (`needs_simulation.dart`, `chat_service_realism_dance.dart`, `chat_service_generation.dart`): new `applyCatastropheIfNeeded()` fires ONE mandatory "this just happened" event when a hard-event need bottoms out (≤0) and lifts it to a class-based recovery floor. Wired into `tickDecay` (1:1) AND the group per-speaker dance (1:1↔group parity). Decisions baked in: only bladder/energy/hunger/comfort/hygiene fire — social & fun are moods, NOT events (the old "fun=0 → dangerous/sexual/chaotic" line was a derailment vector, removed); energy = collapse + brief blackout + wakes groggy (floor 65), NOT fall-asleep; hygiene catastrophe suppressed for enjoys-low-hygiene chars (0 hygiene = comfort for them). Narratives rewritten neutral (they/them), each carrying its own evidence; the class-based floors replace the old magic "+12 if not accident" hack. Injection wrapper rewritten firmer-but-short — no "YOU MUST" wall, and it never puppets {{user}} ("write only {{char}} and the surroundings"). Grok-flagged polish folded in: dropped the forced "humiliation" on bladder, the "grab whoever's nearest" {{user}}-contact steer on hunger/energy, and softened comfort/hygiene so they don't force a full scene-abort / shower quest.
-- **"Enjoys low hygiene" rescoped to odor only** (`needs_simulation.dart`, `needs_injection.dart`): the old inverted texts pushed active filth-seeking ("get grimy", "get properly dirty", "would happily get her hands dirty") — a character literally dumped a mop bucket of dirty water over herself. Reworded to a pure ODOR/MUSK preference (soothed being unwashed/musky, put off by feeling soap-clean, misses their natural scent) with an explicit hard guard in the label: "do NOT seek dirt, mud, mess, or deliberately soil themselves — purely about their own body odor."
+- **"Enjoys low hygiene" rescoped to odor only** (`needs_simulation.dart`, `needs_injection.dart`): the old inverted texts pushed active filth-seeking ("get grimy", "get properly dirty", "would happily get her hands dirty") — a character literally dumped a mop bucket of dirty water over themselves. Reworded to a pure ODOR/MUSK preference (soothed being unwashed/musky, put off by feeling soap-clean, misses their natural scent) with an explicit hard guard in the label: "do NOT seek dirt, mud, mess, or deliberately soil themselves — purely about their own body odor."
 - **Tests:** new coverage — bladder@0 fires + floors to 85; social/fun@0 do NOT fire; hygiene@0 suppressed for enjoys-low. Full suite 2020 green; analyze clean.
 - **Note/follow-up:** the NON-catastrophe stepped distress texts (~35 lines) are still gendered "she" — pre-existing; a full de-gendering pass is a separate cleanup.
 - **Commit hash:** (pending)
@@ -12464,7 +12473,7 @@ swap the framework under it.
   183 memories), and the user's stuck promise needed expunging. The live DB showed the
   REAL defect: no stuck-open promise — 9 promise cards ALL kept, several re-plants of
   the same pledge (4 in one evening) + 8 "kept my word" milestone twins saturating the
-  journal, which is what actually drove the promise-nagging and her confused denials.
+  journal, which is what actually drove the promise-nagging and their confused denials.
 - **Did:**
   1. `PromiseDebtService.resolveManually` — manual kept/broken through the SAME
      `_resolve` applier (deltas, milestone, salience, cache). Guarded by
@@ -13293,8 +13302,8 @@ source check over all six eval files, honestly labelled as structural.
 trust, every need, the verifier and Chance Time all had one. It could not have
 one — the emotional eval returns a label and an intensity, never a cause, and
 adding an `emotion_reason` field would have changed the eval and its cost on
-every path. Standing Mood supplies the honest half for free: not "why she feels
-this", which nothing knows, but what she walked in carrying.
+every path. Standing Mood supplies the honest half for free: not "why they feel
+this", which nothing knows, but what they walked in carrying.
 
 **Design notes:** stamped at the ONE funnel every path attaches through
 (one-shot, multi-call, group, reprocess) rather than beside each of the four
@@ -13495,7 +13504,7 @@ Commit: 4b830fd
 
 ---
 
-## 2026-08-08 — Schema v47: a 1:1 chat forgot her pockets on every reload
+## 2026-08-08 — Schema v47: a 1:1 chat forgot the character's pockets on every reload
 
 **Files:** `lib/database/database.dart` (schemaVersion 46 → 47) ·
 `database.tables.core.dart` (`sessions.pockets`) · `database.migrations.dart`
@@ -13515,19 +13524,19 @@ for the record at all: `ChatService._pockets` lived in memory and was
 snapshotted into each message's `realism_state` — but that snapshot is only
 ever read back by `_restoreRealismStateForSpeaker`, which runs on regen, swipe
 and delete, and never on session load. Closing a 1:1 chat and reopening it
-emptied her pockets and the next pass re-seeded from the card as though the
+emptied their pockets and the next pass re-seeded from the card as though the
 chat were brand new.
 
 That is a straight 1:1-vs-group parity break, and it made the feature's own
 release note false for exactly the users most likely to try it — "the keys stay
-in her pocket", until you closed the tab.
+in their pocket", until you closed the tab.
 
 **The fix** mirrors how Needs solved the identical problem: a nullable
 `sessions.pockets` TEXT column, additive, saved beside `needs_vector` and
 loaded beside it. Written whenever the record is non-empty rather than behind
 the Pockets switch, so toggling the feature off mid-chat does not erase what
-she was already carrying; restored regardless of the switch's current state,
-because opening a chat must not be the thing that empties her hands.
+they were already carrying; restored regardless of the switch's current state,
+because opening a chat must not be the thing that empties their hands.
 
 **Two adjacent leaks fixed in the same change, because persistence promoted
 them from invisible to permanent.** Neither was reachable from the column
@@ -13536,18 +13545,18 @@ a different hat:
 
 1. **Fresh-chat bleed.** `_pockets` was absent from all three fresh-chat reset
    blocks, so a new conversation opened with the *previous* chat's props still
-   in her hands. Harmless while the record was memory-only and re-seeded from
+   in their hands. Harmless while the record was memory-only and re-seeded from
    the card anyway — but with a save wire in place the bleed gets written into
-   the new chat's row, where it is indistinguishable from something she
+   the new chat's row, where it is indistinguishable from something they
    actually picked up.
 2. **Group collapse.** When a group shrinks to one member, `chat_service_cast`
    carries the survivor's realism snapshot, enable-flags, author note and
-   growth rings back to the 1:1 — but dropped her Pockets record on the floor,
-   emptying her hands. Captured now alongside `soleNsfwEnabled`, which is read
+   growth rings back to the 1:1 — but dropped their Pockets record on the floor,
+   emptying their hands. Captured now alongside `soleNsfwEnabled`, which is read
    at the same point and for the same reason: step 4 re-enters as a 1:1, which
    clears `_groupRealism`, so reading it afterwards finds nothing. Carried
    regardless of realism, since the Pockets pass is gated on `pocketsEnabled`
-   alone and a survivor can be holding her keys with the engine off.
+   alone and a survivor can be holding their keys with the engine off.
 
 **On the version-tracker test.** `served_ambition_migration_test.dart` asserted
 `schemaVersion == 46` and went stale the moment v47 landed, turning an
@@ -13589,7 +13598,7 @@ suggested the edit had touched it. The desktop editor was unaffected.
 `CharacterCard.fromJson` uses. Two readers of one field disagreeing about what
 counts as valid is its own bug, and `Pockets.fromJson` (the only consumer)
 already tolerates both entry shapes. Junk falls back to the base; an explicit
-`{}` does clear it, since "she starts with nothing" is a thing an authoring UI
+`{}` does clear it, since "they start with nothing" is a thing an authoring UI
 has to be able to say.
 
 **Why the web side changed too, when it did not have to.** `CharacterEditPage`
@@ -13737,8 +13746,8 @@ turn 0; turn 1 is the character's first real reply.
 **The bug.** The card seed lived only inside `_runPocketsPass`, which runs
 AFTER a reply is generated. So: user sends their first message → the prompt is
 built with no inventory fragment, because no record exists yet → the model
-writes turn 1 knowing nothing about the apron its author put on her → only then
-does the pass seed. She was dressed from turn 2 onward and bare for the turn
+writes turn 1 knowing nothing about the apron its author put on them → only then
+does the pass seed. They were dressed from turn 2 onward and bare for the turn
 that sets the scene. The sidebar was blank for exactly as long, which is when an
 author who just saved a wardrobe goes to check it worked.
 
@@ -13808,8 +13817,8 @@ sidebar needed no change at all, which is the point.
 deliberately bypasses the gate: the v47 save wire writes the `_pockets` field
 directly, the load wire restores it directly, and the swipe/regen rewind writes
 through `setPocketsFor`. Toggle Pockets off for a scene and back on and
-everything she was carrying is still there. Routing any of those through the
-gated read would have turned "turn the feature off" into "delete her things" —
+everything they were carrying is still there. Routing any of those through the
+gated read would have turned "turn the feature off" into "delete their things" —
 which is why there is a guard for each of the three.
 
 **Left alone deliberately:** `_runPocketsPass` keeps its own switch check.
@@ -13838,7 +13847,7 @@ going somewhere etc."
 **The gap.** Both facts already reached the model, in the same block — the needs
 fragment ("thoughts keep returning to when the next meal might come") a few
 lines above the inventory fragment ("carrying a candy bar"). Nothing joined
-them, so whether she ate it was down to the model: frontier models usually
+them, so whether they ate it was down to the model: frontier models usually
 noticed, smaller local ones narrated the hunger and walked past the food in
 their own pocket, or set off to cook something.
 
@@ -13853,16 +13862,16 @@ Pockets eval still asks only for `inventory_ops`, and NO LLM call is added — t
 SETTLED "Pockets runs its own eval" ruling is untouched.
 
 **Gated on both fragments being non-empty**, which is exactly Needs on (hence
-Realism), Pockets on, something actually biting, and something actually in her
-hands. An instruction to use what you have is noise when she has nothing and a
-lie when nothing is wrong with her.
+Realism), Pockets on, something actually biting, and something actually in their
+hands. An instruction to use what you have is noise when they have nothing and a
+lie when nothing is wrong with them.
 
 **Names no need and no item on purpose.** A food-word list would be the wrong
 shape twice — a pantry vocabulary inside a prompt composer, and one that only
 ever serves hunger when the same instinct covers a coat in the cold or a bottle
 when thirsty. "If"/"would" leave the model free to decide nothing helps.
 
-**Adds an option, does not replace the state**: she still shows the hunger, and
+**Adds an option, does not replace the state**: they still show the hunger, and
 the words-only contract still governs the block.
 
 **Gates:** analyze 0 · 3187 unit tests · 94 goldens. 11 new guards, all
@@ -13881,7 +13890,7 @@ reddening its own correct set.
 `docs/design/pockets-and-preferences.md`
 
 **Maintainer question:** "Does the character know what is in their inventory
-before they get told they are hungry though?" No — she did not, and that was the
+before they get told they are hungry though?" No — they did not, and that was the
 wrong way round.
 
 The join line shipped this morning, but the inventory fragment sat FOUR
@@ -13889,14 +13898,14 @@ fragments below the needs line (needs → nsfw → ambitions → preferences →
 inventory → join). So the model met a vivid, directive hunger line
 ("thoughts drifting uncontrollably to food") and only learned about the candy
 bar three lines later, by which point a small local model had usually already
-committed to sending her to the kitchen.
+committed to sending them to the kitchen.
 
 What a character carries is standing knowledge; a need is something that
 arrives. Nobody discovers the contents of their own pocket at the moment they
 get hungry — they already knew, and that prior knowledge is what makes reaching
 for it the obvious move. The fragment now sits directly ABOVE the needs line
-with the join after both, so the block reads: she has this, she needs that, if
-the first eases the second she would reach for it.
+with the join after both, so the block reads: they have this, they need that, if
+the first eases the second they would reach for it.
 
 Matters least for frontier models, which connect them either way, and most for
 small local ones — exactly who this pairing exists for.
@@ -13928,7 +13937,7 @@ months, each appended where it happened to be written, and the emitted result
 had never been read end to end. Four concrete inversions:
 
 1. **Position stated dead last** — "Position: leaning against the counter —
-   ground actions in this" arrived after everything she might do from it. It is
+   ground actions in this" arrived after everything they might do from it. It is
    staging; it belongs with time and weather.
 2. **Fixation stated dead last** — a line that describes itself as "a background
    thought that colors mood and reactions", sitting nine fragments below the
@@ -13946,7 +13955,7 @@ each line and none for the block.
 
 **The contract now:** a fact that explains another fact comes first; a directive
 comes after everything it refers to. Order: the scene (when/where/standing) →
-her people → her word → who she is → how she is right now, with the volatile
+their people → their word → who they are → how they are right now, with the volatile
 state last against the closing "express all of this".
 
 **Structural change:** `behavioral_injection` was emitting two unrelated things
@@ -14184,19 +14193,19 @@ facts apply and never what to do with them.
 The asymmetry is what made it a bug rather than a gap. The SCORING side has
 always been directive — weigh the exchange against these, name the one that
 moved a score — and it reaches the relationship AND emotional-state evals. So
-bond, trust and emotion were already moving on whether a scene hit her
-preferences while she never voiced them: silently rewarding and penalising the
-user over things she would not say out loud.
+bond, trust and emotion were already moving on whether a scene hit their
+preferences while they never voiced them: silently rewarding and penalising the
+user over things they would not say out loud.
 
 Both halves now ship, because the feature is a loop and either alone is dead
-weight: she asks → the user answers → being refused moves her mood → that mood
-is what she carries into the next reply.
-* Wanting: she pursues and may raise it herself, **in her own register** (a
+weight: they ask → the user answers → being refused moves their mood → that mood
+is what they carry into the next reply.
+* Wanting: they pursue and may raise it themselves, **in their own register** (a
   dominant character presses, a soft-spoken one suggests or waits to be
-  noticed), declines what she is not into "rather than going along with it",
-  and being refused "marks her mood — sharper, or hurt, or cooler than before,
-  as fits who she is". The old prohibition "never raise them to start one" is
-  replaced by proportionality, not silence: she can initiate now, which is the
+  noticed), declines what they are not into "rather than going along with it",
+  and being refused "marks their mood — sharper, or hurt, or cooler than before,
+  as fits who they are". The old prohibition "never raise them to start one" is
+  replaced by proportionality, not silence: they can initiate now, which is the
   point, but a model told to pursue with no counterweight steers every scene
   into the same place.
 * Scoring: a refusal is "a real moment, not a neutral exchange", direction
@@ -14546,10 +14555,10 @@ single turn and... obvious results. Sometimes several of them affected."*
 Maintainer: *"It is still very whack a mole."*
 
 **THE LOOP.** The needs eval is handed the character's OWN REPLY and asked what
-the scene did to her needs. That reply was written FROM the needs — the state
+the scene did to their needs. That reply was written FROM the needs — the state
 block gives the model lines like *"Sharp, gnawing hunger cramps; light-headed
 and shaky, thoughts drifting uncontrollably to food"*. The model narrates
-exactly that, and the eval scores the narration as her having BECOME hungrier.
+exactly that, and the eval scores the narration as them having BECOME hungrier.
 Describing a state was counted as changing it, so the lower a need went, the
 more vivid the prose, and the harder the next hit.
 
@@ -14577,9 +14586,9 @@ it is the whack-a-mole, not a symptom of it.
 strength slider):
 * **The prompt breaks the loop directly.** The eval is now told that the scene
   it is reading was WRITTEN FROM the needs listed below it; that a character
-  mentioning her empty stomach is describing the state she was given rather than
+  mentioning their empty stomach is describing the state they were given rather than
   becoming worse; and that a negative is reported only for something the scene
-  explicitly describes costing her. Most needs in most scenes should be 0.
+  explicitly describes costing them. Most needs in most scenes should be 0.
 * **One bound, one place.** A single `_boundDeltas` helper in the evaluator,
   shared by the normal pass and the reprocess pass. It replaced two
   byte-identical `clamp(-30, 100)` call-site lines — a rule enforced by whoever
@@ -15302,7 +15311,7 @@ evaluation this design removed. Both restored, green again.
 
 **Not fixed, reported instead:** `posture_after_reply_test.dart` fails on two `hasLength(1)`
 assertions (lines 239 and 304/310) that count *every* posture prompt globally. Turn one now
-legitimately costs two — one to stage her, one to record where the reply left her — so the
+legitimately costs two — one to stage them, one to record where the reply left them — so the
 arithmetic is stale by maintainer ruling. The prose ("exactly one posture pass per generated
 reply") is still true; only the total is wrong. Left untouched per the no-editing-tests rule.
 
@@ -15507,7 +15516,7 @@ those files. Not edited, reported.
 Both asserted that the PRE-generation prompt asks the model for `posture`. That
 stopped being true when posture moved to its own post-generation pass, so both
 assertions had turned into guards for the bug rather than the behaviour: a check
-that runs before the reply cannot see where the reply moved her, and the next
+that runs before the reply cannot see where the reply moved them, and the next
 turn's pre-generation answer overwrote the post-generation one before it could
 ever reach a prompt.
 
@@ -15630,7 +15639,7 @@ more than what was first written there.
 
 ---
 
-## 2026-08-08 — Spatial stance: rerolling the FIRST reply no longer walks her out of the room
+## 2026-08-08 — Spatial stance: rerolling the FIRST reply no longer walks them out of the room
 
 **Files:** `lib/services/chat_service.dart`,
 `lib/services/chat/chat_service_greeting.dart`,
@@ -15685,8 +15694,8 @@ cannot be thrown at whoever arrived second.
 
 ### 3. `docs/Rawhide.md` promised something untrue
 
-The spatial bullet claimed "rerolling a reply properly puts her back where she
-was before it" while the first reply of every chat did not. Rewritten to state
+The spatial bullet claimed "rerolling a reply properly puts them back where they
+were before it" while the first reply of every chat did not. Rewritten to state
 what now actually ships, including that two rerolls of the same message start
 from the same place in 1:1 and group alike, and that a send landing during the
 opening request waits for it instead of paying for a second one.
@@ -16279,7 +16288,7 @@ set-aside bucket, day-stamped, with asymmetric expiry — clothing expires
 at the next story morning, possessions never do.
 
 **How:** remove parks (not deletes); bulk undress parks outfit AND
-carried things; new `setdown` op for mid-scene "sets her bag by the
+carried things; new `setdown` op for mid-scene "sets their bag by the
 door" (drop remains gone-for-good); wear/pickup search the pile first
 and conditions ride along; give/drop/update/transform reach it; expiry
 is lazy on every record touch, day 0 (no clock) expires nothing, and
@@ -16701,7 +16710,7 @@ hurt:
  * What is group-only is the RECIPIENT side (others roster + give/`to`),
    because a character→character handover needs a second record. A user
    handing the character something needs none of that: it is a plain pickup
-   on her own record, an op that works identically in both modes.
+   on their own record, an op that works identically in both modes.
  * The actual blocker was one clause: "not things they merely mentioned,
    remembered, wanted, or were offered". A user's gift IS an offer, so the
    model was explicitly instructed to score nothing.
@@ -16713,8 +16722,8 @@ opsRubric is the fragment SHARED verbatim with the fused ReplyFactsEval
 prompt, both transports change together by construction.
 
 Pre-generation was declined, with reasons (documented for the record):
- (1) it removes her right to refuse — post-gen, her reply arbitrates whether
-     she took it; pre-gen writes the item in before she has answered, and a
+ (1) it removes their right to refuse — post-gen, their reply arbitrates whether
+     they took it; pre-gen writes the item in before they have answered, and a
      refusal in the reply then leaves the record wrong with nothing to undo
      it. That distinction is the whole reason the sidebar has both "Hand it
      over" and "Add quietly";
@@ -16723,8 +16732,8 @@ Pre-generation was declined, with reasons (documented for the record):
      twice — the Continue double-apply failure class;
  (3) cost in the latency path: another pre-gen call on EVERY user turn to
      catch something rare, right where the voice-call work just cut calls.
- The lag it would fix is not observable: she takes the item in the prose on
- turn N and the record carries it from turn N+1, so no turn shows her
+ The lag it would fix is not observable: they take the item in the prose on
+ turn N and the record carries it from turn N+1, so no turn shows them
  empty-handed after taking it.
 
 Red-proven three ways: restoring the blanket "were offered" fails the

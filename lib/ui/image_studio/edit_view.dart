@@ -196,9 +196,9 @@ class _EditViewState extends State<EditView> {
     if (bytes == null || widget.onSendToChat == null) return;
     await widget.onSendToChat!(bytes, _instructionCtrl.text.trim());
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Image sent to chat')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Image sent to chat')));
     }
   }
 
@@ -360,7 +360,7 @@ class _EditViewState extends State<EditView> {
       onChanged: (_) => setState(() {}),
       style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14),
       decoration: InputDecoration(
-        hintText: 'e.g. she’s laughing, standing in a sunlit garden',
+        hintText: 'e.g. they’re laughing, standing in a sunlit garden',
         hintStyle: TextStyle(color: AppColors.textTertiary(context)),
         filled: true,
         fillColor: AppColors.surfaceContainerOf(context),
@@ -414,7 +414,10 @@ class _EditViewState extends State<EditView> {
         Text(
           'Left keeps the reference close; right lets your instruction take over. '
           'Turn it up if a change comes out too subtle.',
-          style: TextStyle(fontSize: 11.5, color: AppColors.textTertiary(context)),
+          style: TextStyle(
+            fontSize: 11.5,
+            color: AppColors.textTertiary(context),
+          ),
         ),
       ],
     );
@@ -439,7 +442,9 @@ class _EditViewState extends State<EditView> {
         onPressed: canApply ? _generate : null,
         icon: const Icon(Icons.auto_fix_high, size: 18),
         label: Text(
-          comfyBlocked ? 'Apply change · finish the setup above' : 'Apply change',
+          comfyBlocked
+              ? 'Apply change · finish the setup above'
+              : 'Apply change',
         ),
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.formMasterAccent,
@@ -455,8 +460,10 @@ class _EditViewState extends State<EditView> {
   /// Reset the Draw Things edit recipe AND the local strength slider — passed to
   /// [EditRecipeStrip] because the strip can't see this view's [_strength] state.
   void _useRecommendedEdit() {
-    Provider.of<StorageService>(context, listen: false)
-        .resetEditKnobsToRecommended();
+    Provider.of<StorageService>(
+      context,
+      listen: false,
+    ).resetEditKnobsToRecommended();
     setState(() => _strength = kEditRecommendedStrength);
   }
 
