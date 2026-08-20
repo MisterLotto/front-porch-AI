@@ -3,6 +3,14 @@
 
 # Changelog
 
+## 2026-08-20 — fix(worlds): season start uses the calendar picker
+- **Why:** Month + day dropdowns overflowed the Create World climate
+  dialog (Jan–Dec menu over the sidebar).
+- **What:** Same showDatePicker Story begins uses. Chip shows "Mar 1".
+  Year pinned to 2001 so there is no Feb 29 (365-day climate year).
+  Web: native date input over a Mar 1 chip.
+- **Files:** climate_season_start, ClimateSeasonEditor, styles.css, tests
+
 ## 2026-08-20 — fix(e2e): classify with_user glance as EVAL, not CHAT
 - **Why:** 21bfd8c3 added a post-reply With-you judge. The E2E fake had no
   `"with_user"` branch, so it answered with canned chat prose, bumped

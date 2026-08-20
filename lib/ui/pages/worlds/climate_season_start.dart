@@ -9,7 +9,12 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 /// Matches kClimateDanger on the climate editor cards.
 const Color _clash = Color(0xFFE0644C); // theme-keep: mockup danger
 
-/// Month + day start for one season. Clash paints the numbers danger-red.
+/// Non-leap year so the Material calendar has no Feb 29 — the climate year
+/// is 365 days. first/lastDate pin this year so the picker cannot walk off.
+const int _kSeasonPickerYear = 2001;
+
+/// Month + day start for one season. Opens the same [showDatePicker]
+/// Story begins uses; stacked Jan/Feb dropdowns overflowed the dialog.
 class SeasonStartRow extends StatelessWidget {
   const SeasonStartRow({
     super.key,
@@ -26,50 +31,52 @@ class SeasonStartRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final amber = AppColors.porchAmberOf(context);
     final color = clash ? _clash : AppColors.textSecondary(context);
-    final style = TextStyle(fontSize: 11.5, color: color);
-    final surface = AppColors.surfaceContainerOf(context);
-    return Row(
-      children: [
-        Expanded(
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<int>(
-              value: month,
-              isDense: true,
-              isExpanded: true,
-              dropdownColor: surface,
-              style: style,
-              items: [
-                for (var m = 1; m <= 12; m++)
-                  DropdownMenuItem(value: m, child: Text(kMonthShort[m - 1])),
-              ],
-              onChanged: (m) {
-                if (m == null) return;
-                onStart(m, day.clamp(1, daysInMonth365(m)));
-              },
+    final cap = daysInMonth365(month);
+    final safeDay = day.clamp(1, cap);
+    final label = '${kMonthShort[month - 1]} $safeDay';
+    return Material(
+      color: AppColors.surfaceContainerOf(context),
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => _pick(context, safeDay),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: clash ? _clash : amber.withValues(alpha: 0.55),
             ),
           ),
-        ),
-        const SizedBox(width: 4),
-        Expanded(
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<int>(
-              value: day.clamp(1, daysInMonth365(month)),
-              isDense: true,
-              isExpanded: true,
-              dropdownColor: surface,
-              style: style,
-              items: [
-                for (var d = 1; d <= daysInMonth365(month); d++)
-                  DropdownMenuItem(value: d, child: Text('$d')),
-              ],
-              onChanged: (d) {
-                if (d != null) onStart(month, d);
-              },
-            ),
+          child: Row(
+            children: [
+              Icon(Icons.calendar_today, size: 13, color: color),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11.5, color: color),
+                ),
+              ),
+            ],
           ),
         ),
-      ],
+      ),
     );
+  }
+
+  Future<void> _pick(BuildContext context, int safeDay) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime(_kSeasonPickerYear, month, safeDay),
+      firstDate: DateTime(_kSeasonPickerYear, 1, 1),
+      lastDate: DateTime(_kSeasonPickerYear, 12, 31),
+      helpText: 'Season starts',
+    );
+    if (picked == null) return;
+    onStart(picked.month, picked.day.clamp(1, daysInMonth365(picked.month)));
   }
 }

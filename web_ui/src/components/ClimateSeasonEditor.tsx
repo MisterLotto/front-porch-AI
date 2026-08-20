@@ -10,9 +10,9 @@ import {
   applyRows,
   daysInMonth365,
   doyFromMonthDay,
+  formatDoy,
   MAX_SEASONS,
   MIN_SEASONS,
-  MONTH_SHORT,
   monthDayFromDoy,
   rowsFromBiome,
   startInLongestGap,
@@ -40,7 +40,12 @@ export function ClimateSeasonEditor({
         winter / spring / summer / autumn.
       </div>
       <div className="climate-season-grid">
-        {rows.map((row) => (
+        {rows.map((row) => {
+          const cap = daysInMonth365(row.month);
+          const startLabel = formatDoy(doyFromMonthDay(row.month, row.day));
+          const mm = String(row.month).padStart(2, '0');
+          const dd = String(Math.min(row.day, cap)).padStart(2, '0');
+          return (
           <div
             key={row.id}
             className={`climate-season-card${clash(row.id) ? ' clash' : ''}`}
@@ -73,48 +78,35 @@ export function ClimateSeasonEditor({
               )}
             </div>
             <div className="climate-season-dates">
-              <select
-                value={row.month}
+              <span className="climate-season-date">{startLabel}</span>
+              <input
+                type="date"
+                min="2001-01-01"
+                max="2001-12-31"
+                aria-label={`Season starts ${startLabel}`}
+                value={`2001-${mm}-${dd}`}
                 onChange={(e) => {
-                  const month = Number(e.target.value);
-                  const cap = daysInMonth365(month);
+                  if (!e.target.value) return;
+                  const parts = e.target.value.split('-');
+                  const month = Number(parts[1]);
+                  const d = Number(parts[2]);
                   emit(
                     rows.map((r) =>
                       r.id === row.id
-                        ? { ...r, month, day: Math.min(r.day, cap) }
+                        ? {
+                            ...r,
+                            month,
+                            day: Math.min(d, daysInMonth365(month)),
+                          }
                         : r,
                     ),
                   );
                 }}
-              >
-                {MONTH_SHORT.map((m, i) => (
-                  <option key={m} value={i + 1}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={row.day}
-                onChange={(e) =>
-                  emit(
-                    rows.map((r) =>
-                      r.id === row.id ? { ...r, day: Number(e.target.value) } : r,
-                    ),
-                  )
-                }
-              >
-                {Array.from(
-                  { length: daysInMonth365(row.month) },
-                  (_, i) => i + 1,
-                ).map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
           </div>
-        ))}
+          );
+        })}
         {rows.length < MAX_SEASONS && (
           <button
             type="button"
