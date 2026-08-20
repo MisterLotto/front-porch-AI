@@ -3,6 +3,15 @@
 
 # Changelog
 
+## 2026-08-19 — feat(web): custom seasons on Places (PWA)
+- **Why:** Desktop could author High Sun / extra seasons; the phone
+  could only pick temperate.
+- **What:** Places climate → Custom climate. Rename, start day,
+  add/remove 2–8. Server Biome.validate blocks overlap on save.
+  Still a 365-day year.
+- **Files:** world_facade, world_routes, WorldsPage, ClimateSeasonEditor,
+  seasonCalendar.ts, tests, Rawhide.md
+
 ## 2026-08-19 — feat(worlds): 2–8 seasons on a custom climate
 - **Why:** Slice 3. Alien worlds are not stuck at four buckets.
 - **What:** Add/remove seasons (min 2, max 8). Each has name, start,

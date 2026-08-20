@@ -59,12 +59,15 @@ class WorldFacade {
           'name': w.name,
           'description': w.description,
           'entryCount': w.lorebook.entries.length,
-          'biomeId': w.biomeId ?? 'temperate',
+          'biomeId': (w.biomeJson != null && w.biomeJson!.isNotEmpty)
+              ? 'custom'
+              : (w.biomeId ?? 'temperate'),
           'injectDescription': w.injectDescription,
           'coverImage': w.coverImage,
           'hasCover': w.coverImage != null && w.coverImage!.isNotEmpty,
           'linkedCharacterName': w.linkedCharacterName,
-          'linkedCharacterId': w.linkedCharacterId ??
+          'linkedCharacterId':
+              w.linkedCharacterId ??
               (w.linkedCharacterName != null
                   ? idByName[w.linkedCharacterName!]
                   : null),
@@ -74,14 +77,15 @@ class WorldFacade {
 
   /// Built-in climates for the web editor (id, labels, feel copy).
   List<Map<String, dynamic>> climates() => [
-        for (final b in Biome.builtIns)
-          {
-            'id': b.id,
-            'displayName': b.displayName,
-            'description': b.description,
-            'feel': b.feel,
-          },
-      ];
+    for (final b in Biome.builtIns)
+      {
+        'id': b.id,
+        'displayName': b.displayName,
+        'description': b.description,
+        'feel': b.feel,
+        'template': b.toJson(),
+      },
+  ];
 
   Map<String, dynamic>? detail(String nameOrId) {
     final w = _worlds.resolveWorld(nameOrId);
@@ -90,7 +94,10 @@ class WorldFacade {
       'id': w.id,
       'name': w.name,
       'description': w.description,
-      'biomeId': w.biomeId ?? 'temperate',
+      'biomeId': (w.biomeJson != null && w.biomeJson!.isNotEmpty)
+          ? 'custom'
+          : (w.biomeId ?? 'temperate'),
+      'biome': Biome.tryParse(w.biomeJson)?.toJson(),
       'injectDescription': w.injectDescription,
       'coverImage': w.coverImage,
       'linkedCharacterName': w.linkedCharacterName,
@@ -113,7 +120,8 @@ class WorldFacade {
     }
     existing ??= _worlds.worldByName(f['originalName']?.toString() ?? name);
 
-    final world = existing ??
+    final world =
+        existing ??
         World(
           name: name,
           lorebook: Lorebook(entries: []),
@@ -128,14 +136,13 @@ class WorldFacade {
       world.name = name;
     }
     world.description = f['description']?.toString() ?? '';
-    world.biomeId = f['biomeId']?.toString() ?? world.biomeId;
+    if (!_applyClimate(world, f)) return false;
     if (f.containsKey('injectDescription')) {
       world.injectDescription = f['injectDescription'] == true;
     }
     if (f.containsKey('coverImage')) {
       final raw = f['coverImage']?.toString();
-      world.coverImage =
-          (raw == null || raw.isEmpty) ? null : raw;
+      world.coverImage = (raw == null || raw.isEmpty) ? null : raw;
     }
     if (f.containsKey('atmosphere')) {
       world.atmosphere = worldAtmosphereFromName(f['atmosphere']?.toString());
@@ -164,7 +171,8 @@ class WorldFacade {
   /// uniquifying behave identically on both surfaces.
   Future<bool> importWorld(Map<String, dynamic> json) async {
     // Reject payloads that are neither a package envelope nor a lorebook.
-    final isEnvelope = json.containsKey('formatVersion') ||
+    final isEnvelope =
+        json.containsKey('formatVersion') ||
         (json.containsKey('id') &&
             json.containsKey('name') &&
             (json.containsKey('lorebook') || json.containsKey('lorebooks')));
@@ -224,12 +232,12 @@ class WorldFacade {
 
     List<LorebookEntry> cloned() => [for (final e in book.entries) e.clone()];
     Lorebook clonedBook() => Lorebook(
-          entries: cloned(),
-          scanDepth: book.scanDepth,
-          tokenBudget: book.tokenBudget,
-          recursiveScanning: book.recursiveScanning,
-          extensions: Map<String, dynamic>.from(book.extensions),
-        );
+      entries: cloned(),
+      scanDepth: book.scanDepth,
+      tokenBudget: book.tokenBudget,
+      recursiveScanning: book.recursiveScanning,
+      extensions: Map<String, dynamic>.from(book.extensions),
+    );
 
     switch (destination) {
       case 'world':
@@ -242,11 +250,13 @@ class WorldFacade {
           candidate = '$base ($i)';
           i++;
         }
-        await _worlds.saveWorld(World(
-          name: candidate,
-          description: (description ?? summary.suggestedDescription).trim(),
-          lorebook: clonedBook(),
-        ));
+        await _worlds.saveWorld(
+          World(
+            name: candidate,
+            description: (description ?? summary.suggestedDescription).trim(),
+            lorebook: clonedBook(),
+          ),
+        );
         return {'ok': true, 'where': 'world', 'name': candidate};
       case 'characters':
         final chars = _characters;
@@ -263,7 +273,9 @@ class WorldFacade {
           await chars.updateCharacter(c);
           count++;
         }
-        return count > 0 ? {'ok': true, 'where': 'characters', 'count': count} : null;
+        return count > 0
+            ? {'ok': true, 'where': 'characters', 'count': count}
+            : null;
       case 'group':
         final g = _chat?.activeGroup;
         final groups = _groups;
@@ -351,10 +363,7 @@ class WorldFacade {
         for (final id in ids)
           if (_worlds.resolveWorld(id) case final w?)
             if (w.biomeJson != null && Biome.tryParse(w.biomeJson) != null)
-              {
-                'id': 'world:${w.id}',
-                'displayName': '${w.name} (custom)',
-              },
+              {'id': 'world:${w.id}', 'displayName': '${w.name} (custom)'},
       ],
     };
   }
@@ -398,5 +407,35 @@ class WorldFacade {
     }
     await chat.setChatClimate(biome);
     return {'ok': true, ...chatPlaces()};
+  }
+
+  /// Server-side overlap / 2–8 check. Same [Biome.validate] as desktop save.
+  List<String> climateErrors(Map<String, dynamic> json) {
+    try {
+      return Biome.fromJson(json).validate();
+    } catch (_) {
+      return const ['Could not read that climate'];
+    }
+  }
+
+  bool _applyClimate(World world, Map<String, dynamic> f) {
+    final custom = f['biomeId'] == 'custom' || f['biome'] is Map;
+    if (!custom) {
+      if (f.containsKey('biomeId')) {
+        world.biomeId = f['biomeId']?.toString();
+        world.biomeJson = null;
+      }
+      return true;
+    }
+    Map<String, dynamic>? map;
+    final raw = f['biome'];
+    if (raw is Map) map = Map<String, dynamic>.from(raw);
+    final biome = map != null
+        ? Biome.fromJson(map)
+        : Biome.tryParse(f['biomeJson']?.toString());
+    if (biome == null || biome.validate().isNotEmpty) return false;
+    world.biomeId = null;
+    world.biomeJson = biome.toJsonString();
+    return true;
   }
 }

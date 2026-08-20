@@ -31,6 +31,7 @@ class WebWorldRoutes {
     // Static suffix; register before the '<name>' captures so 'import' is never
     // swallowed as a world name.
     router.post('/api/worlds/import', _import);
+    router.post('/api/worlds/climate/check', _climateCheck);
     router.post('/api/lorebook/import', _importLorebook);
     router.get('/api/chat/places', _chatPlaces);
     router.post('/api/chat/places', _setChatPlaces);
@@ -49,6 +50,20 @@ class WebWorldRoutes {
   shelf.Response _climates(shelf.Request request) =>
       JsonResponse.ok({'climates': _facade.climates()});
 
+  Future<shelf.Response> _climateCheck(shelf.Request request) async {
+    Map<String, dynamic> body;
+    try {
+      body = await RequestBody.readJsonMap(request);
+    } catch (_) {
+      return JsonResponse.badRequest('Invalid JSON body');
+    }
+    final raw = body['biome'];
+    if (raw is! Map) return JsonResponse.badRequest('biome is required');
+    return JsonResponse.ok({
+      'errors': _facade.climateErrors(Map<String, dynamic>.from(raw)),
+    });
+  }
+
   shelf.Response _chatPlaces(shelf.Request request) =>
       JsonResponse.ok(_facade.chatPlaces());
 
@@ -60,9 +75,7 @@ class WebWorldRoutes {
       return JsonResponse.badRequest('Invalid JSON body');
     }
     final raw = body['worldIds'];
-    final ids = raw is List
-        ? [for (final e in raw) e.toString()]
-        : <String>[];
+    final ids = raw is List ? [for (final e in raw) e.toString()] : <String>[];
     final result = await _facade.setChatPlaces(ids);
     if (result['ok'] != true) {
       return JsonResponse.badRequest(
@@ -145,14 +158,12 @@ class WebWorldRoutes {
     final world = _facade.exportWorld(decoded);
     if (world == null) return JsonResponse.error(404, 'World not found');
     final placeName = world['name']?.toString() ?? decoded;
-    final safe =
-        placeName.replaceAll(RegExp(r'[^A-Za-z0-9 _\-]'), '_').trim();
+    final safe = placeName.replaceAll(RegExp(r'[^A-Za-z0-9 _\-]'), '_').trim();
     final filename = safe.isEmpty ? 'place' : safe;
     return JsonResponse.ok(
       world,
       extraHeaders: {
-        'Content-Disposition':
-            'attachment; filename="$filename.fpworld.json"',
+        'Content-Disposition': 'attachment; filename="$filename.fpworld.json"',
       },
     );
   }

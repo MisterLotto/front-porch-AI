@@ -860,6 +860,36 @@ button.ghost.small, .ghost.small { font-size: 0.72rem; padding: 4px 8px; backgro
 }
 .climate-feel-card p { margin: 0 0 6px; }
 .climate-feel-card p:last-child { margin-bottom: 0; }
+.climate-season-editor { margin: 8px 0 14px; }
+.climate-season-grid {
+  display: flex; flex-wrap: wrap; gap: 10px;
+}
+.climate-season-card {
+  width: 160px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface, color-mix(in srgb, var(--accent) 6%, transparent));
+}
+.climate-season-card.clash { border-color: #e0644c; }
+.climate-season-card-head { display: flex; gap: 4px; align-items: center; }
+.climate-season-card-head input {
+  flex: 1; min-width: 0; font-weight: 600; font-size: 0.85rem;
+}
+.climate-season-dates { display: flex; gap: 6px; margin-top: 6px; }
+.climate-season-dates select { flex: 1; }
+.climate-season-add {
+  width: 120px; min-height: 72px;
+  border-radius: 10px;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+.climate-season-errors {
+  margin: 8px 0 0; padding: 0; list-style: none;
+  color: #e0644c; font-size: 0.82rem; line-height: 1.4;
+}
 .chat-places { margin: 10px 0 14px; }
 .chat-places-chips {
   display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px;
