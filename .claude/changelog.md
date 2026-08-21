@@ -1,3 +1,22 @@
+# Changelog
+
+## 2026-08-21 — feat(work): occupationBrief grounds at-work narration
+- **Why:** Occupation was a title only. The model guessed the job. Group
+  turns never saw it at all: wiring read `_activeCharacter`, which
+  `setActiveGroup` nulls, so title, hours, and brief were empty. A leaf
+  test stubbed the brief and lied.
+- **What:** Card + web-bridge key `occupationBrief` (omit if blank).
+  At-work prompt is title, then brief, then write-from-there. Empty brief
+  is today. Off-shift brief is identity only. Group copies fall back to
+  the library card. Group prompt reads the pinned speaker via
+  `_workSpeakerCard` (not a sticky `_activeCharacter`). New ChatService
+  test pins like a real turn.
+- **Files:** character_card, presence_derive, behavioral_injection,
+  chat_service_turn_flow, chat_service_wiring_injection,
+  chat_service_group_realism_helpers, realism_extensions_json,
+  preferences_round_trip_test, prompt_injection_test,
+  presence_derive_test, group_work_prompt_injection_test
+
 
 
 

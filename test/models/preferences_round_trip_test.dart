@@ -47,6 +47,7 @@ FrontPorchExtensions seeded() => FrontPorchExtensions(
   planLines: ['finish the log before the tide'],
   occupation: 'lighthouse keeper',
   hours: 'dawn–dusk',
+  occupationBrief: 'Keeps the lamp and logs the ships',
 );
 
 void main() {
@@ -61,33 +62,41 @@ void main() {
       expect(back.planLines, ['finish the log before the tide']);
       expect(back.occupation, 'lighthouse keeper');
       expect(back.hours, 'dawn–dusk');
+      expect(back.occupationBrief, 'Keeps the lamp and logs the ships');
     });
 
     test('occupation and hours omitted JSON reads as empty, not null', () {
       final back = FrontPorchExtensions.fromJson(const {'realism_engine': {}});
       expect(back.occupation, '');
       expect(back.hours, '');
+      expect(back.occupationBrief, '');
     });
 
     test('blank occupation and hours are omitted from card JSON', () {
       final realism =
-          FrontPorchExtensions().toJson()['realism_engine'] as Map<String, dynamic>;
+          FrontPorchExtensions().toJson()['realism_engine']
+              as Map<String, dynamic>;
       expect(realism.containsKey('occupation'), isFalse);
       expect(realism.containsKey('hours'), isFalse);
+      expect(realism.containsKey('occupationBrief'), isFalse);
     });
 
     test('occupation and hours survive the card wire', () {
       final ext = FrontPorchExtensions(
         occupation: 'lighthouse keeper',
         hours: 'dawn–dusk',
+        occupationBrief: 'Keeps the lamp and logs the ships',
       );
       final json = ext.toJson();
       final realism = json['realism_engine'] as Map<String, dynamic>;
       expect(realism['occupation'], 'lighthouse keeper');
       expect(realism['hours'], 'dawn–dusk');
+      expect(realism['occupationBrief'], 'Keeps the lamp and logs the ships');
+      expect(realism.containsKey('occupation_brief'), isFalse);
       final back = FrontPorchExtensions.fromJson(json);
       expect(back.occupation, 'lighthouse keeper');
       expect(back.hours, 'dawn–dusk');
+      expect(back.occupationBrief, 'Keeps the lamp and logs the ships');
     });
 
     test('plan_lines omitted JSON reads as empty, not null', () {
@@ -102,22 +111,24 @@ void main() {
       final json = ext.toJson();
       final realism = json['realism_engine'] as Map<String, dynamic>;
       expect(realism['plan_lines'], ['finish the log before the tide']);
-      expect(
-        FrontPorchExtensions.fromJson(json).planLines,
-        ['finish the log before the tide'],
-      );
+      expect(FrontPorchExtensions.fromJson(json).planLines, [
+        'finish the log before the tide',
+      ]);
     });
 
-    test('the 18+ pair travels nested, so a share can strip it as one object', () {
-      final realism =
-          seeded().toJson()['realism_engine'] as Map<String, dynamic>;
-      expect(realism['intimate_preferences'], {
-        'into': ['slow mornings'],
-        'not_into': ['an audience'],
-      });
-      // ...and is NOT smuggled into the everyday lists.
-      expect(realism['likes'], isNot(contains('slow mornings')));
-    });
+    test(
+      'the 18+ pair travels nested, so a share can strip it as one object',
+      () {
+        final realism =
+            seeded().toJson()['realism_engine'] as Map<String, dynamic>;
+        expect(realism['intimate_preferences'], {
+          'into': ['slow mornings'],
+          'not_into': ['an audience'],
+        });
+        // ...and is NOT smuggled into the everyday lists.
+        expect(realism['likes'], isNot(contains('slow mornings')));
+      },
+    );
 
     test('a card with no preferences at all reads as empty, not null', () {
       final back = FrontPorchExtensions.fromJson(const {'realism_engine': {}});
@@ -173,6 +184,7 @@ void main() {
       expect(back.planLines, ['finish the log before the tide']);
       expect(back.occupation, 'lighthouse keeper');
       expect(back.hours, 'dawn–dusk');
+      expect(back.occupationBrief, 'Keeps the lamp and logs the ships');
     });
 
     test('an older web client that omits the keys keeps the base values', () {
@@ -184,6 +196,7 @@ void main() {
       expect(back.planLines, ['finish the log before the tide']);
       expect(back.occupation, 'lighthouse keeper');
       expect(back.hours, 'dawn–dusk');
+      expect(back.occupationBrief, 'Keeps the lamp and logs the ships');
     });
 
     test('a client sending junk falls back rather than throwing', () {

@@ -51,6 +51,43 @@ extension ChatServiceGroupRealismHelpers on ChatService {
     return _getCharacterIdFromCard(_groupCharacters.first);
   }
 
+  /// Card the work prompt (occupation / hours / brief) reads.
+  ///
+  /// 1:1 uses [_activeCharacter]. Group looks up the member whose id is
+  /// [_getCurrentSpeakerIdForRealism] — never [_activeCharacter], which
+  /// [setActiveGroup] nulls for the whole turn. No matching card
+  /// (empty roster / unknown id) returns null so the three fields stay empty.
+  CharacterCard? _workSpeakerCard() {
+    if (_activeGroup == null) return _activeCharacter;
+    final sid = _getCurrentSpeakerIdForRealism();
+    for (final c in _groupCharacters) {
+      if (_getCharacterIdFromCard(c) == sid) return c;
+    }
+    return null;
+  }
+
+  ({String occupation, String hours, String occupationBrief})
+  _workFieldsForCurrentSpeaker() {
+    final card = _workSpeakerCard();
+    if (card == null) {
+      return (occupation: '', hours: '', occupationBrief: '');
+    }
+    return _workFieldsFor(card);
+  }
+
+  /// Test-only: pin the group speaker the same way `_generateResponse` does
+  /// (`_turnSpeakerIdForRealism`). Do not assign `_activeCharacter`.
+  @visibleForTesting
+  void debugPinTurnSpeakerForRealism(String? charId) {
+    _turnSpeakerIdForRealism = charId;
+  }
+
+  /// Test-only: live position injection through the wired BehavioralInjection.
+  /// Does not stub `getOccupationBrief`.
+  @visibleForTesting
+  String debugBuildPositionInjection() =>
+      _behavioralInjection.buildPositionInjection();
+
   // ── Per-character realism state access (group mode, typed — U7) ─────────
   /// The one write door to a member's typed state. Outside group mode it
   /// hands back a THROWAWAY object, so writes vanish — observationally the

@@ -519,6 +519,59 @@ void main() {
       expect(txt, isNot(contains('Position:')));
     });
 
+    test('empty occupationBrief keeps today at-work line', () {
+      final b = BehavioralInjection(
+        relationshipService: createTestRelSvc(),
+        getRealismEnabled: () => true,
+        getOccupation: () => 'clerk',
+        getHours: () => '9-5',
+        getOccupationBrief: () => '',
+        getClockMinutes: () => 14 * 60 + 30,
+        getIsGroup: () => false,
+      );
+      expect(
+        b.buildPositionInjection(),
+        'At work as a clerk. Write from there.',
+      );
+    });
+
+    test('1:1 at-work prompt injects brief beside the title', () {
+      const brief = 'Keeps the diner grill and the late-night register';
+      final b = BehavioralInjection(
+        relationshipService: createTestRelSvc(),
+        getRealismEnabled: () => true,
+        getOccupation: () => 'clerk',
+        getHours: () => '9-5',
+        getOccupationBrief: () => brief,
+        getClockMinutes: () => 14 * 60 + 30,
+        getIsGroup: () => false,
+      );
+      final txt = b.buildPositionInjection();
+      expect(txt, contains('At work as a clerk.'));
+      expect(txt, contains(brief));
+      expect(txt, contains('Write from there.'));
+      expect(txt, isNot(contains('as a clerk $brief')));
+      expect(txt, isNot(contains('as a $brief')));
+    });
+
+    test('off-shift brief is identity, not workplace staging', () {
+      const brief = 'Keeps the diner grill and the late-night register';
+      final b = BehavioralInjection(
+        relationshipService: createTestRelSvc(),
+        getRealismEnabled: () => true,
+        getOccupation: () => 'clerk',
+        getHours: () => '9-5',
+        getOccupationBrief: () => brief,
+        getClockMinutes: () => 20 * 60,
+        getIsGroup: () => false,
+      );
+      final txt = b.buildPositionInjection();
+      expect(txt, contains('Works as a clerk.'));
+      expect(txt, contains(brief));
+      expect(txt, isNot(contains('At work')));
+      expect(txt, isNot(contains('Write from there.')));
+    });
+
     test('1:1 Away narrates from the stance', () {
       final svc = createTestRelSvc();
       svc.loadScalars(

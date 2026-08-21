@@ -307,9 +307,9 @@ extension ChatServiceWiringInjection on ChatService {
     return BehavioralInjection(
       relationshipService: _relationshipService,
       getRealismEnabled: () => _realismEnabled,
-      getOccupation: () =>
-          _activeCharacter?.frontPorchExtensions?.occupation ?? '',
-      getHours: () => _activeCharacter?.frontPorchExtensions?.hours ?? '',
+      getOccupation: () => _workFieldsForCurrentSpeaker().occupation,
+      getHours: () => _workFieldsForCurrentSpeaker().hours,
+      getOccupationBrief: () => _workFieldsForCurrentSpeaker().occupationBrief,
       getClockMinutes: () => _timeService.clockMinutes,
       getIsGroup: () => _activeGroup != null,
     );

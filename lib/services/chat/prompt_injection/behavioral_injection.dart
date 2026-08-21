@@ -43,6 +43,7 @@ class BehavioralInjection {
   final bool Function() getRealismEnabled;
   final String Function()? getOccupation;
   final String Function()? getHours;
+  final String Function()? getOccupationBrief;
   final int Function()? getClockMinutes;
   final bool Function()? getIsGroup;
 
@@ -51,6 +52,7 @@ class BehavioralInjection {
     required this.getRealismEnabled,
     this.getOccupation,
     this.getHours,
+    this.getOccupationBrief,
     this.getClockMinutes,
     this.getIsGroup,
   });
@@ -78,33 +80,34 @@ class BehavioralInjection {
     if (!getRealismEnabled()) return '';
     final stance = relationshipService.spatialStance.trim();
     final group = getIsGroup?.call() ?? false;
-    if (!group) {
-      final occ = getOccupation?.call() ?? '';
-      final hours = getHours?.call() ?? '';
-      final where = derivePresence(
-        occupation: occ,
-        hours: hours,
-        clockMinutes: getClockMinutes?.call() ?? 0,
-        inScene: inSceneForPresence(
-          stance: stance,
-          withUser: relationshipService.withUser,
-        ),
-      );
-      if (where == PresenceWhere.atWork) {
-        final job = occ.trim();
-        // Do not append the last stance — it is often the porch from
-        // before the clock jumped into the shift.
-        return 'At work${job.isEmpty ? '' : ' as a $job'}. '
-            'Write from there.';
-      }
-      if (where == PresenceWhere.away) {
-        final here = stance.isEmpty ? '' : ' ($stance)';
-        return 'Away from {{user}}$here. Write from there.';
-      }
+    final occ = getOccupation?.call() ?? '';
+    final hours = getHours?.call() ?? '';
+    final brief = getOccupationBrief?.call() ?? '';
+    final where = derivePresence(
+      occupation: occ,
+      hours: hours,
+      clockMinutes: getClockMinutes?.call() ?? 0,
+      inScene: inSceneForPresence(
+        stance: stance,
+        withUser: relationshipService.withUser,
+      ),
+    );
+    if (where == PresenceWhere.atWork) {
+      return atWorkPromptLine(occupation: occ, occupationBrief: brief);
     }
-    if (stance.isEmpty) return '';
-    return 'Position: $stance — ground actions in '
+    if (!group && where == PresenceWhere.away) {
+      final here = stance.isEmpty ? '' : ' ($stance)';
+      return 'Away from {{user}}$here. Write from there.';
+    }
+    final identity = where == PresenceWhere.withYou
+        ? offShiftWorkIdentityLine(occupation: occ, occupationBrief: brief)
+        : '';
+    if (stance.isEmpty) return identity;
+    final position =
+        'Position: $stance — ground actions in '
         'this, but moving and changing position is fine as the scene demands.';
+    if (identity.isEmpty) return position;
+    return '$identity\n$position';
   }
 
   /// Both mechanics as one fragment — the original shape.

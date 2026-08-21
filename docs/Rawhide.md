@@ -5,6 +5,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 💼 **Group chats get the job brief** — when a member is at work in a group, the model now sees their job title and **What the job is**, same as 1:1. Hours still decide whether they are at work.
+
 - 🧥 **Put clothes back on** — if the model strips them, Wearing still shows while empty. Tap Put clothes on (or the plus, then Wearing), type `coat`, They're wearing this. Next reply they're dressed. Add quietly stays for keys in a pocket — it is gone on Wearing. Desktop and phone.
 
 - 🚽 **Hunger and bathroom nag less** — characters don't keep eating and peeing just because a few turns passed. They still will when it's actually time.

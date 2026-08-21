@@ -97,14 +97,7 @@ extension ChatServiceTurnFlow on ChatService {
   /// At work (and Away when we know they are not in scene). 1:1 never skips.
   bool _groupSpeakerSkips(CharacterCard card) {
     if (_activeGroup == null) return false;
-    final ext = card.frontPorchExtensions;
-    final library = originLibraryCardFor(card);
-    final work = workFieldsForGroupMember(
-      copyOccupation: ext?.occupation ?? '',
-      copyHours: ext?.hours ?? '',
-      libraryOccupation: library?.frontPorchExtensions?.occupation,
-      libraryHours: library?.frontPorchExtensions?.hours,
-    );
+    final work = _workFieldsFor(card);
     final where = derivePresence(
       occupation: work.occupation,
       hours: work.hours,
@@ -134,14 +127,7 @@ extension ChatServiceTurnFlow on ChatService {
   }
 
   String _presenceSkipBanner(CharacterCard card) {
-    final ext = card.frontPorchExtensions;
-    final library = originLibraryCardFor(card);
-    final work = workFieldsForGroupMember(
-      copyOccupation: ext?.occupation ?? '',
-      copyHours: ext?.hours ?? '',
-      libraryOccupation: library?.frontPorchExtensions?.occupation,
-      libraryHours: library?.frontPorchExtensions?.hours,
-    );
+    final work = _workFieldsFor(card);
     final where = derivePresence(
       occupation: work.occupation,
       hours: work.hours,
@@ -157,6 +143,21 @@ extension ChatServiceTurnFlow on ChatService {
       return '${card.name} is at work${job.isEmpty ? '' : ' as a $job'}$until.';
     }
     return '${card.name} is away.';
+  }
+
+  ({String occupation, String hours, String occupationBrief}) _workFieldsFor(
+    CharacterCard card,
+  ) {
+    final ext = card.frontPorchExtensions;
+    final library = originLibraryCardFor(card);
+    return workFieldsForGroupMember(
+      copyOccupation: ext?.occupation ?? '',
+      copyHours: ext?.hours ?? '',
+      copyOccupationBrief: ext?.occupationBrief ?? '',
+      libraryOccupation: library?.frontPorchExtensions?.occupation,
+      libraryHours: library?.frontPorchExtensions?.hours,
+      libraryOccupationBrief: library?.frontPorchExtensions?.occupationBrief,
+    );
   }
 
   /// Skip path only. 1:1 never skips (caller returns false first).

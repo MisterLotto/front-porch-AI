@@ -8,19 +8,26 @@ import 'package:front_porch_ai/ui/chat_components/sidebar/character_state/presen
 export 'package:front_porch_ai/ui/chat_components/sidebar/character_state/presence_word.dart'
     show PresenceWhere;
 
-/// Group copies often drop occupation/hours (fromJson only reads
+/// Group copies often drop occupation/hours/brief (fromJson only reads
 /// realism_engine.*). Blank copy fields fall back to the origin library card.
-({String occupation, String hours}) workFieldsForGroupMember({
+({String occupation, String hours, String occupationBrief})
+workFieldsForGroupMember({
   required String copyOccupation,
   required String copyHours,
+  String copyOccupationBrief = '',
   String? libraryOccupation,
   String? libraryHours,
+  String? libraryOccupationBrief,
 }) {
   final occ = copyOccupation.trim();
   final hrs = copyHours.trim();
+  final brief = copyOccupationBrief.trim();
   return (
     occupation: occ.isNotEmpty ? occ : (libraryOccupation ?? '').trim(),
     hours: hrs.isNotEmpty ? hrs : (libraryHours ?? '').trim(),
+    occupationBrief: brief.isNotEmpty
+        ? brief
+        : (libraryOccupationBrief ?? '').trim(),
   );
 }
 
@@ -54,6 +61,34 @@ String presenceGlanceLabel(PresenceWhere where) => switch (where) {
   PresenceWhere.away => 'Away',
   PresenceWhere.atWork => 'At work',
 };
+
+/// At-work prompt line. Title stays `as a $occupation`. [occupationBrief]
+/// is its own sentence — never stuffed into the title. Empty brief is
+/// today's line. Do not invent the job from the title.
+String atWorkPromptLine({
+  required String occupation,
+  String occupationBrief = '',
+}) {
+  final job = occupation.trim();
+  final brief = occupationBrief.trim();
+  final head = 'At work${job.isEmpty ? '' : ' as a $job'}.';
+  if (brief.isEmpty) return '$head Write from there.';
+  final duties = brief.endsWith('.') ? brief : '$brief.';
+  return '$head $duties Write from there.';
+}
+
+/// Off-shift identity only. Never stages the workplace.
+String offShiftWorkIdentityLine({
+  required String occupation,
+  String occupationBrief = '',
+}) {
+  final brief = occupationBrief.trim();
+  if (brief.isEmpty) return '';
+  final job = occupation.trim();
+  final duties = brief.endsWith('.') ? brief : '$brief.';
+  if (job.isEmpty) return duties;
+  return 'Works as a $job. $duties';
+}
 
 /// Judge bit wins when present. Else the stance keyword sniff.
 /// Missing [withUser] fails toward [inScene] / keyword so old chats

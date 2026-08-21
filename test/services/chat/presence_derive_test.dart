@@ -205,9 +205,12 @@ void main() {
     final work = workFieldsForGroupMember(
       copyOccupation: '',
       copyHours: '',
+      copyOccupationBrief: '',
       libraryOccupation: 'meteorologist',
       libraryHours: '9-5',
+      libraryOccupationBrief: 'Reads the sky from the station roof',
     );
+    expect(work.occupationBrief, 'Reads the sky from the station roof');
     expect(
       derivePresence(
         occupation: work.occupation,

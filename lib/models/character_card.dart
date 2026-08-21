@@ -89,11 +89,13 @@ class FrontPorchExtensions {
   /// The today sentence is session state, never stored here.
   List<String> planLines;
 
-  /// Occupation and hours — two short identity strings. Travel with the card
-  /// like [planLines]. Blank is omitted from JSON. No weekday grid; at-work
-  /// is derived later, not stored here.
+  /// Occupation, hours, and a short job brief — identity strings. Travel
+  /// with the card like [planLines]. Blank is omitted from JSON. No weekday
+  /// grid; at-work is derived later, not stored here. [occupationBrief]
+  /// grounds at-work narration; empty means today — do not invent the job.
   String occupation;
   String hours;
+  String occupationBrief;
 
   /// What this character is drawn to, and what puts them off — short phrases,
   /// authored on the card. Identity like [ambitions]: they travel with it.
@@ -225,6 +227,7 @@ class FrontPorchExtensions {
     this.planLines = const [],
     this.occupation = '',
     this.hours = '',
+    this.occupationBrief = '',
     this.likes = const [],
     this.dislikes = const [],
     this.intimateInto = const [],
@@ -306,6 +309,7 @@ class FrontPorchExtensions {
         'plan_lines': planLines,
         if (occupation.isNotEmpty) 'occupation': occupation,
         if (hours.isNotEmpty) 'hours': hours,
+        if (occupationBrief.isNotEmpty) 'occupationBrief': occupationBrief,
         'likes': likes,
         'dislikes': dislikes,
         // Nested so the 18+ pair can be stripped from a share as one object.
@@ -388,6 +392,7 @@ class FrontPorchExtensions {
       planLines: _phrases(realism['plan_lines']),
       occupation: realism['occupation'] as String? ?? '',
       hours: realism['hours'] as String? ?? '',
+      occupationBrief: realism['occupationBrief'] as String? ?? '',
       likes: _phrases(realism['likes']),
       dislikes: _phrases(realism['dislikes']),
       intimateInto: _phrases(_intimate(realism)['into']),
@@ -470,6 +475,7 @@ class FrontPorchExtensions {
     List<String>? planLines,
     String? occupation,
     String? hours,
+    String? occupationBrief,
     List<String>? likes,
     List<String>? dislikes,
     List<String>? intimateInto,
@@ -532,6 +538,7 @@ class FrontPorchExtensions {
       planLines: planLines ?? this.planLines,
       occupation: occupation ?? this.occupation,
       hours: hours ?? this.hours,
+      occupationBrief: occupationBrief ?? this.occupationBrief,
       likes: likes ?? this.likes,
       dislikes: dislikes ?? this.dislikes,
       intimateInto: intimateInto ?? this.intimateInto,
