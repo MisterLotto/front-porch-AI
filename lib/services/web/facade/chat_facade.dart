@@ -24,7 +24,7 @@ import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/web/facade/chat_realism_read.dart';
-import 'package:front_porch_ai/utils/utils.dart';
+import 'package:front_porch_ai/services/web/facade/chat_session_facade.dart';
 import 'package:front_porch_ai/services/web/streaming/stream_hub.dart';
 import 'package:front_porch_ai/services/web/util/lorebook_json.dart';
 
@@ -55,6 +55,12 @@ class ChatFacade {
   /// Realism-READ leaf (host snapshot + per-member participant realism). Pure
   /// reads of [ChatService]; co-located 1:1/group parity pair lives there.
   late final ChatRealismRead _realism = ChatRealismRead(_chat);
+
+  late final ChatSessionFacade _sessions = ChatSessionFacade(
+    _chat,
+    _characters,
+    _notify,
+  );
 
   /// Context Budget payload (desktop ContextViewerDialog parity): per-section
   /// token estimate + the REAL text each section contributed to the last
@@ -670,46 +676,22 @@ class ChatFacade {
     return true;
   }
 
-  /// All saved conversations for the currently-active character/group, newest
-  /// first — so the web UI can list past chats and let the user resume any of
-  /// them via [session]. Reuses ChatService's own session lister; only adapts
-  /// the `date` field to a JSON-safe ISO string.
-  ///
-  /// With [characterId] (a library dbId), lists that character's 1:1 chats
-  /// WITHOUT touching the active chat — the web AI Enhance flow's "which
-  /// chat?" picker. Additive: absent, behavior is unchanged.
-  Future<List<Map<String, dynamic>>> sessions({String? characterId}) async {
-    List<Map<String, dynamic>> raw;
-    if (characterId != null && characterId.isNotEmpty) {
-      final card = _characters.characters
-          .where((c) => c.dbId == characterId)
-          .firstOrNull;
-      // getSessionsForId keys by imagePath basename (stableGroupId) — a UUID
-      // silently returns [] (the documented fall-through).
-      raw = card == null
-          ? const []
-          : await _chat.getSessionsForId(card.stableGroupId);
-    } else {
-      raw = await _chat.getSessions();
-    }
-    return raw.map((s) {
-      final date = s['date'];
-      return {...s, 'date': date is DateTime ? date.toIso8601String() : date};
-    }).toList();
-  }
+  /// All saved conversations. See [ChatSessionFacade.list].
+  Future<List<Map<String, dynamic>>> sessions({
+    String? characterId,
+    String? groupId,
+  }) => _sessions.list(characterId: characterId, groupId: groupId);
 
-  /// New chat or load an existing session. Returns the resulting session id.
-  Future<String?> session({String? action, String? sessionId}) async {
-    if (action == 'new') {
-      await _chat.startNewChat();
-    } else if (sessionId != null) {
-      await _chat.loadSession(sessionId);
-    } else {
-      return null;
-    }
-    _notify();
-    return _chat.currentSessionId;
-  }
+  /// New / load / delete. See [ChatSessionFacade.apply].
+  Future<String?> session({
+    String? action,
+    String? sessionId,
+    bool startReplacement = true,
+  }) => _sessions.apply(
+    action: action,
+    sessionId: sessionId,
+    startReplacement: startReplacement,
+  );
 
   String? get currentSessionId => _chat.currentSessionId;
 
@@ -734,8 +716,7 @@ class ChatFacade {
   /// Save per-chat theme overrides from the web UI.
   Future<bool> setThemeOverrides(Map<String, dynamic> json) async {
     if (_chat.currentSessionId == null) return false;
-    _chat.sessionThemeOverrides =
-        ChatThemeOverrides.fromJson(json);
+    _chat.sessionThemeOverrides = ChatThemeOverrides.fromJson(json);
     _notify();
     return true;
   }

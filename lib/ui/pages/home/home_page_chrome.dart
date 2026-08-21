@@ -115,8 +115,9 @@ extension _HomePageChrome on _HomePageState {
       debugPrint('[Home] open chat failed: $e\n$st');
       if (mounted && nav.canPop()) {
         nav.pop();
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Could not open chat: $e')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not open chat: $e')));
       }
       return;
     }
@@ -258,6 +259,9 @@ extension _HomePageChrome on _HomePageState {
       case 'new_chat':
         _startNewChatWith(character: character);
         break;
+      case 'chat_history':
+        _showChatHistory(character: character);
+        break;
       case 'edit':
         _editCharacter(context, character);
         break;
@@ -327,6 +331,9 @@ extension _HomePageChrome on _HomePageState {
       case 'new_chat':
         _startNewChatWith(group: group);
         break;
+      case 'chat_history':
+        _showChatHistory(group: group);
+        break;
       case 'edit':
         _editGroup(group);
         break;
@@ -384,20 +391,6 @@ extension _HomePageChrome on _HomePageState {
           content: Text('Duplicate Group not yet implemented: ${group.name}'),
         ),
       );
-    }
-  }
-
-  void _handleImport(String source) {
-    switch (source) {
-      case 'cards':
-        _importCharacter(context);
-        break;
-      case 'folder':
-        _folderImportCharacters(context);
-        break;
-      case 'byaf':
-        _importByaf(context);
-        break;
     }
   }
 

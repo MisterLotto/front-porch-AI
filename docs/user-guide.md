@@ -63,7 +63,7 @@ Click any character on the home screen and you're in a chat.
 
 **Slash commands:** type `/` in the message box and a list of commands appears above it — tap one to fill it in. They cover bringing characters in and out of a scene, forcing a turn, setting turn order, generating an image, and stepping away. See [Group Chats](#group-chats) for the cast commands.
 
-**Chat Management** (the folder icon in the input bar at the bottom of the chat — not in the top bar) holds **New Chat**, **Chat History** (every past conversation with this character), **Import Chat** / **Export Chat** (SillyTavern-format JSON, so conversations move between apps), **Context Budget** (see [Long-Term Memory](#long-term-memory)), and **Turn Into a Story…**, which hands the conversation to [Porch Stories](#porch-stories-novel-generator).
+**Chat Management** (the folder icon in the input bar at the bottom of the chat — not in the top bar) holds **New Chat**, **Chat History** (every past conversation with this character), **Import Chat** / **Export Chat** (SillyTavern-format JSON, so conversations move between apps), **Context Budget** (see [Long-Term Memory](#long-term-memory)), and **Turn Into a Story…**, which hands the conversation to [Porch Stories](#porch-stories-novel-generator). Right-click a character or group on Home → **Chat History** opens the same list (edit name, delete a chat); it does not delete the character.
 
 **Thinking models:** some AI models (like Qwen or DeepSeek) "think out loud" before answering. Front Porch tucks that private reasoning into a collapsible "Thought" chip above the reply — tap it if you're curious, ignore it if you're not.
 

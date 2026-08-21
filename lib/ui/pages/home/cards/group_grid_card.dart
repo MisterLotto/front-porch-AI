@@ -106,9 +106,7 @@ class _GroupGridCardState extends State<GroupGridCard> {
             side: BorderSide(
               color: isSelectedCard
                   ? AppColors.porchTerracottaOf(context)
-                  : AppColors.porchTerracottaOf(
-                      context,
-                    ).withValues(alpha: 0.3),
+                  : AppColors.porchTerracottaOf(context).withValues(alpha: 0.3),
               width: isSelectedCard ? 2.5 : 1,
             ),
           ),
@@ -269,66 +267,10 @@ class _GroupGridCardState extends State<GroupGridCard> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          items: [
-                            // Same ordering rule as character cards: start
-                            // fresh first, with its own persona choice.
-                            homeCardMenuItem(
-                              context,
-                              value: 'new_chat',
-                              icon: Icons.add_comment_outlined,
-                              label: 'Start New Chat',
-                              iconColor: AppColors.porchAmberOf(context),
-                            ),
-                            homeCardMenuItem(
-                              context,
-                              value: 'edit',
-                              icon: Icons.edit,
-                              label: 'Edit Group',
-                            ),
-                            homeCardMenuItem(
-                              context,
-                              value: 'duplicate',
-                              icon: Icons.copy,
-                              label: 'Duplicate Group',
-                            ),
-                            homeCardMenuItem(
-                              context,
-                              value: 'export',
-                              icon: Icons.upload,
-                              label: 'Export PNG',
-                            ),
-                            homeCardMenuItem(
-                              context,
-                              value: 'extract',
-                              icon: Icons.call_split,
-                              label: 'Extract Characters',
-                              iconColor: AppColors.journalAccentOf(context),
-                            ),
-                            homeCardMenuItem(
-                              context,
-                              value: 'move_folder',
-                              icon: Icons.drive_file_move,
-                              label: 'Move to Folder',
-                              iconColor: AppColors.porchAmberOf(context),
-                            ),
-                            if (widget.activeFolderId != null)
-                              homeCardMenuItem(
-                                context,
-                                value: 'remove_folder',
-                                icon: Icons.folder_off,
-                                label: 'Remove from Folder',
-                                iconColor: AppColors.porchAmberOf(context),
-                                labelColor: AppColors.porchAmberOf(context),
-                              ),
-                            homeCardMenuItem(
-                              context,
-                              value: 'delete',
-                              icon: Icons.delete,
-                              label: 'Delete',
-                              iconColor: AppColors.negativeAccentOf(context),
-                              labelColor: AppColors.negativeAccentOf(context),
-                            ),
-                          ],
+                          items: groupCardMenuItems(
+                            context,
+                            inFolder: widget.activeFolderId != null,
+                          ),
                         ).then((value) {
                           if (value == null) return;
                           onGroupContextMenuAction(value, group);

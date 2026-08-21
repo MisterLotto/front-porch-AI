@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-08-21 — feat(home): Chat History on Home right-click
+- **Why:** Home character/group right-click had no way to list, rename, or
+  delete past chats. The in-chat folder icon already had that list.
+- **What:** Extracted the Chat History dialog and opened it from Home
+  (after Start New Chat) and the web library kebab. Home/library delete
+  does not spawn a replacement chat. Conversations drawer gained trash.
+- **Files:** chat_history_dialog, home_card_menu, home_page_history,
+  chat_service_message_ops, chat_session_facade, ChatHistoryModal,
+  ConversationsDrawer, CharactersPage, cardMenus, user-guide
+
 ## 2026-08-21 — test(work): Work brief goldens + real-control widgets
 - **Why:** Occupation brief chrome grew. Mac `flutter test` skips Linux
   goldens. Need pixels of the real WorkRow, not a twin.

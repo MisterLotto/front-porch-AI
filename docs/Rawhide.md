@@ -5,6 +5,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 📂 **Chat History from Home** — right-click a character or group and pick Chat History. Same list as the folder icon in a chat: open, rename, or delete a conversation. Deleting a chat from Home does not start a new one.
+
 - 👜 **Work is a real section** — same card as Ambitions on desktop and phone. Occupation is the title; **What the job is** is the short brief the model uses when they're at work. Leave it blank and today stays today. Start and End show the time you picked.
 
 - 💼 **Group chats get the job brief** — when a member is at work in a group, the model now sees their job title and **What the job is**, same as 1:1. Hours still decide whether they are at work.

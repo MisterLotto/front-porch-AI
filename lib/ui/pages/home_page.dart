@@ -47,14 +47,13 @@ import 'package:front_porch_ai/ui/dialogs/avatar_gallery/avatar_gallery_dialog.d
 import 'package:front_porch_ai/ui/dialogs/dialogs.dart';
 import 'package:front_porch_ai/services/byaf_service.dart';
 
-// _HomePageState is split across these part files (each a private extension on
-// the State) to keep every file under the 500-line cap while preserving full
-// access to page state. Lifecycle + build() stay here.
+// State is split across part files (private extensions) to stay under 500.
 part 'home/home_page_chrome.dart';
 part 'home/home_page_handlers.dart';
 part 'home/home_page_dialogs.dart';
 part 'home/home_page_char_ops.dart';
 part 'home/home_page_transfer.dart';
+part 'home/home_page_history.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -456,8 +455,7 @@ class _HomePageState extends State<HomePage> {
                               ),
                             ),
                             ElevatedButton.icon(
-                              onPressed: () =>
-                                  _folderImportCharacters(context),
+                              onPressed: () => _folderImportCharacters(context),
                               icon: const Icon(Icons.library_add),
                               label: const Text('Bulk Import'),
                               style: _buttonStyle(),

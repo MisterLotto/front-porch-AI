@@ -135,7 +135,15 @@ extension ChatServiceMessageOps on ChatService {
 
   /// Delete a specific chat session and its messages.
   /// If it's the current session, switches to the most recent remaining one.
-  Future<void> deleteSession(String sessionId) async {
+  ///
+  /// [startReplacement] is the in-chat folder behaviour (default): when the
+  /// deleted id is the open session and nothing remains, [startNewChat] so
+  /// the user is not left staring at a missing chat. Home / the web library
+  /// pass false so emptying a card's history does not spawn a replacement.
+  Future<void> deleteSession(
+    String sessionId, {
+    bool startReplacement = true,
+  }) async {
     await _db.deleteMessagesForSession(sessionId);
     await _db.deleteSessionById(sessionId);
 
@@ -143,15 +151,22 @@ extension ChatServiceMessageOps on ChatService {
     if (sessionId == _currentSessionId) {
       final remaining = await getSessions();
       if (remaining.isNotEmpty) {
-        await loadSession(remaining.first['id']);
+        if (startReplacement) {
+          await loadSession(remaining.first['id']);
+        } else {
+          _messages.clear();
+          _currentSessionId = null;
+        }
       } else {
-        // No sessions left — start fresh
+        // No sessions left — start fresh only when the open chat asked.
         debugPrint(
           '[ChatService] 🟡 deleteSession: no sessions left, clearing messages',
         );
         _messages.clear();
         _currentSessionId = null;
-        await startNewChat();
+        if (startReplacement) {
+          await startNewChat();
+        }
       }
     }
     notifyListeners();

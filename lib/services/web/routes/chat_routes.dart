@@ -115,6 +115,7 @@ class WebChatRoutes {
       JsonResponse.ok({
         'sessions': await _facade.sessions(
           characterId: request.url.queryParameters['characterId'],
+          groupId: request.url.queryParameters['groupId'],
         ),
       });
 
@@ -384,11 +385,13 @@ class WebChatRoutes {
 
   Future<shelf.Response> _session(shelf.Request request) async {
     final body = await _json(request);
+    final action = body['action']?.toString();
     final sessionId = await _facade.session(
-      action: body['action']?.toString(),
+      action: action,
       sessionId: body['sessionId']?.toString(),
+      startReplacement: body['startReplacement'] != false,
     );
-    if (sessionId == null && body['action'] != 'new') {
+    if (sessionId == null && action != 'new' && action != 'delete') {
       return JsonResponse.badRequest('sessionId or action is required');
     }
     return JsonResponse.ok({'status': 'ok', 'sessionId': sessionId});

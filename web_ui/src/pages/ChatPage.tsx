@@ -898,6 +898,15 @@ export function ChatPage() {
           activeSessionId={state.sessionId}
           onLoad={loadSession}
           onNew={newChat}
+          onDelete={async (id) => {
+            await api.post('/api/chat/session', {
+              action: 'delete',
+              sessionId: id,
+              startReplacement: id === state.sessionId,
+            });
+            await openSessions();
+            await refresh();
+          }}
           onClose={() => setShowSessions(false)}
           exportTitle={title}
           canExport={state.messages.length > 0}
