@@ -71,9 +71,11 @@ class RealismFormSection extends StatelessWidget {
   final List<String>? planLines;
   final ValueChanged<List<String>>? onPlanLinesChanged;
 
-  /// Occupation + hours. Same optional-pair convention as [planLines].
+  /// Occupation + hours + job brief. Same optional-pair convention as [planLines].
   final String? occupation;
   final ValueChanged<String>? onOccupationChanged;
+  final String? occupationBrief;
+  final ValueChanged<String>? onOccupationBriefChanged;
   final String? hours;
   final ValueChanged<String>? onHoursChanged;
 
@@ -151,6 +153,8 @@ class RealismFormSection extends StatelessWidget {
     this.onPlanLinesChanged,
     this.occupation,
     this.onOccupationChanged,
+    this.occupationBrief,
+    this.onOccupationBriefChanged,
     this.hours,
     this.onHoursChanged,
     this.likes,
@@ -772,6 +776,8 @@ class RealismFormSection extends StatelessWidget {
           onPlanLinesChanged: onPlanLinesChanged,
           occupation: occupation,
           onOccupationChanged: onOccupationChanged,
+          occupationBrief: occupationBrief,
+          onOccupationBriefChanged: onOccupationBriefChanged,
           hours: hours,
           onHoursChanged: onHoursChanged,
           likes: likes,

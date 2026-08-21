@@ -1,36 +1,42 @@
 // Copyright (C) 2026 Front Porch AI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Author seeds occupation and work hours. Not a weekday grid. Not an at-work switch.
-// Occupation is free text; Hours is the story-time picker (the "Set story time"
-// dial) run twice — once for a start, once for an end. Period words
-// ("mornings") are not hours: the pickers only write a clock range, and
-// presence_derive.dart only matches that range.
+// Author seeds occupation, a short job brief, and work hours. Not a weekday
+// grid. Not an at-work switch. Occupation is the title; [occupationBrief] is
+// what the job actually is (empty = today — do not invent it). Hours is the
+// story-time picker run twice. Period words ("mornings") are not hours.
 
 import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/services/chat/chat.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
-/// Two fields next to Plan lines. Identity, not a schedule.
+/// Fields inside the Work identity card. Header/card chrome lives on
+/// [IdentityChipLists] so Work matches Ambitions / Likes.
 ///
-/// Occupation is a short free-text; Hours is the existing story-time picker
-/// (the "Set story time" dial) shown twice — Start and End. The stored card
-/// `hours` is derived from the two pickers ("9am–5pm"), and [hoursMatch]
-/// reads that same string, so the chips and the "At work" range always agree.
+/// Occupation is a short free-text title. **What the job is** binds to
+/// `occupationBrief`. Hours is the existing story-time picker shown twice —
+/// Start and End. The stored card `hours` is derived from the two pickers
+/// ("9am–5pm"), and [hoursMatch] reads that same string.
 class WorkRow extends StatefulWidget {
   final String occupation;
+  final String occupationBrief;
   final String hours;
   final ValueChanged<String> onOccupationChanged;
+  final ValueChanged<String> onOccupationBriefChanged;
   final ValueChanged<String> onHoursChanged;
 
   const WorkRow({
     super.key,
     required this.occupation,
+    this.occupationBrief = '',
     required this.hours,
     required this.onOccupationChanged,
+    this.onOccupationBriefChanged = _noop,
     required this.onHoursChanged,
   });
+
+  static void _noop(String _) {}
 
   @override
   State<WorkRow> createState() => _WorkRowState();
@@ -42,6 +48,7 @@ class _WorkRowState extends State<WorkRow> {
 
   late TimeOfDay _start;
   late TimeOfDay _end;
+  late bool _rangeSet;
 
   @override
   void initState() {
@@ -67,10 +74,12 @@ class _WorkRowState extends State<WorkRow> {
     if (range == null) {
       _start = _defaultStart;
       _end = _defaultEnd;
+      _rangeSet = false;
       return;
     }
     _start = TimeOfDay(hour: range.$1 ~/ 60, minute: range.$1 % 60);
     _end = TimeOfDay(hour: range.$2 ~/ 60, minute: range.$2 % 60);
+    _rangeSet = true;
   }
 
   Future<void> _pick({required bool isStart}) async {
@@ -86,6 +95,7 @@ class _WorkRowState extends State<WorkRow> {
       } else {
         _end = picked;
       }
+      _rangeSet = true;
     });
     widget.onHoursChanged(
       formatWorkHoursRange(
@@ -98,30 +108,28 @@ class _WorkRowState extends State<WorkRow> {
   @override
   Widget build(BuildContext context) {
     final amber = AppColors.porchAmberOf(context);
-    final hoursSet = parseWorkHoursRange(widget.hours) != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'WORK',
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.8,
-            color: AppColors.textTertiary(context),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'What they do, and when. Not a calendar.',
-          style: TextStyle(
-            fontSize: 12,
-            height: 1.35,
-            color: AppColors.textSecondary(context),
-          ),
+        _field(
+          context,
+          key: const ValueKey('work-occupation'),
+          label: 'Occupation',
+          hint: 'e.g. librarian',
+          initial: widget.occupation,
+          onChanged: widget.onOccupationChanged,
         ),
         const SizedBox(height: 8),
-        _field(context),
+        _field(
+          context,
+          key: const ValueKey('work-brief'),
+          label: 'What the job is',
+          hint: 'e.g. shelves returns, then reads until close',
+          initial: widget.occupationBrief,
+          onChanged: widget.onOccupationBriefChanged,
+          helper: 'Grounds at-work narration. Not a lorebook. Empty is today.',
+          maxLines: 3,
+        ),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -133,7 +141,6 @@ class _WorkRowState extends State<WorkRow> {
                 label: 'Start',
                 t: _start,
                 isStart: true,
-                isSet: hoursSet,
               ),
             ),
             Padding(
@@ -154,7 +161,6 @@ class _WorkRowState extends State<WorkRow> {
                 label: 'End',
                 t: _end,
                 isStart: false,
-                isSet: hoursSet,
               ),
             ),
           ],
@@ -163,15 +169,22 @@ class _WorkRowState extends State<WorkRow> {
     );
   }
 
-  /// The only free-text. [TextFormField.initialValue] — same pattern the
-  /// original Hours field used, and the same one Day Number uses.
-  Widget _field(BuildContext context) {
+  Widget _field(
+    BuildContext context, {
+    required Key key,
+    required String label,
+    required String hint,
+    required String initial,
+    required ValueChanged<String> onChanged,
+    String? helper,
+    int maxLines = 1,
+  }) {
     final amber = AppColors.porchAmberOf(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Occupation',
+          label,
           style: TextStyle(
             fontSize: 11,
             color: AppColors.textTertiary(context),
@@ -179,15 +192,24 @@ class _WorkRowState extends State<WorkRow> {
         ),
         const SizedBox(height: 4),
         TextFormField(
-          initialValue: widget.occupation,
-          onChanged: widget.onOccupationChanged,
+          key: key,
+          initialValue: initial,
+          onChanged: onChanged,
+          maxLines: maxLines,
           style: TextStyle(fontSize: 13, color: AppColors.textPrimary(context)),
           decoration: InputDecoration(
             isDense: true,
-            hintText: 'e.g. librarian',
+            hintText: hint,
             hintStyle: TextStyle(
               fontSize: 13,
               color: AppColors.textTertiary(context),
+            ),
+            helperText: helper,
+            helperMaxLines: 2,
+            helperStyle: TextStyle(
+              fontSize: 11,
+              height: 1.35,
+              color: AppColors.textSecondary(context),
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 10,
@@ -214,7 +236,6 @@ class _WorkRowState extends State<WorkRow> {
     required String label,
     required TimeOfDay t,
     required bool isStart,
-    required bool isSet,
   }) {
     return InkWell(
       key: key,
@@ -240,7 +261,7 @@ class _WorkRowState extends State<WorkRow> {
             ),
             const SizedBox(height: 2),
             Text(
-              isSet
+              _rangeSet
                   ? StoryClock.formatClock(
                       DateTime.utc(2000, 1, 1, t.hour, t.minute),
                     )
@@ -248,7 +269,7 @@ class _WorkRowState extends State<WorkRow> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: isSet
+                color: _rangeSet
                     ? AppColors.textPrimary(context)
                     : AppColors.textTertiary(context),
               ),

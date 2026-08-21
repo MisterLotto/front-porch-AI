@@ -76,15 +76,29 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
   bool _panelBusy = false;
 
   // ── Personality (Step 1) ──
-  final _descriptionController = StyledTextController(preset: StyledTextPreset.macros);
-  final _personalityController = StyledTextController(preset: StyledTextPreset.macros);
-  final _scenarioController = StyledTextController(preset: StyledTextPreset.macros);
-  final _systemPromptController = StyledTextController(preset: StyledTextPreset.macros);
-  final _postHistoryController = StyledTextController(preset: StyledTextPreset.macros);
+  final _descriptionController = StyledTextController(
+    preset: StyledTextPreset.macros,
+  );
+  final _personalityController = StyledTextController(
+    preset: StyledTextPreset.macros,
+  );
+  final _scenarioController = StyledTextController(
+    preset: StyledTextPreset.macros,
+  );
+  final _systemPromptController = StyledTextController(
+    preset: StyledTextPreset.macros,
+  );
+  final _postHistoryController = StyledTextController(
+    preset: StyledTextPreset.macros,
+  );
 
   // ── Dialogue (Step 2) ──
-  final _firstMessageController = StyledTextController(preset: StyledTextPreset.prose);
-  final _exampleDialogueController = StyledTextController(preset: StyledTextPreset.prose);
+  final _firstMessageController = StyledTextController(
+    preset: StyledTextPreset.prose,
+  );
+  final _exampleDialogueController = StyledTextController(
+    preset: StyledTextPreset.prose,
+  );
   final List<StyledTextController> _altGreetingControllers = [];
 
   // ── Lorebook (Step 3) ──
@@ -115,6 +129,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
   List<String> _realismAmbitions = const [];
   List<String> _realismPlanLines = const [];
   String _realismOccupation = '';
+  String _realismOccupationBrief = '';
   String _realismHours = '';
   List<String> _realismLikes = const [];
   List<String> _realismDislikes = const [];
@@ -259,8 +274,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
             bottom: 24,
             child: ValueListenableBuilder<int>(
               valueListenable: _tokenNotifier,
-              builder: (context, tokens, child) =>
-                  _buildTokenBadge(tokens),
+              builder: (context, tokens, child) => _buildTokenBadge(tokens),
             ),
           ),
         ],
@@ -477,6 +491,4 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
   // ═══════════════════════════════════════════════════════════════
   //  STEP 0: IDENTITY
   // ═══════════════════════════════════════════════════════════════
-
-
 }

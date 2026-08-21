@@ -294,17 +294,17 @@ extension _EditCharacterCoreTabs on _EditCharacterPageState {
               if (widget.showRealismTab)
                 IdentityChipLists(
                   ambitions: _ambitions,
-                  onAmbitionsChanged: (v) =>
-                      rebuildState(() => _ambitions = v),
+                  onAmbitionsChanged: (v) => rebuildState(() => _ambitions = v),
                   planLines: _planLines,
-                  onPlanLinesChanged: (v) =>
-                      rebuildState(() => _planLines = v),
+                  onPlanLinesChanged: (v) => rebuildState(() => _planLines = v),
                   occupation: _occupation,
                   onOccupationChanged: (v) =>
                       rebuildState(() => _occupation = v),
+                  occupationBrief: _occupationBrief,
+                  onOccupationBriefChanged: (v) =>
+                      rebuildState(() => _occupationBrief = v),
                   hours: _hours,
-                  onHoursChanged: (v) =>
-                      rebuildState(() => _hours = v),
+                  onHoursChanged: (v) => rebuildState(() => _hours = v),
                   likes: _likes,
                   onLikesChanged: (v) => rebuildState(() => _likes = v),
                   dislikes: _dislikes,

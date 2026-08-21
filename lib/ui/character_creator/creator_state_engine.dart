@@ -108,6 +108,7 @@ extension CreatorEngine on CreatorState {
         ambitions: realismAmbitions,
         planLines: realismPlanLines,
         occupation: realismOccupation,
+        occupationBrief: realismOccupationBrief,
         hours: realismHours,
         likes: realismLikes,
         dislikes: realismDislikes,
@@ -212,10 +213,7 @@ extension CreatorEngine on CreatorState {
           if (part.length > 2) {
             clean = clean
                 .replaceAll(
-                  RegExp(
-                    '\\b${RegExp.escape(part)}\\b',
-                    caseSensitive: false,
-                  ),
+                  RegExp('\\b${RegExp.escape(part)}\\b', caseSensitive: false),
                   '',
                 )
                 .trim();

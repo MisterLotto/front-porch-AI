@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-08-21 — feat(work): editor Work card + What the job is
+- **Why:** Work was a grey leftover form between Ambitions and Likes. No
+  job-brief box. Start/End stayed **Set** after a time was picked.
+- **What:** Same icon + porch accent + `_card` as Ambitions. Title is one
+  line (**Work**). **What the job is** binds `occupationBrief` (empty =
+  today). Hours stay in the card. Desktop editor, create, AI creator.
+- **Files:** work_row, identity_chip_lists, realism_form_section,
+  edit_character_page (+ tabs_core), create_character_page (+ step_realism,
+  save), creator_state (+ engine/core, realism_step), work_row_test,
+  work_identity_card_test
+
 ## 2026-08-21 — feat(work): occupationBrief grounds at-work narration
 - **Why:** Occupation was a title only. The model guessed the job. Group
   turns never saw it at all: wiring read `_activeCharacter`, which

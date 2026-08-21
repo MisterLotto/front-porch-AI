@@ -82,6 +82,8 @@ class IdentityChipLists extends StatelessWidget {
     this.onPlanLinesChanged,
     this.occupation,
     this.onOccupationChanged,
+    this.occupationBrief,
+    this.onOccupationBriefChanged,
     this.hours,
     this.onHoursChanged,
     this.likes,
@@ -107,6 +109,8 @@ class IdentityChipLists extends StatelessWidget {
 
   final String? occupation;
   final ValueChanged<String>? onOccupationChanged;
+  final String? occupationBrief;
+  final ValueChanged<String>? onOccupationBriefChanged;
   final String? hours;
   final ValueChanged<String>? onHoursChanged;
 
@@ -171,6 +175,8 @@ class IdentityChipLists extends StatelessWidget {
     final hasWork =
         occupation != null &&
         onOccupationChanged != null &&
+        occupationBrief != null &&
+        onOccupationBriefChanged != null &&
         hours != null &&
         onHoursChanged != null;
     final hasTastes =
@@ -238,11 +244,18 @@ class IdentityChipLists extends StatelessWidget {
         ],
 
         if (hasWork) ...[
-          WorkRow(
-            occupation: occupation!,
-            hours: hours!,
-            onOccupationChanged: onOccupationChanged!,
-            onHoursChanged: onHoursChanged!,
+          _header(Icons.work_outline, 'Work', AppColors.taskAccent),
+          const SizedBox(height: 12),
+          _card(
+            context,
+            WorkRow(
+              occupation: occupation!,
+              occupationBrief: occupationBrief!,
+              hours: hours!,
+              onOccupationChanged: onOccupationChanged!,
+              onOccupationBriefChanged: onOccupationBriefChanged!,
+              onHoursChanged: onHoursChanged!,
+            ),
           ),
           const SizedBox(height: 20),
         ],

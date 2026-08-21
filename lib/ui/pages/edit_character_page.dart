@@ -126,6 +126,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   List<String> _ambitions = const [];
   List<String> _planLines = const [];
   String _occupation = '';
+  String _occupationBrief = '';
   String _hours = '';
 
   /// Likes & Dislikes and the 18+ pair — card-authored identity, same shape
@@ -240,7 +241,9 @@ class _EditCharacterPageState extends State<EditCharacterPage>
     _initialWorldNames = List.from(widget.character.worldNames);
 
     _altGreetingControllers = widget.character.alternateGreetings
-        .map((g) => StyledTextController(text: g, preset: StyledTextPreset.prose))
+        .map(
+          (g) => StyledTextController(text: g, preset: StyledTextPreset.prose),
+        )
         .toList();
 
     _tags = List.from(widget.character.tags);
@@ -294,6 +297,8 @@ class _EditCharacterPageState extends State<EditCharacterPage>
       widget.character.frontPorchExtensions?.planLines ?? const [],
     );
     _occupation = widget.character.frontPorchExtensions?.occupation ?? '';
+    _occupationBrief =
+        widget.character.frontPorchExtensions?.occupationBrief ?? '';
     _hours = widget.character.frontPorchExtensions?.hours ?? '';
     _likes = List<String>.from(
       widget.character.frontPorchExtensions?.likes ?? const [],
@@ -459,6 +464,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
         _ambitions.isNotEmpty ||
         _planLines.isNotEmpty ||
         _occupation.trim().isNotEmpty ||
+        _occupationBrief.trim().isNotEmpty ||
         _hours.trim().isNotEmpty ||
         _likes.isNotEmpty ||
         _dislikes.isNotEmpty ||
@@ -503,6 +509,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
             if (a.trim().isNotEmpty) a.trim(),
         ],
         occupation: _occupation.trim(),
+        occupationBrief: _occupationBrief.trim(),
         hours: _hours.trim(),
         likes: [
           for (final a in _likes)
@@ -626,9 +633,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
         await Provider.of<CharacterRepository>(
           context,
           listen: false,
-        ).updateCharacter(
-          widget.character,
-        );
+        ).updateCharacter(widget.character);
 
         // Refresh the "Enjoys low hygiene" flag in any active chat so that
         // toggling it on the character immediately affects existing sessions
@@ -663,7 +668,10 @@ class _EditCharacterPageState extends State<EditCharacterPage>
               addedRefs: addedWorlds,
             );
             if (touched.isNotEmpty && mounted) {
-              final chatService = Provider.of<ChatService>(context, listen: false);
+              final chatService = Provider.of<ChatService>(
+                context,
+                listen: false,
+              );
               if (touched.contains(chatService.currentSessionId)) {
                 await chatService.refreshChatWorlds();
               }
@@ -689,7 +697,11 @@ class _EditCharacterPageState extends State<EditCharacterPage>
             SnackBar(
               content: Row(
                 children: [
-                  Icon(Icons.check_circle, color: AppColors.textPrimary(context), size: 18),
+                  Icon(
+                    Icons.check_circle,
+                    color: AppColors.textPrimary(context),
+                    size: 18,
+                  ),
                   const SizedBox(width: 8),
                   const Text('Character updated successfully!'),
                 ],
@@ -845,7 +857,11 @@ class _EditCharacterPageState extends State<EditCharacterPage>
         ),
         title: Row(
           children: [
-            const Icon(Icons.edit_note, color: AppColors.formMasterAccent, size: 22),
+            const Icon(
+              Icons.edit_note,
+              color: AppColors.formMasterAccent,
+              size: 22,
+            ),
             const SizedBox(width: 8),
             Flexible(
               child: Text(
@@ -923,8 +939,7 @@ class _EditCharacterPageState extends State<EditCharacterPage>
             bottom: 24,
             child: ValueListenableBuilder<int>(
               valueListenable: _tokenNotifier,
-              builder: (context, tokens, child) =>
-                  _buildTokenBadge(tokens),
+              builder: (context, tokens, child) => _buildTokenBadge(tokens),
             ),
           ),
         ],
@@ -973,5 +988,4 @@ class _EditCharacterPageState extends State<EditCharacterPage>
   // ═══════════════════════════════════════════════════════════════
   //  TAB 1: DETAILS
   // ═══════════════════════════════════════════════════════════════
-
 }

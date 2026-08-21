@@ -165,6 +165,11 @@ class RealismStep extends StatelessWidget {
                   state.realismOccupation = v;
                   state.notify();
                 },
+                occupationBrief: state.realismOccupationBrief,
+                onOccupationBriefChanged: (v) {
+                  state.realismOccupationBrief = v;
+                  state.notify();
+                },
                 hours: state.realismHours,
                 onHoursChanged: (v) {
                   state.realismHours = v;
