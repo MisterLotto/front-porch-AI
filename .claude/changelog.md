@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-08-21 — feat(web): Work chrome + What the job is
+- **Why:** Phone create/edit had occupation + hours only. No job-brief box,
+  so a PWA save could not round-trip `occupationBrief`.
+- **What:** Same Work section as desktop. Occupation one-line; **What the
+  job is** textarea binds `occupationBrief` (empty = today). Start/End in
+  the identity chrome. Create + edit. No second key. Guests/report gate
+  untouched.
+- **Files:** realismTypes, RealismFormSection, CreateCharacterPage,
+  workHours.test, RealismFormSection.work.test, styles.css (.work-brief)
+
 ## 2026-08-21 — feat(work): editor Work card + What the job is
 - **Why:** Work was a grey leftover form between Ambitions and Likes. No
   job-brief box. Start/End stayed **Set** after a time was picked.

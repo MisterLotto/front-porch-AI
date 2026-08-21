@@ -199,8 +199,10 @@ export function RealismFormSection({
             helper="What this character is working toward across the whole story. They colour how the character steers a scene, and they inch forward when objectives complete. Not a to-do list — quests live in the chat sidebar."
           />
 
-          {/* ── Work ── mirrors work_row.dart. Occupation is free text;
-              hours is two native time pickers, never "mornings". */}
+          {/* ── Work ── mirrors work_row.dart + identity_chip_lists.dart.
+              Same identity chrome as Ambitions / Likes (header + helper),
+              not a thinner PWA stub. Occupation is the title; What the job
+              is binds occupationBrief; hours is two native time pickers. */}
           <ChipList
             label="Plan lines"
             values={v.planLines}
@@ -291,7 +293,7 @@ function WorkFields({ v, set }: { v: RealismValues; set: Patch }) {
   };
 
   return (
-    <div className="realism-field">
+    <div className="realism-field work-identity">
       <span className="realism-head" style={{ margin: 0 }}>Work</span>
       <p className="muted small" style={{ margin: '4px 0 8px' }}>
         What they do, and when. Not a calendar.
@@ -299,19 +301,44 @@ function WorkFields({ v, set }: { v: RealismValues; set: Patch }) {
       <label className="realism-field">
         <span>Occupation</span>
         <input
+          data-testid="work-occupation"
           value={v.occupation}
           placeholder="e.g. librarian"
           onChange={(e) => set({ occupation: e.target.value })}
         />
       </label>
+      <label className="realism-field">
+        <span>What the job is</span>
+        <textarea
+          data-testid="work-brief"
+          className="work-brief"
+          rows={3}
+          value={v.occupationBrief}
+          placeholder="e.g. shelves returns, then reads until close"
+          onChange={(e) => set({ occupationBrief: e.target.value })}
+        />
+        <small className="muted">
+          Short. Grounds at-work scenes. Leave blank and today stays today.
+        </small>
+      </label>
       <div className="work-hours">
         <label className="realism-field">
           <span>Start</span>
-          <input type="time" value={start} onChange={(e) => write(e.target.value, end)} />
+          <input
+            data-testid="work-start"
+            type="time"
+            value={start}
+            onChange={(e) => write(e.target.value, end)}
+          />
         </label>
         <label className="realism-field">
           <span>End</span>
-          <input type="time" value={end} onChange={(e) => write(start, e.target.value)} />
+          <input
+            data-testid="work-end"
+            type="time"
+            value={end}
+            onChange={(e) => write(start, e.target.value)}
+          />
         </label>
       </div>
     </div>

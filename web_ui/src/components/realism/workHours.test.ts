@@ -60,3 +60,32 @@ describe('occupation and hours survive detail -> form -> save body', () => {
     expect(realismFromDetail(null).hours).toBe('');
   });
 });
+
+describe('occupationBrief survives detail -> form -> save body', () => {
+  it('carries the engine key off the detail block', () => {
+    const rv = realismFromDetail({
+      occupation: 'librarian',
+      occupationBrief: 'shelves returns, then reads until close',
+      hours: '9am–5pm',
+    });
+    expect(rv.occupationBrief).toBe('shelves returns, then reads until close');
+  });
+
+  it('reaches the save body as occupationBrief, not a second key', () => {
+    const rv = realismFromDetail({
+      occupation: 'librarian',
+      occupationBrief: 'Keeps the lamp and logs the ships',
+    });
+    const body = { name: 'Rachel', description: 'edited', ...rv };
+    expect(body.occupationBrief).toBe('Keeps the lamp and logs the ships');
+    expect(body).not.toHaveProperty('occupation_brief');
+    expect(body).not.toHaveProperty('jobBrief');
+  });
+
+  it('empty brief is an empty string so today stays today', () => {
+    expect(realismFromDetail(null).occupationBrief).toBe('');
+    expect(realismFromDetail({ occupation: 'librarian' }).occupationBrief).toBe('');
+    const body = { name: 'Rachel', ...realismFromDetail({ occupation: 'librarian' }) };
+    expect(body.occupationBrief).toBe('');
+  });
+});

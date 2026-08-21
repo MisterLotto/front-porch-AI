@@ -42,6 +42,12 @@ export interface RealismValues {
   planLines: string[];
   /** What they do. Blank is omitted from the card, same as desktop. */
   occupation: string;
+  /**
+   * What the job actually is. Engine key `occupationBrief` — do not invent
+   * a second name. Blank is omitted; missing on /detail keeps the default
+   * empty string (today stays today).
+   */
+  occupationBrief: string;
   /** Clock range the pickers write ("9am–5pm"). Not "mornings". */
   hours: string;
   // Likes & Dislikes, and the 18+ pair. Flat over this bridge (the Dart side's
@@ -105,6 +111,7 @@ export const REALISM_DEFAULTS: RealismValues = {
   ambitions: [],
   planLines: [],
   occupation: '',
+  occupationBrief: '',
   hours: '',
   likes: [],
   dislikes: [],
