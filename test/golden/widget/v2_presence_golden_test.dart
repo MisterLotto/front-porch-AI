@@ -15,6 +15,7 @@ import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/ui/chat_components/sidebar/character_state/presence_word.dart';
 import 'package:front_porch_ai/ui/chat_components/sidebar/character_state/time_strip.dart';
 import 'package:front_porch_ai/ui/widgets/group_member_card.dart';
+import 'package:front_porch_ai/ui/widgets/identity_chip_lists.dart';
 import 'package:front_porch_ai/ui/widgets/work_row.dart';
 
 import '../support/creator_test_support.dart';
@@ -73,21 +74,43 @@ void main() {
     );
   });
 
-  testWidgets('Sheet — occupation + hours', (tester) async {
+  testWidgets('Sheet — occupation + brief + hours', (tester) async {
     await expectThemedGoldens(
       tester,
       child: SizedBox(
         width: 300,
         child: WorkRow(
           occupation: 'lighthouse keeper',
+          occupationBrief: 'Keeps the lamp and logs the ships',
           hours: '9am–5pm',
           onOccupationChanged: (_) {},
+          onOccupationBriefChanged: (_) {},
           onHoursChanged: (_) {},
         ),
       ),
       group: 'v2',
       name: 'work_row',
-      surface: const Size(340, 260),
+      surface: const Size(340, 380),
+    );
+  });
+
+  testWidgets('Sheet — Work identity card chrome', (tester) async {
+    await expectThemedGoldens(
+      tester,
+      child: SizedBox(
+        width: 300,
+        child: IdentityChipLists(
+          occupation: 'lighthouse keeper',
+          occupationBrief: 'Keeps the lamp and logs the ships',
+          hours: '9am–5pm',
+          onOccupationChanged: (_) {},
+          onOccupationBriefChanged: (_) {},
+          onHoursChanged: (_) {},
+        ),
+      ),
+      group: 'v2',
+      name: 'work_identity',
+      surface: const Size(340, 460),
     );
   });
 

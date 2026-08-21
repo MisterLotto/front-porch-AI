@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-08-21 — test(work): Work brief goldens + real-control widgets
+- **Why:** Occupation brief chrome grew. Mac `flutter test` skips Linux
+  goldens. Need pixels of the real WorkRow, not a twin.
+- **What:** v2 work_row golden includes the brief; new work_identity
+  golden for Ambitions chrome. Manual creator Porch Life step restamped
+  (WORK stub → Work card). Report-gate goldens not restamped.
+- **Files:** v2_presence_golden_test, v2/work_row + v2/work_identity
+  goldens, manual_creator/step_4_realism goldens
+
 ## 2026-08-21 — feat(web): Work chrome + What the job is
 - **Why:** Phone create/edit had occupation + hours only. No job-brief box,
   so a PWA save could not round-trip `occupationBrief`.
