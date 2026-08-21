@@ -379,14 +379,13 @@ class ChatToolsFacade {
 
   /// Add one pocket item by hand from the web panel — the other half of the
   /// eraser, delegating to the SAME [ChatService.addPocketItem] the desktop
-  /// dialog calls (gift → her hands + she knows it came from the user;
-  /// otherwise the surprise Easter egg). Same section strings, same
-  /// silent-no-op contract for a stale bundle.
+  /// dialog calls. [correction] is additive (stale bundles omit it).
   Future<void> addPocketItem({
     String? participantId,
     required String section,
     required String name,
     bool gift = false,
+    bool correction = false,
   }) async {
     final focused = _focusedParticipant(participantId);
     // Same guest guard as the eraser — an add would otherwise write the
@@ -406,6 +405,7 @@ class ChatToolsFacade {
       section: target,
       name: name,
       gift: gift,
+      correction: correction,
     );
     _notify();
   }

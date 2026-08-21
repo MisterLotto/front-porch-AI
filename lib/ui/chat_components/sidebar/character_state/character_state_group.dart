@@ -20,7 +20,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/services/chat/chat.dart'
-    show AmbitionService, Pockets;
+    show AmbitionService, PocketSection, Pockets;
 import 'package:front_porch_ai/services/chat/presence_derive.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/dialogs/dialogs.dart'
@@ -304,10 +304,11 @@ class _CharacterStateGroupState extends State<CharacterStateGroup> {
                     day: chat.storyDayCount,
                     onRemove: ({required section, required index}) => chat
                         .removePocketItem(id, section: section, index: index),
-                    onAdd: () async {
+                    onAdd: ({section}) async {
                       final add = await showPocketItemDialog(
                         context,
                         characterName: card.name,
+                        initialSection: section ?? PocketSection.carrying,
                       );
                       if (add == null) return;
                       await chat.addPocketItem(
@@ -315,6 +316,7 @@ class _CharacterStateGroupState extends State<CharacterStateGroup> {
                         section: add.section,
                         name: add.name,
                         gift: add.gift,
+                        correction: add.correction,
                       );
                     },
                   ),

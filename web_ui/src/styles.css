@@ -2489,6 +2489,19 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 .pocket-add button:hover {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
+.pocket-add button.put-on {
+  font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  border-color: var(--accent);
+}
+.pocket-add button.put-on:hover {
+  background: color-mix(in srgb, var(--accent) 44%, transparent);
+}
+.pocket-empty {
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+}
 
 .ambition-bar-fill {
   height: 100%;

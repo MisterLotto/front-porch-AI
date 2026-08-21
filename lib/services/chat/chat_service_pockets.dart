@@ -74,20 +74,29 @@ extension ChatServicePockets on ChatService {
   /// Put one item INTO a character's kit by hand — the other half of the ✕
   /// eraser, from the same sidebar panel (and the web tools panel).
   ///
-  /// [gift] is the in-fiction path: the user hands the thing over, it lands
-  /// in her CARRYING list regardless of which section the panel had open
-  /// (you hand someone a sweater; you don't dress them in it), and the next
-  /// reply has her accept it knowing who it came from. Without [gift] the
-  /// item is added out-of-band to [section], and the next reply has her
-  /// SURPRISED by something she cannot explain — see [_PendingItemIntro].
+  /// Three fictions, opposite prompt notes:
   ///
-  /// The eval recognizes either immediately because the record IS its ground
-  /// truth: the very next bookkeeping prompt lists the item in her kit.
+  ///  * [gift] — the user hands it over in-scene. Lands in CARRYING
+  ///    regardless of which section the panel had open (you hand someone a
+  ///    sweater; you don't dress them in it), and the next reply has them
+  ///    accept it knowing who it came from.
+  ///  * neither gift nor [correction] — conjured out-of-band (the Easter
+  ///    egg): added to [section], and the next reply has them SURPRISED by
+  ///    something they cannot explain — see [_PendingItemIntro].
+  ///  * [correction] — the user is fixing the record (the model stripped
+  ///    them; they should be wearing a coat). [gift] is ignored, the item
+  ///    lands in [section] (the dress UI sends [PocketSection.worn]), and
+  ///    no intro is queued: the inventory fragment already states wearing
+  ///    as fact next turn. A magic-coat surprise is the wrong fiction.
+  ///
+  /// The eval recognizes any of them immediately because the record IS its
+  /// ground truth: the very next bookkeeping prompt lists the item.
   Future<void> addPocketItem(
     String characterId, {
     required PocketSection section,
     required String name,
     bool gift = false,
+    bool correction = false,
   }) async {
     // Same single switch every pockets surface answers to.
     if (!_storageService.realismSettings.pocketsEnabled) return;
@@ -98,7 +107,8 @@ extension ChatServicePockets on ChatService {
     // Expire first, exactly like the eraser: the stored list must match the
     // day-filtered view the user was looking at.
     p.expireSetAside(storyDayCount);
-    final target = gift ? PocketSection.carrying : section;
+    // Gift forces carrying only when this is NOT a record correction.
+    final target = (!correction && gift) ? PocketSection.carrying : section;
     switch (target) {
       case PocketSection.worn:
         p.worn.add(item);
@@ -121,19 +131,21 @@ extension ChatServicePockets on ChatService {
         }
     }
     setPocketsFor(characterId, p);
-    final queue = _pendingItemIntros[characterId] ??= [];
-    queue.add(
-      _PendingItemIntro(
-        item.display,
-        gift: gift,
-        section: target,
-        session: _currentSessionId,
-      ),
-    );
-    // Bounded so a pile of rapid edits cannot flood the prompt: the newest
-    // three reactions are plenty of theatre for one reply.
-    while (queue.length > 3) {
-      queue.removeAt(0);
+    if (!correction) {
+      final queue = _pendingItemIntros[characterId] ??= [];
+      queue.add(
+        _PendingItemIntro(
+          item.display,
+          gift: gift,
+          section: target,
+          session: _currentSessionId,
+        ),
+      );
+      // Bounded so a pile of rapid edits cannot flood the prompt: the newest
+      // three reactions are plenty of theatre for one reply.
+      while (queue.length > 3) {
+        queue.removeAt(0);
+      }
     }
     await _saveChat();
     notifyListeners();

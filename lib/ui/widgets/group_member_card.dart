@@ -538,10 +538,11 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                                 section: section,
                                 index: index,
                               ),
-                          onAdd: () async {
+                          onAdd: ({section}) async {
                             final add = await showPocketItemDialog(
                               context,
                               characterName: widget.character.name,
+                              initialSection: section ?? PocketSection.carrying,
                             );
                             if (add == null) return;
                             await chat.addPocketItem(
@@ -549,6 +550,7 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                               section: add.section,
                               name: add.name,
                               gift: add.gift,
+                              correction: add.correction,
                             );
                           },
                         ),

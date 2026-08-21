@@ -81,8 +81,10 @@ class WebChatToolsRoutes {
   }
 
   /// Add one pocket item by hand — the web half of the desktop add dialog
-  /// (parity, 2026-08-13). `gift: true` = handed over in-scene; otherwise the
-  /// surprise Easter egg fires on the next reply.
+  /// (parity, 2026-08-13). `gift: true` = handed over in-scene; `correction:
+  /// true` = record fix (worn, no intro); otherwise the surprise Easter egg
+  /// fires on the next reply. `correction` is additive — omitted = old
+  /// behaviour, so a stale PWA bundle stays compatible.
   Future<shelf.Response> _pocketAdd(shelf.Request request) async {
     final body = await _json(request);
     await _facade.addPocketItem(
@@ -90,6 +92,7 @@ class WebChatToolsRoutes {
       section: body['section']?.toString() ?? '',
       name: body['name']?.toString() ?? '',
       gift: body['gift'] == true,
+      correction: body['correction'] == true,
     );
     return JsonResponse.ok(_snapshot(request));
   }

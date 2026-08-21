@@ -49,7 +49,10 @@ class PocketsRow extends StatelessWidget {
   /// Open the add-item flow (the parent owns the dialog and the write, same
   /// as the eraser). When set, the panel renders even for an EMPTY record —
   /// otherwise the very first item could never be added by hand.
-  final VoidCallback? onAdd;
+  ///
+  /// [section] is a hint when the tap came from an empty group (Wearing →
+  /// dress them) rather than the header plus.
+  final void Function({PocketSection? section})? onAdd;
 
   const PocketsRow({
     super.key,
@@ -88,7 +91,7 @@ class PocketsRow extends StatelessWidget {
             ),
             if (onAdd != null)
               InkWell(
-                onTap: onAdd,
+                onTap: () => onAdd!(),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 5,
@@ -104,8 +107,19 @@ class PocketsRow extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 4),
-        if (pockets.worn.isNotEmpty)
-          _group(context, 'Wearing', pockets.worn, section: PocketSection.worn),
+        // Always show Wearing when the user can add: a naked / model-stripped
+        // character must not look like "pockets only" — that's the wardrobe
+        // correction entry (Put clothes on).
+        if (pockets.worn.isNotEmpty || onAdd != null)
+          _group(
+            context,
+            'Wearing',
+            pockets.worn,
+            section: PocketSection.worn,
+            emptyAction: pockets.worn.isEmpty && onAdd != null
+                ? 'Put clothes on'
+                : null,
+          ),
         if (pockets.carrying.isNotEmpty)
           _group(
             context,
@@ -131,6 +145,7 @@ class PocketsRow extends StatelessWidget {
     List<PocketItem> items, {
     required PocketSection section,
     bool dimmed = false,
+    String? emptyAction,
   }) {
     final amber = AppColors.porchAmberOf(context);
     return Padding(
@@ -152,6 +167,25 @@ class PocketsRow extends StatelessWidget {
             spacing: 6,
             runSpacing: 5,
             children: [
+              if (items.isEmpty && emptyAction != null)
+                InkWell(
+                  onTap: () => onAdd!(section: section),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: amber.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: amber.withValues(alpha: 0.30)),
+                    ),
+                    child: Text(
+                      emptyAction,
+                      style: TextStyle(fontSize: 10.5, color: amber),
+                    ),
+                  ),
+                ),
               for (var i = 0; i < items.length; i++)
                 Container(
                   padding: const EdgeInsets.only(

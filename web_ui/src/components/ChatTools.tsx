@@ -19,6 +19,7 @@ import { BelongingsPanel } from './BelongingsPanel';
 import { PromisesPanel } from './PromisesPanel';
 import { StoryCalendarModal } from './StoryCalendarModal';
 import { ContextBudgetModal } from './ContextBudgetModal';
+import { PocketAddRow } from './PocketAddRow';
 
 interface ObjectiveTask {
   description: string;
@@ -223,55 +224,6 @@ export function TextField({
   );
 }
 
-/** Hand-add row for Pockets & Wardrobe (desktop dialog parity, 2026-08-13).
- *  "Give" hands the item over in-scene — it lands in their hands and they know
- *  it came from you. "Add" is the quiet drop (the Easter egg): it lands in
- *  the chosen section and their next reply is surprised to find it. Item text
- *  follows the same "name (state)" convention as everywhere else. */
-function PocketAddRow({
-  onAdd,
-}: {
-  onAdd: (section: string, name: string, gift: boolean) => void;
-}) {
-  const [name, setName] = useState('');
-  const [section, setSection] = useState('carrying');
-  const submit = (gift: boolean) => {
-    const n = name.trim();
-    if (!n) return;
-    // A gift lands in their hands regardless of the selected section — you
-    // hand someone a sweater, you don't dress them in it (desktop rule).
-    onAdd(gift ? 'carrying' : section, n, gift);
-    setName('');
-  };
-  return (
-    <div className="pocket-add">
-      <input
-        value={name}
-        placeholder="brass key (scuffed)"
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && submit(false)}
-      />
-      <select value={section} onChange={(e) => setSection(e.target.value)}>
-        <option value="worn">Wearing</option>
-        <option value="carrying">Carrying</option>
-        <option value="set_aside">Set aside</option>
-      </select>
-      <button
-        title="Slip it in quietly — they'll be surprised to find it"
-        onClick={() => submit(false)}
-      >
-        Add
-      </button>
-      <button
-        title="Hand it over in-scene — they'll know it came from you"
-        onClick={() => submit(true)}
-      >
-        Give
-      </button>
-    </div>
-  );
-}
-
 /** Scene-time periods + their single-letter dot labels (mirror the desktop
  *  realism_section _timeDotLabel exactly: D / M / LM / A / E / N). */
 const TIME_DOTS: [string, string][] = [
@@ -343,9 +295,10 @@ export function ChatTools({
     apply(api.post<ToolsState>(`/api/chat/tools/pocket-remove${q}`, { section, index }));
   // The other half of the eraser: hand-add an item (desktop dialog parity,
   // 2026-08-13). gift=true is handed over in-scene (they know it came from
-  // you); gift=false is the Easter egg (they're surprised to find it).
-  const pocketAdd = (section: string, name: string, gift: boolean) =>
-    apply(api.post<ToolsState>(`/api/chat/tools/pocket-add${q}`, { section, name, gift }));
+  // you); correction=true is a wardrobe record fix (worn, no intro);
+  // otherwise the Easter egg (they're surprised to find it).
+  const pocketAdd = (section: string, name: string, gift: boolean, correction = false) =>
+    apply(api.post<ToolsState>(`/api/chat/tools/pocket-add${q}`, { section, name, gift, correction }));
   // Same endpoint, string value — the one tri-state control (see the route's
   // oneShotMode case). Falls back to the legacy bool on an older facade.
   const oneShotMode = t?.realismOneShotMode ?? (t?.realismOneShotEval ? 'on' : 'auto');
@@ -603,25 +556,25 @@ export function ChatTools({
           <details className="tool-section" open>
             <summary>Pockets &amp; Wardrobe</summary>
             <div className="tool-body">
-              {worn.length > 0 && (
-                <>
-                  <div className="muted small side-quest-label">Wearing</div>
-                  <div className="pocket-items">
-                    {worn.map((i, n) => (
-                      <span className="pocket-item" key={`w${n}`}>
-                        {label(i)}
-                        <button
-                          className="pocket-x"
-                          title="Remove from the record"
-                          onClick={() => pocketRemove('worn', n)}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                </>
-              )}
+              <div className="muted small side-quest-label">Wearing</div>
+              <div className="pocket-items">
+                {worn.length === 0 ? (
+                  <span className="pocket-empty">Put clothes on</span>
+                ) : (
+                  worn.map((i, n) => (
+                    <span className="pocket-item" key={`w${n}`}>
+                      {label(i)}
+                      <button
+                        className="pocket-x"
+                        title="Remove from the record"
+                        onClick={() => pocketRemove('worn', n)}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))
+                )}
+              </div>
               {carrying.length > 0 && (
                 <>
                   <div className="muted small side-quest-label">Carrying</div>

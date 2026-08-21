@@ -3,6 +3,19 @@
 
 # Changelog
 
+## 2026-08-20 — feat(pockets): put clothes back on (record correction)
+- **Why:** Plus → Add an item defaulted to Carrying; Hand to always forced
+  pockets. The only worn write was Wearing + Add quietly, which queued a
+  surprise intro. Empty worn hid Wearing, so a model-stripped character
+  looked like pockets-only. Add quietly on a washed sundress is nonsense.
+- **What:** `addPocketItem(correction: true)` writes worn (gift ignored),
+  skips surprise intro. Dialog: Wearing → only They're wearing this
+  (Add quietly / Hand hidden). Empty Wearing shows Put clothes on. Web
+  Put on + POST `correction`. Carrying / Set aside unchanged.
+- **Files:** chat_service_pockets, pocket_item_dialog, pockets_row,
+  character_state_group, group_member_card, chat_tools_facade/routes,
+  ChatTools, PocketAddRow, tests, assets/web_app
+
 ## 2026-08-20 — chore(deps): Riverpod 3.4.2 on Flutter 3.47
 - **Why:** 3.47 pin left generator capped at 4.0.4. flutter run kept
   offering 4.0.8. Latest Riverpod on this SDK is 3.4.2 / generator 4.0.8.
