@@ -31,8 +31,8 @@ void main() {
       expect(ext.passageOfTimeEnabled, true);
       expect(ext.chaosModeEnabled, false);
       expect(ext.currentTask, '');
-      expect(ext.needsDecayHunger, 4);
-      expect(ext.needsDecayBladder, 6);
+      expect(ext.needsDecayHunger, 2);
+      expect(ext.needsDecayBladder, 3);
       expect(ext.needsDecayEnergy, 3);
       expect(ext.needsDecaySocial, 2);
       expect(ext.needsDecayFun, 2);

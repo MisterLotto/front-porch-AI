@@ -254,8 +254,8 @@ class FrontPorchExtensions {
     this.needsBaselineHygiene = 80,
     this.needsBaselineComfort = 80,
 
-    this.needsDecayHunger = 4,
-    this.needsDecayBladder = 6,
+    this.needsDecayHunger = 2,
+    this.needsDecayBladder = 3,
     this.needsDecayEnergy = 3,
     this.needsDecaySocial = 2,
     this.needsDecayFun = 2,
@@ -411,8 +411,8 @@ class FrontPorchExtensions {
       needsBaselineFun: realism['needs_baseline_fun'] as int? ?? 80,
       needsBaselineHygiene: realism['needs_baseline_hygiene'] as int? ?? 80,
       needsBaselineComfort: realism['needs_baseline_comfort'] as int? ?? 80,
-      needsDecayHunger: realism['needs_decay_hunger'] as int? ?? 4,
-      needsDecayBladder: realism['needs_decay_bladder'] as int? ?? 6,
+      needsDecayHunger: realism['needs_decay_hunger'] as int? ?? 2,
+      needsDecayBladder: realism['needs_decay_bladder'] as int? ?? 3,
       needsDecayEnergy: realism['needs_decay_energy'] as int? ?? 3,
       needsDecaySocial: realism['needs_decay_social'] as int? ?? 2,
       needsDecayFun: realism['needs_decay_fun'] as int? ?? 2,
@@ -616,12 +616,14 @@ class CharacterCard {
   /// (e.g. 'af_heart' for Kokoro, 'en_US-lessac-medium' for Piper, etc.).
   /// The UI now prevents (and warns about) cross-engine assignments.
   String? ttsVoice;
+
   /// V2 spec credits — round-trip so Stoop/Chub author names survive import.
   String creator;
   String creatorNotes;
   String characterVersion;
   String? dbId; // UUID primary key (runtime only, not serialized)
-  DateTime? createdAt; // library "date added" from DB (runtime only, not serialized)
+  DateTime?
+  createdAt; // library "date added" from DB (runtime only, not serialized)
   FrontPorchExtensions? frontPorchExtensions; // V2.5 Realism Engine defaults
   Map<String, dynamic>?
   rawExtensions; // Preserve unknown third-party extension keys
@@ -686,7 +688,9 @@ class CharacterCard {
       'post_history_instructions': postHistoryInstructions,
       'alternate_greetings': alternateGreetings,
       'tags': tags,
-      'character_book': lorebook == null ? null : encodeCharacterBook(lorebook!),
+      'character_book': lorebook == null
+          ? null
+          : encodeCharacterBook(lorebook!),
       'world_names': worldNames,
       if (ttsVoice != null) 'tts_voice': ttsVoice,
       if (creator.isNotEmpty) 'creator': creator,

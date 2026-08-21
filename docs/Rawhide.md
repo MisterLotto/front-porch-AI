@@ -7,6 +7,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 - 🧥 **Put clothes back on** — if the model strips them, Wearing still shows while empty. Tap Put clothes on (or the plus, then Wearing), type `coat`, They're wearing this. Next reply they're dressed. Add quietly stays for keys in a pocket — it is gone on Wearing. Desktop and phone.
 
+- 🚽 **Hunger and bathroom nag less** — characters don't keep eating and peeing just because a few turns passed. They still will when it's actually time.
+
 - 👗 **Wearing nothing is undressed, not a garment named "nothing"** — if the character takes everything off, the Wearing row is empty. The clothes go to Set aside. A leftover "nothing" chip on an old chat can be tapped off with the X.
 
 - 📅 **Season starts use the calendar** — tap the date on a season card for the same calendar Story begins uses (not a month dropdown). Leap years count; Feb 29 is a real start. Same start twice, or a missing season, blocks save.

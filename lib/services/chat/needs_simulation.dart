@@ -118,8 +118,8 @@ class NeedsSimulation {
   };
 
   static const Map<String, int> needDecay = {
-    'hunger': 4,
-    'bladder': 6,
+    'hunger': 2,
+    'bladder': 3,
     'energy': 3,
     'social': 2,
     'fun': 2,
@@ -391,9 +391,9 @@ class NeedsSimulation {
   ///
   /// PER-NEED, because a single number is either too tight for the needs whose
   /// mechanism IS events or too loose for the ones decay already owns:
-  ///   * bladder (decay 6) gets the widest bite. It is a fast clock AND the
+  ///   * bladder (decay 3) gets the widest bite. It is a fast clock AND the
   ///     need most obviously moved by a described act — drinking, a long
-  ///     drive, holding it. 18 is about three turns of normal build.
+  ///     drive, holding it. 18 is several turns of normal build.
   ///   * hygiene (decay 1) barely drifts at all; sex, mud and rain are the
   ///     only things that move it, so it needs room despite the tiny decay.
   ///   * hunger, energy, comfort sit at 12 — a real cost, not a cliff.
@@ -624,12 +624,9 @@ class NeedsSimulation {
   }
 
   /// Returns the lowest (worst) needs that should receive background state
-  /// text this turn — those whose effective step is 4 or lower (mild or worse
-  /// after the enjoys-low-hygiene inversion), worst-first, capped at 3. Both
-  /// 1:1 and group paths use this for consistent selection, and so
-  /// slow-decaying needs (Comfort, Hygiene) can appear even when not the
-  /// absolute lowest. Sated needs never surface (words-only salience gating,
-  /// docs/design/prompt-state-injection.md §3).
+  /// this turn, worst-first, capped at 3. Hunger and bladder stay silent at
+  /// mild (step 4) — a faint urge made every chat about peeing and eating.
+  /// Other needs still inject at step 4. Sated needs never surface.
   ///
   /// [enjoysLowHygieneOverride] MUST carry the specific speaker's flag in
   /// group chats (same reason as [getInjectionEffectiveStep]) — without it the
@@ -661,6 +658,15 @@ class NeedsSimulation {
           final byStep = a.effectiveStep.compareTo(b.effectiveStep);
           return byStep != 0 ? byStep : a.value.compareTo(b.value);
         });
-    return ranked.where((e) => e.effectiveStep <= 4).take(3).toList();
+    return ranked
+        .where((e) => _injectsNeed(e.key, e.effectiveStep))
+        .take(3)
+        .toList();
+  }
+
+  /// Hunger/bladder at step 4 is "a faint urge" — too loud for ambient clocks.
+  static bool _injectsNeed(String key, int effectiveStep) {
+    if (key == 'hunger' || key == 'bladder') return effectiveStep <= 3;
+    return effectiveStep <= 4;
   }
 }

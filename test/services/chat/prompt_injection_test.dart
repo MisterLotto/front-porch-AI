@@ -592,6 +592,30 @@ void main() {
       expect(b.buildNeedsInjection(), isEmpty);
     });
 
+    test('mild hunger and bladder stay silent; steady hunger injects', () {
+      final mild = createTestNeeds(
+        isGroupNonObs: true,
+        speakerId: 'g1',
+        groupChars: [CharacterCard(name: 'G1')],
+        groupNeeds: {
+          'g1': {...satedVector(), 'hunger': 54, 'bladder': 50},
+        },
+      );
+      expect(mild.buildNeedsInjection(), isEmpty);
+
+      final biting = createTestNeeds(
+        isGroupNonObs: true,
+        speakerId: 'g1',
+        groupChars: [CharacterCard(name: 'G1')],
+        groupNeeds: {
+          'g1': {...satedVector(), 'hunger': 40},
+        },
+      );
+      final txt = biting.buildNeedsInjection();
+      expect(txt, contains('Hunger:'));
+      expect(txt, isNot(contains('quiet, background emptiness')));
+    });
+
     test('worst-3 cap and words-only lines', () {
       final gneeds = {
         'g1': {

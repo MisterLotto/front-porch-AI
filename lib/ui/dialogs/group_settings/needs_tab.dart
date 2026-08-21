@@ -20,17 +20,17 @@ const _kFun = 'fun';
 const _kHygiene = 'hygiene';
 const _kComfort = 'comfort';
 
-  // Engine default decay per need (== NeedsSimulation.needDecay / the
-  // FrontPorchExtensions decay defaults) — used to seed a reset.
+// Engine default decay per need (== NeedsSimulation.needDecay / the
+// FrontPorchExtensions decay defaults) — used to seed a reset.
 const Map<String, int> _defaultDecayRates = {
-    _kHunger: 4,
-    _kBladder: 6,
-    _kEnergy: 3,
-    _kSocial: 2,
-    _kFun: 2,
-    _kHygiene: 1,
-    _kComfort: 2,
-  };
+  _kHunger: 2,
+  _kBladder: 3,
+  _kEnergy: 3,
+  _kSocial: 2,
+  _kFun: 2,
+  _kHygiene: 1,
+  _kComfort: 2,
+};
 
 class GroupNeedsTab extends StatefulWidget {
   final ChatService chatService;
@@ -101,8 +101,8 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
       // Seed per-member decay from ext (fallbacks = the engine's needDecay
       // defaults, which equal the FrontPorchExtensions decay defaults).
       _decayRates[id] = {
-        _kHunger: ext?.needsDecayHunger ?? 4,
-        _kBladder: ext?.needsDecayBladder ?? 6,
+        _kHunger: ext?.needsDecayHunger ?? 2,
+        _kBladder: ext?.needsDecayBladder ?? 3,
         _kEnergy: ext?.needsDecayEnergy ?? 3,
         _kSocial: ext?.needsDecaySocial ?? 2,
         _kFun: ext?.needsDecayFun ?? 2,
@@ -169,14 +169,13 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
           (char.frontPorchExtensions ?? FrontPorchExtensions()).copyWith(
             enjoysLowHygiene: value,
           );
-        char.frontPorchExtensions?.ensureStableId();
+      char.frontPorchExtensions?.ensureStableId();
     });
     persistGroupMemberPref(widget.chatService, id, 'enjoysLowHygiene', value);
     // The blob key above is creation-time seeding only; the runtime reads
     // frontPorchExtensions.enjoysLowHygiene, so the card has to be written.
     _extPersister.schedule(char);
   }
-
 
   Future<void> _resetAllNeedsStates() async {
     for (final c in _chars) {
@@ -422,5 +421,4 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
       ),
     );
   }
-
 }
