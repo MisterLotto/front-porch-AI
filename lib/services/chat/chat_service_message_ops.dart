@@ -341,25 +341,37 @@ extension ChatServiceMessageOps on ChatService {
   /// regen/delete of a fresh turn (release audit 2026-08-11). Card purge
   /// therefore always runs; cursor rollback stays gated.
   ///
-  /// Recap ("Where we are") is CLEARED on rewrite (M3, 2026-08-11): it is a
-  /// free-form paragraph with no per-line receipt, so it cannot be surgically
-  /// rewound. Leaving it would assert discarded plot as "earlier in this
-  /// story." Empty is honest; [buildRecapBlock] injects nothing; the next
-  /// maintenance pass (kicked below) refills it from the new timeline.
+  /// Recap ("Where we are") is a free-form paragraph with no per-line
+  /// receipt, so a rewrite INSIDE the already-journaled window cannot be
+  /// surgically rewound — leaving it would re-inject discarded plot as
+  /// "earlier in this story" (M3, 2026-08-11). Empty is honest there;
+  /// [buildRecapBlock] injects nothing; the next maintenance pass (kicked
+  /// below) refills it from the new timeline.
+  ///
+  /// A rewrite AT OR AFTER the cursor is not in the recap yet (regen of
+  /// the last reply, the usual move after a model switch). Clearing there
+  /// blanks a still-true plot spine for a line the recap never covered.
+  /// Cursor rollback below is the same gate; recap clear must match it.
+  /// An emptied transcript is the other honest-empty case.
   void _invalidateJournalFrom(int position) {
     final sessionId = _currentSessionId;
     if (sessionId == null) return;
     _journalReview.abandon();
     _growthReview.abandon();
-    if (position < _summaryLastIndex) {
+    final rewriteInsideRecap = position < _summaryLastIndex;
+    if (rewriteInsideRecap) {
       _summaryLastIndex = position;
     }
 
-    // Clear stale recap before the next generation can re-inject it.
+    // Clear stale recap only when the rewrite actually lands in it.
     var recapCleared = false;
-    if (_summary.isNotEmpty) {
+    final transcriptGone = _messages.isEmpty;
+    if (_summary.isNotEmpty && (rewriteInsideRecap || transcriptGone)) {
       _summary = '';
       recapCleared = true;
+      if (transcriptGone) {
+        _summaryLastIndex = 0;
+      }
       debugPrint(
         '[Journal] Timeline rewrite at $position — cleared stale recap '
         '(refill on next journal pass)',

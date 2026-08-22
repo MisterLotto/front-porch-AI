@@ -5,6 +5,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 📖 **"Where we are" survives a model switch** — changing models and regenerating the last reply no longer blanks the recap. It still clears if you rewrite something the recap had already covered.
+
 - 📂 **Chat History from Home** — right-click a character or group and pick Chat History. Same list as the folder icon in a chat: open, rename, or delete a conversation. Deleting a chat from Home does not start a new one.
 
 - 👜 **Work is a real section** — same card as Ambitions on desktop and phone. Occupation is the title; **What the job is** is the short brief the model uses when they're at work. Leave it blank and today stays today. Start and End show the time you picked.

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-08-22 — fix(journal): model-switch regen no longer blanks "Where we are"
+- **Why:** Changing models mid-chat and regenerating the last reply wiped
+  the Journal recap. Recap clear ran on EVERY timeline rewrite, including
+  a regen of a line the recap had never covered (cursor still behind it).
+- **What:** Recap now clears only when the rewrite sits inside the already-
+  journaled window, or the transcript is empty. Same gate as cursor
+  rollback. Planted Growth Rings with no receipts already survived; they
+  still do. Cards/rings that cite the rewritten line still purge.
+- **Files:** chat_service_message_ops, recap_clear_on_rewrite_test,
+  model_switch_memory_survive_test
+
 ## 2026-08-21 — feat(home): Chat History on Home right-click
 - **Why:** Home character/group right-click had no way to list, rename, or
   delete past chats. The in-chat folder icon already had that list.
