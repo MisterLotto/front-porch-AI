@@ -43,6 +43,18 @@
   realism_extensions_json, web workHours/RealismFormSection, presence
   tests, work_days_injection_test
 
+## 2026-08-22 — fix(storage): user-chosen data dir is not nested on next launch (#206)
+- **Why:** Settings → Data Directory wrote the picked folder as the root.
+  On the next launch FileConsolidationService treated any basename other
+  than FrontPorchAI as "scattered Documents" and nested FrontPorchAI
+  under it, leaving groups/ and custom_backgrounds behind. Linux users
+  picking ~/.frontporchai hit this; default Documents/FrontPorchAI is
+  unchanged on every OS.
+- **What:** The wrap-in-FrontPorchAI pass now runs only when the current
+  root IS the OS Documents folder. A path the user already chose is the
+  root. Default data dir is not changed.
+- **Files:** file_consolidation_service, file_consolidation_beta_isolation_test
+
 ## 2026-08-22 — fix(journal): model-switch regen no longer blanks "Where we are"
 - **Why:** Changing models mid-chat and regenerating the last reply wiped
   the Journal recap. Recap clear ran on EVERY timeline rewrite, including

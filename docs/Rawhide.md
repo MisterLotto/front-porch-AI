@@ -5,6 +5,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 📁 **A folder you pick as the data directory stays that folder** — it is not wrapped in another FrontPorchAI folder after restart. Group portraits and chat backgrounds stay with the rest of the library. The default location is still the same on every OS.
+
 - 📖 **"Where we are" survives a model switch** — changing models and regenerating the last reply no longer blanks the recap. It still clears if you rewrite something the recap had already covered.
 
 - 📂 **Chat History from Home** — right-click a character or group and pick Chat History. Same list as the folder icon in a chat: open, rename, or delete a conversation. Deleting a chat from Home does not start a new one.
