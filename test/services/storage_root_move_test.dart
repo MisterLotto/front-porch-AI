@@ -12,6 +12,10 @@
 //    a library is refused before anything is touched, and a failed copy leaves
 //    the root exactly where it was rather than pointing the app (and the DB
 //    path `<root>/KoboldManager/front_porch.db`) at data that never arrived.
+// 3. A destination inside the current root (GTK on Linux sometimes returns
+//    a subdirectory of the folder the picker is already sitting in) is
+//    refused before anything is copied — otherwise the app copies the
+//    library into a child of itself and then deletes the sources.
 
 import 'dart:io';
 
@@ -180,5 +184,41 @@ void main() {
     );
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('root_path'), isNot(newRoot.path));
+  });
+
+  test('a child-of-current-root is refused, sources untouched', () async {
+    final storage = await freshStorage();
+    final oldRoot = storage.rootPath!;
+    seed(p.join(oldRoot, 'KoboldManager', 'front_porch.db'), 'the real db');
+    seed(p.join(oldRoot, 'chats', 'c1.json'), 'chat');
+    seed(
+      p.join(oldRoot, 'groups', 'g1', 'avatars', 'ada.png'),
+      'portrait bytes',
+    );
+
+    // GTK on Linux sometimes hands back a subdirectory of the current
+    // root (the picker is already sitting in it). Copying the library
+    // into a child of itself then deleting the sources splits data
+    // across two folders.
+    final nested = p.join(oldRoot, 'FrontPorchAI');
+
+    final reason = await storage.setRootPath(nested);
+    expect(reason, isNotNull);
+
+    // Nothing moved, nothing created, and the app still points at the
+    // library it was using.
+    expect(storage.rootPath, oldRoot);
+    expect(
+      File(
+        p.join(oldRoot, 'KoboldManager', 'front_porch.db'),
+      ).readAsStringSync(),
+      'the real db',
+    );
+    expect(File(p.join(oldRoot, 'chats', 'c1.json')).existsSync(), isTrue);
+    expect(
+      File(p.join(oldRoot, 'groups', 'g1', 'avatars', 'ada.png')).existsSync(),
+      isTrue,
+    );
+    expect(Directory(nested).existsSync(), isFalse);
   });
 }

@@ -46,9 +46,24 @@ const kRootDirsToMove = [
 /// so committing a root whose data never arrived opens an empty database
 /// while the real one sits under a folder the app no longer names.
 ///
+/// A destination inside (or equal to) the current root is refused before
+/// anything is copied. GTK on Linux sometimes returns a subdirectory of
+/// the folder the picker is already sitting in; copying the library into
+/// a child of itself and then deleting the sources splits the data.
+///
 /// Returns null on success, or a human-readable refusal — nothing was moved
 /// and the old root still stands in that case.
 Future<String?> relocateRootDirectories(String? oldRoot, String newRoot) async {
+  if (oldRoot != null &&
+      (path.equals(oldRoot, newRoot) || path.isWithin(oldRoot, newRoot))) {
+    final reason =
+        'The folder you picked is the current data directory or a folder '
+        'inside it. Nothing was moved — pick a folder outside the current '
+        'one.';
+    debugPrint('[Storage] refusing root move to $newRoot: $reason');
+    return reason;
+  }
+
   final sources = <Directory>[];
   final targets = <Directory>[];
   for (final dirName in kRootDirsToMove) {
