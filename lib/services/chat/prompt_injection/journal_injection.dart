@@ -146,7 +146,8 @@ class JournalInjection {
     if (queryTokens.isNotEmpty) {
       for (final card in coldCards) {
         if (lexical.length >= JournalPhysics.kColdRetrievalLimit) break;
-        if (JournalPhysics.itemCardMentioned(card, queryTokens)) {
+        if (JournalPhysics.itemCardMentioned(card, queryTokens) ||
+            JournalPhysics.episodeCardMentioned(card, queryTokens)) {
           lexical.add(card);
         }
       }
@@ -230,6 +231,12 @@ class JournalInjection {
     //    needs, position or story-clock lines in that same block: those are
     //    live readings of RIGHT NOW, the cards are remembered moments, and a
     //    memory has no business overruling where someone is standing.
+    final impulse = speechImpulse(
+      injected: injected,
+      lastWords: lastWords,
+      seed: Object.hash(lastWords, messageCount),
+    );
+    final impulseBlock = impulse == null ? '' : '\n$impulse';
     final text =
         "\n[$characterName's private journal — personal memories from "
         'this chat, in their own words. Not new messages, and nothing here '
@@ -238,7 +245,8 @@ class JournalInjection {
         'above, or any other note about where $characterName stands with '
         '$userName — the feelings here are the truer guide:\n'
         '${lines.join('\n')}'
-        '$excerpt\n]\n';
+        '$excerpt'
+        '$impulseBlock\n]\n';
     return (
       text: text,
       expandedPositions: expandedPositions,

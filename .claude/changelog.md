@@ -1,5 +1,37 @@
 # Changelog
 
+## 2026-08-22 — fix(work): off-shift prompt names the day off
+- **Why:** A M–F loan officer on Sunday morning still reasoned "she DOES
+  have to work today" then argued with bank hours. Presence was With you
+  (picker + clock were correct). The off-shift line only said the job
+  title, so the model invented a shift.
+- **What:** Off-shift identity now ends with why they are not at work:
+  weekday off ("Today is Sunday — not a work day. Do not send them to
+  work."), before the shift ("not at work yet"), or off the clock.
+- **Files:** presence_derive, behavioral_injection, work_days_injection_test
+
+## 2026-08-22 — feat(time): finished night lands before they write
+- **Why:** "We sleep through the night" left the prompt at 8:31 Saturday
+  and the body tired; Qwen argued with the clock, then wrote exhausted.
+- **What:** Completed-night language is a skip (next morning) like OOC.
+  "Let's go to bed" stays a scene. When that skip moves the clock, energy
+  floors at 90 and comfort bumps before generation. After-reply needs
+  cannot pour a second sleep (large energy/comfort fills dropped).
+- **Files:** skip_language, story_clock, time_service, chat_service_night_skip,
+  chat_service_send, needs_impact_evaluator, night_skip_test
+
+## 2026-08-22 — feat(journal): work can stick, old moments can surface
+- **Why:** After they clock out, nothing from the shift stayed with them.
+  Ordinary days (the food stall) and off-stage life had nowhere to live,
+  and the diary told the model not to mention memories.
+- **What:** No new toggle. Clock-out (skip / chevron / calendar / post-reply
+  tick) may mint one specific episode card (~1 in 4 shifts, one per
+  story-day). Fresh crumbs may be spoken; older ones only when this turn
+  rhymes, rarely. Chance Time untouched. Journal on + a job + a moving
+  clock are the gates.
+- **Files:** episode_crumbs, chat_service_episode_crumbs, journal_physics,
+  journal_injection, generation/send/controls hooks, episode_crumbs_test
+
 ## 2026-08-22 — feat(work): pick which weekdays a character works
 - **Why:** Work hours applied every calendar day, so a 9–5 librarian was
   at work on Saturday and Sunday. There was no day picker.

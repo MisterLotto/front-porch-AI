@@ -139,6 +139,54 @@ class JournalPhysics {
   /// keyword floor below (or cosine, when embeddings exist).
   static bool isItemCard(JournalMemoryData card) => cardKind(card) == 'item';
 
+  /// Off-stage / ordinary-day crumbs ("I clocked out with…"). Cool at the
+  /// full base rate like item cards. Not ledger. Spoken only when injection
+  /// grants permission — the hot set still only colours.
+  static bool isEpisodeCard(JournalMemoryData card) =>
+      cardKind(card) == 'episode';
+
+  /// `work` / other episode flavors from the metadata pouch.
+  static String? episodeKindOf(JournalMemoryData card) {
+    final raw = card.metadata;
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      return decoded is Map ? decoded['episode'] as String? : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static String? episodeOccupationOf(JournalMemoryData card) {
+    final raw = card.metadata;
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      return decoded is Map ? decoded['occupation'] as String? : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Keyword floor for work crumbs: "work" / "job" / "shift" / the job title.
+  static bool episodeCardMentioned(
+    JournalMemoryData card,
+    Set<String> queryTokens,
+  ) {
+    if (queryTokens.isEmpty || !isEpisodeCard(card)) return false;
+    if (episodeKindOf(card) == 'work' &&
+        (queryTokens.contains('work') ||
+            queryTokens.contains('job') ||
+            queryTokens.contains('shift'))) {
+      return true;
+    }
+    final occ = episodeOccupationOf(card);
+    if (occ != null && itemNameTokens(occ).any(queryTokens.contains)) {
+      return true;
+    }
+    return itemNameTokens(card.content).any(queryTokens.contains);
+  }
+
   /// The canonical item name an item card is about, from the metadata pouch.
   static String? itemOf(JournalMemoryData card) {
     final raw = card.metadata;

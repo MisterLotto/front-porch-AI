@@ -282,7 +282,14 @@ extension ChatServiceSend on ChatService {
     // that ignore it today. Additive only — every case that worked still
     // works, plus the one the user asked for.
     if (_realismActiveThisMode || _standaloneClockActive) {
+      final before = _timeService.clock;
       await _timeService.detectOocTimeSkip(text);
+      final after = _timeService.clock;
+      if (after != before &&
+          isNightSkip(stripQuotedSpeech(text).toLowerCase())) {
+        _applyNightSkipRestore();
+      }
+      await _maybeMintEpisodeCrumbs(before, after);
     }
 
     // ── Direct-address turn routing (both cast surfaces) ─────────────────

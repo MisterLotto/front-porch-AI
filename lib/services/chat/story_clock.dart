@@ -16,6 +16,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'package:front_porch_ai/services/chat/skip_language.dart';
+
 /// The Story Clock — pure calendar/clock math for the passage-of-time
 /// subsystem (design: docs/design/story-calendar.md). No I/O, no state,
 /// fully deterministic: TimeService owns the mutable clock; every
@@ -224,10 +226,7 @@ class StoryClock {
     ).hasMatch(lower)) {
       return clock.add(const Duration(days: 7));
     }
-    if (RegExp(
-      r'\b(next (morning|day)|the following (morning|day)|wake up|woke up|'
-      r'overnight|the next day)\b',
-    ).hasMatch(lower)) {
+    if (isNightSkip(lower)) {
       return nextMorning(clock);
     }
     final namedPeriod = RegExp(

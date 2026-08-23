@@ -92,6 +92,8 @@ part 'chat/chat_service_generation_request.dart';
 part 'chat/chat_service_generation_stream.dart';
 part 'chat/chat_service_generation_postgen.dart';
 part 'chat/chat_service_pockets.dart';
+part 'chat/chat_service_episode_crumbs.dart';
+part 'chat/chat_service_night_skip.dart';
 part 'chat/chat_service_reply_facts.dart';
 part 'chat/chat_service_mood.dart';
 part 'chat/chat_service_climax.dart';

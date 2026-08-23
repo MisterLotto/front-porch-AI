@@ -22,6 +22,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/services/chat/pass_support.dart';
 import 'package:front_porch_ai/services/chat/realism_tools.dart';
+import 'package:front_porch_ai/services/chat/skip_language.dart';
 import 'package:front_porch_ai/services/chat/story_clock.dart';
 import 'package:front_porch_ai/services/chat/today_line_tag.dart';
 import 'package:front_porch_ai/services/services.dart' show LlmToolResponse;
@@ -584,30 +585,7 @@ class TimeService {
     }
 
     final lower = stripQuotedSpeech(text).toLowerCase();
-
-    final hasOocMarker = RegExp(
-      r'\(ooc[:\s]|\[ooc|\*ooc\b|ooc:',
-    ).hasMatch(lower);
-    final hasSkipPhrase = RegExp(
-      r'\b(time.?skip|fast.?forward|skip ahead|several hours|a few hours|hours? later|'
-      r'the next (morning|day|evening|afternoon|night|dawn)|'
-      r'next (morning|day|evening|afternoon|night|dawn)|'
-      r'hours? pass(?:ed)?|time passes|the following (morning|day)|'
-      r'wake up the next|woke up|the next day|'
-      r'(a|one) week (later|passes)|next week|weeks? later|'
-      r'(a|one) month (later|passes)|next month)\b',
-    ).hasMatch(lower);
-
-    if (!hasOocMarker && !hasSkipPhrase) return;
-
-    // An OOC marker alone is not a time skip. Without actual time language
-    // ("skip an hour", "a while later") the note is direction/flavor — a
-    // bare "(OOC: ...)" used to advance the clock a silent +1h per note.
-    final hasDurationHint = RegExp(
-      r'\b(an? hour|half an hour|\d+\s*(minutes?|hours?|days?|weeks?)|'
-      r'a while|some ?time|later|skip|fast.?forward|advance|pass(es|ing)?)\b',
-    ).hasMatch(lower);
-    if (!hasSkipPhrase && !hasDurationHint) return;
+    if (!shouldDetectTimeSkip(lower)) return;
 
     final next = StoryClock.resolveSkipTarget(_clock, lower);
 

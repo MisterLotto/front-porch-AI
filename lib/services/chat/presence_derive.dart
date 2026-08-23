@@ -134,17 +134,70 @@ String atWorkPromptLine({
 }
 
 /// Off-shift identity only. Never stages the workplace.
+///
+/// When they have hours/days, say **why** they are not at work — a Sunday
+/// loan officer must not be invented onto a shift. Day-off / not-yet /
+/// already-done is the last sentence so it wins over the job title.
 String offShiftWorkIdentityLine({
   required String occupation,
   String occupationBrief = '',
+  String hours = '',
+  int weekday = DateTime.tuesday,
+  List<int>? workDays,
+  int clockMinutes = 0,
 }) {
-  final brief = occupationBrief.trim();
-  if (brief.isEmpty) return '';
   final job = occupation.trim();
-  final duties = brief.endsWith('.') ? brief : '$brief.';
-  if (job.isEmpty) return duties;
-  return 'Works as a $job. $duties';
+  final brief = occupationBrief.trim();
+  if (job.isEmpty && brief.isEmpty) return '';
+  final duties = brief.isEmpty ? '' : (brief.endsWith('.') ? brief : '$brief.');
+  final head = job.isEmpty
+      ? duties
+      : 'Works as a $job.${duties.isEmpty ? '' : ' $duties'}';
+  final why = _offShiftWhy(
+    hours: hours,
+    weekday: weekday,
+    workDays: workDays,
+    clockMinutes: clockMinutes,
+  );
+  if (why.isEmpty) return head;
+  return '$head $why';
 }
+
+String _offShiftWhy({
+  required String hours,
+  required int weekday,
+  List<int>? workDays,
+  required int clockMinutes,
+}) {
+  if (hours.trim().isEmpty) return '';
+  final days = resolveWorkDays(workDays);
+  final dayName = _weekdayWord(weekday);
+  if (days.isNotEmpty && !days.contains(weekday)) {
+    return 'Today is $dayName — not a work day. Do not send them to work.';
+  }
+  final range = parseWorkHoursRange(hours);
+  if (range == null) return '';
+  if (clockMinutes < range.$1) {
+    return 'Shift starts at ${_clockWord(range.$1)} — not at work yet.';
+  }
+  return 'Off the clock. Do not send them to work.';
+}
+
+String _weekdayWord(int weekday) {
+  const names = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
+  if (weekday < 1 || weekday > 7) return 'today';
+  return names[weekday - 1];
+}
+
+String _clockWord(int minutes) => _fmtMin(minutes);
 
 /// Judge bit wins when present. Else the stance keyword sniff.
 /// Missing [withUser] fails toward [inScene] / keyword so old chats

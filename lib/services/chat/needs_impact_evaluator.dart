@@ -23,6 +23,7 @@ import 'package:flutter/foundation.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/chat/needs_simulation.dart';
 import 'package:front_porch_ai/services/chat/realism_verification.dart';
+import 'package:front_porch_ai/services/chat/skip_language.dart';
 
 /// Plain leaf for needs impact.
 ///
@@ -75,7 +76,10 @@ class NeedsImpactEvaluator {
   /// the bug. What needs limiting is what a MODEL proposes, which is here.
   void _boundDeltas(Map<String, int> deltas) {
     for (final k in deltas.keys.toList()) {
-      deltas[k] = deltas[k]!.clamp(-needsSimulation.sceneDepletionCapFor(k), 100);
+      deltas[k] = deltas[k]!.clamp(
+        -needsSimulation.sceneDepletionCapFor(k),
+        100,
+      );
     }
   }
 
@@ -112,8 +116,6 @@ class NeedsImpactEvaluator {
 
   final Map<String, dynamic> Function()? getPendingRealismMetadata;
   final void Function(Map<String, dynamic>)? setPendingRealismMetadata;
-
-
 
   final CharacterCard? Function() getActiveCharacter;
   final GroupChat? Function() getActiveGroup;
@@ -183,114 +185,288 @@ class NeedsImpactEvaluator {
     }
 
     // Bladder
-    check([
-      'toilet', 'bathroom', 'urinate', 'peed', 'peeing',
-      'used the bathroom', 'went to the bathroom', 'en suite',
-    ], {'bladder': 50});
+    check(
+      [
+        'toilet',
+        'bathroom',
+        'urinate',
+        'peed',
+        'peeing',
+        'used the bathroom',
+        'went to the bathroom',
+        'en suite',
+      ],
+      {'bladder': 50},
+    );
 
     // Hygiene — specific phrases first
-    check([
-      'shower', 'showering', 'showered', 'showers',
-      'bath', 'bathed', 'bathing',
-    ], {'hygiene': 40, 'comfort': 10});
-    check([
-      'washed her face', 'washed up', 'washed herself', 'dish',
-      'brushed her teeth', 'brushing her teeth',
-    ], {'hygiene': 20});
-    check([
-      'splashed water on her face', 'splashed some water',
-      'freshened up', 'freshening up',
-    ], {'hygiene': 15});
+    check(
+      [
+        'shower',
+        'showering',
+        'showered',
+        'showers',
+        'bath',
+        'bathed',
+        'bathing',
+      ],
+      {'hygiene': 40, 'comfort': 10},
+    );
+    check(
+      [
+        'washed her face',
+        'washed up',
+        'washed herself',
+        'dish',
+        'brushed her teeth',
+        'brushing her teeth',
+      ],
+      {'hygiene': 20},
+    );
+    check(
+      [
+        'splashed water on her face',
+        'splashed some water',
+        'freshened up',
+        'freshening up',
+      ],
+      {'hygiene': 15},
+    );
     check(['washed', 'washing'], {'hygiene': 25});
-    check([
-      'changed clothes', 'changed into', 'got dressed',
-      'pajamas', 'clean clothes', 'comfy clothes',
-    ], {'hygiene': 10});
+    check(
+      [
+        'changed clothes',
+        'changed into',
+        'got dressed',
+        'pajamas',
+        'clean clothes',
+        'comfy clothes',
+      ],
+      {'hygiene': 10},
+    );
 
     // Hunger
-    check([
-      'ate', 'eating', 'had breakfast', 'had lunch', 'had dinner', 'dinner',
-      'made breakfast', 'made lunch', 'made dinner',
-    ], {'hunger': 35});
-    check([
-      'food', 'foods', 'meal', 'pizza', 'leftovers', 'leftover', 'pasta',
-      'sandwich', 'snack', 'popcorn', 'cereal', 'apple', 'cheese', 'toast',
-      'cooking', 'browsing recipes', 'recipe', 'groceries', 'takeout',
-    ], {'hunger': 25});
-    check([
-      'fridge', 'refrigerator', 'microwave', 'kitchen',
-      'making food', 'preparing food',
-    ], {'hunger': 10});
+    check(
+      [
+        'ate',
+        'eating',
+        'had breakfast',
+        'had lunch',
+        'had dinner',
+        'dinner',
+        'made breakfast',
+        'made lunch',
+        'made dinner',
+      ],
+      {'hunger': 35},
+    );
+    check(
+      [
+        'food',
+        'foods',
+        'meal',
+        'pizza',
+        'leftovers',
+        'leftover',
+        'pasta',
+        'sandwich',
+        'snack',
+        'popcorn',
+        'cereal',
+        'apple',
+        'cheese',
+        'toast',
+        'cooking',
+        'browsing recipes',
+        'recipe',
+        'groceries',
+        'takeout',
+      ],
+      {'hunger': 25},
+    );
+    check(
+      [
+        'fridge',
+        'refrigerator',
+        'microwave',
+        'kitchen',
+        'making food',
+        'preparing food',
+      ],
+      {'hunger': 10},
+    );
 
     // Beverages → energy (not hunger)
-    check([
-      'coffee', 'tea', 'orange juice', 'juice', 'water', 'soda',
-      'beverage', 'mug', 'cup of', 'fresh pot', 'brew',
-    ], {'energy': 7});
+    check(
+      [
+        'coffee',
+        'tea',
+        'orange juice',
+        'juice',
+        'water',
+        'soda',
+        'beverage',
+        'mug',
+        'cup of',
+        'fresh pot',
+        'brew',
+      ],
+      {'energy': 7},
+    );
 
     // Energy
-    check([
-      'slept', 'sleeping', 'asleep', 'fell asleep', 'went to sleep', 'sleep',
-    ], {'energy': 50});
-    check([
-      'nap', 'napping', 'dozed', 'dozing', 'dozed off', 'drifted off',
-    ], {'energy': 25});
-    check([
-      'rested', 'resting', 'lay down', 'lying down',
-      'stretched out', 'curled up', 'lounging',
-    ], {'energy': 15});
-    check([
-      'stretch', 'stretching', 'yawned', 'yawning',
-    ], {'energy': 5});
+    check(
+      ['slept', 'sleeping', 'asleep', 'fell asleep', 'went to sleep', 'sleep'],
+      {'energy': 50},
+    );
+    check(
+      ['nap', 'napping', 'dozed', 'dozing', 'dozed off', 'drifted off'],
+      {'energy': 25},
+    );
+    check(
+      [
+        'rested',
+        'resting',
+        'lay down',
+        'lying down',
+        'stretched out',
+        'curled up',
+        'lounging',
+      ],
+      {'energy': 15},
+    );
+    check(['stretch', 'stretching', 'yawned', 'yawning'], {'energy': 5});
 
     // Comfort
-    check([
-      'book', 'books', 'reading', 'reads', 'read a', 'novel', 'magazine',
-      'page', 'chapter', 'story',
-    ], {'comfort': 20});
-    check([
-      'tv', 'television', 'movie', 'show', 'shows', 'watching',
-      'video', 'netflix', 'streaming',
-    ], {'comfort': 10});
-    check([
-      'photo', 'album', 'memento', 'photograph',
-      'pictures', 'memories', 'scrapbook',
-    ], {'comfort': 15});
-    check([
-      'couch', 'sofa', 'bed', 'comfortable', 'cozy', 'warm',
-      'peaceful', 'relaxed', 'content', 'serene',
-    ], {'comfort': 10});
-    check([
-      'sunlight', 'morning sun', 'golden light', 'dappled',
-      'nice view', 'backyard', 'birds singing', 'garden',
-    ], {'comfort': 8});
-    check([
-      'candle', 'music', 'quiet', 'rain', 'fireplace',
-      'calm', 'tranquil',
-    ], {'comfort': 10});
+    check(
+      [
+        'book',
+        'books',
+        'reading',
+        'reads',
+        'read a',
+        'novel',
+        'magazine',
+        'page',
+        'chapter',
+        'story',
+      ],
+      {'comfort': 20},
+    );
+    check(
+      [
+        'tv',
+        'television',
+        'movie',
+        'show',
+        'shows',
+        'watching',
+        'video',
+        'netflix',
+        'streaming',
+      ],
+      {'comfort': 10},
+    );
+    check(
+      [
+        'photo',
+        'album',
+        'memento',
+        'photograph',
+        'pictures',
+        'memories',
+        'scrapbook',
+      ],
+      {'comfort': 15},
+    );
+    check(
+      [
+        'couch',
+        'sofa',
+        'bed',
+        'comfortable',
+        'cozy',
+        'warm',
+        'peaceful',
+        'relaxed',
+        'content',
+        'serene',
+      ],
+      {'comfort': 10},
+    );
+    check(
+      [
+        'sunlight',
+        'morning sun',
+        'golden light',
+        'dappled',
+        'nice view',
+        'backyard',
+        'birds singing',
+        'garden',
+      ],
+      {'comfort': 8},
+    );
+    check(
+      ['candle', 'music', 'quiet', 'rain', 'fireplace', 'calm', 'tranquil'],
+      {'comfort': 10},
+    );
 
     // Fun
-    check([
-      'phone', 'computer', 'laptop', 'social media',
-      'scrolling', 'instagram', 'facebook', 'browsing',
-      'online', 'website', 'surfing',
-    ], {'fun': 8});
-    check([
-      'game', 'gaming', 'played', 'hobby', 'craft',
-      'drawing', 'music', 'instrument',
-    ], {'fun': 15});
+    check(
+      [
+        'phone',
+        'computer',
+        'laptop',
+        'social media',
+        'scrolling',
+        'instagram',
+        'facebook',
+        'browsing',
+        'online',
+        'website',
+        'surfing',
+      ],
+      {'fun': 8},
+    );
+    check(
+      [
+        'game',
+        'gaming',
+        'played',
+        'hobby',
+        'craft',
+        'drawing',
+        'music',
+        'instrument',
+      ],
+      {'fun': 15},
+    );
 
     // Social
-    check([
-      'friend', 'friends', 'neighbor', 'neighbors',
-      'talked to', 'chatting with', 'texted', 'called',
-      'phone call', 'messaged',
-    ], {'social': 15});
+    check(
+      [
+        'friend',
+        'friends',
+        'neighbor',
+        'neighbors',
+        'talked to',
+        'chatting with',
+        'texted',
+        'called',
+        'phone call',
+        'messaged',
+      ],
+      {'social': 15},
+    );
 
     return result;
   }
 
-  Future<void> evaluateAndApply(String responseText, {bool isAfk = false}) async {
+  Future<void> evaluateAndApply(
+    String responseText, {
+    bool isAfk = false,
+  }) async {
     if (!getNeedsSimEnabled() ||
         !getRealismEnabled() ||
         responseText.trim().isEmpty) {
@@ -411,6 +587,9 @@ class NeedsImpactEvaluator {
       // pass to overrule the evaluator, so bounding it would make the switch
       // mean less than it says.
       if (!directorCorrected) _boundDeltas(deltas);
+      if (meta?['night_skip_restored'] == true) {
+        suppressSleepDoubleApply(deltas);
+      }
 
       // AFK zero-floor: model sometimes ignores "Only report positive gains"
       // and emits small negative deltas. Zero them to match the instruction.
@@ -429,7 +608,8 @@ class NeedsImpactEvaluator {
         if (fallback.isNotEmpty) {
           bool filled = false;
           for (final k in NeedsSimulation.needKeys) {
-            if ((deltas[k] == null || deltas[k] == 0) && (fallback[k] != null && fallback[k]! > 0)) {
+            if ((deltas[k] == null || deltas[k] == 0) &&
+                (fallback[k] != null && fallback[k]! > 0)) {
               deltas[k] = fallback[k]!;
               filled = true;
             }
@@ -473,7 +653,6 @@ class NeedsImpactEvaluator {
       debugPrint('[Realism:Needs] evaluateAndApply error: $e');
     }
   }
-
 
   int? _extractInt(String text, String key) {
     final re = RegExp('"$key"\\s*:\\s*(-?\\d+)');

@@ -106,7 +106,14 @@ class BehavioralInjection {
       return 'Away from {{user}}$here. Write from there.';
     }
     final identity = where == PresenceWhere.withYou
-        ? offShiftWorkIdentityLine(occupation: occ, occupationBrief: brief)
+        ? offShiftWorkIdentityLine(
+            occupation: occ,
+            occupationBrief: brief,
+            hours: hours,
+            weekday: getWeekday?.call() ?? DateTime.tuesday,
+            workDays: getWorkDays?.call(),
+            clockMinutes: getClockMinutes?.call() ?? 0,
+          )
         : '';
     if (stance.isEmpty) return identity;
     final position =

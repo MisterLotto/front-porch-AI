@@ -11,7 +11,11 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 - 👜 **Work is a real section** — same card as Ambitions on desktop and phone. Occupation is the title; **What the job is** is the short brief the model uses when they're at work. Leave it blank and today stays today. Start and End show the time you picked.
 
-- 📅 **Pick the days they work** — seven chips under the hours (M T W T F S S). A job with hours and no days saved is **weekdays**. Tap Sat/Sun for weekend shifts. Overnight hours still belong to the day the shift started.
+- 📅 **Pick the days they work** — seven chips under the hours (M T W T F S S). A job with hours and no days saved is **weekdays**. Tap Sat/Sun for weekend shifts. Overnight hours still belong to the day the shift started. A weekday job on Sunday is told it is a day off — they will not invent a shift. A weekday morning before the start is "not at work yet."
+
+- 💼 **Work can stick after they clock out** — sometimes (not most days) a small thing from the shift is still on them, and they may mention it. Old moments can rarely come up the way a person says "that reminds me." No extra switch — the diary and a job plus a moving clock are enough. Chance Time is still the party wheel.
+
+- 🌅 **"We slept through the night" is morning** — the clock jumps to 8am *before* they write, and they wake rested (energy comes with the skip). "Let's go to bed" is still tonight: tired now, rest on the next turn. `(OOC: skip to morning)` does the same jump.
 
 - 💼 **Group chats get the job brief** — when a member is at work in a group, the model now sees their job title and **What the job is**, same as 1:1. Hours still decide whether they are at work.
 

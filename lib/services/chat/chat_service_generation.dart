@@ -408,6 +408,7 @@ extension ChatServiceGeneration on ChatService {
   Future<void> _maybeAdvanceStoryClockAfterReply(_GenTurn t) async {
     if (t.mode == GenerationMode.continue_) return;
     if (!_clockRunning) return;
+    final before = _timeService.clock;
     final msg = t.streamTarget;
     if (!msg.isUser) {
       // Stamp the LIVE swipe map. Writing `metadata` is a no-op for
@@ -431,5 +432,6 @@ extension ChatServiceGeneration on ChatService {
       final named = clockNamedInReply(msg.text, _timeService.clock);
       if (named != null) await _timeService.applyReconciledClock(named);
     }
+    await _maybeMintEpisodeCrumbs(before, _timeService.clock);
   }
 }

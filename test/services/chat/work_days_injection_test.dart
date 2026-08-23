@@ -39,7 +39,41 @@ void main() {
     ).buildPositionInjection();
     expect(txt, isNot(contains('At work')));
     expect(txt, contains('Works as a clerk'));
+    expect(txt, contains('Today is Saturday — not a work day'));
+    expect(txt, contains('Do not send them to work'));
     expect(groupTurnSkips(PresenceWhere.withYou), isFalse);
+  });
+
+  test('Sunday morning loan officer is told it is not a work day', () {
+    final txt = BehavioralInjection(
+      relationshipService: createTestRelSvc(),
+      getRealismEnabled: () => true,
+      getOccupation: () => 'Loan Officer',
+      getHours: () => '9am–5pm',
+      getOccupationBrief: () => 'reviews loan applications at Bank of America',
+      getClockMinutes: () => 6 * 60 + 47,
+      getWeekday: () => DateTime.sunday,
+      getWorkDays: () => kDefaultWorkDays,
+      getIsGroup: () => false,
+    ).buildPositionInjection();
+    expect(txt, isNot(contains('At work')));
+    expect(txt, contains('Today is Sunday — not a work day'));
+    expect(txt, contains('Do not send them to work'));
+  });
+
+  test('weekday before the shift is not at work yet', () {
+    final txt = BehavioralInjection(
+      relationshipService: createTestRelSvc(),
+      getRealismEnabled: () => true,
+      getOccupation: () => 'clerk',
+      getHours: () => '9am–5pm',
+      getOccupationBrief: () => 'shelves returns',
+      getClockMinutes: () => 7 * 60,
+      getWeekday: () => DateTime.tuesday,
+      getIsGroup: () => false,
+    ).buildPositionInjection();
+    expect(txt, contains('not at work yet'));
+    expect(txt, isNot(contains('At work as')));
   });
 
   test('Saturday afternoon does not suppress the today plan', () {
