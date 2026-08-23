@@ -75,4 +75,12 @@ describe('Work identity chrome', () => {
     const brief = container.querySelector('[data-testid="work-brief"]') as HTMLTextAreaElement;
     expect(brief.value).toBe('');
   });
+
+  it('shows seven day chips', () => {
+    render({ occupation: 'librarian', hours: '9am–5pm' });
+    for (let d = 1; d <= 7; d++) {
+      expect(container.querySelector(`[data-testid="work-day-${d}"]`)).toBeTruthy();
+    }
+    expect(container.textContent).toContain('Weekdays unless you tap others');
+  });
 });

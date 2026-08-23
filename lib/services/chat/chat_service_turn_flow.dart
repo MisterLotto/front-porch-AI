@@ -102,6 +102,8 @@ extension ChatServiceTurnFlow on ChatService {
       occupation: work.occupation,
       hours: work.hours,
       clockMinutes: _timeService.clockMinutes,
+      weekday: _timeService.clock.weekday,
+      workDays: work.workDays,
       inScene: _memberInScene(card),
     );
     return groupTurnSkips(where);
@@ -132,6 +134,8 @@ extension ChatServiceTurnFlow on ChatService {
       occupation: work.occupation,
       hours: work.hours,
       clockMinutes: _timeService.clockMinutes,
+      weekday: _timeService.clock.weekday,
+      workDays: work.workDays,
       inScene: _memberInScene(card),
     );
     if (where == PresenceWhere.atWork) {
@@ -145,18 +149,24 @@ extension ChatServiceTurnFlow on ChatService {
     return '${card.name} is away.';
   }
 
-  ({String occupation, String hours, String occupationBrief}) _workFieldsFor(
-    CharacterCard card,
-  ) {
+  ({
+    String occupation,
+    String hours,
+    String occupationBrief,
+    List<int>? workDays,
+  })
+  _workFieldsFor(CharacterCard card) {
     final ext = card.frontPorchExtensions;
     final library = originLibraryCardFor(card);
     return workFieldsForGroupMember(
       copyOccupation: ext?.occupation ?? '',
       copyHours: ext?.hours ?? '',
       copyOccupationBrief: ext?.occupationBrief ?? '',
+      copyWorkDays: ext?.workDays,
       libraryOccupation: library?.frontPorchExtensions?.occupation,
       libraryHours: library?.frontPorchExtensions?.hours,
       libraryOccupationBrief: library?.frontPorchExtensions?.occupationBrief,
+      libraryWorkDays: library?.frontPorchExtensions?.workDays,
     );
   }
 

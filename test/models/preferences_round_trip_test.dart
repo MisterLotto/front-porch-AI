@@ -70,6 +70,7 @@ void main() {
       expect(back.occupation, '');
       expect(back.hours, '');
       expect(back.occupationBrief, '');
+      expect(back.workDays, isNull);
     });
 
     test('blank occupation and hours are omitted from card JSON', () {
@@ -93,10 +94,51 @@ void main() {
       expect(realism['hours'], 'dawn–dusk');
       expect(realism['occupationBrief'], 'Keeps the lamp and logs the ships');
       expect(realism.containsKey('occupation_brief'), isFalse);
+      expect(realism.containsKey('workDays'), isFalse);
       final back = FrontPorchExtensions.fromJson(json);
       expect(back.occupation, 'lighthouse keeper');
       expect(back.hours, 'dawn–dusk');
       expect(back.occupationBrief, 'Keeps the lamp and logs the ships');
+      expect(back.workDays, isNull);
+    });
+
+    test('workDays survive the card wire and [] is not collapsed', () {
+      final weekdays = FrontPorchExtensions(
+        occupation: 'clerk',
+        hours: '9am–5pm',
+        workDays: const [1, 2, 3, 4, 5],
+      );
+      final realism =
+          weekdays.toJson()['realism_engine'] as Map<String, dynamic>;
+      expect(realism['workDays'], [1, 2, 3, 4, 5]);
+      expect(FrontPorchExtensions.fromJson(weekdays.toJson()).workDays, [
+        1,
+        2,
+        3,
+        4,
+        5,
+      ]);
+
+      final off = FrontPorchExtensions(
+        occupation: 'clerk',
+        hours: '9am–5pm',
+        workDays: const [],
+      );
+      expect(
+        (off.toJson()['realism_engine'] as Map<String, dynamic>)['workDays'],
+        isEmpty,
+      );
+      expect(FrontPorchExtensions.fromJson(off.toJson()).workDays, isEmpty);
+
+      final noHours = FrontPorchExtensions(
+        occupation: 'clerk',
+        workDays: const [1, 2, 3, 4, 5],
+      );
+      expect(
+        (noHours.toJson()['realism_engine'] as Map<String, dynamic>)
+            .containsKey('workDays'),
+        isFalse,
+      );
     });
 
     test('plan_lines omitted JSON reads as empty, not null', () {
@@ -185,6 +227,36 @@ void main() {
       expect(back.occupation, 'lighthouse keeper');
       expect(back.hours, 'dawn–dusk');
       expect(back.occupationBrief, 'Keeps the lamp and logs the ships');
+    });
+
+    test('workDays survive the web bridge, including empty', () {
+      final seededDays = FrontPorchExtensions(
+        occupation: 'clerk',
+        hours: '9am–5pm',
+        workDays: const [1, 2, 3, 4, 5, 6],
+      );
+      expect(frontPorchFromFields(frontPorchToJson(seededDays)).workDays, [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+      ]);
+      final off = FrontPorchExtensions(
+        occupation: 'clerk',
+        hours: '9am–5pm',
+        workDays: const [],
+      );
+      expect(frontPorchFromFields(frontPorchToJson(off)).workDays, isEmpty);
+      expect(frontPorchFromFields(const {}, base: seededDays).workDays, [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+      ]);
     });
 
     test('an older web client that omits the keys keeps the base values', () {

@@ -340,6 +340,8 @@ class _CharacterStateGroupState extends State<CharacterStateGroup> {
                           occupation: ext?.occupation ?? '',
                           hours: ext?.hours ?? '',
                           clockMinutes: chat.timeService.clockMinutes,
+                          weekday: chat.timeService.clock.weekday,
+                          workDays: ext?.workDays,
                           inScene: inSceneForPresence(
                             stance: chat.relationshipService.spatialStance,
                             withUser: chat.relationshipService.withUser,

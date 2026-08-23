@@ -86,6 +86,8 @@ class IdentityChipLists extends StatelessWidget {
     this.onOccupationBriefChanged,
     this.hours,
     this.onHoursChanged,
+    this.workDays,
+    this.onWorkDaysChanged,
     this.likes,
     this.onLikesChanged,
     this.dislikes,
@@ -113,6 +115,8 @@ class IdentityChipLists extends StatelessWidget {
   final ValueChanged<String>? onOccupationBriefChanged;
   final String? hours;
   final ValueChanged<String>? onHoursChanged;
+  final List<int>? workDays;
+  final ValueChanged<List<int>>? onWorkDaysChanged;
 
   final List<String>? likes;
   final ValueChanged<List<String>>? onLikesChanged;
@@ -252,9 +256,11 @@ class IdentityChipLists extends StatelessWidget {
               occupation: occupation!,
               occupationBrief: occupationBrief!,
               hours: hours!,
+              workDays: workDays,
               onOccupationChanged: onOccupationChanged!,
               onOccupationBriefChanged: onOccupationBriefChanged!,
               onHoursChanged: onHoursChanged!,
+              onWorkDaysChanged: onWorkDaysChanged,
             ),
           ),
           const SizedBox(height: 20),

@@ -831,6 +831,8 @@ class ChatToolsFacade {
         occupation: ext?.occupation ?? '',
         hours: ext?.hours ?? '',
         clockMinutes: _chat.timeService.clockMinutes,
+        weekday: _chat.timeService.clock.weekday,
+        workDays: ext?.workDays,
         inScene: inSceneForPresence(
           stance: _chat.relationshipService.spatialStance,
           withUser: _chat.relationshipService.withUser,

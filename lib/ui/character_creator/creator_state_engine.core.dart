@@ -109,6 +109,7 @@ extension _CreatorCore on CreatorState {
     realismOccupation = ext.occupation;
     realismOccupationBrief = ext.occupationBrief;
     realismHours = ext.hours;
+    realismWorkDays = ext.workDays;
     realismLikes = List<String>.from(ext.likes);
     realismDislikes = List<String>.from(ext.dislikes);
     realismIntimateInto = List<String>.from(ext.intimateInto);

@@ -24,10 +24,13 @@ import {
 import {
   DEFAULT_END_MIN,
   DEFAULT_START_MIN,
+  DEFAULT_WORK_DAYS,
+  WORK_DAY_LETTERS,
   formatWorkHoursRange,
   hhmmToMinutes,
   minutesToHHMM,
   parseWorkHoursRange,
+  resolveWorkDays,
 } from './workHours';
 
 type Patch = (patch: Partial<RealismValues>) => void;
@@ -202,7 +205,8 @@ export function RealismFormSection({
           {/* ── Work ── mirrors work_row.dart + identity_chip_lists.dart.
               Same identity chrome as Ambitions / Likes (header + helper),
               not a thinner PWA stub. Occupation is the title; What the job
-              is binds occupationBrief; hours is two native time pickers. */}
+              is binds occupationBrief; hours is two native time pickers;
+              days are seven letter chips (missing = Mon–Fri). */}
           <ChipList
             label="Plan lines"
             values={v.planLines}
@@ -285,18 +289,29 @@ function WorkFields({ v, set }: { v: RealismValues; set: Patch }) {
   const parsed = parseWorkHoursRange(v.hours);
   const start = parsed ? minutesToHHMM(parsed[0]) : '';
   const end = parsed ? minutesToHHMM(parsed[1]) : '';
+  const selected = new Set(resolveWorkDays(v.workDays));
 
   const write = (nextStart: string, nextEnd: string) => {
     const s = hhmmToMinutes(nextStart) ?? DEFAULT_START_MIN;
     const e = hhmmToMinutes(nextEnd) ?? DEFAULT_END_MIN;
-    set({ hours: formatWorkHoursRange(s, e) });
+    const patch: Partial<RealismValues> = { hours: formatWorkHoursRange(s, e) };
+    if (v.workDays == null) patch.workDays = [...DEFAULT_WORK_DAYS];
+    set(patch);
+  };
+
+  const toggleDay = (day: number) => {
+    const current = resolveWorkDays(v.workDays);
+    const next = current.includes(day)
+      ? current.filter((d) => d !== day)
+      : [...current, day].sort((a, b) => a - b);
+    set({ workDays: next });
   };
 
   return (
     <div className="realism-field work-identity">
       <span className="realism-head" style={{ margin: 0 }}>Work</span>
       <p className="muted small" style={{ margin: '4px 0 8px' }}>
-        What they do, and when. Not a calendar.
+        What they do, and when. Weekdays unless you tap others.
       </p>
       <label className="realism-field">
         <span>Occupation</span>
@@ -340,6 +355,24 @@ function WorkFields({ v, set }: { v: RealismValues; set: Patch }) {
             onChange={(e) => write(start, e.target.value)}
           />
         </label>
+      </div>
+      <div className="work-days" role="group" aria-label="Work days">
+        {WORK_DAY_LETTERS.map((letter, i) => {
+          const day = i + 1;
+          const on = selected.has(day);
+          return (
+            <button
+              key={day}
+              type="button"
+              data-testid={`work-day-${day}`}
+              className={on ? 'work-day on' : 'work-day'}
+              aria-pressed={on}
+              onClick={() => toggleDay(day)}
+            >
+              {letter}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

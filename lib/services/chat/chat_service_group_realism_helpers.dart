@@ -66,11 +66,16 @@ extension ChatServiceGroupRealismHelpers on ChatService {
     return null;
   }
 
-  ({String occupation, String hours, String occupationBrief})
+  ({
+    String occupation,
+    String hours,
+    String occupationBrief,
+    List<int>? workDays,
+  })
   _workFieldsForCurrentSpeaker() {
     final card = _workSpeakerCard();
     if (card == null) {
-      return (occupation: '', hours: '', occupationBrief: '');
+      return (occupation: '', hours: '', occupationBrief: '', workDays: null);
     }
     return _workFieldsFor(card);
   }

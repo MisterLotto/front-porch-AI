@@ -8,6 +8,8 @@
 // `realism` block with no intermediate mapping. Consumed by RealismFormSection
 // and NeedsFormSection, which are reused by character create + edit.
 
+import { parseWorkDaysField } from './workHours';
+
 /** One thing a character has: a bare name, or a name plus its condition. */
 export type InventoryEntry = string | { name: string; state?: string };
 
@@ -50,6 +52,12 @@ export interface RealismValues {
   occupationBrief: string;
   /** Clock range the pickers write ("9am–5pm"). Not "mornings". */
   hours: string;
+  /**
+   * DateTime.weekday ints (1=Mon…7=Sun). `null` = missing = Mon–Fri at
+   * derive. `[]` = never at work. Do not default this to [] in the form
+   * model or an old card's next save turns every day off.
+   */
+  workDays: number[] | null;
   // Likes & Dislikes, and the 18+ pair. Flat over this bridge (the Dart side's
   // frontPorchFromFields expects camelCase keys); the CARD nests the intimate
   // pair under intimate_preferences, which is the Dart model's business.
@@ -113,6 +121,7 @@ export const REALISM_DEFAULTS: RealismValues = {
   occupation: '',
   occupationBrief: '',
   hours: '',
+  workDays: null,
   likes: [],
   dislikes: [],
   intimateInto: [],
@@ -241,7 +250,10 @@ export function titleCase(value: string): string {
 /** Coerce the /detail `realism` block (or null) into a full RealismValues,
  *  filling any missing key with its desktop default. */
 export function realismFromDetail(raw: Partial<RealismValues> | null | undefined): RealismValues {
-  return { ...REALISM_DEFAULTS, ...(raw ?? {}) };
+  const merged: RealismValues = { ...REALISM_DEFAULTS, ...(raw ?? {}) };
+  const present = raw != null && Object.prototype.hasOwnProperty.call(raw, 'workDays');
+  merged.workDays = parseWorkDaysField(raw?.workDays, present);
+  return merged;
 }
 
 // ── Relationship tier names (mirror realism_form_section.dart) ──────────────

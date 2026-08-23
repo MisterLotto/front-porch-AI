@@ -17,9 +17,11 @@ void main() {
     String occupation = 'librarian',
     String occupationBrief = '',
     String hours = '',
+    List<int>? workDays,
     ValueChanged<String>? onOccupationChanged,
     ValueChanged<String>? onOccupationBriefChanged,
     ValueChanged<String>? onHoursChanged,
+    ValueChanged<List<int>>? onWorkDaysChanged,
   }) {
     return tester.pumpWidget(
       MaterialApp(
@@ -28,9 +30,11 @@ void main() {
             occupation: occupation,
             occupationBrief: occupationBrief,
             hours: hours,
+            workDays: workDays,
             onOccupationChanged: onOccupationChanged ?? (_) {},
             onOccupationBriefChanged: onOccupationBriefChanged ?? (_) {},
             onHoursChanged: onHoursChanged ?? (_) {},
+            onWorkDaysChanged: onWorkDaysChanged,
           ),
         ),
       ),
@@ -153,5 +157,40 @@ void main() {
     expect(find.text('Set'), findsNothing);
     expect(find.text('9:00 AM'), findsOneWidget);
     expect(find.text('5:00 PM'), findsOneWidget);
+  });
+
+  testWidgets('missing workDays shows Mon–Fri selected', (tester) async {
+    await pump(tester, hours: '9am–5pm');
+
+    expect(find.text('Days'), findsOneWidget);
+    expect(find.text('Weekdays unless you tap others.'), findsOneWidget);
+    for (var d = 1; d <= 7; d++) {
+      expect(find.byKey(ValueKey('work-day-$d')), findsOneWidget);
+    }
+  });
+
+  testWidgets('tapping Saturday writes weekdays plus Saturday', (tester) async {
+    List<int>? written;
+    await pump(tester, hours: '9am–5pm', onWorkDaysChanged: (v) => written = v);
+
+    await tester.tap(find.byKey(const ValueKey('work-day-6')));
+    await tester.pump();
+
+    expect(written, [1, 2, 3, 4, 5, 6]);
+  });
+
+  testWidgets('turning every day off writes an empty list', (tester) async {
+    List<int>? written;
+    await pump(
+      tester,
+      hours: '9am–5pm',
+      workDays: const [DateTime.monday],
+      onWorkDaysChanged: (v) => written = v,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('work-day-1')));
+    await tester.pump();
+
+    expect(written, isEmpty);
   });
 }

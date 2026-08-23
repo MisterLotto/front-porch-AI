@@ -278,6 +278,7 @@ class CreatorState extends ChangeNotifier {
   String realismOccupation = '';
   String realismOccupationBrief = '';
   String realismHours = '';
+  List<int>? realismWorkDays;
 
   /// Likes & Dislikes and the 18+ pair — same card-resident identity lists,
   /// authored in the same step.

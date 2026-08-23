@@ -310,7 +310,9 @@ extension ChatServiceWiringInjection on ChatService {
       getOccupation: () => _workFieldsForCurrentSpeaker().occupation,
       getHours: () => _workFieldsForCurrentSpeaker().hours,
       getOccupationBrief: () => _workFieldsForCurrentSpeaker().occupationBrief,
+      getWorkDays: () => _workFieldsForCurrentSpeaker().workDays,
       getClockMinutes: () => _timeService.clockMinutes,
+      getWeekday: () => _timeService.clock.weekday,
       getIsGroup: () => _activeGroup != null,
     );
   }
@@ -403,6 +405,7 @@ extension ChatServiceWiringInjection on ChatService {
       getTodayLine: () => todaySentence,
       getPlannerEnabled: () => _storageService.realismSettings.plannerEnabled,
       getClockMinutes: () => _timeService.clockMinutes,
+      getWeekday: () => _timeService.clock.weekday,
       getActiveCharacter: () => _activeCharacter,
       getIsGroupNonObserverMode: () => (_activeGroup != null && !_observerMode),
       getCurrentSpeakerIdForRealism: _getCurrentSpeakerIdForRealism,

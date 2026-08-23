@@ -13,6 +13,7 @@ class PlanInjection with SpeakerCardResolver {
   final String? Function() getTodayLine;
   final bool Function() getPlannerEnabled;
   final int Function()? getClockMinutes;
+  final int Function()? getWeekday;
   @override
   final CharacterCard? Function() getActiveCharacter;
   @override
@@ -28,6 +29,7 @@ class PlanInjection with SpeakerCardResolver {
     required this.getTodayLine,
     required this.getPlannerEnabled,
     this.getClockMinutes,
+    this.getWeekday,
     required this.getActiveCharacter,
     required this.getIsGroupNonObserverMode,
     required this.getCurrentSpeakerIdForRealism,
@@ -46,6 +48,8 @@ class PlanInjection with SpeakerCardResolver {
             occupation: ext?.occupation ?? '',
             hours: ext?.hours ?? '',
             clockMinutes: getClockMinutes!(),
+            weekday: getWeekday?.call() ?? DateTime.tuesday,
+            workDays: ext?.workDays,
             inScene: true,
           ) ==
           PresenceWhere.atWork;

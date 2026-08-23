@@ -172,14 +172,20 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
     final work = workFieldsForGroupMember(
       copyOccupation: ext?.occupation ?? '',
       copyHours: ext?.hours ?? '',
+      copyOccupationBrief: ext?.occupationBrief ?? '',
+      copyWorkDays: ext?.workDays,
       libraryOccupation: library?.frontPorchExtensions?.occupation,
       libraryHours: library?.frontPorchExtensions?.hours,
+      libraryOccupationBrief: library?.frontPorchExtensions?.occupationBrief,
+      libraryWorkDays: library?.frontPorchExtensions?.workDays,
     );
     final presence = PresenceWord(
       where: derivePresence(
         occupation: work.occupation,
         hours: work.hours,
         clockMinutes: chat.timeService.clockMinutes,
+        weekday: chat.timeService.clock.weekday,
+        workDays: work.workDays,
         inScene: inSceneForPresence(
           stance: chat.spatialStanceForGroupCharacter(widget.character),
           withUser: chat.withUserForGroupCharacter(widget.character),

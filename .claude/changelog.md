@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-08-22 — feat(work): pick which weekdays a character works
+- **Why:** Work hours applied every calendar day, so a 9–5 librarian was
+  at work on Saturday and Sunday. There was no day picker.
+- **What:** Card `workDays` (DateTime.weekday ints). Missing field is
+  Mon–Fri; written `[]` is never at work. `onShift` gates hours by
+  weekday, with overnight wrap belonging to yesterday. Desktop WorkRow
+  and web WorkFields gained M–S chips. Group copies fall back like hours.
+- **Files:** presence_derive, character_card, work_row, identity editors,
+  realism_extensions_json, web workHours/RealismFormSection, presence
+  tests, work_days_injection_test
+
 ## 2026-08-22 — fix(journal): model-switch regen no longer blanks "Where we are"
 - **Why:** Changing models mid-chat and regenerating the last reply wiped
   the Journal recap. Recap clear ran on EVERY timeline rewrite, including

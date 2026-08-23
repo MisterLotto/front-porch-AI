@@ -305,6 +305,8 @@ extension _EditCharacterCoreTabs on _EditCharacterPageState {
                       rebuildState(() => _occupationBrief = v),
                   hours: _hours,
                   onHoursChanged: (v) => rebuildState(() => _hours = v),
+                  workDays: _workDays,
+                  onWorkDaysChanged: (v) => rebuildState(() => _workDays = v),
                   likes: _likes,
                   onLikesChanged: (v) => rebuildState(() => _likes = v),
                   dislikes: _dislikes,

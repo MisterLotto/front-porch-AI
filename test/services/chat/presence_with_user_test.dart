@@ -18,6 +18,7 @@ void main() {
         occupation: '',
         hours: '',
         clockMinutes: _evening,
+        weekday: DateTime.tuesday,
         inScene: inSceneForPresence(
           stance: 'sitting on her couch at home',
           withUser: false,
@@ -33,6 +34,7 @@ void main() {
         occupation: '',
         hours: '',
         clockMinutes: _evening,
+        weekday: DateTime.tuesday,
         inScene: inSceneForPresence(
           stance: 'She left the kitchen',
           withUser: true,
@@ -53,6 +55,7 @@ void main() {
         occupation: 'clerk',
         hours: '9-5',
         clockMinutes: _afternoon,
+        weekday: DateTime.tuesday,
         inScene: inSceneForPresence(stance: 'at the register', withUser: true),
       ),
       PresenceWhere.atWork,

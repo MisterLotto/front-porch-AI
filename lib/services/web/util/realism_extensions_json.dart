@@ -72,6 +72,31 @@ FrontPorchExtensions frontPorchFromFields(
       ? fields[key].toString()
       : fallback;
 
+  /// Missing key keeps [fallback]. Present `[]` is never-at-work. Junk →
+  /// fallback rather than throwing, same as [asStrList].
+  List<int>? asWorkDays(String key, List<int>? fallback) {
+    if (!fields.containsKey(key) || fields[key] == null) return fallback;
+    final v = fields[key];
+    if (v is! List) return fallback;
+    if (v.isEmpty) return const [];
+    final days = <int>{};
+    for (final e in v) {
+      final n = e is int
+          ? e
+          : e is num
+          ? e.toInt()
+          : e is String
+          ? int.tryParse(e.trim())
+          : null;
+      if (n != null && n >= DateTime.monday && n <= DateTime.sunday) {
+        days.add(n);
+      }
+    }
+    if (days.isEmpty) return fallback;
+    final list = days.toList()..sort();
+    return list;
+  }
+
   return FrontPorchExtensions(
     // Preserved identity / non-form state (carried from base, never wiped).
     stableId: b.stableId,
@@ -117,6 +142,7 @@ FrontPorchExtensions frontPorchFromFields(
     occupation: asStr('occupation', b.occupation),
     hours: asStr('hours', b.hours),
     occupationBrief: asStr('occupationBrief', b.occupationBrief),
+    workDays: asWorkDays('workDays', b.workDays),
     likes: asStrList('likes', b.likes),
     dislikes: asStrList('dislikes', b.dislikes),
     // The 18+ pair travels FLAT over this bridge (`intimateInto` /
@@ -207,6 +233,7 @@ Map<String, dynamic> frontPorchToJson(FrontPorchExtensions e) => {
   'occupation': e.occupation,
   'hours': e.hours,
   'occupationBrief': e.occupationBrief,
+  'workDays': e.workDays,
   'likes': e.likes,
   'dislikes': e.dislikes,
   'intimateInto': e.intimateInto,

@@ -56,6 +56,31 @@ Map<String, dynamic> _intimate(Map<String, dynamic> realism) {
   return v is Map ? Map<String, dynamic>.from(v) : const {};
 }
 
+/// Card `workDays`: key missing → null (derive treats as Mon–Fri). Written
+/// `[]` stays empty (never at work). Junk / all-invalid → null, not [].
+List<int>? _workDays(Map<String, dynamic> realism) {
+  if (!realism.containsKey('workDays')) return null;
+  final raw = realism['workDays'];
+  if (raw is! List) return null;
+  if (raw.isEmpty) return const [];
+  final days = <int>{};
+  for (final e in raw) {
+    final n = e is int
+        ? e
+        : e is num
+        ? e.toInt()
+        : e is String
+        ? int.tryParse(e.trim())
+        : null;
+    if (n != null && n >= DateTime.monday && n <= DateTime.sunday) {
+      days.add(n);
+    }
+  }
+  if (days.isEmpty) return null;
+  final list = days.toList()..sort();
+  return list;
+}
+
 class FrontPorchExtensions {
   bool realismEnabled;
   int shortTermBond; // -300 to 300
@@ -89,13 +114,17 @@ class FrontPorchExtensions {
   /// The today sentence is session state, never stored here.
   List<String> planLines;
 
-  /// Occupation, hours, and a short job brief — identity strings. Travel
-  /// with the card like [planLines]. Blank is omitted from JSON. No weekday
-  /// grid; at-work is derived later, not stored here. [occupationBrief]
-  /// grounds at-work narration; empty means today — do not invent the job.
+  /// Occupation, hours, job brief, and which weekdays they work — identity.
+  /// Travel with the card like [planLines]. Blank occupation/hours/brief are
+  /// omitted from JSON. [workDays] is DateTime.weekday ints (1=Mon…7=Sun);
+  /// missing means Mon–Fri at derive; written `[]` means never at work.
+  /// At-work is derived from these plus the story clock, not stored here.
+  /// [occupationBrief] grounds at-work narration; empty means today — do
+  /// not invent the job.
   String occupation;
   String hours;
   String occupationBrief;
+  List<int>? workDays;
 
   /// What this character is drawn to, and what puts them off — short phrases,
   /// authored on the card. Identity like [ambitions]: they travel with it.
@@ -228,6 +257,7 @@ class FrontPorchExtensions {
     this.occupation = '',
     this.hours = '',
     this.occupationBrief = '',
+    this.workDays,
     this.likes = const [],
     this.dislikes = const [],
     this.intimateInto = const [],
@@ -310,6 +340,7 @@ class FrontPorchExtensions {
         if (occupation.isNotEmpty) 'occupation': occupation,
         if (hours.isNotEmpty) 'hours': hours,
         if (occupationBrief.isNotEmpty) 'occupationBrief': occupationBrief,
+        if (hours.isNotEmpty && workDays != null) 'workDays': workDays,
         'likes': likes,
         'dislikes': dislikes,
         // Nested so the 18+ pair can be stripped from a share as one object.
@@ -393,6 +424,7 @@ class FrontPorchExtensions {
       occupation: realism['occupation'] as String? ?? '',
       hours: realism['hours'] as String? ?? '',
       occupationBrief: realism['occupationBrief'] as String? ?? '',
+      workDays: _workDays(realism),
       likes: _phrases(realism['likes']),
       dislikes: _phrases(realism['dislikes']),
       intimateInto: _phrases(_intimate(realism)['into']),
@@ -476,6 +508,7 @@ class FrontPorchExtensions {
     String? occupation,
     String? hours,
     String? occupationBrief,
+    List<int>? workDays,
     List<String>? likes,
     List<String>? dislikes,
     List<String>? intimateInto,
@@ -539,6 +572,7 @@ class FrontPorchExtensions {
       occupation: occupation ?? this.occupation,
       hours: hours ?? this.hours,
       occupationBrief: occupationBrief ?? this.occupationBrief,
+      workDays: workDays ?? this.workDays,
       likes: likes ?? this.likes,
       dislikes: dislikes ?? this.dislikes,
       intimateInto: intimateInto ?? this.intimateInto,

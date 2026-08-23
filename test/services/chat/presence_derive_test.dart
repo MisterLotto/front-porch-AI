@@ -1,13 +1,13 @@
 // Copyright (C) 2026 Front Porch AI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// At work is occupation + hours + the period. Fail closed.
+// At work is occupation + hours + weekday. Missing workDays is Mon–Fri.
+// Fail closed on hours.
 
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:front_porch_ai/services/chat/presence_derive.dart';
-import 'package:front_porch_ai/ui/chat_components/sidebar/character_state/presence_word.dart';
 
 const _morning = 9 * 60;
 const _lateMorning = 11 * 60 + 30;
@@ -18,12 +18,16 @@ PresenceWhere d({
   String occupation = 'clerk',
   String hours = '9-5',
   int clockMinutes = _afternoon,
+  int weekday = DateTime.tuesday,
+  List<int>? workDays,
   bool isGroup = false,
   bool inScene = true,
 }) => derivePresence(
   occupation: occupation,
   hours: hours,
   clockMinutes: clockMinutes,
+  weekday: weekday,
+  workDays: workDays,
   inScene: inScene,
 );
 
@@ -152,12 +156,14 @@ void main() {
       occupation: 'clerk',
       hours: '9-5',
       clockMinutes: _afternoon,
+      weekday: DateTime.tuesday,
       inScene: true,
     );
     final away = derivePresence(
       occupation: 'clerk',
       hours: '9-5',
       clockMinutes: _evening,
+      weekday: DateTime.tuesday,
       inScene: false,
     );
     expect(atWork, PresenceWhere.atWork);
@@ -216,9 +222,109 @@ void main() {
         occupation: work.occupation,
         hours: work.hours,
         clockMinutes: _morning,
+        weekday: DateTime.tuesday,
         inScene: false,
       ),
       PresenceWhere.atWork,
     );
+  });
+
+  test('missing workDays on Saturday afternoon is With you', () {
+    expect(
+      d(weekday: DateTime.saturday, clockMinutes: _afternoon),
+      PresenceWhere.withYou,
+    );
+  });
+
+  test('missing workDays on Tuesday afternoon is At work', () {
+    expect(
+      d(weekday: DateTime.tuesday, clockMinutes: _afternoon),
+      PresenceWhere.atWork,
+    );
+  });
+
+  test('every-day list is At work on Saturday', () {
+    expect(
+      d(
+        weekday: DateTime.saturday,
+        workDays: const [1, 2, 3, 4, 5, 6, 7],
+        clockMinutes: _afternoon,
+      ),
+      PresenceWhere.atWork,
+    );
+  });
+
+  test('written empty workDays is never at work', () {
+    expect(
+      d(
+        weekday: DateTime.tuesday,
+        workDays: const [],
+        clockMinutes: _afternoon,
+      ),
+      PresenceWhere.withYou,
+    );
+  });
+
+  test('overnight Friday shift is still on Saturday 1am', () {
+    expect(
+      d(
+        hours: '10pm–2am',
+        weekday: DateTime.saturday,
+        clockMinutes: 60,
+        workDays: kDefaultWorkDays,
+      ),
+      PresenceWhere.atWork,
+    );
+  });
+
+  test('Saturday-only night shift is not at work Saturday 1am', () {
+    expect(
+      d(
+        hours: '10pm–2am',
+        weekday: DateTime.saturday,
+        clockMinutes: 60,
+        workDays: const [DateTime.saturday],
+      ),
+      PresenceWhere.withYou,
+    );
+  });
+
+  test('group library fallback copies workDays', () {
+    final work = workFieldsForGroupMember(
+      copyOccupation: '',
+      copyHours: '',
+      copyWorkDays: null,
+      libraryOccupation: 'bartender',
+      libraryHours: '10pm–2am',
+      libraryWorkDays: const [DateTime.friday, DateTime.saturday],
+    );
+    expect(work.workDays, [DateTime.friday, DateTime.saturday]);
+  });
+
+  test('copy with its own hours keeps missing workDays (Mon–Fri)', () {
+    final work = workFieldsForGroupMember(
+      copyOccupation: 'clerk',
+      copyHours: '9-5',
+      copyWorkDays: null,
+      libraryWorkDays: const [DateTime.saturday],
+    );
+    expect(work.workDays, isNull);
+    expect(
+      d(hours: work.hours, weekday: DateTime.saturday, workDays: work.workDays),
+      PresenceWhere.withYou,
+    );
+  });
+
+  test('parseWorkDaysField missing vs empty vs junk', () {
+    expect(parseWorkDaysField(null, present: false), isNull);
+    expect(parseWorkDaysField(const [], present: true), isEmpty);
+    expect(parseWorkDaysField(const [1, 2, 99, '3'], present: true), [1, 2, 3]);
+    expect(parseWorkDaysField(const [99, 'nope'], present: true), isNull);
+    expect(parseWorkDaysField('weekdays', present: true), isNull);
+  });
+
+  test('resolveWorkDays missing is Mon–Fri, empty stays empty', () {
+    expect(resolveWorkDays(null), kDefaultWorkDays);
+    expect(resolveWorkDays(const []), isEmpty);
   });
 }

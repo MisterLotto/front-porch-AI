@@ -44,7 +44,9 @@ class BehavioralInjection {
   final String Function()? getOccupation;
   final String Function()? getHours;
   final String Function()? getOccupationBrief;
+  final List<int>? Function()? getWorkDays;
   final int Function()? getClockMinutes;
+  final int Function()? getWeekday;
   final bool Function()? getIsGroup;
 
   BehavioralInjection({
@@ -53,7 +55,9 @@ class BehavioralInjection {
     this.getOccupation,
     this.getHours,
     this.getOccupationBrief,
+    this.getWorkDays,
     this.getClockMinutes,
+    this.getWeekday,
     this.getIsGroup,
   });
 
@@ -87,6 +91,8 @@ class BehavioralInjection {
       occupation: occ,
       hours: hours,
       clockMinutes: getClockMinutes?.call() ?? 0,
+      weekday: getWeekday?.call() ?? DateTime.tuesday,
+      workDays: getWorkDays?.call(),
       inScene: inSceneForPresence(
         stance: stance,
         withUser: relationshipService.withUser,

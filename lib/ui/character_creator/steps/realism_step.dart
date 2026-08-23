@@ -175,6 +175,11 @@ class RealismStep extends StatelessWidget {
                   state.realismHours = v;
                   state.notify();
                 },
+                workDays: state.realismWorkDays,
+                onWorkDaysChanged: (v) {
+                  state.realismWorkDays = v;
+                  state.notify();
+                },
                 likes: state.realismLikes,
                 onLikesChanged: (v) {
                   state.realismLikes = v;

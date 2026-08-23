@@ -79,3 +79,55 @@ export function hhmmToMinutes(hhmm: string): number | null {
   if (h > 23 || min > 59) return null;
   return h * 60 + min;
 }
+
+/** DateTime.weekday values (1=Mon … 7=Sun). Missing card field resolves here. */
+export const DEFAULT_WORK_DAYS = [1, 2, 3, 4, 5];
+
+export const WORK_DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+export function sanitizeWorkDays(raw: unknown[]): number[] {
+  const days = new Set<number>();
+  for (const e of raw) {
+    const n = typeof e === 'number' ? e : typeof e === 'string' ? Number.parseInt(e.trim(), 10) : NaN;
+    if (Number.isInteger(n) && n >= 1 && n <= 7) days.add(n);
+  }
+  return [...days].sort((a, b) => a - b);
+}
+
+/** Missing/null → Mon–Fri. Written [] stays empty (never at work). */
+export function resolveWorkDays(workDays: number[] | null | undefined): number[] {
+  if (workDays == null) return [...DEFAULT_WORK_DAYS];
+  return sanitizeWorkDays(workDays);
+}
+
+/** Card JSON: key missing → null. `[]` → never at work. All junk → null. */
+export function parseWorkDaysField(raw: unknown, present: boolean): number[] | null {
+  if (!present) return null;
+  if (!Array.isArray(raw)) return null;
+  if (raw.length === 0) return [];
+  const out = sanitizeWorkDays(raw);
+  return out.length === 0 ? null : out;
+}
+
+function minutesInRange(minutes: number, start: number, end: number): boolean {
+  if (start === end) return minutes === start;
+  if (start < end) return minutes >= start && minutes < end;
+  return minutes >= start || minutes < end;
+}
+
+/** Hours plus weekday. Overnight after midnight belongs to yesterday. */
+export function onShift(opts: {
+  hours: string;
+  clockMinutes: number;
+  weekday: number;
+  workDays?: number[] | null;
+}): boolean {
+  const range = parseWorkHoursRange(opts.hours);
+  if (!range) return false;
+  const days = resolveWorkDays(opts.workDays);
+  if (days.length === 0) return false;
+  const [start, end] = range;
+  const overnightEarly = start > end && opts.clockMinutes < end;
+  const day = overnightEarly ? (opts.weekday === 1 ? 7 : opts.weekday - 1) : opts.weekday;
+  return days.includes(day) && minutesInRange(opts.clockMinutes, start, end);
+}

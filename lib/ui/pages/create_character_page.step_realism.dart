@@ -106,6 +106,9 @@ extension _CreateCharacterRealismStep on _CreateCharacterPageState {
                     rebuildState(() => _realismOccupationBrief = v),
                 hours: _realismHours,
                 onHoursChanged: (v) => rebuildState(() => _realismHours = v),
+                workDays: _realismWorkDays,
+                onWorkDaysChanged: (v) =>
+                    rebuildState(() => _realismWorkDays = v),
                 likes: _realismLikes,
                 onLikesChanged: (v) => rebuildState(() => _realismLikes = v),
                 dislikes: _realismDislikes,

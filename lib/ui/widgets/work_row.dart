@@ -1,10 +1,11 @@
 // Copyright (C) 2026 Front Porch AI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Author seeds occupation, a short job brief, and work hours. Not a weekday
-// grid. Not an at-work switch. Occupation is the title; [occupationBrief] is
+// Author seeds occupation, a short job brief, work hours, and weekdays.
+// Not an at-work switch. Occupation is the title; [occupationBrief] is
 // what the job actually is (empty = today — do not invent it). Hours is the
 // story-time picker run twice. Period words ("mornings") are not hours.
+// Missing workDays displays Mon–Fri; written [] is every chip off.
 
 import 'package:flutter/material.dart';
 
@@ -17,23 +18,28 @@ import 'package:front_porch_ai/ui/theme/app_colors.dart';
 /// Occupation is a short free-text title. **What the job is** binds to
 /// `occupationBrief`. Hours is the existing story-time picker shown twice —
 /// Start and End. The stored card `hours` is derived from the two pickers
-/// ("9am–5pm"), and [hoursMatch] reads that same string.
+/// ("9am–5pm"), and [hoursMatch] reads that same string. Weekday chips
+/// write [workDays]; missing shows Mon–Fri.
 class WorkRow extends StatefulWidget {
   final String occupation;
   final String occupationBrief;
   final String hours;
+  final List<int>? workDays;
   final ValueChanged<String> onOccupationChanged;
   final ValueChanged<String> onOccupationBriefChanged;
   final ValueChanged<String> onHoursChanged;
+  final ValueChanged<List<int>>? onWorkDaysChanged;
 
   const WorkRow({
     super.key,
     required this.occupation,
     this.occupationBrief = '',
     required this.hours,
+    this.workDays,
     required this.onOccupationChanged,
     this.onOccupationBriefChanged = _noop,
     required this.onHoursChanged,
+    this.onWorkDaysChanged,
   });
 
   static void _noop(String _) {}
@@ -103,6 +109,22 @@ class _WorkRowState extends State<WorkRow> {
         _end.hour * 60 + _end.minute,
       ),
     );
+    if (widget.workDays == null) {
+      widget.onWorkDaysChanged?.call(List<int>.from(kDefaultWorkDays));
+    }
+  }
+
+  void _toggleDay(int day) {
+    final current = resolveWorkDays(widget.workDays);
+    final next = List<int>.from(current);
+    if (next.contains(day)) {
+      next.remove(day);
+    } else {
+      next
+        ..add(day)
+        ..sort();
+    }
+    widget.onWorkDaysChanged?.call(next);
   }
 
   @override
@@ -165,7 +187,78 @@ class _WorkRowState extends State<WorkRow> {
             ),
           ],
         ),
+        const SizedBox(height: 8),
+        _daysRow(context, amber),
       ],
+    );
+  }
+
+  static const _dayLetters = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+  Widget _daysRow(BuildContext context, Color amber) {
+    final selected = resolveWorkDays(widget.workDays).toSet();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Days',
+          style: TextStyle(
+            fontSize: 11,
+            color: AppColors.textTertiary(context),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            for (var i = 0; i < 7; i++) ...[
+              if (i > 0) const SizedBox(width: 4),
+              Expanded(child: _dayChip(context, amber, i + 1, selected)),
+            ],
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Weekdays unless you tap others.',
+          style: TextStyle(
+            fontSize: 11,
+            height: 1.35,
+            color: AppColors.textSecondary(context),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _dayChip(
+    BuildContext context,
+    Color amber,
+    int day,
+    Set<int> selected,
+  ) {
+    final on = selected.contains(day);
+    return InkWell(
+      key: ValueKey('work-day-$day'),
+      onTap: () => _toggleDay(day),
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        decoration: BoxDecoration(
+          color: on ? amber : AppColors.surfaceContainerOf(context),
+          border: Border.all(color: amber.withValues(alpha: on ? 1 : .5)),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          _dayLetters[day - 1],
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: on
+                ? AppColors.onChaosAccent
+                : AppColors.textPrimary(context),
+          ),
+        ),
+      ),
     );
   }
 

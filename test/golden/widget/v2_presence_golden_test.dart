@@ -90,7 +90,7 @@ void main() {
       ),
       group: 'v2',
       name: 'work_row',
-      surface: const Size(340, 380),
+      surface: const Size(340, 460),
     );
   });
 
@@ -110,7 +110,7 @@ void main() {
       ),
       group: 'v2',
       name: 'work_identity',
-      surface: const Size(340, 460),
+      surface: const Size(340, 540),
     );
   });
 

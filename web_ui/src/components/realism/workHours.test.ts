@@ -7,10 +7,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DEFAULT_WORK_DAYS,
   formatWorkHoursRange,
   hhmmToMinutes,
   minutesToHHMM,
+  onShift,
+  parseWorkDaysField,
   parseWorkHoursRange,
+  resolveWorkDays,
 } from './workHours';
 import { realismFromDetail } from './realismTypes';
 
@@ -89,3 +93,54 @@ describe('occupationBrief survives detail -> form -> save body', () => {
     expect(body.occupationBrief).toBe('');
   });
 });
+
+describe('workDays survive detail -> form -> save body', () => {
+  it('missing key stays null, not an empty week', () => {
+    const rv = realismFromDetail({ occupation: 'librarian', hours: '9am–5pm' });
+    expect(rv.workDays).toBeNull();
+    expect(resolveWorkDays(rv.workDays)).toEqual(DEFAULT_WORK_DAYS);
+  });
+
+  it('written [] reaches the save body as []', () => {
+    const rv = realismFromDetail({
+      occupation: 'clerk',
+      hours: '9am–5pm',
+      workDays: [],
+    });
+    expect(rv.workDays).toEqual([]);
+    const body = { name: 'Rachel', ...rv };
+    expect(body.workDays).toEqual([]);
+  });
+
+  it('a stored weekday list reaches the save body', () => {
+    const rv = realismFromDetail({
+      occupation: 'clerk',
+      hours: '9am–5pm',
+      workDays: [1, 2, 3, 4, 5, 6],
+    });
+    expect(rv.workDays).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+});
+
+describe('onShift weekday gate', () => {
+  const afternoon = 14 * 60 + 30;
+  it('missing days is off on Saturday', () => {
+    expect(onShift({ hours: '9-5', clockMinutes: afternoon, weekday: 6 })).toBe(false);
+  });
+  it('missing days is on on Tuesday', () => {
+    expect(onShift({ hours: '9-5', clockMinutes: afternoon, weekday: 2 })).toBe(true);
+  });
+  it('overnight Friday shift is on Saturday 1am', () => {
+    expect(onShift({ hours: '10pm–2am', clockMinutes: 60, weekday: 6, workDays: DEFAULT_WORK_DAYS })).toBe(true);
+  });
+  it('Saturday-only night shift is off Saturday 1am', () => {
+    expect(onShift({ hours: '10pm–2am', clockMinutes: 60, weekday: 6, workDays: [6] })).toBe(false);
+  });
+  it('parseWorkDaysField missing vs empty vs junk', () => {
+    expect(parseWorkDaysField(undefined, false)).toBeNull();
+    expect(parseWorkDaysField([], true)).toEqual([]);
+    expect(parseWorkDaysField([1, 2, 99, '3'], true)).toEqual([1, 2, 3]);
+    expect(parseWorkDaysField([99, 'nope'], true)).toBeNull();
+  });
+});
+

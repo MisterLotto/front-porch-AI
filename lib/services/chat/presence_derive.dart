@@ -1,23 +1,70 @@
 // Copyright (C) 2026 Front Porch AI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// At work is occupation + hours + the clock. Fail closed on hours.
+// At work is occupation + hours + weekday + the clock. Fail closed on
+// hours. Missing workDays is Mon–Fri. Written [] is never at work.
 // With you / Away is last. Never a yes/no switch.
 
 import 'package:front_porch_ai/ui/chat_components/sidebar/character_state/presence_word.dart';
 export 'package:front_porch_ai/ui/chat_components/sidebar/character_state/presence_word.dart'
     show PresenceWhere;
 
+/// DateTime.weekday values (1=Mon … 7=Sun). Missing card field resolves here.
+const List<int> kDefaultWorkDays = [
+  DateTime.monday,
+  DateTime.tuesday,
+  DateTime.wednesday,
+  DateTime.thursday,
+  DateTime.friday,
+];
+
+/// Missing/null → Mon–Fri. Written [] stays empty (never at work).
+List<int> resolveWorkDays(List<int>? workDays) {
+  if (workDays == null) return List<int>.from(kDefaultWorkDays);
+  return sanitizeWorkDays(workDays);
+}
+
+/// Ints 1–7 only, unique, sorted. Junk dropped.
+List<int> sanitizeWorkDays(Iterable<Object?> raw) {
+  final days = <int>{};
+  for (final e in raw) {
+    final n = e is int
+        ? e
+        : e is num
+        ? e.toInt()
+        : e is String
+        ? int.tryParse(e.trim())
+        : null;
+    if (n != null && n >= DateTime.monday && n <= DateTime.sunday) {
+      days.add(n);
+    }
+  }
+  final list = days.toList()..sort();
+  return list;
+}
+
+/// Card JSON: key missing → null (Mon–Fri at derive). `[]` → never at work.
+/// Present but all junk → null, not an accidental empty week.
+List<int>? parseWorkDaysField(Object? raw, {required bool present}) {
+  if (!present) return null;
+  if (raw is! List) return null;
+  if (raw.isEmpty) return const [];
+  final out = sanitizeWorkDays(raw);
+  return out.isEmpty ? null : out;
+}
+
 /// Group copies often drop occupation/hours/brief (fromJson only reads
 /// realism_engine.*). Blank copy fields fall back to the origin library card.
-({String occupation, String hours, String occupationBrief})
+({String occupation, String hours, String occupationBrief, List<int>? workDays})
 workFieldsForGroupMember({
   required String copyOccupation,
   required String copyHours,
   String copyOccupationBrief = '',
+  List<int>? copyWorkDays,
   String? libraryOccupation,
   String? libraryHours,
   String? libraryOccupationBrief,
+  List<int>? libraryWorkDays,
 }) {
   final occ = copyOccupation.trim();
   final hrs = copyHours.trim();
@@ -28,23 +75,32 @@ workFieldsForGroupMember({
     occupationBrief: brief.isNotEmpty
         ? brief
         : (libraryOccupationBrief ?? '').trim(),
+    workDays: copyWorkDays ?? (hrs.isNotEmpty ? null : libraryWorkDays),
   );
 }
 
 /// Derive the glance word.
 ///
-/// Order: at work (occupation + hours contain the live clock) → Away
-/// (not in this scene) → With you. 1:1 may be Away or At work. Skip is
-/// group-only. [inScene] fails toward true.
+/// Order: at work (occupation + hours + weekday contain the live clock)
+/// → Away (not in this scene) → With you. 1:1 may be Away or At work.
+/// Skip is group-only. [inScene] fails toward true. Missing [workDays]
+/// is Mon–Fri.
 PresenceWhere derivePresence({
   required String occupation,
   required String hours,
   required int clockMinutes,
   required bool inScene,
+  required int weekday,
+  List<int>? workDays,
 }) {
   if (occupation.trim().isNotEmpty &&
       hours.trim().isNotEmpty &&
-      hoursMatch(hours, clockMinutes)) {
+      onShift(
+        hours: hours,
+        clockMinutes: clockMinutes,
+        weekday: weekday,
+        workDays: workDays,
+      )) {
     return PresenceWhere.atWork;
   }
   if (!inScene) return PresenceWhere.away;
@@ -132,6 +188,28 @@ bool hoursMatch(String hours, int clockMinutes) {
   final range = parseWorkHoursRange(hours);
   if (range == null) return false;
   return _minutesInRange(clockMinutes, range.$1, range.$2);
+}
+
+/// Hours plus weekday. Overnight hours after midnight belong to
+/// yesterday's shift, so a Friday 10pm–2am bartender is still at work
+/// Saturday 1am, and a Saturday-only night shift is not.
+bool onShift({
+  required String hours,
+  required int clockMinutes,
+  required int weekday,
+  List<int>? workDays,
+}) {
+  final range = parseWorkHoursRange(hours);
+  if (range == null) return false;
+  final days = resolveWorkDays(workDays);
+  if (days.isEmpty) return false;
+  final start = range.$1;
+  final end = range.$2;
+  final overnightEarly = start > end && clockMinutes < end;
+  final day = overnightEarly
+      ? (weekday == DateTime.monday ? DateTime.sunday : weekday - 1)
+      : weekday;
+  return days.contains(day) && _minutesInRange(clockMinutes, start, end);
 }
 
 final _rangeRe = RegExp(
