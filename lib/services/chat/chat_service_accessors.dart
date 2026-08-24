@@ -624,10 +624,11 @@ extension ChatServiceAccessors on ChatService {
     // retest tool support for the new model (sidebar pill contract).
     _storageService.addListener(_onBackendIdentity);
     _onTodayAbandoned = (held) {
-      unawaited(() async {
-        await _deactivateTodayObjective();
-        await _journalResolvedToday(held, fate: PlannerTodayFate.abandoned);
-      }());
+      // Sour mood first — deactivate is DB I/O and must not gate the
+      // feeling. Day-ate already journals then deactivates; abandon
+      // used to wait on the isolate and leave emotion empty under load.
+      unawaited(_journalResolvedToday(held, fate: PlannerTodayFate.abandoned));
+      unawaited(_deactivateTodayObjective());
     };
   }
 }

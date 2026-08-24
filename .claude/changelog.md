@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-08-24 — fix(ci): Rawhide unit suite — FakeChatService greets, OpenRouter mock, today/gist isolation
+- **Why:** Push 4ce4aead failed GitHub `Tests (unit + integration)` with
+  7 failures across 4 files. Chip goldens crashed on library-private
+  `_messages`; Enhance wizard hit real OpenRouter `/models` (HttpOverrides
+  400); abandonToday soured mood only after DB deactivate (empty emotion
+  under concurrency); gist leftover-KEEP timed out at 30s then closed the
+  isolate mid-query.
+- **What:** Greet/swipe read paths use public `messages` /
+  `activeCharacter` / `greetingIndex`. `fetchAvailableModels` uses the
+  same `httpClientFactory` seam as ping; enhance wizard injects a
+  MockClient. Abandon journals (nudge) then deactivates, in parallel.
+  Gist leftover-KEEP and today-quest use same-isolate DBs; leftover-KEEP
+  timeout is 2 minutes.
+- **Files:** chat_service_variants, open_router_service,
+  chat_service_accessors, enhance_wizard_test, today_side_quest_test,
+  gist_first_recall_locks_test
+
 ## 2026-08-24 — fix(chat): ST-style variant cards + finish 3f780c5c residuals
 - **Why:** The greet/swipe picker shipped as 15-word HTML-comment
   ListTiles (every greet looked identical). 3f780c5c also left three

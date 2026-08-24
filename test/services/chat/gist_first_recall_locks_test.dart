@@ -61,7 +61,7 @@ import 'package:front_porch_ai/services/chat/chat.dart';
 import 'package:front_porch_ai/services/embedding_service.dart';
 import 'package:front_porch_ai/services/memory_service.dart';
 import 'package:front_porch_ai/services/services.dart';
-import 'package:front_porch_ai/utils/character_id.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 void _setupPathProviderMock() {
   const channel = MethodChannel('plugins.flutter.io/path_provider');
@@ -326,7 +326,7 @@ void main() {
       'journal_enabled': true,
       'context_size': 3072,
     });
-    db = AppDatabase.forTesting();
+    db = AppDatabase.forTesting(sameIsolate: true);
     storage = StorageService();
     llm = _ScriptedLlm();
     chat =
@@ -3478,7 +3478,7 @@ void main() {
         );
       }
     }
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
 
   test(
     'LOCK: leftover-empty only — this/my/our/your-porch swing still DROP',

@@ -24,12 +24,15 @@ extension ChatServiceVariants on ChatService {
   /// True when this bubble is the opening greet with more than one card greet
   /// and no stored regen swipes (those are variants, not greets).
   bool isSelectableGreeting(int messageIndex) {
-    if (messageIndex < 0 || messageIndex >= _messages.length) return false;
-    final msg = _messages[messageIndex];
+    // Public accessors so FakeChatService (other library) can answer this
+    // from a bubble build. `_messages` / `_activeCharacter` are library-
+    // private and resolve as noSuchMethod on the fake.
+    if (messageIndex < 0 || messageIndex >= messages.length) return false;
+    final msg = messages[messageIndex];
     return usesGreetingPicker(
       messageIndex: messageIndex,
       isUser: msg.isUser,
-      greetCount: _activeCharacter?.allGreetings.length ?? 0,
+      greetCount: activeCharacter?.allGreetings.length ?? 0,
       swipeCount: msg.swipes.length,
     );
   }
@@ -37,22 +40,22 @@ extension ChatServiceVariants on ChatService {
   /// Picker rows for [messageIndex]. Card greets are macro-resolved so the
   /// preview reads like the opening bubble, not `{{char}}` + HTML comments.
   List<VariantOption> variantsForMessage(int messageIndex) {
-    if (messageIndex < 0 || messageIndex >= _messages.length) {
+    if (messageIndex < 0 || messageIndex >= messages.length) {
       return const [];
     }
     if (isSelectableGreeting(messageIndex)) {
-      final character = _activeCharacter!;
+      final character = activeCharacter!;
       final resolved = [
         for (final g in character.allGreetings)
           _buildFirstMessage(character, greetingText: g),
       ];
       return buildVariantOptions(
         resolved,
-        _greetingIndex,
+        greetingIndex,
         kind: VariantKind.greet,
       );
     }
-    final msg = _messages[messageIndex];
+    final msg = messages[messageIndex];
     return buildVariantOptions(
       msg.swipes,
       msg.swipeIndex,
@@ -61,7 +64,7 @@ extension ChatServiceVariants on ChatService {
   }
 
   Map<String, dynamic> variantPickerPayload(int messageIndex) {
-    if (messageIndex < 0 || messageIndex >= _messages.length) {
+    if (messageIndex < 0 || messageIndex >= messages.length) {
       return {
         'kind': 'regen',
         'title': 'Select variant',

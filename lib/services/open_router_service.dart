@@ -196,7 +196,11 @@ class OpenRouterService extends LLMService {
     final isLocal = url.contains('localhost') || url.contains('127.0.0.1');
     if (key.isEmpty && !isLocal) return [];
 
-    final client = http.Client();
+    // Same seam as [refreshReachability]: tests inject a MockClient so
+    // this never hits the network (flutter test HttpOverrides is a
+    // bodiless 400, which used to empty the picker and flip isReady).
+    final client = httpClientFactory?.call() ?? http.Client();
+    final owned = httpClientFactory == null;
     var batched = false;
     try {
       final uri = Uri.parse('$url/models');
@@ -293,7 +297,7 @@ class OpenRouterService extends LLMService {
       return [];
     } finally {
       if (batched) endReasoningEffortCatalogBatch();
-      client.close();
+      if (owned) client.close();
     }
   }
 
