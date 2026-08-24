@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../api/client', () => ({ api: { get: () => Promise.resolve({}), post: () => Promise.resolve({}) } }));
 
-const { TextField } = await import('./ChatTools');
+const { TextField, SummaryRecapField } = await import('./SummaryRecapField');
 
 let container: HTMLDivElement;
 let root: Root;
@@ -81,5 +81,38 @@ describe('ChatTools recap field', () => {
     type('mine');
     render('freshly generated recap', () => {});
     expect(area().value).toBe('freshly generated recap');
+  });
+});
+
+function renderRecap(value: string, editing: boolean) {
+  act(() => {
+    root.render(
+      createElement(SummaryRecapField, {
+        value,
+        editing,
+        onCommit: () => {},
+        onStartEditing: () => {},
+        onStopEditing: () => {},
+      }),
+    );
+  });
+}
+
+describe('SummaryRecapField', () => {
+  it('shows formatted recap text, not a textarea, when not editing', () => {
+    renderRecap('Where we left the porch light on.', false);
+    expect(container.querySelector('textarea')).toBeNull();
+    expect(container.textContent).toContain('porch light');
+  });
+
+  it('opens the editor when editing is true', () => {
+    renderRecap('Where we left the porch light on.', true);
+    expect(container.querySelector('textarea')).not.toBeNull();
+    expect(area().value).toBe('Where we left the porch light on.');
+  });
+
+  it('stays in the editor when the recap is empty', () => {
+    renderRecap('', false);
+    expect(container.querySelector('textarea')).not.toBeNull();
   });
 });

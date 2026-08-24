@@ -44,8 +44,10 @@ export function MessageActions({
   // Generated-image messages carry no regenerable text — hide the text-gen
   // actions for them (desktop bubble parity).
   const isImage = !!m.image;
-  const isGreet = !m.isUser && m.index === 0 && greetCount > 1;
   const hasSwipeVariants = !m.isUser && !isImage && count > 1;
+  // Pre-existing regen swipes on the opening message are variants, not
+  // card greets — same rule as desktop usesGreetingPicker.
+  const isGreet = !m.isUser && m.index === 0 && greetCount > 1 && !hasSwipeVariants;
   const canSwipe =
     !m.isUser &&
     !isImage &&

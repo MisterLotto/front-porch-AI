@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-08-24 — fix(chat): ST-style variant cards + finish 3f780c5c residuals
+- **Why:** The greet/swipe picker shipped as 15-word HTML-comment
+  ListTiles (every greet looked identical). 3f780c5c also left three
+  residuals: remote "Ready" meant "key is saved"; regen swipes on the
+  opening message showed as greets; web "Where we are" was still a raw
+  textarea.
+- **What:** Picker is a card list like SillyTavern's swipe panel: #N
+  [Current], 3-line prose (HTML comments stripped, greets
+  macro-resolved), char/token counts, expand, copy, jump-to-#.
+  OpenRouterService pings GET /models on remote activation; isReady is
+  false after a failed ping; UI shows Configured / Checking / Ready /
+  Configured but unreachable (green only when live). Picker rows carry
+  kind greet|regen; opening-message regen swipes are variants, not card
+  greets. Web recap is a 4-line clamp with Edit.
+- **Files:** variant_snippet, variant_picker_dialog, chat_service_variants,
+  message_bubble.actions, remote_reachability, open_router_service,
+  llm_provider, remote_ready_badge, remote_api_section,
+  ai_engine_status_card, backend_facade, settings_facade, web
+  VariantPickerModal / ChatTools / SummaryRecapField / MessageActions /
+  SettingsPage / AiEngineStrip / styles.css
+
 ## 2026-08-23 — feat(chat): API-down placeholder, variant picker, sidebar expand
 - **Why:** Discord (SAMF): (1) unreachable API, send does nothing with no
   hint; (2) 9 greets / 20 regens only cycled blindly, and greet "regen"

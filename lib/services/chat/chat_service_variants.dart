@@ -21,44 +21,62 @@ part of '../chat_service.dart';
 /// Shared greet / regenerated-swipe picker: list payload + commit-once select.
 /// Chevron cycling reuses [selectGreeting] so emotion rules stay in one place.
 extension ChatServiceVariants on ChatService {
-  /// True when this bubble is the opening greet with more than one card greet.
+  /// True when this bubble is the opening greet with more than one card greet
+  /// and no stored regen swipes (those are variants, not greets).
   bool isSelectableGreeting(int messageIndex) {
-    if (messageIndex != 0 || _messages.isEmpty || _messages[0].isUser) {
-      return false;
+    if (messageIndex < 0 || messageIndex >= _messages.length) return false;
+    final msg = _messages[messageIndex];
+    return usesGreetingPicker(
+      messageIndex: messageIndex,
+      isUser: msg.isUser,
+      greetCount: _activeCharacter?.allGreetings.length ?? 0,
+      swipeCount: msg.swipes.length,
+    );
+  }
+
+  /// Picker rows for [messageIndex]. Card greets are macro-resolved so the
+  /// preview reads like the opening bubble, not `{{char}}` + HTML comments.
+  List<VariantOption> variantsForMessage(int messageIndex) {
+    if (messageIndex < 0 || messageIndex >= _messages.length) {
+      return const [];
     }
-    return (_activeCharacter?.allGreetings.length ?? 0) > 1;
+    if (isSelectableGreeting(messageIndex)) {
+      final character = _activeCharacter!;
+      final resolved = [
+        for (final g in character.allGreetings)
+          _buildFirstMessage(character, greetingText: g),
+      ];
+      return buildVariantOptions(
+        resolved,
+        _greetingIndex,
+        kind: VariantKind.greet,
+      );
+    }
+    final msg = _messages[messageIndex];
+    return buildVariantOptions(
+      msg.swipes,
+      msg.swipeIndex,
+      kind: VariantKind.regen,
+    );
   }
 
   Map<String, dynamic> variantPickerPayload(int messageIndex) {
     if (messageIndex < 0 || messageIndex >= _messages.length) {
       return {
-        'kind': 'swipe',
+        'kind': 'regen',
         'title': 'Select variant',
         'currentIndex': 0,
         'variants': const [],
       };
     }
-    if (isSelectableGreeting(messageIndex)) {
-      final greets = _activeCharacter!.allGreetings;
-      return {
-        'kind': 'greet',
-        'title': 'Select greet',
-        'currentIndex': _greetingIndex.clamp(0, greets.length - 1),
-        'variants': [
-          for (final v in buildVariantOptions(greets, _greetingIndex))
-            v.toJson(),
-        ],
-      };
-    }
-    final msg = _messages[messageIndex];
+    final greet = isSelectableGreeting(messageIndex);
+    final options = variantsForMessage(messageIndex);
+    final current = options.where((v) => v.isCurrent);
     return {
-      'kind': 'swipe',
-      'title': 'Select variant',
-      'currentIndex': msg.swipeIndex,
-      'variants': [
-        for (final v in buildVariantOptions(msg.swipes, msg.swipeIndex))
-          v.toJson(),
-      ],
+      'kind': greet ? 'greet' : 'regen',
+      'title': greet ? 'Select greet' : 'Select variant',
+      'currentIndex': current.isEmpty ? 0 : current.first.index,
+      'variants': [for (final v in options) v.toJson()],
     };
   }
 

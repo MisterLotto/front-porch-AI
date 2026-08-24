@@ -10,6 +10,7 @@ export 'feature_row.dart';
 export 'image_gen_enable_section.dart';
 export 'legacy_cleanup_card.dart';
 export 'photo_understanding_card.dart';
+export 'remote_ready_badge.dart';
 export 'porch_life_row_children.dart';
 export 'section_header.dart';
 export 'slider_setting.dart';

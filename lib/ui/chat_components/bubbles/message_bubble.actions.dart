@@ -29,13 +29,10 @@ extension _BubbleActions on _MessageBubbleState {
     return Consumer<ChatService>(
       builder: (context, chatService, _) {
         final character = chatService.activeCharacter;
-        if (character == null) {
+        if (character == null || !chatService.isSelectableGreeting(index)) {
           return const SizedBox.shrink();
         }
         final allGreetings = character.allGreetings;
-        if (allGreetings.length <= 1) {
-          return const SizedBox.shrink();
-        }
 
         return Padding(
           padding: const EdgeInsets.only(top: 8),
@@ -82,8 +79,7 @@ extension _BubbleActions on _MessageBubbleState {
                 child: InkWell(
                   onTap: () => _openVariantPicker(
                     title: 'Select greet',
-                    texts: allGreetings,
-                    currentIndex: chatService.greetingIndex,
+                    messageIndex: index,
                     onSelect: chatService.selectGreeting,
                   ),
                   borderRadius: BorderRadius.circular(12),
@@ -106,14 +102,14 @@ extension _BubbleActions on _MessageBubbleState {
 
   Future<void> _openVariantPicker({
     required String title,
-    required List<String> texts,
-    required int currentIndex,
+    required int messageIndex,
     required Future<void> Function(int) onSelect,
   }) async {
+    final chat = context.read<ChatService>();
     final chosen = await showVariantPickerDialog(
       context,
       title: title,
-      variants: buildVariantOptions(texts, currentIndex),
+      variants: chat.variantsForMessage(messageIndex),
     );
     if (chosen != null && mounted) await onSelect(chosen);
   }
@@ -253,8 +249,7 @@ extension _BubbleActions on _MessageBubbleState {
                   child: InkWell(
                     onTap: () => _openVariantPicker(
                       title: 'Select variant',
-                      texts: message.swipes,
-                      currentIndex: message.swipeIndex,
+                      messageIndex: index,
                       onSelect: (i) => chatService.selectSwipe(index, i),
                     ),
                     borderRadius: BorderRadius.circular(12),

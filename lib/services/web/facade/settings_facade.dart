@@ -139,6 +139,8 @@ class SettingsFacade {
       'remoteApiUrl': b.remoteApiUrl,
       'remoteModelName': b.remoteModelName,
       'hasApiKey': b.remoteApiKey.isNotEmpty,
+      'remoteConfigured': _llm.openRouterService.isConfigured,
+      'remoteReachability': _llm.openRouterService.reachability.name,
       'contextSize': b.contextSize,
       // Reasoning / "thinking" — for reasoning models (GLM-*:thinking, etc.) this
       // must be on or the provider's reasoning tokens are discarded and no

@@ -7,9 +7,11 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 - 🔌 **The chat box says when the AI is disconnected** — if the backend or API is down, the placeholder reads "No API connection" instead of looking ready. When it comes back, the normal hint returns. Same on the phone.
 
-- 📋 **Pick a greet or a regenerated reply from a list** — cards with several greets, and replies you regenerated a bunch of times, get a list button. Each row is a short snippet plus the character count, with Current on the one you are on. Tap one to switch. The greet's regenerate button is gone (greets are on the card, not generated). Same on the phone.
+- 🟢 **Remote Ready means the API answered, not that a key is saved** — Settings shows Configured / Checking / Ready / Configured but unreachable. Green only after a live ping. Same on the phone.
 
-- 📖 **Journal, recap, and memory text use a few lines, then expand on tap** — they no longer cut off with an ellipsis while the sidebar still has room. Tap to read the rest; tap again to fold. Same on the phone.
+- 📋 **Pick a greet or a regenerated reply from a list** — cards with several greets, and replies you regenerated a bunch of times, get a list button. Each option is a card: the opening prose (not the HTML comment), character and token counts, Current highlighted, expand to read the rest, copy, or type a number and tap Go. Labeled Greet or Regen. Old regenerated first-message swipes are Regen, not Greet. Same on the phone.
+
+- 📖 **Journal, recap, and memory text use a few lines, then expand on tap** — they no longer cut off with an ellipsis while the sidebar still has room. Tap to read the rest; tap again to fold. "Where we are" on the phone matches the desktop: formatted recap, Edit to type. Same on the phone.
 
 - 📁 **A folder you pick as the data directory stays that folder** — it is not wrapped in another FrontPorchAI folder after restart. Group portraits and chat backgrounds stay with the rest of the library. The default location is still the same on every OS.
 

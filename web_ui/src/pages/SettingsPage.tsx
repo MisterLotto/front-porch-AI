@@ -76,6 +76,8 @@ interface Settings {
   remoteApiUrl: string;
   remoteModelName: string;
   hasApiKey: boolean;
+  remoteConfigured?: boolean;
+  remoteReachability?: 'unknown' | 'checking' | 'reachable' | 'unreachable';
   contextSize: number;
   reasoningEnabled: boolean;
   reasoningEffort: string;
@@ -103,6 +105,39 @@ interface LegacyModels {
 
 const fmtBytes = (b: number) =>
   b >= 1024 ** 3 ? `${(b / 1024 ** 3).toFixed(1)} GB` : `${Math.round(b / 1024 ** 2)} MB`;
+
+function remoteReachabilityLabel(
+  configured: boolean,
+  reachability?: string,
+): { text: string; tone: 'ok' | 'busy' | 'down' | 'configured' } {
+  if (!configured) return { text: 'Not configured', tone: 'down' };
+  switch (reachability) {
+    case 'checking':
+      return { text: 'Checking…', tone: 'busy' };
+    case 'reachable':
+      return { text: 'Ready', tone: 'ok' };
+    case 'unreachable':
+      return { text: 'Configured but unreachable', tone: 'down' };
+    default:
+      return { text: 'Configured', tone: 'configured' };
+  }
+}
+
+function RemoteReachabilityBadge({
+  configured,
+  reachability,
+}: {
+  configured: boolean;
+  reachability?: string;
+}) {
+  const { text, tone } = remoteReachabilityLabel(configured, reachability);
+  return (
+    <span className={`remote-ready-badge remote-ready-badge-${tone}`}>
+      <span className="engine-dot" />
+      {text}
+    </span>
+  );
+}
 
 export function SettingsPage() {
   const [s, setS] = useState<Settings | null>(null);
@@ -258,6 +293,7 @@ export function SettingsPage() {
       setTestMsg(e instanceof ApiError ? e.message : 'Connection test failed');
     } finally {
       setTesting(false);
+      void load();
     }
   };
 
@@ -372,6 +408,10 @@ export function SettingsPage() {
               </label>
             )}
             <div className="test-conn-row">
+              <RemoteReachabilityBadge
+                configured={s.remoteConfigured ?? s.hasApiKey}
+                reachability={s.remoteReachability}
+              />
               <button
                 className="ghost"
                 onClick={testConnection}

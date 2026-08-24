@@ -24,6 +24,7 @@ import 'package:front_porch_ai/services/llm_tool_parsing.dart';
 import 'package:front_porch_ai/services/reasoning_effort.dart';
 import 'package:front_porch_ai/services/reasoning_stream_wrapper.dart';
 import 'package:front_porch_ai/services/remote_model_info.dart';
+import 'package:front_porch_ai/services/remote_reachability.dart';
 import 'package:front_porch_ai/services/openai_completions_fallback.dart';
 
 // RemoteModelInfo lived here for years — re-export so importers keep working.
@@ -72,7 +73,7 @@ class OpenRouterService extends LLMService {
   String _apiUrl;
   String _apiKey;
   String _modelName;
-  bool _isReady = false;
+  final RemoteApiHealth _health = RemoteApiHealth();
 
   /// Every client with a call in flight, so [abortGeneration] can close all of
   /// them. A SET rather than one slot because this is a single shared instance
@@ -82,18 +83,34 @@ class OpenRouterService extends LLMService {
   /// the rest kept streaming (and billing).
   final Set<http.Client> _activeClients = {};
 
+  /// Test seam: a MockClient so reachability tests never hit the network.
+  http.Client Function()? get httpClientFactory => _health.httpClientFactory;
+  set httpClientFactory(http.Client Function()? factory) =>
+      _health.httpClientFactory = factory;
+
   String get apiUrl => _apiUrl;
   String get apiKey => _apiKey;
   String get modelName => _modelName;
+  RemoteReachability get reachability => _health.reachability;
+  bool get isReachable => _health.isReachable;
+  bool get isCheckingReachability => _health.isChecking;
 
   /// Local backends (LM Studio, vLLM, etc.) are usable without an API key.
   bool get _isLocalUrl =>
       _apiUrl.contains('localhost') || _apiUrl.contains('127.0.0.1');
 
+  /// Credentials + model are filled in. Not a live ping.
+  bool get isConfigured =>
+      _modelName.isNotEmpty && (_apiKey.isNotEmpty || _isLocalUrl);
+
+  /// Generation gate: configured, and not proven unreachable. Unknown /
+  /// checking stay provisionally ready so a 5s ping does not freeze send;
+  /// a failed ping flips this off (composer: "No API connection").
   @override
   bool get isReady {
-    if (!_isReady || _modelName.isEmpty) return false;
-    return _apiKey.isNotEmpty || _isLocalUrl;
+    if (!isConfigured) return false;
+    if (reachability == RemoteReachability.unreachable) return false;
+    return true;
   }
 
   @override
@@ -106,40 +123,45 @@ class OpenRouterService extends LLMService {
   }) : _apiUrl = apiUrl,
        _apiKey = apiKey,
        _modelName = modelName {
-    _isReady = (_apiKey.isNotEmpty || _isLocalUrl) && _modelName.isNotEmpty;
+    _health.onChanged = _emit;
+  }
+
+  void _emit() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      notifyListeners();
+    });
   }
 
   /// Update configuration at runtime (e.g. when user changes settings).
-  void configure({String? apiUrl, String? apiKey, String? modelName}) {
-    bool changed = false;
+  /// Returns true when URL / key / model actually changed.
+  bool configure({String? apiUrl, String? apiKey, String? modelName}) {
+    var changed = false;
+    var endpointChanged = false;
     if (apiUrl != null && apiUrl != _apiUrl) {
       _apiUrl = apiUrl;
       changed = true;
+      endpointChanged = true;
     }
     if (apiKey != null && apiKey != _apiKey) {
       _apiKey = apiKey;
       changed = true;
+      endpointChanged = true;
     }
     if (modelName != null && modelName != _modelName) {
       _modelName = modelName;
       changed = true;
     }
-    // Allow local backends without API key
-    final newReady =
-        (_apiKey.isNotEmpty || _isLocalUrl) && _modelName.isNotEmpty;
-    if (newReady != _isReady) {
-      _isReady = newReady;
-      changed = true;
+    if (endpointChanged || !isConfigured) {
+      _health.reset();
     }
-    if (changed) {
-      // Defer notification to after the current frame to avoid calling
-      // notifyListeners() during the widget build phase, which crashes
-      // release builds (setState called during build).
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        notifyListeners();
-      });
-    }
+    if (changed) _emit();
+    return changed;
   }
+
+  /// Live `GET /models` against the configured endpoint. Stamps
+  /// [reachability] (and therefore [isReady] / [isReachable]).
+  Future<void> refreshReachability() =>
+      _health.ping(apiUrl: _apiUrl, apiKey: _apiKey, configured: isConfigured);
 
   /// Test whether the API connection is working.
   /// Returns a human-readable status message.
@@ -147,37 +169,14 @@ class OpenRouterService extends LLMService {
   /// Same override contract as [fetchAvailableModels]: pass the target
   /// explicitly from UI so a connection test never re-routes the active
   /// backend's live configuration.
-  Future<String> testConnection({String? apiUrl, String? apiKey}) async {
-    final url = apiUrl ?? _apiUrl;
-    final key = apiKey ?? _apiKey;
-    if (url.isEmpty) return 'API URL is empty.';
-    // Allow empty API key for local backends (localhost / 127.0.0.1)
-    final isLocal = url.contains('localhost') || url.contains('127.0.0.1');
-    if (key.isEmpty && !isLocal) return 'API key is empty.';
-
-    final client = http.Client();
-    try {
-      final uri = Uri.parse('$url/models');
-      final response = await client
-          .get(uri, headers: {'Authorization': 'Bearer $key'})
-          .timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        return 'Connection successful!';
-      } else {
-        String msg = 'HTTP ${response.statusCode}';
-        try {
-          final body = jsonDecode(response.body);
-          msg = body['error']?['message'] ?? msg;
-        } catch (_) {}
-        return 'Connection failed: $msg';
-      }
-    } catch (e) {
-      return 'Connection failed: $e';
-    } finally {
-      client.close();
-    }
-  }
+  Future<String> testConnection({String? apiUrl, String? apiKey}) =>
+      _health.testConnection(
+        liveUrl: _apiUrl,
+        liveKey: _apiKey,
+        configured: isConfigured,
+        apiUrl: apiUrl,
+        apiKey: apiKey,
+      );
 
   /// Fetch the list of available models with pricing info from the API.
   /// Lists models from [apiUrl] (else this service's live URL). Pass the

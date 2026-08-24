@@ -21,6 +21,9 @@ import { StoryCalendarModal } from './StoryCalendarModal';
 import { ContextBudgetModal } from './ContextBudgetModal';
 import { PocketAddRow } from './PocketAddRow';
 import { ExpandableText } from './ExpandableText';
+import { SummaryRecapField } from './SummaryRecapField';
+
+export { TextField } from './SummaryRecapField';
 
 interface ObjectiveTask {
   description: string;
@@ -194,37 +197,6 @@ function NumField({
   );
 }
 
-/** Free-text field that commits on blur, keeping the half-typed draft alive
- *  across a refetch. The tools sidebar reloads its WHOLE snapshot on every
- *  chat refresh (a finished journal pass, a message from another device, a
- *  socket reconnect), so binding a textarea straight to that object threw away
- *  everything typed since the last blur. Syncing on the primitive text — the
- *  NumField rule — means an identical refetch is a no-op. */
-export function TextField({
-  value,
-  rows,
-  placeholder,
-  onCommit,
-}: {
-  value: string;
-  rows: number;
-  placeholder?: string;
-  onCommit: (v: string) => void;
-}) {
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
-  return (
-    <textarea
-      className="note-input"
-      rows={rows}
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => draft !== value && onCommit(draft)}
-      placeholder={placeholder}
-    />
-  );
-}
-
 /** Scene-time periods + their single-letter dot labels (mirror the desktop
  *  realism_section _timeDotLabel exactly: D / M / LM / A / E / N). */
 const TIME_DOTS: [string, string][] = [
@@ -253,6 +225,7 @@ export function ChatTools({
   const [goal, setGoal] = useState('');
   const [showCalendar, setShowCalendar] = useState(false);
   const [showBudget, setShowBudget] = useState(false);
+  const [editingRecap, setEditingRecap] = useState(false);
 
   // Scope every tools call to the focused cast participant so objectives/arousal
   // (and the snapshot returned by mutations) follow the focus.
@@ -268,6 +241,7 @@ export function ChatTools({
 
   useEffect(() => {
     void load();
+    setEditingRecap(false);
   }, [load, reloadKey]);
 
   // While the host is downloading the embedding model, poll tools state so the
@@ -785,13 +759,22 @@ export function ChatTools({
       <details className="tool-section">
         <summary>Where we are</summary>
         <div className="tool-body">
-          <TextField
+          <SummaryRecapField
             value={t.summary.text}
-            rows={4}
-            placeholder="The character's recap of where things stand…"
+            editing={editingRecap}
             onCommit={(text) => apply(api.post<ToolsState>(`/api/chat/tools/summary${q}`, { text }))}
+            onStartEditing={() => setEditingRecap(true)}
+            onStopEditing={() => setEditingRecap(false)}
           />
           <div className="tool-row">
+            {t.summary.text.trim() !== '' && (
+              <button
+                type="button"
+                onClick={() => setEditingRecap((v) => !v)}
+              >
+                {editingRecap ? 'Done' : 'Edit'}
+              </button>
+            )}
             <button
               className="primary"
               disabled={t.summary.isGenerating}

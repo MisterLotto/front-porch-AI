@@ -49,12 +49,35 @@ class AiEngineStatusCard extends StatelessWidget {
 
     final active = llm.activeService;
     final ready = active.isReady;
+    final remote = active is OpenRouterService ? active : null;
+    // Green chrome is a successful ping, not "a key is saved".
+    final liveReady = remote?.isReachable ?? ready;
 
-    // Live state label + color.
+    // Live state label + color. Remote green "Ready" requires a successful
+    // ping — configured-without-a-live-check is not the same badge.
     String stateLabel;
     Color stateColor;
     bool busy = false;
-    if (ready) {
+    if (remote != null) {
+      stateLabel = remoteBackendStatusLabel(
+        configured: remote.isConfigured,
+        reachability: remote.reachability,
+      );
+      busy = remote.reachability == RemoteReachability.checking;
+      if (remote.isReachable) {
+        stateColor = AppColors.resolve(
+          context,
+          AppColors.logReady,
+          AppColors.bondHighLight,
+        );
+      } else if (busy ||
+          (remote.isConfigured &&
+              remote.reachability != RemoteReachability.unreachable)) {
+        stateColor = AppColors.porchAmberOf(context);
+      } else {
+        stateColor = AppColors.negativeAccentOf(context);
+      }
+    } else if (ready) {
       stateLabel = 'Ready';
       stateColor = AppColors.resolve(
         context,
@@ -109,7 +132,10 @@ class AiEngineStatusCard extends StatelessWidget {
         : Container(
             width: 10,
             height: 10,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: stateColor),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: stateColor,
+            ),
           );
 
     final button = TextButton(
@@ -121,7 +147,9 @@ class AiEngineStatusCard extends StatelessWidget {
         foregroundColor: AppColors.porchHoneyOf(context),
         visualDensity: VisualDensity.compact,
       ),
-      child: Text(ready ? 'Change' : 'Set Up'),
+      child: Text(
+        liveReady || (remote?.isConfigured ?? false) ? 'Change' : 'Set Up',
+      ),
     );
 
     if (compact) {
@@ -142,7 +170,7 @@ class AiEngineStatusCard extends StatelessWidget {
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 260),
               child: Text(
-                ready
+                liveReady
                     ? '${active.backendName} · $modelLabel'
                     : '${active.backendName} · $stateLabel',
                 overflow: TextOverflow.ellipsis,
@@ -165,7 +193,7 @@ class AiEngineStatusCard extends StatelessWidget {
         color: AppColors.cardOf(context),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: ready
+          color: liveReady
               ? AppColors.borderOf(context).withValues(alpha: 0.4)
               : stateColor.withValues(alpha: 0.5),
         ),
@@ -175,7 +203,7 @@ class AiEngineStatusCard extends StatelessWidget {
           Icon(
             Icons.memory,
             size: 22,
-            color: ready ? AppColors.porchHoneyOf(context) : stateColor,
+            color: liveReady ? AppColors.porchHoneyOf(context) : stateColor,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -203,7 +231,7 @@ class AiEngineStatusCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  ready
+                  liveReady
                       ? modelLabel
                       : 'Stories use the same AI engine as chat — '
                             '$modelLabel.',

@@ -531,6 +531,17 @@ button.ghost.small, .ghost.small { font-size: 0.72rem; padding: 4px 8px; backgro
 .mp-meta { font-size: 0.7rem; }
 .mp-inline-error { color: var(--danger); font-size: 0.75rem; margin: 4px 0 0; }
 .test-conn-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+.remote-ready-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.remote-ready-badge-ok { color: var(--ok); }
+.remote-ready-badge-busy,
+.remote-ready-badge-configured { color: var(--porch-amber); }
+.remote-ready-badge-down { color: var(--danger); }
 .test-conn-msg { font-size: 0.8rem; }
 .test-conn-msg.ok { color: var(--ok); }
 .test-conn-msg.bad { color: var(--danger); }
@@ -941,6 +952,13 @@ button.ghost.small, .ghost.small { font-size: 0.72rem; padding: 4px 8px; backgro
 .thinking summary { cursor: pointer; }
 .thinking-body { white-space: pre-wrap; margin-top: 6px; }
 .note-input { resize: vertical; }
+.summary-recap-view {
+  width: 100%;
+  padding: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
 .note-save { align-self: flex-start; }
 
 /* ── Chat layout (desktop persistent insight column) ──────────── */
@@ -2672,25 +2690,70 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
   line-clamp: unset;
 }
 
-.variant-picker-modal { width: min(440px, 94vw); max-height: min(520px, 88vh); display: flex; flex-direction: column; }
-.variant-picker-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
-.variant-picker-row {
-  display: flex; flex-direction: column; align-items: stretch; gap: 4px;
-  width: 100%; text-align: left; padding: 10px 8px;
-  background: none; border: none; border-bottom: 1px solid var(--border);
-  color: var(--text); cursor: pointer;
+.variant-picker-modal {
+  width: min(680px, 94vw); max-height: min(80vh, 720px);
+  display: flex; flex-direction: column; gap: 10px;
 }
-.variant-picker-row:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
-.variant-picker-row.current { background: color-mix(in srgb, var(--accent) 16%, transparent); }
-.variant-picker-snippet { font-size: 0.9rem; line-height: 1.35; }
-.variant-picker-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.variant-picker-list {
+  list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.variant-card {
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px 10px;
+  cursor: pointer;
+  color: var(--text);
+}
+.variant-card:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+.variant-card.current {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--border));
+}
+.variant-card-head {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.82rem;
+}
+.variant-card-id {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-weight: 700; flex-shrink: 0;
+}
+.variant-card-meta {
+  margin-left: auto; color: var(--faint);
+  font-size: 0.75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.variant-card-tools { display: inline-flex; flex-shrink: 0; }
 .variant-current-mark {
   font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
-  text-transform: uppercase; color: var(--accent-ink);
+  text-transform: uppercase; color: #1a1200; /* onChaosAccent — white-on-amber is unreadable */
   background: var(--accent); border-radius: 999px; padding: 1px 8px;
+}
+.variant-card-preview {
+  margin: 6px 0 0; font-size: 0.9rem; line-height: 1.45;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+  overflow: hidden; white-space: pre-wrap;
+}
+.variant-card-preview.open {
+  display: block; -webkit-line-clamp: unset; overflow: visible;
+}
+.variant-jump {
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+}
+.variant-jump label { color: var(--muted); font-size: 0.9rem; }
+.variant-jump input {
+  width: 64px; text-align: center; padding: 6px 8px;
+  border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text);
+}
+.variant-jump-go {
+  background: var(--accent); color: #1a1200; font-weight: 700;
+  border: none; border-radius: 8px; padding: 6px 14px; cursor: pointer;
 }
 
 @media (max-width: 640px) {
   .expandable-text { font-size: 0.85rem; }
   .variant-picker-modal { width: 96vw; max-height: 80vh; }
+  .variant-card-head { flex-wrap: wrap; }
+  .variant-card-meta { margin-left: 0; width: 100%; order: 3; }
 }
