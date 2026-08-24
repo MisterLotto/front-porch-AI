@@ -219,36 +219,45 @@ extension _ChatPageInputActions on _ChatPageState {
       const SizedBox(width: 4),
 
       Expanded(
-        child: AppTextField(
-          controller: _controller,
-          focusNode: _chatFocusNode,
-          enabled: !chatService.isLoadingSession,
-          maxLines: 10,
-          minLines: _inputMinLines,
-          textInputAction: TextInputAction.newline,
-          style: TextStyle(color: AppColors.textPrimary(context)),
-          spellCheckConfiguration: SpellCheckConfiguration.disabled(),
-          decoration: InputDecoration(
-            hintText: chatService.observerMode
-                ? 'Direct the scene...'
-                : 'Type a message...',
-            hintStyle: TextStyle(
-              color: chatService.observerMode
-                  ? Colors.amberAccent.withValues(alpha: 0.6)
-                  : AppColors.textTertiary(context),
-            ),
-            filled: true,
-            fillColor: AppColors.surfaceContainerOf(context),
-            isDense: true,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(20),
-              borderSide: BorderSide.none,
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 10,
-            ),
-          ),
+        child: Consumer2<LLMProvider, OpenRouterService>(
+          builder: (context, llm, _, _) {
+            final apiReady = llm.activeService.isReady;
+            final hint = chatComposerHint(
+              apiReady: apiReady,
+              observerMode: chatService.observerMode,
+            );
+            return AppTextField(
+              controller: _controller,
+              focusNode: _chatFocusNode,
+              enabled: !chatService.isLoadingSession,
+              maxLines: 10,
+              minLines: _inputMinLines,
+              textInputAction: TextInputAction.newline,
+              style: TextStyle(color: AppColors.textPrimary(context)),
+              spellCheckConfiguration: SpellCheckConfiguration.disabled(),
+              decoration: InputDecoration(
+                hintText: hint,
+                hintStyle: TextStyle(
+                  color: !apiReady
+                      ? AppColors.negativeAccentOf(context)
+                      : chatService.observerMode
+                      ? AppColors.porchAmberOf(context).withValues(alpha: 0.7)
+                      : AppColors.textTertiary(context),
+                ),
+                filled: true,
+                fillColor: AppColors.surfaceContainerOf(context),
+                isDense: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+              ),
+            );
+          },
         ),
       ),
       const SizedBox(width: 4),

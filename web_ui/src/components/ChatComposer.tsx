@@ -60,6 +60,7 @@ export function ChatComposer({
   cast,
   impersonateFill,
   onImpersonate,
+  apiReady = true,
 }: {
   onSend: (text: string) => void;
   onStop: () => void;
@@ -74,6 +75,8 @@ export function ChatComposer({
   impersonateFill?: string | null;
   /** Desktop wand: AI writes the user's next line from the current draft. */
   onImpersonate?: (prefix: string) => void;
+  /** Host LLM connection (not a one-off HTTP 500). False → "No API connection". */
+  apiReady?: boolean;
 }) {
   const [draft, setDraftState] = useState('');
   const setDraft = (v: string | ((d: string) => string)) => {
@@ -231,7 +234,6 @@ export function ChatComposer({
         </div>
         <textarea
           ref={taRef}
-          className="composer-input"
           value={draft}
           spellCheck
           onScroll={syncScroll}
@@ -264,7 +266,8 @@ export function ChatComposer({
               send();
             }
           }}
-          placeholder="Message…"
+          placeholder={apiReady ? 'Message…' : 'No API connection'}
+          className={`composer-input${apiReady ? '' : ' no-api'}`}
           rows={1}
         />
       </div>

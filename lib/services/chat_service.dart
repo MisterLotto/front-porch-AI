@@ -102,6 +102,7 @@ part 'chat/chat_service_images.dart';
 part 'chat/chat_service_photo.dart';
 part 'chat/chat_service_idle_autonomous.dart';
 part 'chat/chat_service_greeting.dart';
+part 'chat/chat_service_variants.dart';
 part 'chat/chat_service_prompt_blocks.dart';
 part 'chat/chat_service_scene_guest.dart';
 part 'chat/chat_service_controls.dart';

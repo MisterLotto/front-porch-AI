@@ -103,6 +103,9 @@ type TranscriptProps = {
   onDelete: (index: number) => void;
   onReprocess: (index: number) => void;
   onRevert: (index: number) => void;
+  greetCount?: number;
+  greetingIndex?: number;
+  onVariantPicked?: () => void;
 };
 
 // Memoized separately from the live streaming tail: token/processing WS
@@ -124,6 +127,9 @@ const TranscriptRows = memo(function TranscriptRows({
   onDelete,
   onReprocess,
   onRevert,
+  greetCount,
+  greetingIndex,
+  onVariantPicked,
 }: TranscriptProps) {
   return (
     <>
@@ -186,11 +192,14 @@ const TranscriptRows = memo(function TranscriptRows({
               isLast={m.index === lastIndex}
               busy={busy}
               canSpeak={canSpeak}
+              greetCount={greetCount}
+              greetingIndex={greetingIndex}
               onSwipe={onSwipe}
               onRegenerate={onRegenerate}
               onContinue={onContinue}
               onEdit={() => onBeginEdit(m)}
               onDelete={() => onDelete(m.index)}
+              onVariantPicked={onVariantPicked}
             />
           </div>
         );

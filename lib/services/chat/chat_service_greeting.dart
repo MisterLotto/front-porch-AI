@@ -127,7 +127,8 @@ extension ChatServiceGreeting on ChatService {
     // yet (the first turn of a brand-new chat, and every unit test) has a null
     // id, and skipping the mark for it is what let the seed fire on every turn
     // anyway — the exact bug, still there, just narrower.
-    final key = '${_currentSessionId ?? ''}|'
+    final key =
+        '${_currentSessionId ?? ''}|'
         '${_activeCharacter == null ? '' : _getCharacterIdFromCard(_activeCharacter!)}';
     if (_openingPostureSeededFor == key) return;
     _openingPostureSeededFor = key;
@@ -281,31 +282,17 @@ extension ChatServiceGreeting on ChatService {
     }
   }
 
-  /// Cycle the first message through alternate greetings
+  /// Cycle the first message through alternate greetings.
+  /// Commit-once: the same [selectGreeting] path the picker uses (first
+  /// greet keeps starting emotion; alternatives get reading-the-room).
   Future<void> cycleGreeting(int direction) async {
     if (_activeCharacter == null || _messages.isEmpty) return;
     final allGreetings = _activeCharacter!.allGreetings;
     if (allGreetings.length <= 1) return;
 
-    _greetingIndex = (_greetingIndex + direction) % allGreetings.length;
-    if (_greetingIndex < 0) _greetingIndex += allGreetings.length;
-
-    // Replace the first message text
-    final greeting = allGreetings[_greetingIndex];
-    _messages[0] = ChatMessage(
-      text: _buildFirstMessage(_activeCharacter!, greetingText: greeting),
-      sender: _activeCharacter!.name,
-      isUser: false,
-    );
-
-    await _saveChat();
-    notifyListeners();
-
-    // Re-run baseline eval for the new greeting (skip pre-seeded V2.5 cards)
-    if (_realismActiveThisMode &&
-        _activeCharacter!.frontPorchExtensions == null) {
-      _runPostGreetingEval();
-    }
+    var next = (_greetingIndex + direction) % allGreetings.length;
+    if (next < 0) next += allGreetings.length;
+    await selectGreeting(next);
   }
 
   String _buildFirstMessage(CharacterCard character, {String? greetingText}) {

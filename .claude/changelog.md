@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-08-23 — feat(chat): API-down placeholder, variant picker, sidebar expand
+- **Why:** Discord (SAMF): (1) unreachable API, send does nothing with no
+  hint; (2) 9 greets / 20 regens only cycled blindly, and greet "regen"
+  is nonsense; (3) Journal / recap / RAG ellipsis-truncated with room left.
+- **What:** Composer placeholder tracks `LLMService.isReady` (connection,
+  not a one-off 500) live in both directions. Shared greet/swipe picker
+  (snippet + char count + Current); greets keep starting emotion on #1
+  and reading-the-room on alts; swipes restore the stored variant (full
+  swipe list was already retained). Sidebar body text is a 4-line clamp
+  with tap-to-expand. Desktop + web_ui.
+- **Files:** chat_composer_hint, chat_page.input_actions, variant_snippet,
+  chat_service_variants, variant_picker_dialog, message_bubble.actions,
+  expandable_sidebar_text, summary_recap_field, journal_panel,
+  rag_receipt_view, chat_facade/routes/host, web ChatComposer /
+  MessageActions / VariantPickerModal / ExpandableText / ChatTools
+
 ## 2026-08-22 — fix(work): off-shift prompt names the day off
 - **Why:** A M–F loan officer on Sunday morning still reasoned "she DOES
   have to work today" then argued with bank hours. Presence was With you

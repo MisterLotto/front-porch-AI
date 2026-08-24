@@ -49,6 +49,8 @@ class WebChatRoutes {
     router.post('/api/chat/continue', _continue);
     router.post('/api/chat/impersonate', _impersonate);
     router.post('/api/chat/swipe', _swipe);
+    router.get('/api/chat/variants', _variants);
+    router.post('/api/chat/select-variant', _selectVariant);
     router.post('/api/chat/edit', _edit);
     router.post('/api/chat/delete', _delete);
     router.post('/api/chat/insert-image', _insertImage);
@@ -286,6 +288,28 @@ class WebChatRoutes {
       return JsonResponse.badRequest('messageIndex and direction are required');
     }
     _facade.swipe(index, direction);
+    return JsonResponse.ok({'status': 'ok'});
+  }
+
+  shelf.Response _variants(shelf.Request request) {
+    final raw = request.url.queryParameters['messageIndex'];
+    final index = int.tryParse(raw ?? '');
+    if (index == null) {
+      return JsonResponse.badRequest('messageIndex is required');
+    }
+    return JsonResponse.ok(_facade.variants(index));
+  }
+
+  Future<shelf.Response> _selectVariant(shelf.Request request) async {
+    final body = await _json(request);
+    final index = body['messageIndex'];
+    final variantIndex = body['variantIndex'];
+    if (index is! int || variantIndex is! int) {
+      return JsonResponse.badRequest(
+        'messageIndex and variantIndex are required',
+      );
+    }
+    await _facade.selectVariant(index, variantIndex);
     return JsonResponse.ok({'status': 'ok'});
   }
 

@@ -36,57 +36,47 @@ extension ChatServiceMessageOps on ChatService {
 
     final newIndex = msg.swipeIndex + direction;
 
-    // Guest-message swipes carry no Realism/Needs, so navigating between them
-    // must never touch the active character's state (parity) — true even for a
-    // guest who has since left the scene, hence the authoritative check.
-    final isGuestMsg = _isGuestAuthoredMessage(msg);
-
-    // …and the state rewind belongs to the TIP of the chat only. Re-reading an
-    // OLD variant is navigation, not time travel: restoring that message's
-    // snapshot rewound bond/trust/emotion/arousal/needs/story clock/pockets to
-    // that turn while every later message stayed, and the `_saveChat()` below
-    // wrote the rewind onto the session row permanently. Same rule the delete
-    // door states out loud ("restore from the NEW LAST message"). Guest
-    // replies are transparent here — they stamp no Realism/Needs — so a host
-    // buried only under guest chime-ins is still the tip, matching
-    // regenerableHostBelowGuestsIndex.
-    final isTip =
-        !isGuestMsg &&
-        _messages.skip(messageIndex + 1).every(_isGuestAuthoredMessage);
-
     // Swiping left
     if (direction < 0) {
       if (newIndex >= 0) {
-        msg.swipeIndex = newIndex;
-        if (isTip) _syncRealismStateForSwipe(msg);
-        // Pockets follow the selected variant too — this swipe's own
-        // post-turn record, or the shared pre-turn base when this variant's
-        // pass changed nothing (hostile review 2026-08-11).
-        if (isTip) _restorePocketsFromStamp(msg, after: true);
-        // Timeline integrity: the active variant at this position changed —
-        // cards journaled from the other swipe are now phantom.
-        _invalidateJournalFrom(messageIndex);
-        await _saveChat();
-        notifyListeners();
+        await _commitSwipeIndex(messageIndex, newIndex);
       }
       return;
     }
 
     // Swiping right
     if (newIndex < msg.swipes.length) {
-      // Navigate to existing swipe
-      msg.swipeIndex = newIndex;
-      if (isTip) _syncRealismStateForSwipe(msg);
-      // Same pockets rewind as the left branch.
-      if (isTip) _restorePocketsFromStamp(msg, after: true);
-      // Timeline integrity — same as the left-swipe branch above.
-      _invalidateJournalFrom(messageIndex);
-      await _saveChat();
-      notifyListeners();
+      await _commitSwipeIndex(messageIndex, newIndex);
     } else if (messageIndex == _messages.length - 1 && !_isTurnBusy) {
       // Past last swipe on last message — regenerate
       await regenerateLastMessage();
     }
+  }
+
+  /// Apply an already-stored swipe index. Guest replies never rewind
+  /// Realism/Needs; only the tip of the chat restores that snapshot
+  /// (re-reading an old variant is navigation, not time travel).
+  Future<void> _commitSwipeIndex(int messageIndex, int newIndex) async {
+    final msg = _messages[messageIndex];
+    if (newIndex == msg.swipeIndex) return;
+    if (newIndex < 0 || newIndex >= msg.swipes.length) return;
+
+    final isGuestMsg = _isGuestAuthoredMessage(msg);
+    final isTip =
+        !isGuestMsg &&
+        _messages.skip(messageIndex + 1).every(_isGuestAuthoredMessage);
+
+    msg.swipeIndex = newIndex;
+    if (isTip) _syncRealismStateForSwipe(msg);
+    // Pockets follow the selected variant too — this swipe's own
+    // post-turn record, or the shared pre-turn base when this variant's
+    // pass changed nothing (hostile review 2026-08-11).
+    if (isTip) _restorePocketsFromStamp(msg, after: true);
+    // Timeline integrity: the active variant at this position changed —
+    // cards journaled from the other swipe are now phantom.
+    _invalidateJournalFrom(messageIndex);
+    await _saveChat();
+    notifyListeners();
   }
 
   void _syncRealismStateForSwipe(ChatMessage msg) {

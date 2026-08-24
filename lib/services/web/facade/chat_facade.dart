@@ -39,7 +39,14 @@ class ChatFacade {
     this._hub,
     this._groups, {
     File? Function(String name)? resolveSavedImage,
-  }) : _resolveSavedImage = resolveSavedImage;
+    LLMProvider? llm,
+  }) : _resolveSavedImage = resolveSavedImage,
+       _llm = llm;
+
+  /// Live LLM connection flag for the chat-input placeholder. Null in tests
+  /// that construct a facade without a provider — treated as ready so they
+  /// do not inherit a "No API connection" hint.
+  final LLMProvider? _llm;
 
   /// Resolves a saved generated image's basename to its file (with the
   /// traversal guard) — wired to [ImageFacade.savedImageFile] by the host so
@@ -267,7 +274,18 @@ class ChatFacade {
       },
       // Per-chat theme overrides (preset + font/color/background/border).
       'themeOverrides': _chat.sessionThemeOverrides.toJson(),
+      // LLM backend connection (not a one-off request). Additive; older
+      // PWAs ignore it and keep the normal composer placeholder.
+      'llmReady': _llm?.activeService.isReady ?? true,
     };
+  }
+
+  Map<String, dynamic> variants(int messageIndex) =>
+      _chat.variantPickerPayload(messageIndex);
+
+  Future<void> selectVariant(int messageIndex, int variantIndex) async {
+    await _chat.selectVariant(messageIndex, variantIndex);
+    _notify();
   }
 
   /// Re-probe the current backend+model's tool-calling support (the web

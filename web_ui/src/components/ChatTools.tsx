@@ -20,6 +20,7 @@ import { PromisesPanel } from './PromisesPanel';
 import { StoryCalendarModal } from './StoryCalendarModal';
 import { ContextBudgetModal } from './ContextBudgetModal';
 import { PocketAddRow } from './PocketAddRow';
+import { ExpandableText } from './ExpandableText';
 
 interface ObjectiveTask {
   description: string;
@@ -444,10 +445,10 @@ export function ChatTools({
                   <div className="rag-receipt">
                     <p className="muted small">{summary}</p>
                     {status === 'ok' && r?.injected.map((line, i) => (
-                      <p key={i} className="muted small rag-receipt-line">
+                      <div key={i} className="rag-receipt-line">
                         <strong>{line.other_chat ? 'another chat' : line.day != null ? `Day ${line.day}` : ''}</strong>{' '}
-                        {line.preview}
-                      </p>
+                        <ExpandableText text={line.preview} lines={4} className="muted small" />
+                      </div>
                     ))}
                   </div>
                 );

@@ -76,11 +76,46 @@ extension _BubbleActions on _MessageBubbleState {
                   ),
                 ),
               ),
+              const SizedBox(width: 4),
+              Tooltip(
+                message: 'Select greet',
+                child: InkWell(
+                  onTap: () => _openVariantPicker(
+                    title: 'Select greet',
+                    texts: allGreetings,
+                    currentIndex: chatService.greetingIndex,
+                    onSelect: chatService.selectGreeting,
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      Icons.view_list,
+                      size: 18,
+                      color: AppColors.porchAmberOf(context),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         );
       },
     );
+  }
+
+  Future<void> _openVariantPicker({
+    required String title,
+    required List<String> texts,
+    required int currentIndex,
+    required Future<void> Function(int) onSelect,
+  }) async {
+    final chosen = await showVariantPickerDialog(
+      context,
+      title: title,
+      variants: buildVariantOptions(texts, currentIndex),
+    );
+    if (chosen != null && mounted) await onSelect(chosen);
   }
 
   Widget _messageActionRow() {
@@ -96,16 +131,12 @@ extension _BubbleActions on _MessageBubbleState {
         // first removes those stale guest replies. (By definition
         // this is never the last message.)
         final isRegenHostBelowGuests =
-            index ==
-                chatService
-                    .regenerableHostBelowGuestsIndex &&
+            index == chatService.regenerableHostBelowGuestsIndex &&
             !chatService.isGenerating;
 
         // Nothing to show if not last message, no swipes, and not
         // a host buried under guest replies.
-        if (!isLastBotMessage &&
-            !hasSwipes &&
-            !isRegenHostBelowGuests) {
+        if (!isLastBotMessage && !hasSwipes && !isRegenHostBelowGuests) {
           return const SizedBox.shrink();
         }
 
@@ -123,8 +154,7 @@ extension _BubbleActions on _MessageBubbleState {
                   message:
                       'Regenerate main character\n(removes the NPC’s reply)',
                   child: InkWell(
-                    onTap: () => chatService
-                        .regenerateMainCharacter(),
+                    onTap: () => chatService.regenerateMainCharacter(),
                     borderRadius: BorderRadius.circular(12),
                     child: Padding(
                       padding: const EdgeInsets.all(4),
@@ -142,13 +172,14 @@ extension _BubbleActions on _MessageBubbleState {
                 ),
                 if (hasSwipes) const SizedBox(width: 12),
               ],
-              // Regen button — last bot message only
-              if (isLastBotMessage) ...[
+              // Regen — last bot message only. Greets are static card
+              // content; Select greet is the replacement. Continue still
+              // belongs on a last greet (it extends the opening line).
+              if (isLastBotMessage && index != 0) ...[
                 Tooltip(
                   message: 'Regenerate',
                   child: InkWell(
-                    onTap: () =>
-                        chatService.regenerateLastMessage(),
+                    onTap: () => chatService.regenerateLastMessage(),
                     borderRadius: BorderRadius.circular(12),
                     child: const Padding(
                       padding: EdgeInsets.all(4),
@@ -161,12 +192,12 @@ extension _BubbleActions on _MessageBubbleState {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Continue button
+              ],
+              if (isLastBotMessage) ...[
                 Tooltip(
                   message: 'Continue generation',
                   child: InkWell(
-                    onTap: () =>
-                        chatService.continueGeneration(),
+                    onTap: () => chatService.continueGeneration(),
                     borderRadius: BorderRadius.circular(12),
                     child: const Padding(
                       padding: EdgeInsets.all(4),
@@ -183,17 +214,14 @@ extension _BubbleActions on _MessageBubbleState {
               // Swipe arrows — only when multiple swipes exist
               if (hasSwipes) ...[
                 InkWell(
-                  onTap: () =>
-                      chatService.swipeMessage(index, -1),
+                  onTap: () => chatService.swipeMessage(index, -1),
                   borderRadius: BorderRadius.circular(12),
                   child: Padding(
                     padding: EdgeInsets.all(4),
                     child: Icon(
                       Icons.chevron_left,
                       size: 20,
-                      color: AppColors.textSecondary(
-                        context,
-                      ),
+                      color: AppColors.textSecondary(context),
                     ),
                   ),
                 ),
@@ -208,16 +236,34 @@ extension _BubbleActions on _MessageBubbleState {
                 ),
                 const SizedBox(width: 4),
                 InkWell(
-                  onTap: () =>
-                      chatService.swipeMessage(index, 1),
+                  onTap: () => chatService.swipeMessage(index, 1),
                   borderRadius: BorderRadius.circular(12),
                   child: Padding(
                     padding: EdgeInsets.all(4),
                     child: Icon(
                       Icons.chevron_right,
                       size: 20,
-                      color: AppColors.textSecondary(
-                        context,
+                      color: AppColors.textSecondary(context),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Tooltip(
+                  message: 'Select variant',
+                  child: InkWell(
+                    onTap: () => _openVariantPicker(
+                      title: 'Select variant',
+                      texts: message.swipes,
+                      currentIndex: message.swipeIndex,
+                      onSelect: (i) => chatService.selectSwipe(index, i),
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.view_list,
+                        size: 18,
+                        color: AppColors.porchAmberOf(context),
                       ),
                     ),
                   ),
@@ -239,8 +285,7 @@ extension _BubbleActions on _MessageBubbleState {
         if (!isLast) return const SizedBox.shrink();
 
         final actions = chatService.suggestedActions;
-        final isGenerating =
-            chatService.isGeneratingActions;
+        final isGenerating = chatService.isGeneratingActions;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -267,9 +312,7 @@ extension _BubbleActions on _MessageBubbleState {
                           height: 12,
                           child: CircularProgressIndicator(
                             strokeWidth: 1.5,
-                            color: AppColors.textTertiary(
-                              context,
-                            ),
+                            color: AppColors.textTertiary(context),
                           ),
                         )
                       else
@@ -277,23 +320,15 @@ extension _BubbleActions on _MessageBubbleState {
                           Icons.lightbulb_outline,
                           size: 13,
                           color:
-                              theme.accent ??
-                              AppColors.textTertiary(
-                                context,
-                              ),
+                              theme.accent ?? AppColors.textTertiary(context),
                         ),
                       const SizedBox(width: 5),
                       Text(
-                        isGenerating
-                            ? 'Thinking...'
-                            : 'Suggest actions',
+                        isGenerating ? 'Thinking...' : 'Suggest actions',
                         style: TextStyle(
                           fontSize: 11,
                           color:
-                              theme.accent ??
-                              AppColors.textTertiary(
-                                context,
-                              ),
+                              theme.accent ?? AppColors.textTertiary(context),
                         ),
                       ),
                     ],
@@ -310,25 +345,17 @@ extension _BubbleActions on _MessageBubbleState {
                   runSpacing: 6,
                   children: actions.map((action) {
                     return InkWell(
-                      onTap: () =>
-                          chatService.sendMessage(action),
-                      borderRadius: BorderRadius.circular(
-                        16,
-                      ),
+                      onTap: () => chatService.sendMessage(action),
+                      borderRadius: BorderRadius.circular(16),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 12,
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(
-                            alpha: 0.06,
-                          ),
-                          borderRadius:
-                              BorderRadius.circular(16),
-                          border: Border.all(
-                            color: Colors.white12,
-                          ),
+                          color: Colors.white.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white12),
                         ),
                         child: Text(
                           action,
@@ -336,9 +363,7 @@ extension _BubbleActions on _MessageBubbleState {
                             fontSize: 12,
                             color:
                                 theme.accent ??
-                                AppColors.textSecondary(
-                                  context,
-                                ),
+                                AppColors.textSecondary(context),
                           ),
                         ),
                       ),

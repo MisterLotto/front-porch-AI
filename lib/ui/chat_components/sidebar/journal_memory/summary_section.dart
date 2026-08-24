@@ -21,8 +21,8 @@ import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import '../sidebar_tokens.dart';
+import 'summary_recap_field.dart';
 
 /// "Where we are" sidebar panel — the Journal's per-chat recap.
 /// Shows the Journal enable toggle, the editable recap text, pause/regenerate
@@ -41,6 +41,7 @@ class SummarySection extends StatefulWidget {
 class SummarySectionState extends State<SummarySection> {
   late TextEditingController _controller;
   bool _showSettings = false;
+  bool _editingRecap = false;
   double? _dragJournalInterval;
 
   @override
@@ -152,44 +153,14 @@ class SummarySectionState extends State<SummarySection> {
 
         if (enabled) ...[
           const SizedBox(height: 8),
-          // Recap text field (editable — the character reads this back)
-          Padding(
-            padding: const EdgeInsets.only(left: 20.0),
-            child: AppTextField(
-              controller: _controller,
-              maxLines: 6,
-              minLines: 2,
-              style: TextStyle(
-                color: AppColors.textPrimary(context),
-                fontSize: 12,
-              ),
-              decoration: InputDecoration(
-                hintText:
-                    'No recap yet. It will generate after enough messages...',
-                hintStyle: TextStyle(
-                  color: AppColors.textTertiary(context),
-                  fontSize: 12,
-                ),
-                filled: true,
-                fillColor: AppColors.surfaceContainerOf(context),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: AppColors.borderOf(context)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: AppColors.borderOf(context)),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: accent),
-                ),
-                contentPadding: const EdgeInsets.all(10),
-              ),
-              onChanged: (val) {
-                widget.chatService.setSummary(val);
-              },
-            ),
+          SummaryRecapField(
+            controller: _controller,
+            text: widget.chatService.summary,
+            editing: _editingRecap,
+            accent: accent,
+            onChanged: widget.chatService.setSummary,
+            onStartEditing: () => setState(() => _editingRecap = true),
+            onStopEditing: () => setState(() => _editingRecap = false),
           ),
           const SizedBox(height: 6),
           // Controls row
@@ -234,6 +205,27 @@ class SummarySectionState extends State<SummarySection> {
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
+                if (widget.chatService.summary.trim().isNotEmpty)
+                  InkWell(
+                    onTap: () => setState(() => _editingRecap = !_editingRecap),
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 2,
+                      ),
+                      child: Text(
+                        _editingRecap ? 'Done' : 'Edit',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: _editingRecap
+                              ? accent
+                              : AppColors.textSecondary(context),
+                        ),
+                      ),
+                    ),
+                  ),
                 const SizedBox(width: 8),
                 // Settings gear toggle
                 InkWell(

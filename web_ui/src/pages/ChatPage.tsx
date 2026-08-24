@@ -70,6 +70,8 @@ interface ChatState {
   toolSupport?: { state: string; testing: boolean };
   // Per-chat theme overrides (preset + font/color/background/border).
   themeOverrides?: ChatThemeOverrides;
+  // Host LLM connection (additive — older desktops omit it).
+  llmReady?: boolean;
 }
 
 export function ChatPage() {
@@ -782,6 +784,9 @@ export function ChatPage() {
           onDelete={del}
           onReprocess={setReprocessIndex}
           onRevert={revertNeeds}
+          greetCount={state.totalGreetings}
+          greetingIndex={state.greetingIndex}
+          onVariantPicked={() => void refresh()}
         />
 
         {editTarget && (
@@ -824,6 +829,7 @@ export function ChatPage() {
           onImpersonate={(prefix) => {
             void api.post('/api/chat/impersonate', { prefix });
           }}
+          apiReady={state.llmReady !== false}
         />
       </div>
 

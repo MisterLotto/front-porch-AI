@@ -693,6 +693,7 @@ button.ghost.small, .ghost.small { font-size: 0.72rem; padding: 4px 8px; backgro
   overflow-y: hidden;
 }
 .chat-input .composer-input::placeholder { color: var(--muted); }
+.chat-input .composer-input.no-api::placeholder { color: var(--danger); }
 /* Colour-only in the live composer (no italic/bold) so transparent textarea and
  * coloured backdrop keep identical glyph metrics. Rendered bubbles add the
  * italic/bold; the input intentionally doesn't (matches StyledTextController). */
@@ -2655,3 +2656,41 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
   border: 1px solid var(--border); border-radius: 8px; padding: 8px;
 }
 .enh-new:focus { border-color: var(--accent); outline: none; }
+
+/* Sidebar body text: fixed line-clamp, tap to expand (desktop parity). */
+.expandable-text {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  cursor: pointer;
+}
+.expandable-text.open {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+}
+
+.variant-picker-modal { width: min(440px, 94vw); max-height: min(520px, 88vh); display: flex; flex-direction: column; }
+.variant-picker-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
+.variant-picker-row {
+  display: flex; flex-direction: column; align-items: stretch; gap: 4px;
+  width: 100%; text-align: left; padding: 10px 8px;
+  background: none; border: none; border-bottom: 1px solid var(--border);
+  color: var(--text); cursor: pointer;
+}
+.variant-picker-row:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.variant-picker-row.current { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.variant-picker-snippet { font-size: 0.9rem; line-height: 1.35; }
+.variant-picker-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.variant-current-mark {
+  font-size: 0.7rem; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--accent-ink);
+  background: var(--accent); border-radius: 999px; padding: 1px 8px;
+}
+
+@media (max-width: 640px) {
+  .expandable-text { font-size: 0.85rem; }
+  .variant-picker-modal { width: 96vw; max-height: 80vh; }
+}

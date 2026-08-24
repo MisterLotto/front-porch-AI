@@ -107,6 +107,8 @@ class WebServerHost extends ChangeNotifier {
   // between them no notifier fires and the interpolated fraction would
   // freeze on web without the tick.
   VoidCallback? _genStatusListener;
+  VoidCallback? _llmReadyListener;
+  bool? _lastLlmReady;
   Timer? _genStatusTicker;
   bool _wasBroadcastingGenStatus = false;
   DateTime _lastGenStatusSent = DateTime.fromMillisecondsSinceEpoch(0);
@@ -162,6 +164,7 @@ class WebServerHost extends ChangeNotifier {
     }
     return null;
   }
+
   bool get hasActiveClient => _hasActiveClient;
   String? get connectedClientIp => _connectedClientIp;
   String? get connectedClientInfo => _connectedClientInfo;
@@ -315,7 +318,8 @@ class WebServerHost extends ChangeNotifier {
           // text actually grew AND the 300ms window elapsed. This turns the
           // ~6.6 full-payload frames/s of a long local eval into ≤3 delta-
           // worthy ones and drops the identical re-broadcasts entirely.
-          final transition = !_wasEvaluatingRealism ||
+          final transition =
+              !_wasEvaluatingRealism ||
               verifying != _lastProcessingVerifying ||
               objective != _lastProcessingObjective;
           final textChanged = text.length != _lastProcessingTextLen;
@@ -444,6 +448,23 @@ class WebServerHost extends ChangeNotifier {
       );
     }
 
+    // Composer "No API connection" placeholder — push chat_updated only when
+    // the connection flag flips (not on one-off request failures).
+    final llm = _llmProvider;
+    if (streamHub != null && llm != null) {
+      void onLlmReady() {
+        final ready = llm.activeService.isReady;
+        if (_lastLlmReady == ready) return;
+        _lastLlmReady = ready;
+        streamHub.broadcastChatUpdate();
+      }
+
+      _llmReadyListener = onLlmReady;
+      _lastLlmReady = llm.activeService.isReady;
+      llm.addListener(onLlmReady);
+      llm.openRouterService.addListener(onLlmReady);
+    }
+
     // Image generation live progress → web clients: percent + (when the
     // backend streams one) the in-progress preview frame, so the web chat
     // shows the image coming to life like the desktop bubble. Preview frames
@@ -530,6 +551,7 @@ class WebServerHost extends ChangeNotifier {
             streamHub,
             _groupChatRepository,
             resolveSavedImage: imageFacade?.savedImageFile,
+            llm: _llmProvider,
           )
         : null;
 
@@ -657,8 +679,9 @@ class WebServerHost extends ChangeNotifier {
       characterLibraryFacade: characterLibraryFacade,
       chargenFacade: chargenFacade,
       chatFacade: chatFacade,
-      chatPackageFacade:
-          chatService != null ? ChatPackageFacade(chatService) : null,
+      chatPackageFacade: chatService != null
+          ? ChatPackageFacade(chatService)
+          : null,
       chatToolsFacade: chatToolsFacade,
       groupFacade: groupFacade,
       settingsFacade: settingsFacade,
@@ -816,6 +839,7 @@ class WebServerHost extends ChangeNotifier {
         _tunnelManager != null ||
         _realismListener != null ||
         _genStatusListener != null ||
+        _llmReadyListener != null ||
         _imageProgressListener != null ||
         _libraryListener != null ||
         _genStatusTicker != null ||
@@ -835,6 +859,12 @@ class WebServerHost extends ChangeNotifier {
     _genStatusTicker?.cancel();
     _genStatusTicker = null;
     _wasBroadcastingGenStatus = false;
+    if (_llmReadyListener != null) {
+      _llmProvider?.removeListener(_llmReadyListener!);
+      _llmProvider?.openRouterService.removeListener(_llmReadyListener!);
+      _llmReadyListener = null;
+    }
+    _lastLlmReady = null;
     if (_imageProgressListener != null) {
       _imageGenService?.removeListener(_imageProgressListener!);
       _imageProgressListener = null;
