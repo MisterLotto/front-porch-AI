@@ -21,7 +21,7 @@
 // progress with the same word. A local copy here would drift the first time a
 // band moved.
 import 'package:front_porch_ai/services/chat/ambition_service.dart';
-import 'package:front_porch_ai/services/chat/preference_phrases.dart';
+import 'package:front_porch_ai/services/chat/preference_scoring.dart';
 
 /// Per-eval delta limits for the realism LLM calls (relationship, emotional
 /// state, one-shot). These are the authoritative ranges for what each eval is
@@ -198,31 +198,9 @@ class RealismPromptBuilder {
 
   /// The card's authored Likes & Dislikes, as ONE line the judge weighs.
   ///
-  /// This is the SCORING half of the feature (the behavioural half is
-  /// prompt_injection/preferences_injection.dart, which needs no engine). It
-  /// makes [_subjectivityFrame]'s closing claim concrete: that paragraph
-  /// already tells the model "what genuinely reaches someone is what THEY
-  /// value" and then leaves it to guess what this particular character values.
-  /// Now it does not have to.
-  ///
-  /// Rendered ONCE per turn and handed to all three prompts that carry the
-  /// frame — relationship, emotional state, and the fused one-shot — so
-  /// one-shot/multi-call parity holds by construction rather than by three
-  /// copies that happen to match today (the strict-parity contract in
-  /// CLAUDE.md).
-  ///
-  /// [intimateInto]/[intimateNotInto] are already NSFW-filtered by the caller;
-  /// this builder does not consult a switch, so there is exactly one place
-  /// that decision is made.
-  ///
-  /// Empty in, empty out: a character with no authored preferences costs their
-  /// eval exactly what it cost before this existed — the same contract the
-  /// ambition roster keeps.
-  /// [intimateAgency] mirrors the After Dark "Acts on desires" switch (already
-  /// AND-ed with the engine by the caller). It adds the refusal clause below —
-  /// omitted when off, because a judge told to weigh "she asked and was
-  /// refused" against a character who never asks is being asked to score
-  /// something that did not happen.
+  /// Scoring half of authored likes. Body lives in [PreferenceScoring.block]
+  /// so this file does not grow; the name stays here so one-shot wiring
+  /// cannot pick a second builder.
   static String preferencesBlock({
     required String charName,
     List<String> likes = const [],
@@ -230,48 +208,14 @@ class RealismPromptBuilder {
     List<String> intimateInto = const [],
     List<String> intimateNotInto = const [],
     bool intimateAgency = false,
-  }) {
-    // ONE shared cleanup with the behavioural injection (preference_phrases.dart)
-    // so what the judge weighs and what the character was told cannot diverge —
-    // and so a downloaded card's text cannot smuggle newlines into this prompt.
-    final l = sanitizePreferencePhrases(likes);
-    final d = sanitizePreferencePhrases(dislikes);
-    final i = sanitizePreferencePhrases(intimateInto);
-    final n = sanitizePreferencePhrases(intimateNotInto);
-    if (l.isEmpty && d.isEmpty && i.isEmpty && n.isEmpty) return '';
-
-    final parts = [
-      if (l.isNotEmpty) 'drawn to ${l.join(', ')}',
-      if (d.isNotEmpty) 'put off by ${d.join(', ')}',
-      if (i.isNotEmpty) 'warms to ${i.join(', ')}',
-      if (n.isNotEmpty) 'not interested in ${n.join(', ')}',
-    ];
-    return 'Specifically, $charName is ${parts.join('; ')}. '
-        'Weigh the exchange against those: a moment that touches something they '
-        'are drawn to lands harder than the same words otherwise would, and one '
-        'that hits something they are put off by costs more — even when it was '
-        'kindly meant. When one of these is what actually moved a score, SAY SO '
-        'in that score\'s reason, naming it — the user sees those reasons and '
-        'they are how a number stops being arbitrary. Do not invent preferences '
-        'beyond these. '
-        // The other half of "she acts on her desires" (preferences_injection).
-        // She can now ask for what she wants; this is what makes the answer
-        // MATTER. Without it a refusal reads to the judge as an ordinary line
-        // of dialogue, emotion barely moves, and the next turn's mood line
-        // shows a character who shrugged off being turned down — which is not
-        // a character, it is a vending machine.
-        //
-        // Direction follows personality on purpose. "Refused, therefore angry"
-        // would make every character the same character; the whole point of
-        // the maintainer's example is that a DOMINANT one gets angry where a
-        // gentler one goes quiet.
-        '${intimateAgency ? 'When $charName asked for one of these and was refused — or was '
-                  'given it — that is a real moment, not a neutral exchange. Score it '
-                  'as one, and let the direction fit who they are: pressed and turned '
-                  'down reads as anger or cold distance in a dominant character, and '
-                  'as hurt or retreat in a gentler one. ' : ''}'
-        '\n\n';
-  }
+  }) => PreferenceScoring.block(
+    charName: charName,
+    likes: likes,
+    dislikes: dislikes,
+    intimateInto: intimateInto,
+    intimateNotInto: intimateNotInto,
+    intimateAgency: intimateAgency,
+  );
 
   static String _subjectivityFrame(
     String charName,
@@ -347,6 +291,9 @@ class RealismPromptBuilder {
       '  Wanted intimacy: +3 (a charged look, a whispered word) up to +25 (explicit contact $charName '
       'craves). Unwanted or badly-timed advances: 0 to -10 (and let the bond/trust fields carry the '
       'violation). Rejection or humiliation: -15 to -25.\n'
+      '  These bands are the default. Authored "drawn to" / "warms to" tastes outrank the '
+      'Rejection band: a matching turn is wanted intimacy, not humiliation. A genuine '
+      'out-of-play stop is still Rejection.\n'
       '  Arousal measures DESIRE and PHYSICAL RESPONSE, not progress toward climax — climax only happens '
       'during active sexual contact at high arousal. At 60+ it is VISIBLE in $charName\'s behavior: '
       'breathing, focus, flushed skin, body language.\n'

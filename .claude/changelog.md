@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-08-25 — fix(realism): authored tastes own the SIGN of lust/bond/emotion
+- **Why:** Intimate prefs landed after the vanilla eval bands. The lists
+  already reached the judge ("weigh the exchange") but "Rejection or
+  humiliation: −15 to −25" still owned the sign, so a femdom card that
+  warms to struggle scored lust and bond DOWN on a resist (Nemu live chat:
+  8 → 5 through the smother; emotion stayed hurt/disappointment).
+- **What:** PreferenceScoring.block: a matching listed taste owns bond,
+  emotion, and arousal; trust is not inverted as a blob; genuine
+  out-of-play stop stays negative. Agency refusal clause yields when the
+  refusal IS the taste ("fuel, not a wound"). Arousal rubric: authored
+  "drawn to"/"warms to" outrank the Rejection band. Empty prefs still
+  vanilla. Helpers on desktop + web say sign, not only size.
+- **Files:** preference_scoring.dart (new), realism_prompt_builder,
+  preference_phrases, identity_chip_lists, chat.dart barrel,
+  RealismFormSection.tsx, preference_valence_test.dart (new)
+
 ## 2026-08-24 — fix(ci): Rawhide unit suite — FakeChatService greets, OpenRouter mock, today/gist isolation
 - **Why:** Push 4ce4aead failed GitHub `Tests (unit + integration)` with
   7 failures across 4 files. Chip goldens crashed on library-private

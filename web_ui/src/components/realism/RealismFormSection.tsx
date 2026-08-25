@@ -225,7 +225,7 @@ export function RealismFormSection({
             values={v.likes}
             onChange={(a) => set({ likes: a })}
             placeholder="e.g. thunderstorms"
-            helper="Small, specific things this character warms to. They colour how the character reacts to what is already happening — and, with the Realism Engine on, how much a moment moves them."
+            helper="Small, specific things this character warms to. They colour how they react — and, with the Realism Engine on, which way a moment moves them. A chase or struggle they are drawn to can raise bond and desire instead of reading as rejection."
           />
           <ChipList
             label="Put off by"
@@ -265,7 +265,7 @@ export function RealismFormSection({
                 values={v.intimateInto}
                 onChange={(a) => set({ intimateInto: a })}
                 placeholder="e.g. slow mornings"
-                helper="Suggestive tastes for 18+ scenes. These stay out of the prompt entirely unless 18+ themes are switched on."
+                helper="Suggestive tastes for 18+ scenes. Hidden unless 18+ is on. With the engine on these own the sign: pinning, struggle, or being fled from that they warm to raises desire (and can raise bond), not humiliation."
               />
               <ChipList
                 label="Not interested in"
