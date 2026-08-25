@@ -87,9 +87,15 @@ extension ChatServiceGreetingSeed on ChatService {
   Future<void> _applyGreetingOpeningSeed({
     required CharacterCard card,
     required int index,
+    bool scheduleEval = true,
   }) async {
     final ext = card.frontPorchExtensions;
-    final overlay = greetingOverlayAt(ext?.greetingSeeds ?? const [], index);
+    final firstMesEmpty = greetingFirstMesEmpty(card.firstMessage);
+    final overlay = greetingOverlayAt(
+      ext?.greetingSeeds ?? const [],
+      index,
+      firstMesEmpty: firstMesEmpty,
+    );
     final memberId = _activeGroup == null
         ? null
         : _getCharacterIdFromCard(card);
@@ -161,12 +167,18 @@ extension ChatServiceGreetingSeed on ChatService {
       _messages.first.activeMetadata!['realism_state'] = _captureRealismState();
     }
 
+    if (!scheduleEval) return;
     final authored = greetingHasAuthoredSeed(
       hasCardExtensions: ext != null,
       seeds: ext?.greetingSeeds ?? const [],
       greetingIndex: index,
+      firstMesEmpty: firstMesEmpty,
     );
-    if (shouldReadRoomForGreeting(index, hasAuthoredSeed: authored) &&
+    if (shouldReadRoomForGreeting(
+          index,
+          hasAuthoredSeed: authored,
+          firstMesEmpty: firstMesEmpty,
+        ) &&
         _realismActiveThisMode) {
       _runPostGreetingEval();
     } else if (_realismActiveThisMode) {
@@ -194,13 +206,20 @@ extension ChatServiceGreetingSeed on ChatService {
   }
 
   /// Custom group first_message + alts: one overlay fans out to the story
-  /// clock and every member's opening slot. Groups never had reading-the-room
-  /// on the opener (`_activeCharacter` is null), so unauthored alts inherit
-  /// the group baselines instead of calling the 1:1 eval path.
-  Future<void> _applyGroupCustomGreetingSeed(int index) async {
+  /// clock and every member's opening slot. Unauthored alts Read the Room
+  /// like 1:1; an authored overlay (including `{}`) skips.
+  Future<void> _applyGroupCustomGreetingSeed(
+    int index, {
+    bool scheduleEval = true,
+  }) async {
     final group = _activeGroup;
     if (group == null) return;
-    final overlay = greetingOverlayAt(group.greetingSeeds, index);
+    final firstMesEmpty = greetingFirstMesEmpty(group.firstMessage);
+    final overlay = greetingOverlayAt(
+      group.greetingSeeds,
+      index,
+      firstMesEmpty: firstMesEmpty,
+    );
     final time = parseGroupTimeSeed(
       group.defaultMemberRealismState,
       group.baselineRealismState,
@@ -259,8 +278,79 @@ extension ChatServiceGreetingSeed on ChatService {
       _messages.first.activeMetadata!['realism_state'] = _captureRealismState();
     }
 
-    if (_realismActiveThisMode) {
+    if (!scheduleEval) return;
+    final authored =
+        greetingOverlayAt(
+          group.greetingSeeds,
+          index,
+          firstMesEmpty: firstMesEmpty,
+        ) !=
+        null;
+    if (shouldReadRoomForGreeting(
+          index,
+          hasAuthoredSeed: authored,
+          firstMesEmpty: firstMesEmpty,
+        ) &&
+        _realismActiveThisMode) {
+      _runPostGreetingEval();
+    } else if (_realismActiveThisMode) {
       unawaited(_seedOpeningPosture().catchError((Object _) {}));
+    }
+  }
+
+  /// After unauthored group RtR, persist live scalars into the current cast
+  /// so persist + first-speaker [_loadGroupRealismIntoScalars] keep the eval.
+  /// Member-greet and custom opener share this fan-out. Whitespace first_mes
+  /// is not a custom opener and must not write only [evalChar].
+  void _writeBackGreetingEvalToGroupSlots(CharacterCard? evalChar) {
+    if (_activeGroup == null) return;
+    if (_groupCharacters.isNotEmpty) {
+      for (final c in _groupCharacters) {
+        _saveScalarsIntoGroupRealism(_getCharacterIdFromCard(c));
+      }
+      return;
+    }
+    if (evalChar != null) {
+      _saveScalarsIntoGroupRealism(_getCharacterIdFromCard(evalChar));
+    }
+  }
+
+  /// After reload restores the greeting cursor, re-apply that index's
+  /// *authored* overlay so swipe-committed fury / {} survive hydrate.
+  /// Unauthored (null) overlays must not write inherit over a persisted
+  /// RtR — load already hydrated curious; re-eval is the named leftover.
+  Future<void> _reapplyOpeningOverlayIfNeeded() async {
+    if (!_isOpeningGreetingChat) return;
+    final groupCustom =
+        _activeGroup != null &&
+        !greetingFirstMesEmpty(_activeGroup!.firstMessage);
+    if (groupCustom) {
+      final authored = greetingOverlayAt(
+            _activeGroup!.greetingSeeds,
+            _greetingIndex,
+            firstMesEmpty: false,
+          ) !=
+          null;
+      if (!authored) return;
+      await _applyGroupCustomGreetingSeed(_greetingIndex, scheduleEval: false);
+      return;
+    }
+    final owner = _greetingOwnerCard() ?? _activeCharacter;
+    if (owner != null) {
+      final ext = owner.frontPorchExtensions;
+      final firstMesEmpty = greetingFirstMesEmpty(owner.firstMessage);
+      final authored = greetingHasAuthoredSeed(
+        hasCardExtensions: ext != null,
+        seeds: ext?.greetingSeeds ?? const [],
+        greetingIndex: _greetingIndex,
+        firstMesEmpty: firstMesEmpty,
+      );
+      if (!authored) return;
+      await _applyGreetingOpeningSeed(
+        card: owner,
+        index: _greetingIndex,
+        scheduleEval: false,
+      );
     }
   }
 }

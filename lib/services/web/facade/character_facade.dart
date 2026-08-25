@@ -283,10 +283,17 @@ class CharacterFacade {
     if (tags is List) card.tags = tags.map((e) => e.toString()).toList();
     final greetings = fields['alternateGreetings'];
     if (greetings is List) {
-      card.alternateGreetings = greetings
-          .map((e) => e.toString())
-          .where((g) => g.trim().isNotEmpty)
-          .toList();
+      // Seeds omitted + alts present: compact against empty/null, not unpaired
+      // base leftovers. Group updateSettings writes both; frontPorchFromFields
+      // below writes the compacted seeds so leftover furious cannot land on
+      // Get out.
+      final paired = compactGreetingPairs(
+        greetingSlotsFromRaw(greetings),
+        fields.containsKey('greetingSeeds')
+            ? parseGreetingSeeds(fields['greetingSeeds'])
+            : const [],
+      );
+      card.alternateGreetings = paired.greetings;
     }
     // Linked worlds (attach worlds/lorebooks to a character). Worlds are keyed
     // by name; only replace when present so a partial edit doesn't clear them.
@@ -359,9 +366,10 @@ class CharacterFacade {
       systemPrompt: fields['systemPrompt']?.toString() ?? '',
       postHistoryInstructions:
           fields['postHistoryInstructions']?.toString() ?? '',
-      alternateGreetings: asStrList(
-        fields['alternateGreetings'],
-      ).where((g) => g.trim().isNotEmpty).toList(),
+      alternateGreetings: compactGreetingPairs(
+        greetingSlotsFromRaw(fields['alternateGreetings']),
+        parseGreetingSeeds(fields['greetingSeeds']),
+      ).greetings,
       tags: asStrList(fields['tags']),
       lorebook: buildLorebookFromJson(fields['lorebook']),
       frontPorchExtensions: fpExt,

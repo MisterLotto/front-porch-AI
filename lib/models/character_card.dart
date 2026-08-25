@@ -404,7 +404,10 @@ class FrontPorchExtensions {
     };
   }
 
-  factory FrontPorchExtensions.fromJson(Map<String, dynamic> json) {
+  factory FrontPorchExtensions.fromJson(
+    Map<String, dynamic> json, {
+    List<String> alternateGreetings = const [],
+  }) {
     // `is Map` + copy rather than `as Map<String, dynamic>?`: jsonDecode always
     // hands back Map<String, dynamic>, but a card map BUILT IN DART (a group
     // member seed, a test fixture, anything assembled from literals) can be
@@ -493,7 +496,11 @@ class FrontPorchExtensions {
       chatFontFamily: realism['chat_font_family'] as String?,
 
       currentTask: realism['current_task'] as String? ?? '',
-      greetingSeeds: parseGreetingSeeds(realism['greeting_seeds']),
+      greetingSeeds: () {
+        final parsed = parseGreetingSeeds(realism['greeting_seeds']);
+        if (alternateGreetings.isEmpty) return parsed;
+        return compactGreetingPairs(alternateGreetings, parsed).seeds;
+      }(),
       tier: realism['tier'] as String?,
       favoriteAvatarId: realism['favorite_avatar_id'] as String?,
     );
@@ -738,7 +745,28 @@ class CharacterCard {
   List<String> get allGreetings {
     final greetings = <String>[firstMessage];
     greetings.addAll(alternateGreetings);
-    return greetings.where((g) => g.isNotEmpty).toList();
+    return greetings.where((g) => g.trim().isNotEmpty).toList();
+  }
+
+  /// Replace [alternateGreetings] with rewritten [alts].
+  ///
+  /// Seeds not authored with the rewrite compact against empty so leftover
+  /// source seeds cannot land on the new alts. A `copyWith` that only
+  /// replaces alts must pass the compacted seeds (or `[]`) — never silently
+  /// keep source [greetingSeeds]. Pass [authoredSeeds] when the rewrite
+  /// wrote seeds alongside the new alts.
+  void assignRewrittenAlternateGreetings(
+    List<String> alts, {
+    List<GreetingRealismSeed?>? authoredSeeds,
+  }) {
+    final paired = compactRewrittenGreetingAlts(alts, authoredSeeds);
+    alternateGreetings = paired.greetings;
+    final ext = frontPorchExtensions;
+    if (ext != null) {
+      ext.greetingSeeds = paired.seeds;
+    } else if (paired.seeds.isNotEmpty) {
+      frontPorchExtensions = FrontPorchExtensions(greetingSeeds: paired.seeds);
+    }
   }
 
   Map<String, dynamic> toJson() {

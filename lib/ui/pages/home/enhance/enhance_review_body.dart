@@ -25,6 +25,15 @@ import 'package:front_porch_ai/services/chargen/chargen.dart';
 import 'package:front_porch_ai/ui/pages/home/enhance/enhance_review_porch_life.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
+/// Compact accepted Review greet texts against seeds authored with the
+/// enhance rewrite. Leftover source `ext.greetingSeeds` on the duplicate
+/// must not be passed — that loads furious onto Get out.
+({List<String> greetings, List<GreetingRealismSeed?> seeds})
+compactAcceptedEnhanceGreetings(
+  List<String> acceptedAlts,
+  List<GreetingRealismSeed?>? authoredSeeds,
+) => compactRewrittenGreetingAlts(acceptedAlts, authoredSeeds);
+
 /// Old-vs-new review of an AI Enhance run — the Review step's body inside
 /// [EnhanceWizardPage] (reworked from the old standalone EnhanceReviewPage;
 /// the wizard owns the chrome and the nav buttons now). Every rewritten
@@ -158,17 +167,19 @@ class EnhanceReviewBodyState extends State<EnhanceReviewBody> {
       copy.scenario = accepted('scenario', copy.scenario);
       if (widget.selection.greetings && (_use['greetings'] ?? false)) {
         copy.firstMessage = _controllers['firstMessage']!.text.trim();
-        copy.alternateGreetings = [
-          for (var i = 0; i < widget.enhanced.alternateGreetings.length; i++)
-            _controllers['alt$i']!.text.trim(),
-        ]..removeWhere((g) => g.isEmpty);
         final ext = copy.frontPorchExtensions;
+        // Compact against seeds the enhance step authored — not leftover
+        // source ext.greetingSeeds on the duplicate (furious on Get out).
+        final greetingPairs = compactAcceptedEnhanceGreetings([
+          for (var i = 0; i < widget.enhanced.alternateGreetings.length; i++)
+            _controllers['alt$i']!.text,
+        ], widget.enhanced.frontPorchExtensions?.greetingSeeds);
+        copy.alternateGreetings = greetingPairs.greetings;
         if (ext != null) {
-          ext.greetingSeeds = compactGreetingSeeds(
-            alignGreetingSeeds(
-              ext.greetingSeeds,
-              copy.alternateGreetings.length,
-            ),
+          ext.greetingSeeds = greetingPairs.seeds;
+        } else if (greetingPairs.seeds.isNotEmpty) {
+          copy.frontPorchExtensions = FrontPorchExtensions(
+            greetingSeeds: greetingPairs.seeds,
           );
         }
       }

@@ -137,8 +137,8 @@ class GroupChat {
   /// Custom group opener + alts. Empty when the group uses a member greet.
   List<String> get allGreetings {
     final greetings = <String>[
-      if (firstMessage.isNotEmpty) firstMessage,
-      ...alternateGreetings.where((g) => g.isNotEmpty),
+      if (firstMessage.trim().isNotEmpty) firstMessage,
+      ...alternateGreetings.where((g) => g.trim().isNotEmpty),
     ];
     return greetings;
   }
@@ -157,6 +157,9 @@ class GroupChat {
       'director_mode': directorMode,
       'first_message': firstMessage,
       'alternate_greetings': alternateGreetings,
+      'greeting_seeds': [
+        for (final s in compactGreetingSeeds(greetingSeeds)) s?.toJson(),
+      ],
       'scenario': scenario,
       'system_prompt': systemPrompt,
       'default_member_realism_state': defaultMemberRealismState,
@@ -183,6 +186,11 @@ class GroupChat {
         ? rawWorldIds.map((e) => e.toString()).toList()
         : <String>[];
 
+    final pairedOpening = compactGreetingPairs(
+      greetingSlotsFromRaw(json['alternate_greetings']),
+      parseGreetingSeeds(json['greeting_seeds']),
+    );
+
     return GroupChat(
       id: json['id'] ?? '',
       stableId:
@@ -200,14 +208,8 @@ class GroupChat {
       autoAdvance: json['auto_advance'] ?? false,
       directorMode: json['director_mode'] ?? false,
       firstMessage: json['first_message'] ?? '',
-      alternateGreetings: [
-        for (final e
-            in (json['alternate_greetings'] is List
-                ? json['alternate_greetings'] as List
-                : const []))
-          if (e is String && e.trim().isNotEmpty) e,
-      ],
-      greetingSeeds: parseGreetingSeeds(json['greeting_seeds']),
+      alternateGreetings: pairedOpening.greetings,
+      greetingSeeds: pairedOpening.seeds,
       scenario: json['scenario'] ?? '',
       systemPrompt: json['system_prompt'] ?? '',
       defaultMemberRealismState: json['default_member_realism_state'] ?? '{}',

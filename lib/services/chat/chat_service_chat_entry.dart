@@ -131,6 +131,10 @@ extension ChatServiceChatEntry on ChatService {
       // About to throw the live list away. Write it first so a slow-path
       // reload cannot hydrate a row that is still missing this turn.
       await flushPendingSaves();
+      // Detach before swapping the owner. Anything that saves between
+      // `_activeCharacter =` and `_loadLastSession` used to rebind this
+      // row to the incoming card (history/E2E then loadSession-ed Nightowl).
+      _currentSessionId = null;
 
       // Reset AFK idle state when switching to a different chat
       _cancelIdleTimer();
@@ -201,6 +205,7 @@ extension ChatServiceChatEntry on ChatService {
         '[ChatService] 🟡 setActiveCharacter: clearing messages '
         '(had ${_messages.length}) for ${character?.name}, loading session...',
       );
+      await _invalidateGreetingEval();
       _messages.clear();
       _greetingIndex = 0;
       _history.reset();
@@ -412,16 +417,26 @@ extension ChatServiceChatEntry on ChatService {
                 _storageService.realismSettings.objectivesEnabled;
           }
 
-          if (_activeCharacter!.firstMessage.isNotEmpty) {
+          final opening = _activeCharacter!.allGreetings;
+          if (opening.isNotEmpty) {
             _messages.add(
               ChatMessage(
-                text: _buildFirstMessage(_activeCharacter!),
+                text: _buildFirstMessage(
+                  _activeCharacter!,
+                  greetingText: opening.first,
+                ),
                 sender: _activeCharacter!.name,
                 isUser: false,
               ),
             );
             // Scan first message for lore (thin delegation to extracted scanner).
             _lorebookScanner.scanLatest();
+            if (_activeCharacter!.firstMessage.trim().isEmpty) {
+              await _applyGreetingOpeningSeed(
+                card: _activeCharacter!,
+                index: 0,
+              );
+            }
           }
           // Note: for the direct 0-session setActiveCharacter path (fresh import via home grid <=1 session),
           // _greetingEvalPending is left false here. The post-greeting baseline eval is scheduled only

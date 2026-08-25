@@ -191,4 +191,109 @@ void main() {
     expect(save, contains('applyPorchLifeProposal'));
     expect(save.contains('ext.copyWith('), isFalse);
   });
+
+  test(
+    'accept new greet texts vs leftover ext.greetingSeeds drops furious on Get out',
+    () {
+      final leftover = [GreetingRealismSeed(characterEmotion: 'furious')];
+      // Review must compact against enhance-authored seeds (null here), not
+      // leftover source ext.greetingSeeds on the duplicate.
+      final paired = compactAcceptedEnhanceGreetings(['Get out.'], null);
+      expect(paired.greetings, ['Get out.']);
+      expect(
+        paired.seeds,
+        isEmpty,
+        reason:
+            "['Get out.'] omit seeds must not reuse unpaired leftover [furious]",
+      );
+      expect(
+        greetingOverlayAt(paired.seeds, 1),
+        isNull,
+        reason: 'Get out overlay is not leftover furious',
+      );
+      expect(leftover.single.characterEmotion, 'furious');
+    },
+  );
+
+  test('accept new greet texts pairs a seed the enhance step authored', () {
+    final authored = [GreetingRealismSeed(characterEmotion: 'cold')];
+    final paired = compactAcceptedEnhanceGreetings(['Get out.'], authored);
+    expect(paired.greetings, ['Get out.']);
+    expect(paired.seeds.single!.characterEmotion, 'cold');
+    expect(greetingOverlayAt(paired.seeds, 1)!.characterEmotion, 'cold');
+  });
+
+  test(
+    'enhance_review_body accept leftover furious on duplicate does not land on Get out',
+    () {
+      final leftover = GreetingRealismSeed(characterEmotion: 'furious');
+      final copy = CharacterCard(
+        name: 'Nina (Enhanced)',
+        firstMessage: 'Stay.',
+        alternateGreetings: ['Stay.'],
+        frontPorchExtensions: FrontPorchExtensions(greetingSeeds: [leftover]),
+      );
+      final enhanced = CharacterCard(
+        name: 'Nina',
+        firstMessage: 'Hey.',
+        alternateGreetings: ['Get out.'],
+      );
+      final greetingPairs = compactAcceptedEnhanceGreetings(
+        enhanced.alternateGreetings,
+        enhanced.frontPorchExtensions?.greetingSeeds,
+      );
+      copy.alternateGreetings = greetingPairs.greetings;
+      copy.frontPorchExtensions!.greetingSeeds = greetingPairs.seeds;
+      expect(copy.alternateGreetings, ['Get out.']);
+      expect(
+        copy.frontPorchExtensions!.greetingSeeds,
+        isEmpty,
+        reason:
+            "accept ['Get out.'] must not load leftover duplicate [furious]",
+      );
+      expect(
+        greetingOverlayAt(copy.frontPorchExtensions!.greetingSeeds, 1),
+        isNull,
+        reason: 'Get out overlay is not leftover furious',
+      );
+      expect(leftover.characterEmotion, 'furious');
+    },
+  );
+
+  test(
+    'enhance_review_body accept authored enhance seeds still pair',
+    () {
+      final leftover = GreetingRealismSeed(characterEmotion: 'furious');
+      final copy = CharacterCard(
+        name: 'Nina (Enhanced)',
+        firstMessage: 'Stay.',
+        alternateGreetings: ['Stay.'],
+        frontPorchExtensions: FrontPorchExtensions(greetingSeeds: [leftover]),
+      );
+      final authored = [GreetingRealismSeed(characterEmotion: 'cold')];
+      final enhanced = CharacterCard(
+        name: 'Nina',
+        firstMessage: 'Hey.',
+        alternateGreetings: ['Get out.'],
+        frontPorchExtensions: FrontPorchExtensions(greetingSeeds: authored),
+      );
+      final greetingPairs = compactAcceptedEnhanceGreetings(
+        enhanced.alternateGreetings,
+        enhanced.frontPorchExtensions?.greetingSeeds,
+      );
+      copy.alternateGreetings = greetingPairs.greetings;
+      copy.frontPorchExtensions!.greetingSeeds = greetingPairs.seeds;
+      expect(copy.alternateGreetings, ['Get out.']);
+      expect(
+        copy.frontPorchExtensions!.greetingSeeds.single!.characterEmotion,
+        'cold',
+      );
+      expect(
+        greetingOverlayAt(copy.frontPorchExtensions!.greetingSeeds, 1)!
+            .characterEmotion,
+        'cold',
+      );
+      expect(leftover.characterEmotion, 'furious');
+    },
+  );
 }

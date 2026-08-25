@@ -354,6 +354,21 @@ List<GreetingRealismSeed?> parseGreetingSeeds(Object? raw) {
   ];
 }
 
+/// Keep JSON-null / non-string greet slots as empty placeholders so zip
+/// stays index-aligned; [compactGreetingPairs] then drops empty+seed together.
+/// Numbers coerce to string (V2 hostile cards); null stays `''`.
+List<String> greetingSlotsFromRaw(Object? raw) {
+  if (raw is! List) return const [];
+  return [
+    for (final e in raw)
+      e == null
+          ? ''
+          : e is String
+          ? e
+          : e.toString(),
+  ];
+}
+
 /// Pad / trim so [seeds] is the same length as the alternate-greetings list.
 List<GreetingRealismSeed?> alignGreetingSeeds(
   List<GreetingRealismSeed?> seeds,
@@ -382,25 +397,72 @@ List<GreetingRealismSeed?> compactGreetingSeeds(
   return seeds.sublist(0, end);
 }
 
-/// Overlay for `allGreetings[index]`. Index 0 (first_mes) is always null —
-/// that opening uses the card-level fields. Alts are `seeds[index - 1]`.
+/// Drop empty greet rows *and* the seed slot at the same index so compact
+/// never prefix-aligns a furious seed onto the wrong alt (Add / blank / Add).
+({List<String> greetings, List<GreetingRealismSeed?> seeds})
+compactGreetingPairs(List<String> greetings, List<GreetingRealismSeed?> seeds) {
+  final aligned = alignGreetingSeeds(seeds, greetings.length);
+  final outG = <String>[];
+  final outS = <GreetingRealismSeed?>[];
+  for (var i = 0; i < greetings.length; i++) {
+    if (greetings[i].trim().isEmpty) continue;
+    outG.add(greetings[i]);
+    outS.add(aligned[i]);
+  }
+  return (greetings: outG, seeds: compactGreetingSeeds(outS));
+}
+
+/// Compact rewritten alternate greetings.
+///
+/// When [authoredSeeds] is omitted/null, pair against empty so leftover
+/// source seeds (enhance `copyWith` of the original, chargen base leftovers)
+/// cannot land furious on Get out. When enhance/chargen actually authored
+/// seeds alongside the new alts (including `[]`), pass those so they are
+/// not wiped.
+({List<String> greetings, List<GreetingRealismSeed?> seeds})
+compactRewrittenGreetingAlts(
+  List<String> alts, [
+  List<GreetingRealismSeed?>? authoredSeeds,
+]) =>
+    compactGreetingPairs(greetingSlotsFromRaw(alts), authoredSeeds ?? const []);
+
+/// True when first_mes is missing or whitespace-only. Same pairing as empty.
+bool greetingFirstMesEmpty(String firstMes) => firstMes.trim().isEmpty;
+
+/// Overlay for `allGreetings[index]`.
+///
+/// When [firstMesEmpty] is false (non-empty first_mes), index 0 is always
+/// null — that opening uses the card-level fields — and alts are
+/// `seeds[index - 1]`. When first_mes is empty, `allGreetings` drops it so
+/// displayed 0 is alt[0] and must read `seeds[0]`.
 GreetingRealismSeed? greetingOverlayAt(
   List<GreetingRealismSeed?> seeds,
-  int greetingIndex,
-) {
+  int greetingIndex, {
+  bool firstMesEmpty = false,
+}) {
+  if (firstMesEmpty) {
+    if (greetingIndex < 0 || greetingIndex >= seeds.length) return null;
+    return seeds[greetingIndex];
+  }
   if (greetingIndex <= 0) return null;
   final i = greetingIndex - 1;
   if (i < 0 || i >= seeds.length) return null;
   return seeds[i];
 }
 
-/// Authored seed? First greet: any Front Porch extensions object counts.
-/// Alts: a non-null slot (including `{}`) counts; missing means read-the-room.
+/// Authored seed? First greet with a present first_mes: any Front Porch
+/// extensions object counts. When first_mes is empty, displayed 0 is an alt
+/// and uses the seed slot. Alts: a non-null slot (including `{}`) counts;
+/// missing means read-the-room.
 bool greetingHasAuthoredSeed({
   required bool hasCardExtensions,
   required List<GreetingRealismSeed?> seeds,
   required int greetingIndex,
+  bool firstMesEmpty = false,
 }) {
+  if (firstMesEmpty) {
+    return greetingOverlayAt(seeds, greetingIndex, firstMesEmpty: true) != null;
+  }
   if (greetingIndex <= 0) return hasCardExtensions;
   return greetingOverlayAt(seeds, greetingIndex) != null;
 }
