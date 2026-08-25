@@ -18,6 +18,7 @@ export function MessageActions({
   canSpeak,
   greetCount = 1,
   greetingIndex = 0,
+  userHasReplied = false,
   onSwipe,
   onRegenerate,
   onContinue,
@@ -31,6 +32,7 @@ export function MessageActions({
   canSpeak: boolean;
   greetCount?: number;
   greetingIndex?: number;
+  userHasReplied?: boolean;
   onSwipe: (index: number, direction: number) => void;
   onRegenerate: () => void;
   onContinue: () => void;
@@ -47,7 +49,12 @@ export function MessageActions({
   const hasSwipeVariants = !m.isUser && !isImage && count > 1;
   // Pre-existing regen swipes on the opening message are variants, not
   // card greets — same rule as desktop usesGreetingPicker.
-  const isGreet = !m.isUser && m.index === 0 && greetCount > 1 && !hasSwipeVariants;
+  const isGreet =
+    !m.isUser &&
+    m.index === 0 &&
+    greetCount > 1 &&
+    !hasSwipeVariants &&
+    !userHasReplied;
   const canSwipe =
     !m.isUser &&
     !isImage &&

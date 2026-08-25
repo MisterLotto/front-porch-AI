@@ -118,6 +118,7 @@ extension ChatServiceGroupEntry on ChatService {
         '(had ${_messages.length}) for group ${group.name}',
       );
       _messages.clear();
+      _greetingIndex = 0;
       _history.reset();
       _currentSessionId = null;
       _clearTodayPointer();

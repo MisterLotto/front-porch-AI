@@ -28,11 +28,10 @@ extension _BubbleActions on _MessageBubbleState {
   Widget _greetingSwipeRow() {
     return Consumer<ChatService>(
       builder: (context, chatService, _) {
-        final character = chatService.activeCharacter;
-        if (character == null || !chatService.isSelectableGreeting(index)) {
+        if (!chatService.isSelectableGreeting(index)) {
           return const SizedBox.shrink();
         }
-        final allGreetings = character.allGreetings;
+        final allGreetings = chatService.openingAllGreetings;
 
         return Padding(
           padding: const EdgeInsets.only(top: 8),

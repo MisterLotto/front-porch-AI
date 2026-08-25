@@ -81,6 +81,16 @@ extension _CreatorCore on CreatorState {
       firstMessageController.text = card.firstMessage;
       exampleDialogueController.text = card.mesExample;
       systemPromptController.text = card.systemPrompt;
+      for (final c in altGreetingControllers) {
+        c.dispose();
+      }
+      altGreetingControllers = [
+        for (final g in card.alternateGreetings) TextEditingController(text: g),
+      ];
+      greetingSeeds = alignGreetingSeeds(
+        card.frontPorchExtensions?.greetingSeeds ?? const [],
+        altGreetingControllers.length,
+      );
 
       progress = 1.0;
       isGenerating = false;

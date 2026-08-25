@@ -86,7 +86,7 @@ Open **AI Character Creator** from the sidebar and pick how much control you wan
 
 A few things worth knowing, whichever mode you pick:
 
-- **Alternate greetings** — the creator can write up to 5 extra opening messages alongside the first one, each with its own tone (playful, dramatic, and so on). When you start a chat, you can flip between them and begin the story from whichever opening you like.
+- **Alternate greetings** — the creator can write up to 5 extra opening messages alongside the first one, each with its own tone (playful, dramatic, and so on). When you start a chat, you can flip between them and begin the story from whichever opening you like. Each alternate can also carry its own Realism/Needs opening (mood, bond, trust, clock, needs, wardrobe) so an angry greeting does not start with the friendly first-message seed. Groups use the same greeting picker when the opener is a custom group first message (group alts + seeds) or a member's first message (that member's alts + seeds). Regen/continue/swipe on replies is the same in 1:1 and groups; the greeting picker is the extra row on message 1 only, before anyone has typed.
 - **World lore** — paste one or more wiki or lore page URLs (a Fandom wiki, for example), or attach local files (`.txt`, `.md`, `.pdf`, `.json`, `.csv`), and the creator weaves that knowledge into the character and their lorebook.
 - **Lorebook generation** — the creator can write world-knowledge entries to go with the character (more on lorebooks below).
 - **Portrait & avatars** — if you've connected an image generator (see the [User Guide](user-guide.md)), the review screen can generate a matching portrait and a whole set of expression images.

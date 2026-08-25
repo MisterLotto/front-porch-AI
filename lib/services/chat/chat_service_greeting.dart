@@ -283,11 +283,10 @@ extension ChatServiceGreeting on ChatService {
   }
 
   /// Cycle the first message through alternate greetings.
-  /// Commit-once: the same [selectGreeting] path the picker uses (first
-  /// greet keeps starting emotion; alternatives get reading-the-room).
+  /// Commit-once: the same [selectGreeting] path the picker uses.
   Future<void> cycleGreeting(int direction) async {
-    if (_activeCharacter == null || _messages.isEmpty) return;
-    final allGreetings = _activeCharacter!.allGreetings;
+    if (_messages.isEmpty) return;
+    final allGreetings = openingAllGreetings;
     if (allGreetings.length <= 1) return;
 
     var next = (_greetingIndex + direction) % allGreetings.length;

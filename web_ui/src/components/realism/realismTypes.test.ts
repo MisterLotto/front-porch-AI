@@ -53,6 +53,18 @@ describe('inventory survives detail -> form -> save body', () => {
     expect((body as typeof rv).inventory).toEqual(stored);
   });
 
+  it('carries greetingSeeds off the detail block so a phone save cannot drop them', () => {
+    const seeds = [{ characterEmotion: 'furious', shortTermBond: -40 }];
+    const rv = realismFromDetail({ greetingSeeds: seeds });
+    const body = { name: 'Nemu', ...rv };
+    expect(body.greetingSeeds).toEqual(seeds);
+  });
+
+  it('defaults greetingSeeds to an empty list, never undefined', () => {
+    expect(REALISM_DEFAULTS.greetingSeeds).toEqual([]);
+    expect(realismFromDetail(null).greetingSeeds).toEqual([]);
+  });
+
   it('defaults to an empty record, never undefined', () => {
     // Undefined would reach the Dart side as a missing key. That is survivable
     // there (it falls back to the stored value) but it would mean the web could

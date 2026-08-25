@@ -321,6 +321,7 @@ extension ChatServiceSessionLoad on ChatService {
     if (_messages.isNotEmpty) {
       _lorebookScanner.scanLatest();
     }
+    _restoreGreetingIndex();
   }
 
   /// Hydrates every session-scoped scalar the two load paths share, from one

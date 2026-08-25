@@ -41,6 +41,19 @@ void main() {
         isFalse,
       );
     });
+
+    test('a user reply ends the greet picker', () {
+      expect(
+        usesGreetingPicker(
+          messageIndex: 0,
+          isUser: false,
+          greetCount: 3,
+          swipeCount: 1,
+          userHasReplied: true,
+        ),
+        isFalse,
+      );
+    });
   });
 
   group('buildVariantOptions kind', () {

@@ -5,6 +5,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:front_porch_ai/models/character_card.dart';
+import 'package:front_porch_ai/models/greeting_realism_seed.dart';
 import 'package:front_porch_ai/models/group_member.dart';
 import 'package:front_porch_ai/utils/character_id.dart';
 import 'package:front_porch_ai/utils/group_realism_blobs.dart';
@@ -79,22 +80,24 @@ void main() {
       expect((base['alice'] as Map).containsKey('relationships'), isFalse);
     });
 
-    test('missing scalars fall back to the documented defaults (35/40/neutral/mild)',
-        () {
-      final blobs = buildGroupRealismBlobs(
-        seeds: {
-          'x': {'relationships': <String, int>{}},
-        },
-        needsEnabled: true,
-        timeOfDay: 'morning',
-        dayCount: 1,
-      );
-      final base = (jsonDecode(blobs.baselineJson) as Map)['x'] as Map;
-      expect(base['affection'], 35);
-      expect(base['trust'], 40);
-      expect(base['emotion'], 'neutral');
-      expect(base['emotionIntensity'], 'mild');
-    });
+    test(
+      'missing scalars fall back to the documented defaults (35/40/neutral/mild)',
+      () {
+        final blobs = buildGroupRealismBlobs(
+          seeds: {
+            'x': {'relationships': <String, int>{}},
+          },
+          needsEnabled: true,
+          timeOfDay: 'morning',
+          dayCount: 1,
+        );
+        final base = (jsonDecode(blobs.baselineJson) as Map)['x'] as Map;
+        expect(base['affection'], 35);
+        expect(base['trust'], 40);
+        expect(base['emotion'], 'neutral');
+        expect(base['emotionIntensity'], 'mild');
+      },
+    );
 
     test('needs disabled strips the needs map from both blobs '
         'but keeps relationships', () {
@@ -147,100 +150,149 @@ void main() {
     });
   });
 
-  group('parseGroupTimeSeed — the fresh-session clock seed (story calendar)', () {
-    test('reads the canonical top-level keys buildGroupRealismBlobs writes', () {
-      final blobs = buildGroupRealismBlobs(
-        seeds: sampleSeeds(),
-        needsEnabled: true,
-        timeOfDay: 'evening',
-        dayCount: 3,
-        storyStartDate: '1887-06-01',
-        storyStartTime: '23:47',
-      );
-      final seed = parseGroupTimeSeed(
-        blobs.defaultMemberJson,
-        blobs.baselineJson,
-      );
-      expect(seed, isNotNull);
-      expect(seed!.timeOfDay, 'evening');
-      expect(seed.dayCount, 3);
-      expect(seed.storyStartDate, '1887-06-01');
-      expect(seed.storyStartTime, '23:47');
-    });
+  group(
+    'parseGroupTimeSeed — the fresh-session clock seed (story calendar)',
+    () {
+      test('alternate greetings and greeting seeds round-trip on the blob', () {
+        final angry = GreetingRealismSeed(
+          characterEmotion: 'furious',
+          emotionIntensity: 'strong',
+        );
+        final blobs = buildGroupRealismBlobs(
+          seeds: {'a': defaultGroupMemberRealismSeed()},
+          needsEnabled: true,
+          timeOfDay: 'night',
+          dayCount: 2,
+          alternateGreetings: ['Get out.', 'Sit down.'],
+          greetingSeeds: [angry, null],
+        );
+        expect(parseGroupAlternateGreetings(blobs.defaultMemberJson), [
+          'Get out.',
+          'Sit down.',
+        ]);
+        final seeds = parseGroupGreetingSeeds(blobs.defaultMemberJson);
+        expect(seeds.first!.characterEmotion, 'furious');
+        expect(
+          greetingOverlayAt(seeds, 2),
+          isNull,
+          reason: 'trailing null slots compact; missing = unauthored',
+        );
 
-    test('falls back to the first baseline entry for pre-fix groups '
-        '(where the wizard stored its only copy)', () {
-      // A pre-calendar group: no top-level time on defaultMember, per-member
-      // baseline entries carry the wizard's seed.
-      const defaultMember = '{"perChar":{"alice":{"affection":10}}}';
-      const baseline =
-          '{"alice":{"affection":10,"timeOfDay":"night","dayCount":7}}';
-      final seed = parseGroupTimeSeed(defaultMember, baseline);
-      expect(seed, isNotNull);
-      expect(seed!.timeOfDay, 'night');
-      expect(seed.dayCount, 7);
-      expect(seed.storyStartDate, isNull);
-      expect(seed.storyStartTime, isNull);
-    });
+        final patched = withGroupOpeningAlts(
+          blobs.defaultMemberJson,
+          alternateGreetings: ['Only one'],
+          greetingSeeds: [angry],
+        );
+        expect(parseGroupAlternateGreetings(patched), ['Only one']);
+        expect(
+          parseGroupTimeSeed(patched, blobs.baselineJson)?.timeOfDay,
+          'night',
+        );
+      });
 
-    test('settings-dialog-style top-level keys win over baseline', () {
-      // The group settings dialog writes top-level keys directly.
-      const defaultMember =
-          '{"perChar":{},"timeOfDay":"afternoon","dayCount":2}';
-      const baseline = '{"alice":{"timeOfDay":"night","dayCount":9}}';
-      final seed = parseGroupTimeSeed(defaultMember, baseline);
-      expect(seed!.timeOfDay, 'afternoon');
-      expect(seed.dayCount, 2);
-    });
-
-    test('realism-off / blank / garbage blobs yield null', () {
-      expect(parseGroupTimeSeed('{}', '{}'), isNull);
-      expect(parseGroupTimeSeed('', ''), isNull);
-      expect(parseGroupTimeSeed('not json', 'also not json'), isNull);
-      expect(parseGroupTimeSeed('{"perChar":{}}', '{}'), isNull);
-    });
-  });
-
-  group('remapSeedsToMemberIds — source library id → runtime member id (mid)', () {
-    test('re-keys member entries AND relationship targets to the mid', () {
-      final seeds = sampleSeeds(); // keyed by 'alice' / 'bob' (source ids)
-      final idMap = {'alice': 'mid-a', 'bob': 'mid-b'};
-
-      final remapped = remapSeedsToMemberIds(seeds, idMap);
-
-      // Member keys are now the mids the realism engine reads.
-      expect(remapped.keys, containsAll(['mid-a', 'mid-b']));
-      expect(remapped.containsKey('alice'), isFalse);
-      // Intragroup relationship targets are re-pointed at the mids too, so
-      // "alice feels +40 about bob" survives as "mid-a → {mid-b: 40}".
-      expect((remapped['mid-a']!['relationships'] as Map)['mid-b'], 40);
-      expect((remapped['mid-b']!['relationships'] as Map)['mid-a'], -20);
-      // Scalars/needs ride along untouched.
-      expect(remapped['mid-a']!['affection'], 75);
-      expect((remapped['mid-a']!['needs'] as Map)['hunger'], 80);
-    });
-
-    test('passes through ids (and targets) with no mapping, unchanged', () {
-      final remapped = remapSeedsToMemberIds({
-        'known': {
-          'affection': 10,
-          'relationships': {'known': 5, 'stranger': 9},
+      test(
+        'reads the canonical top-level keys buildGroupRealismBlobs writes',
+        () {
+          final blobs = buildGroupRealismBlobs(
+            seeds: sampleSeeds(),
+            needsEnabled: true,
+            timeOfDay: 'evening',
+            dayCount: 3,
+            storyStartDate: '1887-06-01',
+            storyStartTime: '23:47',
+          );
+          final seed = parseGroupTimeSeed(
+            blobs.defaultMemberJson,
+            blobs.baselineJson,
+          );
+          expect(seed, isNotNull);
+          expect(seed!.timeOfDay, 'evening');
+          expect(seed.dayCount, 3);
+          expect(seed.storyStartDate, '1887-06-01');
+          expect(seed.storyStartTime, '23:47');
         },
-      }, {'known': 'mid-k'});
-      expect(remapped.keys, ['mid-k']);
-      final rels = remapped['mid-k']!['relationships'] as Map;
-      expect(rels['mid-k'], 5); // mapped target
-      expect(rels['stranger'], 9); // unmapped target left as-is
-    });
+      );
 
-    test('does NOT mutate the caller\'s seed map', () {
-      final seeds = sampleSeeds();
-      remapSeedsToMemberIds(seeds, {'alice': 'mid-a', 'bob': 'mid-b'});
-      // Original still keyed by the source ids with the original targets.
-      expect(seeds.containsKey('alice'), isTrue);
-      expect((seeds['alice']!['relationships'] as Map)['bob'], 40);
-    });
-  });
+      test('falls back to the first baseline entry for pre-fix groups '
+          '(where the wizard stored its only copy)', () {
+        // A pre-calendar group: no top-level time on defaultMember, per-member
+        // baseline entries carry the wizard's seed.
+        const defaultMember = '{"perChar":{"alice":{"affection":10}}}';
+        const baseline =
+            '{"alice":{"affection":10,"timeOfDay":"night","dayCount":7}}';
+        final seed = parseGroupTimeSeed(defaultMember, baseline);
+        expect(seed, isNotNull);
+        expect(seed!.timeOfDay, 'night');
+        expect(seed.dayCount, 7);
+        expect(seed.storyStartDate, isNull);
+        expect(seed.storyStartTime, isNull);
+      });
+
+      test('settings-dialog-style top-level keys win over baseline', () {
+        // The group settings dialog writes top-level keys directly.
+        const defaultMember =
+            '{"perChar":{},"timeOfDay":"afternoon","dayCount":2}';
+        const baseline = '{"alice":{"timeOfDay":"night","dayCount":9}}';
+        final seed = parseGroupTimeSeed(defaultMember, baseline);
+        expect(seed!.timeOfDay, 'afternoon');
+        expect(seed.dayCount, 2);
+      });
+
+      test('realism-off / blank / garbage blobs yield null', () {
+        expect(parseGroupTimeSeed('{}', '{}'), isNull);
+        expect(parseGroupTimeSeed('', ''), isNull);
+        expect(parseGroupTimeSeed('not json', 'also not json'), isNull);
+        expect(parseGroupTimeSeed('{"perChar":{}}', '{}'), isNull);
+      });
+    },
+  );
+
+  group(
+    'remapSeedsToMemberIds — source library id → runtime member id (mid)',
+    () {
+      test('re-keys member entries AND relationship targets to the mid', () {
+        final seeds = sampleSeeds(); // keyed by 'alice' / 'bob' (source ids)
+        final idMap = {'alice': 'mid-a', 'bob': 'mid-b'};
+
+        final remapped = remapSeedsToMemberIds(seeds, idMap);
+
+        // Member keys are now the mids the realism engine reads.
+        expect(remapped.keys, containsAll(['mid-a', 'mid-b']));
+        expect(remapped.containsKey('alice'), isFalse);
+        // Intragroup relationship targets are re-pointed at the mids too, so
+        // "alice feels +40 about bob" survives as "mid-a → {mid-b: 40}".
+        expect((remapped['mid-a']!['relationships'] as Map)['mid-b'], 40);
+        expect((remapped['mid-b']!['relationships'] as Map)['mid-a'], -20);
+        // Scalars/needs ride along untouched.
+        expect(remapped['mid-a']!['affection'], 75);
+        expect((remapped['mid-a']!['needs'] as Map)['hunger'], 80);
+      });
+
+      test('passes through ids (and targets) with no mapping, unchanged', () {
+        final remapped = remapSeedsToMemberIds(
+          {
+            'known': {
+              'affection': 10,
+              'relationships': {'known': 5, 'stranger': 9},
+            },
+          },
+          {'known': 'mid-k'},
+        );
+        expect(remapped.keys, ['mid-k']);
+        final rels = remapped['mid-k']!['relationships'] as Map;
+        expect(rels['mid-k'], 5); // mapped target
+        expect(rels['stranger'], 9); // unmapped target left as-is
+      });
+
+      test('does NOT mutate the caller\'s seed map', () {
+        final seeds = sampleSeeds();
+        remapSeedsToMemberIds(seeds, {'alice': 'mid-a', 'bob': 'mid-b'});
+        // Original still keyed by the source ids with the original targets.
+        expect(seeds.containsKey('alice'), isTrue);
+        expect((seeds['alice']!['relationships'] as Map)['bob'], 40);
+      });
+    },
+  );
 
   // The regression this whole change exists to fix: a creator seed must be
   // reachable at runtime, where the lookup key is the resolved member card's
@@ -256,14 +308,15 @@ void main() {
     // The group stores a decoupled copy under a FRESH uuid; the avatar file (and
     // therefore the runtime card's stableGroupId) is that uuid.
     const mid = '11111111-2222-3333-4444-555555555555';
-    final memberCard = GroupMember(
-      id: mid,
-      groupId: 'group_1',
-      name: 'Alice',
-      avatarFilename: '$mid.png',
-    ).toCharacterCard(
-      resolvedImagePath: '/data/groups/group_1/avatars/$mid.png',
-    );
+    final memberCard =
+        GroupMember(
+          id: mid,
+          groupId: 'group_1',
+          name: 'Alice',
+          avatarFilename: '$mid.png',
+        ).toCharacterCard(
+          resolvedImagePath: '/data/groups/group_1/avatars/$mid.png',
+        );
 
     test('sanity: the id-spaces genuinely differ', () {
       expect(sourceCard.stableGroupId, 'alice_library');
@@ -271,24 +324,30 @@ void main() {
       expect(sourceCard.stableGroupId == memberCard.stableGroupId, isFalse);
     });
 
-    test('WITHOUT remap: the seed is NOT reachable by the member id (the bug)', () {
-      final blobs = buildGroupRealismBlobs(
-        seeds: {
-          sourceCard.stableGroupId: {'affection': 90, 'trust': 80},
-        },
-        needsEnabled: true,
-        timeOfDay: 'morning',
-        dayCount: 1,
-      );
-      final perChar = parseGroupRealismSeeds(blobs.defaultMemberJson);
-      // Runtime reads perChar[memberCard.stableGroupId] → miss → defaults.
-      expect(perChar.containsKey(memberCard.stableGroupId), isFalse);
-    });
+    test(
+      'WITHOUT remap: the seed is NOT reachable by the member id (the bug)',
+      () {
+        final blobs = buildGroupRealismBlobs(
+          seeds: {
+            sourceCard.stableGroupId: {'affection': 90, 'trust': 80},
+          },
+          needsEnabled: true,
+          timeOfDay: 'morning',
+          dayCount: 1,
+        );
+        final perChar = parseGroupRealismSeeds(blobs.defaultMemberJson);
+        // Runtime reads perChar[memberCard.stableGroupId] → miss → defaults.
+        expect(perChar.containsKey(memberCard.stableGroupId), isFalse);
+      },
+    );
 
     test('WITH remap: the seed IS reachable by the member id (the fix)', () {
-      final remapped = remapSeedsToMemberIds({
-        sourceCard.stableGroupId: {'affection': 90, 'trust': 80},
-      }, {sourceCard.stableGroupId: memberCard.stableGroupId});
+      final remapped = remapSeedsToMemberIds(
+        {
+          sourceCard.stableGroupId: {'affection': 90, 'trust': 80},
+        },
+        {sourceCard.stableGroupId: memberCard.stableGroupId},
+      );
 
       final blobs = buildGroupRealismBlobs(
         seeds: remapped,
@@ -303,8 +362,7 @@ void main() {
       expect(perChar[memberCard.stableGroupId]!['affection'], 90);
       // baselineRealismState (read by getBaselineSeedForGroupCharacter via the
       // same mid) is likewise keyed by the mid.
-      final baseline =
-          jsonDecode(blobs.baselineJson) as Map<String, dynamic>;
+      final baseline = jsonDecode(blobs.baselineJson) as Map<String, dynamic>;
       expect(baseline.containsKey(memberCard.stableGroupId), isTrue);
       expect((baseline[memberCard.stableGroupId] as Map)['trust'], 80);
     });

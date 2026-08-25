@@ -100,6 +100,33 @@ export interface RealismValues {
   needsDecayFun: number;
   needsDecayHygiene: number;
   needsDecayComfort: number;
+  /**
+   * Sparse opening-state overlays, parallel to `alternateGreetings`.
+   * `null` = this alt still reads the room. `{}` = inherit card defaults.
+   */
+  greetingSeeds: (GreetingSeed | null)[];
+}
+
+/** Sparse per-alt overlay. Absent keys inherit the card-level seed. */
+export interface GreetingSeed {
+  characterEmotion?: string;
+  emotionIntensity?: string;
+  shortTermBond?: number;
+  longTermBond?: number;
+  trustLevel?: number;
+  dayCount?: number;
+  timeOfDay?: string;
+  storyStartDate?: string | null;
+  storyStartTime?: string | null;
+  currentTask?: string;
+  needsBaselineHunger?: number;
+  needsBaselineBladder?: number;
+  needsBaselineEnergy?: number;
+  needsBaselineSocial?: number;
+  needsBaselineFun?: number;
+  needsBaselineHygiene?: number;
+  needsBaselineComfort?: number;
+  inventory?: InventoryRecord;
 }
 
 /** Defaults mirror Flutter FrontPorchExtensions() exactly. */
@@ -150,6 +177,7 @@ export const REALISM_DEFAULTS: RealismValues = {
   needsDecayFun: 2,
   needsDecayHygiene: 1,
   needsDecayComfort: 2,
+  greetingSeeds: [],
 };
 
 // ── Pockets & Wardrobe chip text ───────────────────────────────────────────

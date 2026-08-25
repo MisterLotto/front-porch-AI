@@ -16,6 +16,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'package:front_porch_ai/models/greeting_realism_seed.dart';
+
 /// Turn order strategies for group chats.
 enum TurnOrder {
   /// Characters respond in fixed order after each user message.
@@ -50,6 +52,11 @@ class GroupChat {
   bool autoAdvance; // auto-trigger next character after one responds
   bool directorMode; // start in director mode when entering this group
   String firstMessage; // custom group greeting (empty = use first character's)
+  /// Parallel to [firstMessage], same as a character card's alternate
+  /// greetings. Empty when the group has no custom opener (member greets
+  /// are used instead). Stored on `defaultMemberRealismState`.
+  List<String> alternateGreetings;
+  List<GreetingRealismSeed?> greetingSeeds;
   String
   scenario; // group-level scenario override (empty = use first character's)
   String
@@ -113,6 +120,8 @@ class GroupChat {
     this.autoAdvance = false,
     this.directorMode = false,
     this.firstMessage = '',
+    this.alternateGreetings = const [],
+    this.greetingSeeds = const [],
     this.scenario = '',
     this.systemPrompt = '',
     this.defaultMemberRealismState = '{}',
@@ -124,6 +133,15 @@ class GroupChat {
     this.chaosModeEnabled = false,
     this.chaosNsfwEnabled = false,
   }) : characterSystemPrompts = characterSystemPrompts ?? {};
+
+  /// Custom group opener + alts. Empty when the group uses a member greet.
+  List<String> get allGreetings {
+    final greetings = <String>[
+      if (firstMessage.isNotEmpty) firstMessage,
+      ...alternateGreetings.where((g) => g.isNotEmpty),
+    ];
+    return greetings;
+  }
 
   Map<String, dynamic> toJson() {
     return {
@@ -138,6 +156,7 @@ class GroupChat {
       'auto_advance': autoAdvance,
       'director_mode': directorMode,
       'first_message': firstMessage,
+      'alternate_greetings': alternateGreetings,
       'scenario': scenario,
       'system_prompt': systemPrompt,
       'default_member_realism_state': defaultMemberRealismState,
@@ -166,7 +185,9 @@ class GroupChat {
 
     return GroupChat(
       id: json['id'] ?? '',
-      stableId: (json['stable_id'] is String && (json['stable_id'] as String).trim().isNotEmpty)
+      stableId:
+          (json['stable_id'] is String &&
+              (json['stable_id'] as String).trim().isNotEmpty)
           ? (json['stable_id'] as String).trim()
           : null,
       name: json['name'] ?? 'Group Chat',
@@ -179,6 +200,14 @@ class GroupChat {
       autoAdvance: json['auto_advance'] ?? false,
       directorMode: json['director_mode'] ?? false,
       firstMessage: json['first_message'] ?? '',
+      alternateGreetings: [
+        for (final e
+            in (json['alternate_greetings'] is List
+                ? json['alternate_greetings'] as List
+                : const []))
+          if (e is String && e.trim().isNotEmpty) e,
+      ],
+      greetingSeeds: parseGreetingSeeds(json['greeting_seeds']),
       scenario: json['scenario'] ?? '',
       systemPrompt: json['system_prompt'] ?? '',
       defaultMemberRealismState: json['default_member_realism_state'] ?? '{}',

@@ -131,6 +131,7 @@ const TranscriptRows = memo(function TranscriptRows({
   greetingIndex,
   onVariantPicked,
 }: TranscriptProps) {
+  const userHasReplied = messages.some((m) => m.isUser);
   return (
     <>
       {messages.map((m) => {
@@ -194,6 +195,7 @@ const TranscriptRows = memo(function TranscriptRows({
               canSpeak={canSpeak}
               greetCount={greetCount}
               greetingIndex={greetingIndex}
+              userHasReplied={userHasReplied}
               onSwipe={onSwipe}
               onRegenerate={onRegenerate}
               onContinue={onContinue}

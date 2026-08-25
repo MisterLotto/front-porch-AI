@@ -25,6 +25,7 @@ import 'package:uuid/uuid.dart';
 import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Persists group chat definitions to the database.
 class GroupChatRepository extends ChangeNotifier {
@@ -90,6 +91,10 @@ class GroupChatRepository extends ChangeNotifier {
             autoAdvance: g.autoAdvance,
             directorMode: g.directorMode,
             firstMessage: g.firstMessage,
+            alternateGreetings: parseGroupAlternateGreetings(
+              g.defaultMemberRealismState,
+            ),
+            greetingSeeds: parseGroupGreetingSeeds(g.defaultMemberRealismState),
             scenario: g.scenario,
             systemPrompt: g.systemPrompt,
             defaultMemberRealismState: g.defaultMemberRealismState,
@@ -135,7 +140,13 @@ class GroupChatRepository extends ChangeNotifier {
       firstMessage: Value(group.firstMessage),
       scenario: Value(group.scenario),
       systemPrompt: Value(group.systemPrompt),
-      defaultMemberRealismState: Value(group.defaultMemberRealismState),
+      defaultMemberRealismState: Value(
+        withGroupOpeningAlts(
+          group.defaultMemberRealismState,
+          alternateGreetings: group.alternateGreetings,
+          greetingSeeds: group.greetingSeeds,
+        ),
+      ),
       characterSystemPrompts: Value(jsonEncode(group.characterSystemPrompts)),
       chaosModeEnabled: Value(group.chaosModeEnabled),
       chaosNsfwEnabled: Value(group.chaosNsfwEnabled),
@@ -165,7 +176,13 @@ class GroupChatRepository extends ChangeNotifier {
           firstMessage: Value(group.firstMessage),
           scenario: Value(group.scenario),
           systemPrompt: Value(group.systemPrompt),
-          defaultMemberRealismState: Value(group.defaultMemberRealismState),
+          defaultMemberRealismState: Value(
+            withGroupOpeningAlts(
+              group.defaultMemberRealismState,
+              alternateGreetings: group.alternateGreetings,
+              greetingSeeds: group.greetingSeeds,
+            ),
+          ),
           characterSystemPrompts: Value(
             jsonEncode(group.characterSystemPrompts),
           ),

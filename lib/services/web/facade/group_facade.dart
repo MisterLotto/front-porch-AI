@@ -89,9 +89,7 @@ class GroupFacade {
       final f = File(
         p.join(_storage.groupsDir.path, groupId, 'avatars', filename),
       );
-      return f.existsSync()
-          ? f.statSync().modified.millisecondsSinceEpoch
-          : 0;
+      return f.existsSync() ? f.statSync().modified.millisecondsSinceEpoch : 0;
     } catch (_) {
       return 0;
     }
@@ -131,7 +129,9 @@ class GroupFacade {
         : TurnOrder.roundRobin;
 
     final groupId = 'group_${DateTime.now().millisecondsSinceEpoch}';
-    final avDir = Directory(p.join(_storage.groupsDir.path, groupId, 'avatars'));
+    final avDir = Directory(
+      p.join(_storage.groupsDir.path, groupId, 'avatars'),
+    );
     await avDir.create(recursive: true);
 
     for (final source in sources) {
@@ -159,7 +159,9 @@ class GroupFacade {
           avatarFilename: Value('$mid.png'),
           ttsVoice: Value(source.ttsVoice),
           lorebook: Value(
-            source.lorebook != null ? jsonEncode(source.lorebook!.toJson()) : null,
+            source.lorebook != null
+                ? jsonEncode(source.lorebook!.toJson())
+                : null,
           ),
           worldNames: Value(jsonEncode(source.worldNames)),
           frontPorchExtensions: Value(
@@ -168,7 +170,9 @@ class GroupFacade {
                 : null,
           ),
           rawExtensions: Value(
-            source.rawExtensions != null ? jsonEncode(source.rawExtensions!) : null,
+            source.rawExtensions != null
+                ? jsonEncode(source.rawExtensions!)
+                : null,
           ),
           memberState: Value(
             GroupMember.encodeProvenance(
@@ -180,7 +184,9 @@ class GroupFacade {
       );
     }
 
-    await _groups.save(GroupChat(id: groupId, name: name, turnOrder: turnOrder));
+    await _groups.save(
+      GroupChat(id: groupId, name: name, turnOrder: turnOrder),
+    );
     return {'id': groupId, 'name': name};
   }
 
@@ -206,6 +212,15 @@ class GroupFacade {
     if (f['scenario'] is String) g.scenario = f['scenario'] as String;
     if (f['firstMessage'] is String) {
       g.firstMessage = f['firstMessage'] as String;
+    }
+    if (f['alternateGreetings'] is List) {
+      g.alternateGreetings = [
+        for (final e in f['alternateGreetings'] as List)
+          if (e is String && e.trim().isNotEmpty) e,
+      ];
+    }
+    if (f.containsKey('greetingSeeds')) {
+      g.greetingSeeds = parseGreetingSeeds(f['greetingSeeds']);
     }
     if (f['turnOrder'] is String) {
       g.turnOrder = f['turnOrder'] == 'random'

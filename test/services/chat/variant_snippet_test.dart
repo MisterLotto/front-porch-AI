@@ -58,5 +58,9 @@ void main() {
       expect(shouldReadRoomForGreeting(1), isTrue);
       expect(shouldReadRoomForGreeting(8), isTrue);
     });
+
+    test('an authored overlay skips reading-the-room', () {
+      expect(shouldReadRoomForGreeting(1, hasAuthoredSeed: true), isFalse);
+    });
   });
 }

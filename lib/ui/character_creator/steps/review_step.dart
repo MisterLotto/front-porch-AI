@@ -23,6 +23,7 @@ import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/avatar_creation/avatar_generation_panel.dart';
 import 'package:front_porch_ai/ui/character_creator/character_creator.dart';
 import 'package:front_porch_ai/ui/character_creator/widgets/review_lorebook_section.dart';
+import 'package:front_porch_ai/ui/widgets/greeting_seed_form.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 
@@ -138,8 +139,9 @@ class ReviewStep extends StatelessWidget {
                                 color: AppColors.textSecondary(context),
                               ),
                             ),
-                            backgroundColor:
-                                AppColors.surfaceContainerOf(context),
+                            backgroundColor: AppColors.surfaceContainerOf(
+                              context,
+                            ),
                             side: BorderSide.none,
                             visualDensity: VisualDensity.compact,
                           ),
@@ -197,6 +199,37 @@ class ReviewStep extends StatelessWidget {
                   state.firstMessageController,
                   maxLines: 6,
                 ),
+                ...state.altGreetingControllers.asMap().entries.map((e) {
+                  final idx = e.key;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _editableField(
+                          context,
+                          'Alternate greeting ${idx + 1}',
+                          e.value,
+                          maxLines: 4,
+                        ),
+                        GreetingSeedForm(
+                          seed: idx < state.greetingSeeds.length
+                              ? state.greetingSeeds[idx]
+                              : null,
+                          showNeeds: state.realismNeedsSim,
+                          showInventory: true,
+                          onChanged: (next) {
+                            while (state.greetingSeeds.length <= idx) {
+                              state.greetingSeeds.add(null);
+                            }
+                            state.greetingSeeds[idx] = next;
+                            state.notify();
+                          },
+                        ),
+                      ],
+                    ),
+                  );
+                }),
                 _editableField(
                   context,
                   'Example Dialogue',

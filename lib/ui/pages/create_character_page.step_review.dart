@@ -314,10 +314,31 @@ extension _CreateCharacterReviewStep on _CreateCharacterPageState {
 
                 // Alt greetings
                 ..._altGreetingControllers.asMap().entries.map((entry) {
-                  return _reviewField(
-                    'Alt Greeting ${entry.key + 1}',
-                    entry.value,
-                    maxLines: 3,
+                  final idx = entry.key;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _reviewField(
+                        'Alt Greeting ${idx + 1}',
+                        entry.value,
+                        maxLines: 3,
+                      ),
+                      GreetingSeedForm(
+                        seed: idx < _altGreetingSeeds.length
+                            ? _altGreetingSeeds[idx]
+                            : null,
+                        showNeeds: _realismNeedsSim,
+                        showInventory: true,
+                        onChanged: (next) {
+                          rebuildState(() {
+                            while (_altGreetingSeeds.length <= idx) {
+                              _altGreetingSeeds.add(null);
+                            }
+                            _altGreetingSeeds[idx] = next;
+                          });
+                        },
+                      ),
+                    ],
                   );
                 }),
 

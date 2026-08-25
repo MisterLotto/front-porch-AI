@@ -12,6 +12,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/chat/chat.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/ui/widgets/group_member_realism_editor.dart';
@@ -78,6 +79,8 @@ class _GroupRealismDynamicsEditorState
   // Story Calendar authoring (story-calendar.md §3a).
   String? _storyStartDate;
   String? _storyStartTime;
+  List<String> _alternateGreetings = const [];
+  List<GreetingRealismSeed?> _greetingSeeds = const [];
 
   // The offered periods ARE [StoryClock.periods] — the wire format the seed is
   // stored in and the only list `representativeTime` knows. This picker used to
@@ -89,6 +92,10 @@ class _GroupRealismDynamicsEditorState
   @override
   void initState() {
     super.initState();
+    _alternateGreetings = parseGroupAlternateGreetings(
+      widget.initialDefaultMemberJson,
+    );
+    _greetingSeeds = parseGroupGreetingSeeds(widget.initialDefaultMemberJson);
     final parsed = parseGroupRealismSeeds(widget.initialDefaultMemberJson);
     _realismEnabled = parsed.isNotEmpty;
 
@@ -148,7 +155,14 @@ class _GroupRealismDynamicsEditorState
 
   void _emit() {
     if (!_realismEnabled) {
-      widget.onChanged('{}', '{}');
+      widget.onChanged(
+        withGroupOpeningAlts(
+          '{}',
+          alternateGreetings: _alternateGreetings,
+          greetingSeeds: _greetingSeeds,
+        ),
+        '{}',
+      );
       return;
     }
     final blobs = buildGroupRealismBlobs(
@@ -158,6 +172,8 @@ class _GroupRealismDynamicsEditorState
       dayCount: _dayCount,
       storyStartDate: _storyStartDate,
       storyStartTime: _storyStartTime,
+      alternateGreetings: _alternateGreetings,
+      greetingSeeds: _greetingSeeds,
     );
     widget.onChanged(blobs.defaultMemberJson, blobs.baselineJson);
   }
@@ -196,7 +212,9 @@ class _GroupRealismDynamicsEditorState
         ? null
         : _avatarCache.putIfAbsent(
             path,
-            () => File(path).existsSync() // io-ok: memoized per editor
+            () =>
+                File(path)
+                    .existsSync() // io-ok: memoized per editor
                 ? FileImage(File(path))
                 : null,
           );
@@ -290,7 +308,10 @@ class _GroupRealismDynamicsEditorState
                   decoration: const InputDecoration(labelText: 'Time of day'),
                   items: [
                     for (final t in StoryClock.periods)
-                      DropdownMenuItem(value: t, child: Text(t.replaceAll('_', ' '))),
+                      DropdownMenuItem(
+                        value: t,
+                        child: Text(t.replaceAll('_', ' ')),
+                      ),
                   ],
                   onChanged: (v) {
                     if (v == null) return;
@@ -302,7 +323,10 @@ class _GroupRealismDynamicsEditorState
               const SizedBox(width: 16),
               Row(
                 children: [
-                  Text('Day', style: TextStyle(color: AppColors.textSecondary(context))),
+                  Text(
+                    'Day',
+                    style: TextStyle(color: AppColors.textSecondary(context)),
+                  ),
                   IconButton(
                     icon: const Icon(Icons.remove_circle_outline),
                     onPressed: _dayCount > 1

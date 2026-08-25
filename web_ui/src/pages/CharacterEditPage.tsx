@@ -199,7 +199,13 @@ export function CharacterEditPage() {
       </label>
 
       <h3 className="section-label">Alternate greetings</h3>
-      <AltGreetingsEditor greetings={greetings} onChange={setGreetings} />
+      <AltGreetingsEditor
+        greetings={greetings}
+        onChange={setGreetings}
+        seeds={rv.greetingSeeds}
+        showNeeds={rv.needsSimEnabled}
+        onSeedsChange={(seeds) => patch({ greetingSeeds: seeds })}
+      />
 
       <h3 className="section-label">Lorebook</h3>
       <LoreEntriesEditor entries={lore} onChange={setLore} />

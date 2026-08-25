@@ -162,6 +162,15 @@ class EnhanceReviewBodyState extends State<EnhanceReviewBody> {
           for (var i = 0; i < widget.enhanced.alternateGreetings.length; i++)
             _controllers['alt$i']!.text.trim(),
         ]..removeWhere((g) => g.isEmpty);
+        final ext = copy.frontPorchExtensions;
+        if (ext != null) {
+          ext.greetingSeeds = compactGreetingSeeds(
+            alignGreetingSeeds(
+              ext.greetingSeeds,
+              copy.alternateGreetings.length,
+            ),
+          );
+        }
       }
       final loreEntries = widget.enhanced.lorebook?.entries ?? [];
       final keptLore = [

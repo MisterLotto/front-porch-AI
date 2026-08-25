@@ -62,20 +62,6 @@ String variantKindLabel(VariantKind kind) => switch (kind) {
   VariantKind.regen => 'Regen',
 };
 
-/// Opening-message picker shows card greets only when that message has no
-/// stored regen swipes. `swipeCount > 1` is a leftover of the old greet-regen
-/// button — those rows are variants, not greets.
-bool usesGreetingPicker({
-  required int messageIndex,
-  required bool isUser,
-  required int greetCount,
-  required int swipeCount,
-}) {
-  if (messageIndex != 0 || isUser) return false;
-  if (swipeCount > 1) return false;
-  return greetCount > 1;
-}
-
 /// One row in the shared greet/swipe picker.
 class VariantOption {
   final int index;
@@ -130,7 +116,24 @@ List<VariantOption> buildVariantOptions(
   ];
 }
 
-/// First greet keeps the card's starting emotion; alternative greets get
-/// reading-the-room (the post-greeting eval) on commit. Not a per-greet
-/// setting — just which path runs when the picker (or chevron) lands.
-bool shouldReadRoomForGreeting(int index) => index > 0;
+/// First greet keeps the card's starting emotion. Alternative greets get
+/// reading-the-room only when the author did **not** attach a greeting seed
+/// (null slot). An authored overlay — even `{}` inherit — skips the eval.
+bool shouldReadRoomForGreeting(int index, {bool hasAuthoredSeed = false}) =>
+    index > 0 && !hasAuthoredSeed;
+
+/// Opening-message picker shows card greets only while the chat is still
+/// the opening (no user reply yet) and that message has no stored regen
+/// swipes. `swipeCount > 1` is a leftover of the old greet-regen button.
+bool usesGreetingPicker({
+  required int messageIndex,
+  required bool isUser,
+  required int greetCount,
+  required int swipeCount,
+  bool userHasReplied = false,
+}) {
+  if (userHasReplied) return false;
+  if (messageIndex != 0 || isUser) return false;
+  if (swipeCount > 1) return false;
+  return greetCount > 1;
+}

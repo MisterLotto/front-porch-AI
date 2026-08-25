@@ -130,7 +130,13 @@ export function CreateCharacterPage() {
               First message (greeting)
               <textarea rows={5} value={d.firstMessage} onChange={(e) => set('firstMessage', e.target.value)} />
             </label>
-            <AltGreetingsEditor greetings={d.alternateGreetings} onChange={(g) => set('alternateGreetings', g)} />
+            <AltGreetingsEditor
+              greetings={d.alternateGreetings}
+              onChange={(g) => set('alternateGreetings', g)}
+              seeds={d.greetingSeeds}
+              showNeeds={d.needsSimEnabled}
+              onSeedsChange={(seeds) => set('greetingSeeds', seeds)}
+            />
             <label>
               Example dialogue
               <textarea rows={4} value={d.mesExample} onChange={(e) => set('mesExample', e.target.value)} />

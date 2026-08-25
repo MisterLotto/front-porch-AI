@@ -120,6 +120,12 @@ FrontPorchExtensions frontPorchFromFields(
     storyStartDate: b.storyStartDate,
     storyStartTime: b.storyStartTime,
     favoriteAvatarId: b.favoriteAvatarId,
+    // Same class of bug as inventory/storyStart: the React editor used to
+    // omit greetingSeeds, and rebuilding without carrying the base wiped
+    // per-alt opening state on every phone save.
+    greetingSeeds: fields.containsKey('greetingSeeds')
+        ? parseGreetingSeeds(fields['greetingSeeds'])
+        : b.greetingSeeds,
 
     // Realism Engine core.
     realismEnabled: asBool('realismEnabled', b.realismEnabled),
@@ -260,4 +266,5 @@ Map<String, dynamic> frontPorchToJson(FrontPorchExtensions e) => {
   'needsDecayFun': e.needsDecayFun,
   'needsDecayHygiene': e.needsDecayHygiene,
   'needsDecayComfort': e.needsDecayComfort,
+  'greetingSeeds': [for (final s in e.greetingSeeds) s?.toFields()],
 };

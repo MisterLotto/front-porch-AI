@@ -150,6 +150,8 @@ class CreatorState extends ChangeNotifier {
   final firstMessageController = TextEditingController();
   final exampleDialogueController = TextEditingController();
   final systemPromptController = TextEditingController();
+  List<TextEditingController> altGreetingControllers = [];
+  List<GreetingRealismSeed?> greetingSeeds = [];
 
   // SharedPreferences keys (all lifted)
   static const _prefName = 'chargen_name';
@@ -647,6 +649,11 @@ class CreatorState extends ChangeNotifier {
     firstMessageController.clear();
     exampleDialogueController.clear();
     systemPromptController.clear();
+    for (final c in altGreetingControllers) {
+      c.dispose();
+    }
+    altGreetingControllers = [];
+    greetingSeeds = [];
 
     // Chip/toggle selections
     selectedTones = {'Neutral'};
@@ -926,6 +933,9 @@ class CreatorState extends ChangeNotifier {
     firstMessageController.dispose();
     exampleDialogueController.dispose();
     systemPromptController.dispose();
+    for (final c in altGreetingControllers) {
+      c.dispose();
+    }
     quickScenarioController.dispose();
     guidedVisionController.dispose();
     guidedAppearanceController.dispose();

@@ -314,6 +314,8 @@ class ChatToolsFacade {
       'systemPrompt': g.systemPrompt,
       'scenario': g.scenario,
       'firstMessage': g.firstMessage,
+      'alternateGreetings': g.alternateGreetings,
+      'greetingSeeds': [for (final s in g.greetingSeeds) s?.toFields()],
       'members': _chat.cast
           .map(
             (p) => {

@@ -17,6 +17,7 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:front_porch_ai/models/avatar_image.dart';
+import 'package:front_porch_ai/models/greeting_realism_seed.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/models/lorebook_export.dart';
 import 'package:front_porch_ai/services/macro_resolver.dart';
@@ -212,6 +213,12 @@ class FrontPorchExtensions {
 
   String currentTask; // initial quest/task for the character
 
+  /// Sparse opening-state overlays, parallel to [CharacterCard.alternateGreetings].
+  /// Index 0 = first alternate (`allGreetings[1]`). Null slot = read-the-room;
+  /// empty overlay = inherit this object's card-level seeds and skip eval.
+  /// `first_mes` keeps using the fields above.
+  List<GreetingRealismSeed?> greetingSeeds;
+
   /// Stable identity UUID for this logical character.
   /// Carried inside the PNG (under extensions.front_porch.realism_engine.stable_id).
   /// Generated once per library entry (on create/import/touch); used to match on
@@ -310,6 +317,7 @@ class FrontPorchExtensions {
     this.chatFontFamily,
 
     this.currentTask = '',
+    this.greetingSeeds = const [],
     this.stableId,
     this.tier,
     this.favoriteAvatarId,
@@ -386,6 +394,10 @@ class FrontPorchExtensions {
         'chat_font_family': chatFontFamily,
 
         'current_task': currentTask,
+        if (compactGreetingSeeds(greetingSeeds).isNotEmpty)
+          'greeting_seeds': [
+            for (final s in compactGreetingSeeds(greetingSeeds)) s?.toJson(),
+          ],
         'tier': ?tier,
         'favorite_avatar_id': ?favoriteAvatarId,
       },
@@ -481,6 +493,7 @@ class FrontPorchExtensions {
       chatFontFamily: realism['chat_font_family'] as String?,
 
       currentTask: realism['current_task'] as String? ?? '',
+      greetingSeeds: parseGreetingSeeds(realism['greeting_seeds']),
       tier: realism['tier'] as String?,
       favoriteAvatarId: realism['favorite_avatar_id'] as String?,
     );
@@ -547,6 +560,7 @@ class FrontPorchExtensions {
     String? chatFontFamily,
 
     String? currentTask,
+    List<GreetingRealismSeed?>? greetingSeeds,
     String? stableId,
     String? tier,
     String? favoriteAvatarId,
@@ -616,6 +630,7 @@ class FrontPorchExtensions {
       chatFontFamily: chatFontFamily ?? this.chatFontFamily,
 
       currentTask: currentTask ?? this.currentTask,
+      greetingSeeds: greetingSeeds ?? this.greetingSeeds,
       stableId: stableId ?? this.stableId,
       tier: tier ?? this.tier,
       favoriteAvatarId: favoriteAvatarId ?? this.favoriteAvatarId,
@@ -633,6 +648,28 @@ class FrontPorchExtensions {
       stableId = _uuid.v4();
     }
   }
+
+  /// Card-level opening used as the merge base for greeting overlays.
+  GreetingOpeningBase get openingBase => GreetingOpeningBase(
+    shortTermBond: shortTermBond,
+    longTermBond: longTermBond,
+    trustLevel: trustLevel,
+    dayCount: dayCount,
+    timeOfDay: timeOfDay,
+    storyStartDate: storyStartDate,
+    storyStartTime: storyStartTime,
+    characterEmotion: characterEmotion,
+    emotionIntensity: emotionIntensity,
+    currentTask: currentTask,
+    needsBaselineHunger: needsBaselineHunger,
+    needsBaselineBladder: needsBaselineBladder,
+    needsBaselineEnergy: needsBaselineEnergy,
+    needsBaselineSocial: needsBaselineSocial,
+    needsBaselineFun: needsBaselineFun,
+    needsBaselineHygiene: needsBaselineHygiene,
+    needsBaselineComfort: needsBaselineComfort,
+    inventory: inventory,
+  );
 }
 
 class CharacterCard {

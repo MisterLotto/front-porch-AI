@@ -223,7 +223,10 @@ class ChatFacade {
       'summaryPaused': _chat.summaryPaused,
       'isSummaryGenerating': _chat.isSummaryGenerating,
       'greetingIndex': _chat.greetingIndex,
-      'totalGreetings': activeChar?.allGreetings.length ?? 1,
+      'totalGreetings': () {
+        final n = _chat.openingAllGreetings.length;
+        return n < 1 ? 1 : n;
+      }(),
       'userPersonaName': _personas?.persona.name ?? 'User',
       'lorebook': lorebook,
       // Living Worlds — places attached to this session (ids).

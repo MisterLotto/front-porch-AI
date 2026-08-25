@@ -21,6 +21,24 @@ part of '../chat_service.dart';
 /// Shared greet / regenerated-swipe picker: list payload + commit-once select.
 /// Chevron cycling reuses [selectGreeting] so emotion rules stay in one place.
 extension ChatServiceVariants on ChatService {
+  /// The card whose greets the opening picker cycles. Public so the bubble
+  /// (and FakeChatService) can count them without `_activeCharacter` — groups
+  /// have a null active character even when the opener is a member greet.
+  List<String> get openingAllGreetings {
+    if (isGroupMode) {
+      final g = activeGroup;
+      if (g != null && g.firstMessage.isNotEmpty) return g.allGreetings;
+      if (messages.isEmpty) return const [];
+      final cid = messages.first.characterId;
+      if (cid == null || cid.isEmpty) return const [];
+      for (final c in groupCharacters) {
+        if (c.stableGroupId == cid) return c.allGreetings;
+      }
+      return const [];
+    }
+    return activeCharacter?.allGreetings ?? const [];
+  }
+
   /// True when this bubble is the opening greet with more than one card greet
   /// and no stored regen swipes (those are variants, not greets).
   bool isSelectableGreeting(int messageIndex) {
@@ -32,8 +50,9 @@ extension ChatServiceVariants on ChatService {
     return usesGreetingPicker(
       messageIndex: messageIndex,
       isUser: msg.isUser,
-      greetCount: activeCharacter?.allGreetings.length ?? 0,
+      greetCount: openingAllGreetings.length,
       swipeCount: msg.swipes.length,
+      userHasReplied: messages.any((m) => m.isUser),
     );
   }
 
@@ -44,13 +63,8 @@ extension ChatServiceVariants on ChatService {
       return const [];
     }
     if (isSelectableGreeting(messageIndex)) {
-      final character = activeCharacter!;
-      final resolved = [
-        for (final g in character.allGreetings)
-          _buildFirstMessage(character, greetingText: g),
-      ];
       return buildVariantOptions(
-        resolved,
+        _resolvedOpeningGreetings(),
         greetingIndex,
         kind: VariantKind.greet,
       );
@@ -83,31 +97,63 @@ extension ChatServiceVariants on ChatService {
     };
   }
 
-  /// Commit one greet. First greet keeps starting emotion; alternatives
-  /// fire reading-the-room once. Re-selecting the same index is a no-op
-  /// (does not re-derive emotion).
+  /// Commit one greet. Opening-only chats re-apply that greet's authored
+  /// Realism/Needs seed (or read-the-room when the alt has none). Swiping
+  /// back to index 0 restores the card/group base — it does not keep the
+  /// previous alt's live mood. Re-selecting the same index is a no-op.
+  List<String> _resolvedOpeningGreetings() {
+    if (_activeGroup != null && _activeGroup!.firstMessage.isNotEmpty) {
+      return [
+        for (final g in _activeGroup!.allGreetings)
+          _macroResolver.resolve(
+            g,
+            MacroContext(userName: _userPersonaService.persona.name),
+            section: 'greeting',
+          ),
+      ];
+    }
+    final character = _greetingOwnerCard() ?? _activeCharacter;
+    if (character == null) return const [];
+    return [
+      for (final g in character.allGreetings)
+        _buildFirstMessage(character, greetingText: g),
+    ];
+  }
+
   Future<void> selectGreeting(int index) async {
-    if (_activeCharacter == null || _messages.isEmpty) return;
-    final allGreetings = _activeCharacter!.allGreetings;
+    if (_messages.isEmpty) return;
+    final allGreetings = openingAllGreetings;
     if (allGreetings.length <= 1) return;
     if (index < 0 || index >= allGreetings.length) return;
     if (index == _greetingIndex) return;
 
     _greetingIndex = index;
-    final greeting = allGreetings[_greetingIndex];
+    final resolved = _resolvedOpeningGreetings();
+    if (index >= resolved.length) return;
     final old = _messages[0];
+    final groupCustom =
+        _activeGroup != null && _activeGroup!.firstMessage.isNotEmpty;
     _messages[0] = ChatMessage(
-      text: _buildFirstMessage(_activeCharacter!, greetingText: greeting),
-      sender: _activeCharacter!.name,
+      text: resolved[index],
+      sender: groupCustom ? _activeGroup!.name : (old.sender),
       isUser: false,
-      characterId: old.characterId,
+      characterId: groupCustom ? null : old.characterId,
     );
+    _stampGreetingIndex(index);
+
+    if (_isOpeningGreetingChat) {
+      if (groupCustom) {
+        await _applyGroupCustomGreetingSeed(index);
+      } else {
+        final owner = _greetingOwnerCard() ?? _activeCharacter;
+        if (owner != null) {
+          await _applyGreetingOpeningSeed(card: owner, index: index);
+        }
+      }
+    }
+
     await _saveChat();
     notifyListeners();
-
-    if (shouldReadRoomForGreeting(index) && _realismActiveThisMode) {
-      _runPostGreetingEval();
-    }
   }
 
   /// Jump to an already-stored swipe. Never generates a new one (the

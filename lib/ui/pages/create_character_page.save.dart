@@ -106,6 +106,9 @@ extension _CreateCharacterSave on _CreateCharacterPageState {
         needsDecayFun: _needsDecayFun,
         needsDecayHygiene: _needsDecayHygiene,
         needsDecayComfort: _needsDecayComfort,
+        greetingSeeds: compactGreetingSeeds(
+          alignGreetingSeeds(_altGreetingSeeds, _altGreetingControllers.length),
+        ),
       );
 
       fpExt.ensureStableId();
@@ -213,6 +216,7 @@ extension _CreateCharacterSave on _CreateCharacterPageState {
         c.dispose();
       }
       _altGreetingControllers.clear();
+      _altGreetingSeeds.clear();
       _lorebookEntries.clear();
       _tags.clear();
       _realismEnabled = false;

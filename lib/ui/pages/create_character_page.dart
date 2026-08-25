@@ -25,6 +25,7 @@ import 'package:front_porch_ai/services/chat/chat.dart' show Pockets;
 import 'package:front_porch_ai/ui/avatar_creation/avatar_generation_panel.dart';
 import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
+import 'package:front_porch_ai/ui/widgets/greeting_seed_form.dart';
 import 'package:front_porch_ai/ui/widgets/needs_form_section.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/providers/app_state.dart';
@@ -100,6 +101,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
     preset: StyledTextPreset.prose,
   );
   final List<StyledTextController> _altGreetingControllers = [];
+  final List<GreetingRealismSeed?> _altGreetingSeeds = [];
 
   // ── Lorebook (Step 3) ──
   final List<LorebookEntry> _lorebookEntries = [];
