@@ -17,6 +17,7 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/utils/reasoning_markers.dart';
 
 /// Pure, deterministic post-generation normalization helpers for AI-generated
 /// character cards.
@@ -65,8 +66,9 @@ void applyCharMacroToCard(CharacterCard card, String name) {
   card.scenario = applyCharMacro(card.scenario, name);
   card.firstMessage = applyCharMacro(card.firstMessage, name);
   card.mesExample = applyCharMacro(card.mesExample, name);
-  card.alternateGreetings =
-      card.alternateGreetings.map((g) => applyCharMacro(g, name)).toList();
+  card.alternateGreetings = card.alternateGreetings
+      .map((g) => applyCharMacro(g, name))
+      .toList();
 }
 
 /// Strip `<think>`…`</think>` reasoning blocks (fuzzy — models misspell the tag
@@ -74,6 +76,7 @@ void applyCharMacroToCard(CharacterCard card, String name) {
 /// content or only "thought". Handles both completed blocks and an unterminated
 /// `<think>` prefix that runs to the end of the stream.
 String stripThinkBlocks(String raw) {
+  raw = canonicalizeReasoning(raw);
   const open = r'<(?:think|thinking|thnk|thik|tink|thin|hink|ink)>';
   const close = r'</(?:think|thinking|thnk|thik|tink|thin|hink|ink)>';
   return raw
@@ -97,6 +100,6 @@ final RegExp _singleBraceDynamicMacro = RegExp(
 /// so genuine single braces in prose (and correct `{{…}}` macros) are left as-is.
 /// Used for both generated lorebook entries and generated greetings.
 String fixDynamicMacroBraces(String content) => content.replaceAllMapped(
-      _singleBraceDynamicMacro,
-      (m) => '{{${m[1]!.toLowerCase()}${m[2]}}}',
-    );
+  _singleBraceDynamicMacro,
+  (m) => '{{${m[1]!.toLowerCase()}${m[2]}}}',
+);

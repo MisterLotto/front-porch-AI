@@ -554,7 +554,7 @@ class OpenRouterService extends LLMService {
     // payload builder), so the provider returns no reasoning to wrap. Every
     // suppress path (Continue, evals) sets reasoningEnabled=false anyway, so the
     // two predicates are equivalent in practice.
-    final wrapper = ReasoningTagWrapper(
+    final wrapper = ReasoningIngest(
       wrap: params.reasoningEnabled,
       salvage: params.salvageReasoning,
     );

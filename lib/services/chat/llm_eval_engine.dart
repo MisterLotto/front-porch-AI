@@ -27,6 +27,7 @@ import 'package:front_porch_ai/services/chat/pass_support.dart';
 import 'package:front_porch_ai/services/chat/realism_tools.dart';
 import 'package:front_porch_ai/services/chat/relationship_service.dart';
 import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/utils/reasoning_markers.dart';
 
 /// Hang guard for eval streams: the maximum gap between streamed chunks
 /// before the attempt is treated as dead (covers the first token too, so a
@@ -331,9 +332,9 @@ class LlmEvalEngine {
   /// routes here. 2000 budget for gen/check paths now applied in step 11
   /// objective_proposal leaf via this strip cb passed from god thin.)
   String stripThinkBlocks(String text) {
-    String cleaned = text
-        .replaceAll(RegExp(r'<think>.*?</think>', dotAll: true), '')
-        .trim();
+    String cleaned = canonicalizeReasoning(
+      text,
+    ).replaceAll(RegExp(r'<think>.*?</think>', dotAll: true), '').trim();
     final unclosed = cleaned.indexOf('<think>');
     if (unclosed >= 0) {
       cleaned = cleaned.substring(0, unclosed).trim();
@@ -477,20 +478,21 @@ class LlmEvalEngine {
         // retry/give-up path instead, so a hung eval degrades to the same
         // silent fail-and-retry-next-interval the passes were designed for.
         bool cancelledDuringStream = false;
-        await for (final chunk in llm
-            .generateStream(params)
-            .timeout(
-              streamChunkTimeout,
-              onTimeout: (sink) {
-                sink.addError(
-                  TimeoutException(
-                    'eval stream: no chunk within '
-                    '${streamChunkTimeout.inSeconds}s',
-                  ),
-                );
-                sink.close();
-              },
-            )) {
+        await for (final chunk
+            in llm
+                .generateStream(params)
+                .timeout(
+                  streamChunkTimeout,
+                  onTimeout: (sink) {
+                    sink.addError(
+                      TimeoutException(
+                        'eval stream: no chunk within '
+                        '${streamChunkTimeout.inSeconds}s',
+                      ),
+                    );
+                    sink.close();
+                  },
+                )) {
           // If a cancellation has been requested, terminate streaming gracefully.
           if (getIsCancellingRealismEval() || getRealismEvalCancelled()) {
             debugPrint('[Realism] streaming terminated via cancel');
@@ -608,17 +610,17 @@ class LlmEvalEngine {
 
     final needsStateStr = currentNeeds != null && currentNeeds.isNotEmpty
         ? '\nCurrent needs for $charName (0-100, lower = more urgent): '
-            '${currentNeeds.entries.map((e) => '${e.key}: ${e.value}').join(', ')}\n\n'
+              '${currentNeeds.entries.map((e) => '${e.key}: ${e.value}').join(', ')}\n\n'
         : '';
 
     final decayContextStr = decayTurns != null
         ? (decayTurns > 0
-            ? '\nNOTE: Time has passed \u2014 needs have drifted lower by $decayTurns turn(s) of normal decline. '
-                'When the scene describes an activity that restores a need (using the bathroom -> bladder +60 to +100, '
-                'eating -> hunger +50 to +90, resting/sleeping -> energy +60 to +100, washing -> hygiene +50 to +90), '
-                'use the full chart magnitude \u2014 do not undershoot. The baseline was higher before the decline.\n\n'
-            : '\nNOTE: No passive decay is occurring. Report only the scene\'s direct effects on needs \u2014 '
-                'do not subtract any baseline drift.\n\n')
+              ? '\nNOTE: Time has passed \u2014 needs have drifted lower by $decayTurns turn(s) of normal decline. '
+                    'When the scene describes an activity that restores a need (using the bathroom -> bladder +60 to +100, '
+                    'eating -> hunger +50 to +90, resting/sleeping -> energy +60 to +100, washing -> hygiene +50 to +90), '
+                    'use the full chart magnitude \u2014 do not undershoot. The baseline was higher before the decline.\n\n'
+              : '\nNOTE: No passive decay is occurring. Report only the scene\'s direct effects on needs \u2014 '
+                    'do not subtract any baseline drift.\n\n')
         : '';
 
     String buildPrompt({required bool toolsMode}) {
@@ -647,108 +649,108 @@ class LlmEvalEngine {
         // instead of proper restorative deltas. This stripped-down version
         // only lists restorative activities with positive deltas.
         return 'Evaluate how this daily scene affects $charName\'s needs.\n\n'
-          '$needsStateStr'
-          'Scene:\n$responseText\n\n'
-          '${toolsMode ? 'Report the effects by calling the $kNeedsImpactTool tool with all seven _delta fields and a reason.\n\n' : 'Return ONLY raw JSON with all seven _delta fields and a reason. '
-              'Do not use markdown code blocks. No other text.\n'
-              '{"hunger_delta": <int>, "energy_delta": <int>, "hygiene_delta": <int>, '
-              '"fun_delta": <int>, "social_delta": <int>, "bladder_delta": <int>, '
-              '"comfort_delta": <int>, "reason": "<brief reason>"}\n\n'}'
-          'Guidelines (at ${strength}x scale \u2014 scale these baselines by $strength):\n'
-          '  • Eating food or a meal \u2192 hunger +15 to +70\n'
-          '  • Using toilet or bathroom \u2192 bladder +30 to +90\n'
-          '  • Sleeping or long rest \u2192 energy +40 to +80\n'
-          '  • Napping, dozing, or lying down \u2192 energy +15 to +35\n'
-          '  • Shower, bath, or full washing \u2192 hygiene +30 to +70\n'
-          '  • Washing face, brushing teeth, freshening up \u2192 hygiene +5 to +20\n'
-          '  • Reading, browsing, or quiet relaxation \u2192 comfort +10 to +40\n'
-          '  • Watching TV or videos \u2192 comfort +5 to +15\n'
-          '  • Looking at photos, albums, or mementos \u2192 comfort +10 to +25\n'
-          '  • Using phone or computer for leisure \u2192 fun +5 to +15\n'
-          '  • Scrolling social media on phone \u2192 fun +5 to +10\n'
-          '  • Standing at a window, enjoying a view, or looking outside \u2192 comfort +5 to +15\n'
-          '  • Exercise, yoga, or stretching \u2192 energy +5 to +15, comfort +5\n'
-          '  • Drinking any beverage \u2192 energy +5 to +10\n'
-          '  • Cooking or preparing food \u2192 comfort +5\n\n'
-          'Only report positive gains. Do NOT subtract anything.\n'
-          '${toolsMode ? 'Use ONLY the tool — no plain-text reply.' : 'Return raw JSON with no markdown, no explanation.'}';
+            '$needsStateStr'
+            'Scene:\n$responseText\n\n'
+            '${toolsMode ? 'Report the effects by calling the $kNeedsImpactTool tool with all seven _delta fields and a reason.\n\n' : 'Return ONLY raw JSON with all seven _delta fields and a reason. '
+                      'Do not use markdown code blocks. No other text.\n'
+                      '{"hunger_delta": <int>, "energy_delta": <int>, "hygiene_delta": <int>, '
+                      '"fun_delta": <int>, "social_delta": <int>, "bladder_delta": <int>, '
+                      '"comfort_delta": <int>, "reason": "<brief reason>"}\n\n'}'
+            'Guidelines (at ${strength}x scale \u2014 scale these baselines by $strength):\n'
+            '  • Eating food or a meal \u2192 hunger +15 to +70\n'
+            '  • Using toilet or bathroom \u2192 bladder +30 to +90\n'
+            '  • Sleeping or long rest \u2192 energy +40 to +80\n'
+            '  • Napping, dozing, or lying down \u2192 energy +15 to +35\n'
+            '  • Shower, bath, or full washing \u2192 hygiene +30 to +70\n'
+            '  • Washing face, brushing teeth, freshening up \u2192 hygiene +5 to +20\n'
+            '  • Reading, browsing, or quiet relaxation \u2192 comfort +10 to +40\n'
+            '  • Watching TV or videos \u2192 comfort +5 to +15\n'
+            '  • Looking at photos, albums, or mementos \u2192 comfort +10 to +25\n'
+            '  • Using phone or computer for leisure \u2192 fun +5 to +15\n'
+            '  • Scrolling social media on phone \u2192 fun +5 to +10\n'
+            '  • Standing at a window, enjoying a view, or looking outside \u2192 comfort +5 to +15\n'
+            '  • Exercise, yoga, or stretching \u2192 energy +5 to +15, comfort +5\n'
+            '  • Drinking any beverage \u2192 energy +5 to +10\n'
+            '  • Cooking or preparing food \u2192 comfort +5\n\n'
+            'Only report positive gains. Do NOT subtract anything.\n'
+            '${toolsMode ? 'Use ONLY the tool — no plain-text reply.' : 'Return raw JSON with no markdown, no explanation.'}';
       } else if (userCritique != null && userCritique.trim().isNotEmpty) {
         // B: unified rich correction prompt (no duplication of context logic)
         final prev = jsonEncode(previousDeltas ?? {});
         return 'You are the Realism Director correcting the previous Needs deltas for a roleplay scene.\n\n'
-          '$personalityInjection'
-          '$currentStance'
-          'RESPONSE (the scene that just happened):\n$responseText\n\n'
-          'Recent exchange for context:\n$recent\n\n'
-          '$needsStateStr'
-          '$decayContextStr'
-          'This is immersive erotic roleplay. Detailed physical and psychological descriptions matter: self-touch, bodily arousal states, fluids, dominance, submission, power exchange, and explicit narration of actions should influence needs (fun, social, comfort, hygiene, energy, hunger, bladder) in natural grounded ways.\n\n'
-          'Be reasonable and faithful to the written text. Do not invent events that are not described.\n\n'
-          'PREVIOUS DELTAS:\n$prev\n\n'
-          'USER CRITIQUE (The user noticed an issue with the deltas that MUST be fixed):\n"$userCritique"\n\n'
-          'Analyze what actually occurred and output a corrected set of net signed effects (deltas) on each need.\n\n'
-          'User has set Needs delta strength to ${strength}x. Emit deltas with magnitude scaled by this factor.\n\n'
-          'Even if the critique suggests little/no change, you MUST output the complete flat JSON with all seven _delta keys (0 is valid). Do not omit fields.\n\n'
-          'MAGNITUDE: needs run 0–100 (100 = fully satisfied); ±8 BARELY registers. When the scene SATISFIES/RESTORES a need, use a LARGE positive delta so it actually fills — using the bathroom → bladder +60 to +100; a full meal → hunger +50 to +90; sleeping / a long rest → energy +60 to +100; cozy solitude, lounging, drowsing → comfort +20 to +45, energy +10 to +30; a thorough wash → hygiene +50 to +90. Reserve small numbers for incidental effects, never a complete relief. (1x baselines; scale by the strength above.)\n\n'
-          'Examples of valid correction output:\n'
-          '{"hunger_delta": 8, "energy_delta": 0, "hygiene_delta": -2, "fun_delta": 5, "social_delta": 0, "bladder_delta": 0, "comfort_delta": 1, "reason": "ate snack per critique"}\n'
-          '{"hunger_delta": 0, "energy_delta": 0, "hygiene_delta": 0, "fun_delta": 0, "social_delta": 0, "bladder_delta": 0, "comfort_delta": 0, "reason": "no notable need impact"}\n\n' +
-          flatJsonAsk +
-          (toolsMode
-              ? ''
-              : '"reason": "<brief grounded reason for the deltas incorporating the critique>" }');
+                '$personalityInjection'
+                '$currentStance'
+                'RESPONSE (the scene that just happened):\n$responseText\n\n'
+                'Recent exchange for context:\n$recent\n\n'
+                '$needsStateStr'
+                '$decayContextStr'
+                'This is immersive erotic roleplay. Detailed physical and psychological descriptions matter: self-touch, bodily arousal states, fluids, dominance, submission, power exchange, and explicit narration of actions should influence needs (fun, social, comfort, hygiene, energy, hunger, bladder) in natural grounded ways.\n\n'
+                'Be reasonable and faithful to the written text. Do not invent events that are not described.\n\n'
+                'PREVIOUS DELTAS:\n$prev\n\n'
+                'USER CRITIQUE (The user noticed an issue with the deltas that MUST be fixed):\n"$userCritique"\n\n'
+                'Analyze what actually occurred and output a corrected set of net signed effects (deltas) on each need.\n\n'
+                'User has set Needs delta strength to ${strength}x. Emit deltas with magnitude scaled by this factor.\n\n'
+                'Even if the critique suggests little/no change, you MUST output the complete flat JSON with all seven _delta keys (0 is valid). Do not omit fields.\n\n'
+                'MAGNITUDE: needs run 0–100 (100 = fully satisfied); ±8 BARELY registers. When the scene SATISFIES/RESTORES a need, use a LARGE positive delta so it actually fills — using the bathroom → bladder +60 to +100; a full meal → hunger +50 to +90; sleeping / a long rest → energy +60 to +100; cozy solitude, lounging, drowsing → comfort +20 to +45, energy +10 to +30; a thorough wash → hygiene +50 to +90. Reserve small numbers for incidental effects, never a complete relief. (1x baselines; scale by the strength above.)\n\n'
+                'Examples of valid correction output:\n'
+                '{"hunger_delta": 8, "energy_delta": 0, "hygiene_delta": -2, "fun_delta": 5, "social_delta": 0, "bladder_delta": 0, "comfort_delta": 1, "reason": "ate snack per critique"}\n'
+                '{"hunger_delta": 0, "energy_delta": 0, "hygiene_delta": 0, "fun_delta": 0, "social_delta": 0, "bladder_delta": 0, "comfort_delta": 0, "reason": "no notable need impact"}\n\n' +
+            flatJsonAsk +
+            (toolsMode
+                ? ''
+                : '"reason": "<brief grounded reason for the deltas incorporating the critique>" }');
       } else {
         return 'You are evaluating the effects of a roleplay scene on $charName\'s needs.\n\n'
-              '$personalityInjection'
-              '$currentStance'
-              'RESPONSE (the scene that just happened):\n$responseText\n\n'
-              'Recent exchange for context:\n$recent\n\n'
-              '$needsStateStr'
-              '$decayContextStr'
-              'Analyze what actually occurred in the scene (actions, physical descriptions, dialogue, power dynamics, emotional tone) and determine the *net signed effects* on each of $charName\'s needs caused by this scene'
-              '${decayContextStr.isEmpty ? ', on top of normal decay' : ''}.\n\n'
-              'This is immersive erotic roleplay. Detailed physical and psychological descriptions matter: self-touch, bodily arousal states ("charging", "aching", "swollen", "leaking through fabric"), fluids, dominance, submission, "choosing", begging, power exchange, and explicit narration of what the character is doing or feeling should influence the relevant needs (fun, social, comfort, hygiene, energy, etc.) in natural, grounded ways.\n\n'
-              'Be reasonable and faithful to the written text. Do not invent events that are not described.\n\n'
-              // ── THE LOOP-BREAKER ────────────────────────────────────────
-              // Reported 2026-08-08: "the need starts to influence the
-              // response, then next turn the response further boosts the need
-              // gravity… sudden loss of like 35-40 points in single turn."
-              //
-              // The RESPONSE above was written FROM the needs listed below it:
-              // the state block hands the model lines like "sharp, gnawing
-              // hunger cramps… thoughts drifting uncontrollably to food", the
-              // model narrates exactly that, and this eval then read the
-              // narration as evidence she had BECOME hungrier. Describing a
-              // state was being scored as changing it, and the lower a need
-              // went the more vivid the prose and the harder the next hit.
-              //
-              // CLAUDE.md already forbids this for the Realism Engine — "the
-              // eval scores the USER's message, never the character's own
-              // reply" — and the rule had simply never been applied here.
-              'DEPLETION IS HANDLED SEPARATELY. Needs drift downward on their own every turn; '
-                  'that is already accounted for and is not your job. The scene text above was WRITTEN FROM '
-                  'the current needs listed below — a character mentioning her empty stomach, dragging her feet, '
-                  'or squirming is DESCRIBING the state you are being shown, not becoming worse. Do not charge '
-                  'her for it.\n'
-                  'Report a NEGATIVE delta only when the scene explicitly describes something that COST her: '
-                  'hard exertion, sex, a soaking or a mess, being kept awake, going without, or drinking a '
-                  'lot (which fills the bladder rather than emptying it). A described event SHOULD register '
-                  'clearly — a soda is a real hit to bladder, a long walk a real hit to energy — it is the '
-                  'ambient drift you must not double-count. Otherwise the negative is 0; most needs in most '
-                  'scenes should be 0.\n\n'
-              'Report *net signed effects* (deltas) on each need.\n\n'
-              'User has set Needs delta strength to ' +
-          strength.toString() +
-          'x. Emit deltas with magnitude scaled by this factor so the final applied swings match the user setting (example: a hygiene hit you would normally call -3 at 1x should be around -15 at 5x; small effects stay small at 1x). The Director (if reviewing) also receives this strength and will correct at the requested scale.\n\n'
-              'The optional Director/Verifier (when enabled with authority on needs) will correct you if your structured output does not match the actual narrative you just wrote.\n\n'
-              'CRITICAL — MAGNITUDE: needs run 0–100 (100 = fully satisfied). A delta of ±5 is a nudge and ±8 BARELY registers, so when the scene clearly SATISFIES or RESTORES a need you MUST use a LARGE positive delta so the need actually fills — do NOT lowball a complete relief:\n'
-              '  • Using the bathroom / relieving oneself → bladder +60 to +100 (a full relief nearly maxes it; +8 leaves them still desperate to go)\n'
-              '  • A full meal → hunger +50 to +90 (a snack is smaller, ~+15)\n'
-              '  • Sleeping, a long rest, or "through the night / waking next morning" → energy +60 to +100 (and broadly restores other physical needs as the body recovers; hygiene/social/fun stay only mildly affected)\n'
-              '  • Drowsing, lounging, cozy solitude, or quiet relaxation → comfort +20 to +45, energy +10 to +30\n'
-              '  • A thorough wash, shower, or bath → hygiene +50 to +90\n'
-              '  • Deep, fulfilling social connection, cuddling, or play → social / fun +20 to +50; comfort +10 to +25\n'
-              'Partial or interrupted versions get proportionally smaller deltas. Reserve small numbers (±1 to ±8) for INCIDENTAL effects, never for a complete relief or restoration. (These are 1x baselines — scale by the strength factor above.)\n\n' +
+                '$personalityInjection'
+                '$currentStance'
+                'RESPONSE (the scene that just happened):\n$responseText\n\n'
+                'Recent exchange for context:\n$recent\n\n'
+                '$needsStateStr'
+                '$decayContextStr'
+                'Analyze what actually occurred in the scene (actions, physical descriptions, dialogue, power dynamics, emotional tone) and determine the *net signed effects* on each of $charName\'s needs caused by this scene'
+                '${decayContextStr.isEmpty ? ', on top of normal decay' : ''}.\n\n'
+                'This is immersive erotic roleplay. Detailed physical and psychological descriptions matter: self-touch, bodily arousal states ("charging", "aching", "swollen", "leaking through fabric"), fluids, dominance, submission, "choosing", begging, power exchange, and explicit narration of what the character is doing or feeling should influence the relevant needs (fun, social, comfort, hygiene, energy, etc.) in natural, grounded ways.\n\n'
+                'Be reasonable and faithful to the written text. Do not invent events that are not described.\n\n'
+                // ── THE LOOP-BREAKER ────────────────────────────────────────
+                // Reported 2026-08-08: "the need starts to influence the
+                // response, then next turn the response further boosts the need
+                // gravity… sudden loss of like 35-40 points in single turn."
+                //
+                // The RESPONSE above was written FROM the needs listed below it:
+                // the state block hands the model lines like "sharp, gnawing
+                // hunger cramps… thoughts drifting uncontrollably to food", the
+                // model narrates exactly that, and this eval then read the
+                // narration as evidence she had BECOME hungrier. Describing a
+                // state was being scored as changing it, and the lower a need
+                // went the more vivid the prose and the harder the next hit.
+                //
+                // CLAUDE.md already forbids this for the Realism Engine — "the
+                // eval scores the USER's message, never the character's own
+                // reply" — and the rule had simply never been applied here.
+                'DEPLETION IS HANDLED SEPARATELY. Needs drift downward on their own every turn; '
+                'that is already accounted for and is not your job. The scene text above was WRITTEN FROM '
+                'the current needs listed below — a character mentioning her empty stomach, dragging her feet, '
+                'or squirming is DESCRIBING the state you are being shown, not becoming worse. Do not charge '
+                'her for it.\n'
+                'Report a NEGATIVE delta only when the scene explicitly describes something that COST her: '
+                'hard exertion, sex, a soaking or a mess, being kept awake, going without, or drinking a '
+                'lot (which fills the bladder rather than emptying it). A described event SHOULD register '
+                'clearly — a soda is a real hit to bladder, a long walk a real hit to energy — it is the '
+                'ambient drift you must not double-count. Otherwise the negative is 0; most needs in most '
+                'scenes should be 0.\n\n'
+                'Report *net signed effects* (deltas) on each need.\n\n'
+                'User has set Needs delta strength to ' +
+            strength.toString() +
+            'x. Emit deltas with magnitude scaled by this factor so the final applied swings match the user setting (example: a hygiene hit you would normally call -3 at 1x should be around -15 at 5x; small effects stay small at 1x). The Director (if reviewing) also receives this strength and will correct at the requested scale.\n\n'
+                'The optional Director/Verifier (when enabled with authority on needs) will correct you if your structured output does not match the actual narrative you just wrote.\n\n'
+                'CRITICAL — MAGNITUDE: needs run 0–100 (100 = fully satisfied). A delta of ±5 is a nudge and ±8 BARELY registers, so when the scene clearly SATISFIES or RESTORES a need you MUST use a LARGE positive delta so the need actually fills — do NOT lowball a complete relief:\n'
+                '  • Using the bathroom / relieving oneself → bladder +60 to +100 (a full relief nearly maxes it; +8 leaves them still desperate to go)\n'
+                '  • A full meal → hunger +50 to +90 (a snack is smaller, ~+15)\n'
+                '  • Sleeping, a long rest, or "through the night / waking next morning" → energy +60 to +100 (and broadly restores other physical needs as the body recovers; hygiene/social/fun stay only mildly affected)\n'
+                '  • Drowsing, lounging, cozy solitude, or quiet relaxation → comfort +20 to +45, energy +10 to +30\n'
+                '  • A thorough wash, shower, or bath → hygiene +50 to +90\n'
+                '  • Deep, fulfilling social connection, cuddling, or play → social / fun +20 to +50; comfort +10 to +25\n'
+                'Partial or interrupted versions get proportionally smaller deltas. Reserve small numbers (±1 to ±8) for INCIDENTAL effects, never for a complete relief or restoration. (These are 1x baselines — scale by the strength factor above.)\n\n' +
             flatJsonAsk +
             (toolsMode
                 ? 'If the scene had little or no notable effect on needs, use small numbers or zeros and a short reason.'

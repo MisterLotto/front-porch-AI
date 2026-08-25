@@ -1,12 +1,14 @@
 import 'dart:convert';
 
+import 'package:front_porch_ai/utils/reasoning_markers.dart';
+
 /// A utility for sanitizing and recovering broken JSON outputs from LLMs.
 class JsonSanitizer {
   /// Cleans markdown boundaries, trailing commas, and inline unescaped newlines.
   static String sanitize(String input) {
     if (input.isEmpty) return input;
 
-    var cleaned = input;
+    var cleaned = canonicalizeReasoning(input);
 
     // 1. Strip markdown fences and thought blocks
     // Fuzzy matching: models misspell <think> at high temp (e.g. <ink>, <hink>)

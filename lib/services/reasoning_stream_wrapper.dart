@@ -16,6 +16,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'package:front_porch_ai/utils/reasoning_markers.dart';
+
 /// Wraps an OpenAI-style split reasoning stream (`reasoning_content` /
 /// `reasoning` deltas separate from `content` deltas) back into the inline
 /// `<think>…</think>` framing the rest of the app understands — the single
@@ -93,5 +95,35 @@ class ReasoningTagWrapper {
       return '</think>\n';
     }
     return '';
+  }
+}
+
+/// One ingest for a generateStream: split `reasoning_content` is wrapped,
+/// and thinking dumped inside `content` (Gemma channels, MiniMax, …) is
+/// sniffed from bytes and canonicalized to the same `<think>` tags.
+///
+/// [wrap]/[salvage] match [ReasoningTagWrapper]. Marker peeling stays on
+/// when salvage is on so evals can still strip. When both are off, the
+/// think body is dropped and only the spoken tail is kept.
+class ReasoningIngest {
+  ReasoningIngest({required bool wrap, bool salvage = false})
+    : _tags = ReasoningTagWrapper(wrap: wrap, salvage: salvage),
+      _markers = ReasoningMarkerRewriter(keep: wrap || salvage);
+
+  final ReasoningTagWrapper _tags;
+  final ReasoningMarkerRewriter _markers;
+
+  String onReasoning(String delta) => _tags.onReasoning(delta);
+
+  String onContent(String delta) {
+    final rewritten = _markers.push(delta);
+    if (rewritten.isEmpty) return '';
+    return _tags.onContent(rewritten);
+  }
+
+  String finish() {
+    final rest = _markers.finish();
+    final fromMarkers = rest.isEmpty ? '' : _tags.onContent(rest);
+    return '$fromMarkers${_tags.finish()}';
   }
 }

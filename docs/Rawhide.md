@@ -6,3 +6,7 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 ## Recent improvements (unreleased — ships in the next build)
 
 - 💛 **Intimate preferences now guide the Realism evals** — listed tastes can change the direction of a score, not only how hard it hits. Blank preferences keep the old defaults. Same on the phone.
+
+- 🧠 **Thinking strength chips only show when this model actually has levels** — a host that accepts every value is not a menu. On/off still works. Same on the phone.
+
+- 💭 **Thinking dumped inside the reply is folded into the Thought chip** — same as when the host already splits it. Same on the phone.

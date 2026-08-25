@@ -191,15 +191,21 @@ class _ThinkingSettingsBlockState extends State<ThinkingSettingsBlock> {
         : reasoningEffortThinkingOn(widget.modelId, widget.enabled);
     final pending = (_isOmlx || _isLocalRemote)
         ? widget.modelId.isNotEmpty &&
-            !ReasoningSupportResolver.instance.isResolved(widget.modelId)
+              !ReasoningSupportResolver.instance.isResolved(widget.modelId)
         : !local &&
-            reasoningEffortMenuPending(
-              widget.modelId,
-              apiUrl: _storage?.remoteApiUrl ?? '',
-            );
+              reasoningEffortMenuPending(
+                widget.modelId,
+                apiUrl: _storage?.remoteApiUrl ?? '',
+              );
     // A model whose template has no thinking machinery at all: the switch and
     // the chips would both be no-ops, so say that instead of implying they work.
     final localCannotThink = templateSupport == ThinkingSupport.none;
+    // Template toggle (oMLX/GGUF) OR a remote poke that learned on/off only
+    // (NanoGPT returning the host enum, not this model's levels).
+    final toggleOnly =
+        templateSupport == ThinkingSupport.toggle ||
+        reasoningEffortIsToggleOnly(effectiveModelId);
+    final strengthChips = reasoningEffortChipsFor(effectiveModelId);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -237,7 +243,7 @@ class _ThinkingSettingsBlockState extends State<ThinkingSettingsBlock> {
               ),
             ),
           ),
-        if (templateSupport == ThinkingSupport.toggle)
+        if (toggleOnly)
           Padding(
             padding: EdgeInsets.only(top: widget.compact ? 2 : 4),
             child: Text(
@@ -276,7 +282,7 @@ class _ThinkingSettingsBlockState extends State<ThinkingSettingsBlock> {
               ),
             ),
           ),
-        if (thinkingOn && !localCannotThink)
+        if (thinkingOn && !localCannotThink && strengthChips.isNotEmpty)
           Padding(
             padding: EdgeInsets.only(top: widget.compact ? 4 : 12),
             child: ThinkingStrengthControl(

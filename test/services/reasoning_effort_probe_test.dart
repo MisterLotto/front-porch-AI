@@ -67,6 +67,72 @@ void main() {
     );
   });
 
+  test('OpenAI/LMS host enum becomes toggle-only, not six chips', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+    server.listen((req) async {
+      req.response
+        ..statusCode = 400
+        ..headers.contentType = ContentType.json
+        ..write(
+          jsonEncode({
+            'error': {
+              'message':
+                  "Invalid 'reasoning_effort' value: 'fpai_probe'. "
+                  'Supported values: none, minimal, low, medium, high, xhigh.',
+            },
+          }),
+        );
+      await req.response.close();
+    });
+    const model = 'google/gemma-4-26B-A4B';
+    final learned = await probeReasoningEfforts(
+      model: model,
+      apiUrl: 'http://${server.address.host}:${server.port}',
+      apiKey: 't',
+      allowLocal: true,
+    );
+    expect(learned, isTrue);
+    expect(reasoningEffortIsToggleOnly(model), isTrue);
+    expect(reasoningEffortChipsFor(model), isEmpty);
+  });
+
+  test(
+    '200 on a bogus effort is toggle-only, not generic Low/Med/High',
+    () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      addTearDown(server.close);
+      server.listen((req) async {
+        req.response
+          ..statusCode = 200
+          ..headers.contentType = ContentType.json
+          ..write(
+            jsonEncode({
+              'choices': [
+                {
+                  'message': {'content': 'ok'},
+                },
+              ],
+            }),
+          );
+        await req.response.close();
+      });
+      const model = 'acme/ignores-effort';
+      await probeReasoningEfforts(
+        model: model,
+        apiUrl: 'http://${server.address.host}:${server.port}',
+        apiKey: 't',
+        allowLocal: true,
+      );
+      expect(reasoningEffortIsToggleOnly(model), isTrue);
+      expect(reasoningEffortChipsFor(model), isEmpty);
+      expect(
+        reasoningEffortChipsFor(model),
+        isNot(equals(kAppReasoningEfforts)),
+      );
+    },
+  );
+
   test('a listing-less 400 is not poked again', () async {
     final hits = <int>[];
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
@@ -104,18 +170,21 @@ Future<HttpServer> _startFakeNano({
     onHit?.call();
     final body = jsonDecode(await utf8.decoder.bind(req).join()) as Map;
     final reasoning = (body['reasoning'] as Map?)?.cast<String, dynamic>();
-    seen.add(reasoning?['effort']?.toString() ??
-        body['reasoning_effort']?.toString());
+    seen.add(
+      reasoning?['effort']?.toString() ?? body['reasoning_effort']?.toString(),
+    );
     req.response
       ..statusCode = 400
       ..headers.contentType = ContentType.json
-      ..write(jsonEncode({
-        'error': {
-          'message':
-              'Invalid value for reasoning.effort: "fpai_probe". '
-              'Supported values are: none, high, max.',
-        },
-      }));
+      ..write(
+        jsonEncode({
+          'error': {
+            'message':
+                'Invalid value for reasoning.effort: "fpai_probe". '
+                'Supported values are: none, high, max.',
+          },
+        }),
+      );
     await req.response.close();
   });
   return server;

@@ -16,6 +16,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'package:front_porch_ai/utils/reasoning_markers.dart';
+
 enum GenerationMode { normal, continue_, impersonate }
 
 /// Tracks the distinct phases of text generation for UI display.
@@ -97,10 +99,12 @@ class ChatMessage {
   String get displayText {
     final raw = text;
     if (identical(raw, _displayTextSource)) return _displayTextCache!;
-    // Fast path: no think tag at all (the overwhelming majority of messages).
-    final result = !_hasThinkRe.hasMatch(raw)
-        ? raw.trim()
-        : raw
+    final source = reasoningMarkersMayBePresent(raw)
+        ? canonicalizeReasoning(raw)
+        : raw;
+    final result = !_hasThinkRe.hasMatch(source)
+        ? source.trim()
+        : source
               .replaceAll(_closedThinkRe, '')
               .replaceAll(_openThinkRe, '')
               .trim();
@@ -140,8 +144,9 @@ class ChatMessage {
     }
     if (activeMetadata?['is_generated_image'] == true && displayText.isEmpty) {
       final prompt = (activeMetadata?['image_prompt'] as String? ?? '').trim();
-      final short =
-          prompt.length > 120 ? '${prompt.substring(0, 120)}…' : prompt;
+      final short = prompt.length > 120
+          ? '${prompt.substring(0, 120)}…'
+          : prompt;
       return '$sender: [shares a generated image'
           '${short.isEmpty ? '' : ': $short'}]';
     }
@@ -153,12 +158,15 @@ class ChatMessage {
   String? get thinkingContent {
     final raw = text;
     if (identical(raw, _thinkingSource)) return _thinkingCache;
+    final source = reasoningMarkersMayBePresent(raw)
+        ? canonicalizeReasoning(raw)
+        : raw;
     String? result;
-    if (_hasThinkRe.hasMatch(raw)) {
-      final closed = _closedThinkCaptureRe.firstMatch(raw);
+    if (_hasThinkRe.hasMatch(source)) {
+      final closed = _closedThinkCaptureRe.firstMatch(source);
       result = closed != null
           ? closed.group(1)?.trim()
-          : _openThinkCaptureRe.firstMatch(raw)?.group(1)?.trim();
+          : _openThinkCaptureRe.firstMatch(source)?.group(1)?.trim();
     }
     _thinkingSource = raw;
     _thinkingCache = result;

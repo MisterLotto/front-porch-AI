@@ -99,8 +99,7 @@ Map<String, dynamic> _chatPayload(
     'xtc_threshold': params.xtcThreshold,
     'xtc_probability': params.xtcProbability,
     if (params.topK > 0) 'top_k': params.topK,
-    if (params.dynatempRange != null)
-      'dynatemp_range': params.dynatempRange,
+    if (params.dynatempRange != null) 'dynatemp_range': params.dynatempRange,
     if (params.dryMultiplier > 0) ...{
       // Standard DRY companions (KoboldCpp defaults, stated explicitly).
       'dry_multiplier': params.dryMultiplier,
@@ -135,8 +134,7 @@ Map<String, dynamic> _chatPayload(
   // reasoning "off" discards thinking. enable_thinking:false genuinely suppresses
   // it in jinja mode (verified). reasoningMaxTokens==0 is the Continue/eval
   // hard-suppress signal.
-  final thinkOn =
-      params.reasoningEnabled && params.reasoningMaxTokens != 0;
+  final thinkOn = params.reasoningEnabled && params.reasoningMaxTokens != 0;
   payload['chat_template_kwargs'] = {'enable_thinking': thinkOn};
   payload['reasoning_effort'] = thinkOn
       ? (params.reasoningEffort.isEmpty ? 'high' : params.reasoningEffort)
@@ -252,7 +250,7 @@ Stream<String> streamOpenAiChat(
   // enable_thinking:false and parks its answer in reasoning_content would
   // otherwise hand the judges an empty reply (the remote Kimi 2.6 bug's
   // local twin); evals are never user-visible, so nothing can leak.
-  final wrapper = ReasoningTagWrapper(
+  final wrapper = ReasoningIngest(
     wrap: params.reasoningEnabled && params.reasoningMaxTokens != 0,
     salvage: params.salvageReasoning,
   );
@@ -308,7 +306,9 @@ Stream<String> streamOpenAiChat(
           // tolerate 'reasoning' too). A delta carrying reasoning is consumed
           // and never also treated as content, mirroring the OpenRouter path.
           final reasoning = delta['reasoning_content'] ?? delta['reasoning'];
-          if (reasoning != null && reasoning is String && reasoning.isNotEmpty) {
+          if (reasoning != null &&
+              reasoning is String &&
+              reasoning.isNotEmpty) {
             final out = wrapper.onReasoning(reasoning);
             if (out.isNotEmpty) yield out;
             continue;

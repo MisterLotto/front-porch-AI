@@ -113,8 +113,17 @@ class SettingsFacade {
       return;
     }
     final name = _storage.backendSettings.remoteModelName;
-    if (name.isEmpty || !_usesTemplateResolve) return;
-    await _resolveTemplate(name);
+    if (name.isEmpty) return;
+    if (_usesTemplateResolve) {
+      await _resolveTemplate(name);
+      return;
+    }
+    final b = _storage.backendSettings;
+    await probeReasoningEfforts(
+      model: name,
+      apiUrl: b.remoteApiUrl,
+      apiKey: b.remoteApiKey,
+    );
   }
 
   void _seedReasoningCatalog() {
@@ -127,8 +136,30 @@ class SettingsFacade {
     unawaited(_llm.openRouterService.fetchAvailableModels());
   }
 
+  void _kickRemoteEffortProbe() {
+    if (_llm.isLocal || _usesTemplateResolve) return;
+    final b = _storage.backendSettings;
+    if (b.remoteModelName.isEmpty || b.remoteApiUrl.isEmpty) return;
+    kickReasoningEffortProbe(
+      model: b.remoteModelName,
+      apiUrl: b.remoteApiUrl,
+      apiKey: b.remoteApiKey,
+    );
+  }
+
+  /// Remote poke that learned `{none}` is the same UI as a template toggle.
+  String? get _thinkingSupportName {
+    final local = _localThinkingSupport;
+    if (local != null) return local.name;
+    if (reasoningEffortIsToggleOnly(_reasoningModelKey)) {
+      return ThinkingSupport.toggle.name;
+    }
+    return null;
+  }
+
   Map<String, dynamic> read() {
     _seedReasoningCatalog();
+    _kickRemoteEffortProbe();
     final g = _storage.generationSettings;
     final b = _storage.backendSettings;
     return {
@@ -153,7 +184,7 @@ class SettingsFacade {
       // only a template verdict can produce ("this model cannot think").
       'reasoningMandatory': reasoningEffortIsMandatory(_reasoningModelKey),
       'reasoningEfforts': reasoningEffortChipsFor(_reasoningModelKey),
-      'reasoningLocalSupport': _localThinkingSupport?.name,
+      'reasoningLocalSupport': _thinkingSupportName,
       'generation': {
         'temperature': g.temperature,
         'minP': g.minP,

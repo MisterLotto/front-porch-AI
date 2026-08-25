@@ -40,6 +40,7 @@ export 'persona_colors.dart';
 export 'picker_prefs.dart';
 export 'png_metadata_utils.dart';
 export 'quoted_speech.dart';
+export 'reasoning_markers.dart';
 export 'safe_outbound_url.dart';
 export 'spell_check_languages.dart';
 export 'startup_trace.dart';

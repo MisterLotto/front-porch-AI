@@ -18,6 +18,7 @@
 
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:front_porch_ai/utils/reasoning_markers.dart';
 
 /// JSON extraction and repair for LLM story-pipeline responses.
 ///
@@ -31,10 +32,9 @@ abstract final class StoryJson {
   static String stripThinkTags(String text) {
     // Handle both complete and unclosed think tags
     // Complete: <think>...</think> (including multiple blocks)
-    var result = text.replaceAll(
-      RegExp(r'<think>[\s\S]*?</think>', caseSensitive: false),
-      '',
-    );
+    var result = canonicalizeReasoning(
+      text,
+    ).replaceAll(RegExp(r'<think>[\s\S]*?</think>', caseSensitive: false), '');
     // Also handle <reasoning>...</reasoning> blocks (some models use this)
     result = result.replaceAll(
       RegExp(r'<reasoning>[\s\S]*?</reasoning>', caseSensitive: false),

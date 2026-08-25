@@ -40,10 +40,11 @@ void main() {
       'supported_efforts': ['max', 'high', 'low'],
       'mandatory': false,
     });
-    expect(
-      reasoningEffortChipsFor('deepseek/deepseek-v4-flash-0731'),
-      ['low', 'high', 'max'],
-    );
+    expect(reasoningEffortChipsFor('deepseek/deepseek-v4-flash-0731'), [
+      'low',
+      'high',
+      'max',
+    ]);
     expect(
       reasoningEffortIsMandatory('deepseek/deepseek-v4-flash-0731'),
       isFalse,
@@ -57,10 +58,12 @@ void main() {
     });
     expect(reasoningEffortIsMandatory('x-ai/grok-4.6'), isTrue);
     expect(reasoningEffortThinkingOn('x-ai/grok-4.6', false), isTrue);
-    expect(
-      reasoningEffortChipsFor('x-ai/grok-4.6'),
-      ['low', 'medium', 'high', 'xhigh'],
-    );
+    expect(reasoningEffortChipsFor('x-ai/grok-4.6'), [
+      'low',
+      'medium',
+      'high',
+      'xhigh',
+    ]);
     final cap = reasoningEffortMappingCaption('x-ai/grok-4.6', 'high');
     expect(cap.toLowerCase(), contains('always thinks'));
     expect(cap, contains('Extra high'));
@@ -93,21 +96,50 @@ void main() {
   });
 
   test('a random :thinking id is not guessed as High/Max', () {
+    expect(reasoningEffortChipsFor('acme/mystery-reasoner:thinking'), [
+      'low',
+      'medium',
+      'high',
+    ]);
     expect(
-      reasoningEffortChipsFor('acme/mystery-reasoner:thinking'),
-      ['low', 'medium', 'high'],
+      wireReasoningEffort('acme/mystery-reasoner:thinking', 'medium'),
+      'medium',
     );
-    expect(wireReasoningEffort('acme/mystery-reasoner:thinking', 'medium'),
-        'medium');
   });
 
   test('plain models pass the user pick through until a 400 teaches them', () {
     expect(wireReasoningEffort('acme/gpt-lite', 'low'), 'low');
-    rememberReasoningEffortsForModel(
-      'acme/gpt-lite',
-      {'none', 'high', 'max'},
-    );
+    rememberReasoningEffortsForModel('acme/gpt-lite', {'none', 'high', 'max'});
     expect(wireReasoningEffort('acme/gpt-lite', 'low'), 'high');
     expect(reasoningEffortChipsFor('acme/gpt-lite'), ['high', 'max']);
+  });
+
+  test('the LMS/OpenAI server enum is not a per-model menu', () {
+    const lms =
+        "Invalid 'reasoning_effort' value: 'fpai_probe'. "
+        'Supported values: none, minimal, low, medium, high, xhigh.';
+    final listing = supportedReasoningEffortsFromError(lms)!;
+    expect(isGenericProviderEffortSchema(listing), isTrue);
+    expect(
+      isGenericProviderEffortSchema({'none', 'high', 'max'}),
+      isFalse,
+      reason: 'DeepSeek-on-Nano is a real short menu',
+    );
+    expect(
+      isGenericProviderEffortSchema({'none', 'low', 'high', 'max'}),
+      isFalse,
+      reason: 'Kimi is a real short menu',
+    );
+  });
+
+  test('toggle-only has no chips and does not wire effort none', () {
+    rememberReasoningEffortsForModel('google/gemma-4-26b-a4b', const {'none'});
+    expect(reasoningEffortIsToggleOnly('google/gemma-4-26b-a4b'), isTrue);
+    expect(reasoningEffortChipsFor('google/gemma-4-26b-a4b'), isEmpty);
+    expect(
+      wireReasoningEffort('google/gemma-4-26b-a4b', 'minimal'),
+      'minimal',
+      reason: 'rewriting to none would turn thinking off on Nano/OpenRouter',
+    );
   });
 }

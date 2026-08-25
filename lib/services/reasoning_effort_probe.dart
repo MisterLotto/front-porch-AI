@@ -112,21 +112,28 @@ Future<bool> _probe(
               {'role': 'user', 'content': 'ok'},
             ],
             'reasoning_effort': _kProbeEffort,
-            'reasoning': {
-              'enabled': true,
-              'effort': _kProbeEffort,
-            },
+            'reasoning': {'enabled': true, 'effort': _kProbeEffort},
           }),
         )
         .timeout(const Duration(seconds: 8));
     final body = response.body;
-    final listing = supportedReasoningEffortsFromError(body) ??
+    final listing =
+        supportedReasoningEffortsFromError(body) ??
         supportedReasoningEffortsFromError(_messageOf(body));
     if (listing != null) {
-      rememberReasoningEffortsForModel(model, listing);
-      _probed.add(model);
+      // A full OpenAI/LMS ladder is the HOST's parameter enum (the same 400
+      // LM Studio returns for a 0.5B instruct that cannot think). A real
+      // per-model menu is a short asymmetric set (high/max, low/high/max).
+      rememberReasoningEffortsForModel(
+        model,
+        isGenericProviderEffortSchema(listing) ? const {'none'} : listing,
+      );
+      _markProbedAndPersist(model);
       return true;
     }
+    // 200 on a bogus effort, or a listing-less 400: this model does not
+    // enumerate levels. Same as an oMLX template toggle — on/off only.
+    rememberReasoningEffortsForModel(model, const {'none'});
     _markProbedAndPersist(model);
     return false;
   } catch (_) {
@@ -148,7 +155,9 @@ String _messageOf(String body) {
     final decoded = jsonDecode(body);
     if (decoded is Map) {
       final err = decoded['error'];
-      if (err is Map && err['message'] != null) return err['message'].toString();
+      if (err is Map && err['message'] != null) {
+        return err['message'].toString();
+      }
       if (err is String) return err;
       if (decoded['message'] != null) return decoded['message'].toString();
     }

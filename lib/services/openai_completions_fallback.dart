@@ -5,6 +5,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:front_porch_ai/services/llm_service.dart';
+import 'package:front_porch_ai/utils/reasoning_markers.dart';
 
 /// oMLX (and some local MLX servers) register VLMs as completions-only:
 /// `POST /v1/chat/completions` returns
@@ -53,6 +54,7 @@ Map<String, dynamic> openAiCompletionsPayload(
 /// Yields `choices[0].text` chunks from an OpenAI completions SSE stream.
 Stream<String> parseCompletionsSse(Stream<List<int>> byteStream) async* {
   var buffer = '';
+  final markers = ReasoningMarkerRewriter();
   await for (final chunk in byteStream.transform(utf8.decoder)) {
     buffer += chunk;
     while (buffer.contains('\n')) {
@@ -60,12 +62,24 @@ Stream<String> parseCompletionsSse(Stream<List<int>> byteStream) async* {
       final line = buffer.substring(0, idx).trim();
       buffer = buffer.substring(idx + 1);
       final piece = _textFromSseLine(line);
-      if (piece == _kDone) return;
-      if (piece != null && piece.isNotEmpty) yield piece;
+      if (piece == _kDone) {
+        final rest = markers.finish();
+        if (rest.isNotEmpty) yield rest;
+        return;
+      }
+      if (piece != null && piece.isNotEmpty) {
+        final out = markers.push(piece);
+        if (out.isNotEmpty) yield out;
+      }
     }
   }
   final tail = _textFromSseLine(buffer.trim());
-  if (tail != null && tail.isNotEmpty && tail != _kDone) yield tail;
+  if (tail != null && tail.isNotEmpty && tail != _kDone) {
+    final out = markers.push(tail);
+    if (out.isNotEmpty) yield out;
+  }
+  final rest = markers.finish();
+  if (rest.isNotEmpty) yield rest;
 }
 
 const _kDone = '__DONE__';
@@ -74,7 +88,9 @@ String? _textFromSseLine(String line) {
   if (line.isEmpty) return null;
   if (line == 'data: [DONE]' || line == 'data:[DONE]') return _kDone;
   if (!line.startsWith('data:')) return null;
-  final data = line.startsWith('data: ') ? line.substring(6) : line.substring(5);
+  final data = line.startsWith('data: ')
+      ? line.substring(6)
+      : line.substring(5);
   if (data == '[DONE]') return _kDone;
   try {
     final json = jsonDecode(data);

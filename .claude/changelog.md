@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-08-25 — fix(reasoning): canonicalize all think wrappers to <think>
+- **Why:** NanoGPT Gemma 4 dumps `<|channel>thought` (or a leftover
+  `thought` after special tokens are stripped) in content. We only parsed
+  `<think>`, so the essay was the reply and ate max_tokens. oMLX splits
+  reasoning_content so it never hit this. A Gemma-only branch would be
+  whack-a-mole; ST's Auto-Parse is prefix/suffix, not model ids.
+- **What:** kReasoningFences sniffed from bytes (Gemma channel, harmony
+  analysis, Kimi triangles, <reasoning>/<thinking>, DeepSeek begin/end,
+  stripped thought\\n + close). Stream ingest (chat + completions) plus
+  ChatMessage/strip/evals/story/web floor. No model-name branch.
+- **Files:** reasoning_markers.dart (new), ReasoningIngest, openai_chat_stream,
+  open_router_service, completions fallback, chat_message, think_tags,
+  llm_eval_engine, story_json, json_sanitizer, char_macro, web
+  reasoningMarkers.ts + ChatMessageList + messageEdit
+
+## 2026-08-25 — fix(reasoning): host effort enum is not a per-model menu
+- **Why:** The Nano/OpenAI-compat poke treats a 400 "Supported values:
+  none, minimal, low, medium, high, xhigh" as THIS model's ladder. That
+  string is the server parameter enum (same LM Studio 0.4.21 trap we
+  already refused to trust locally). Gemma 4 on NanoGPT showed Minimal…
+  Max; oMLX hid chips because it read the template (toggle). A 200 on
+  bogus effort also fell through to generic Low/Med/High.
+- **What:** isGenericProviderEffortSchema (minimal+xhigh) → remember
+  {none} (toggle-only, empty chips). 200 / listing-less 400 same.
+  DeepSeek/Kimi short listings unchanged. wireReasoningEffort does not
+  rewrite a toggle model to none (would disable thinking). Hydrate
+  collapses a stored host enum. Desktop hides empty chips; web facade
+  reports localSupport=toggle.
+- **Files:** reasoning_effort, reasoning_effort_probe, reasoning_effort_store,
+  thinking_settings_block, settings_facade, tests
+
 ## 2026-08-25 — fix(realism): authored tastes own the SIGN of lust/bond/emotion
 - **Why:** Intimate prefs landed after the vanilla eval bands. The lists
   already reached the judge ("weigh the exchange") but "Rejection or

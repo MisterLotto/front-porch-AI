@@ -13,6 +13,14 @@ describe('splitMessageForEdit / joinMessageEdit', () => {
     expect(parts.body).toBe('"Hello," she said.');
   });
 
+  it('Gemma channel wrappers split like <think>', () => {
+    const parts = splitMessageForEdit(
+      '<|channel>thought\nessay\n<channel|>"Stay."',
+    );
+    expect(parts.thinking).toBe('essay');
+    expect(parts.body).toBe('"Stay."');
+  });
+
   it('plain message has empty thinking', () => {
     const parts = splitMessageForEdit('Just a reply.');
     expect(parts.thinking).toBe('');
