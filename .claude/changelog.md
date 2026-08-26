@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-08-26 — fix(settings): don't stat a GGUF when no preset owns one
+- **Why:** P2 memoized the model-exists check but always read
+  kcppsModelPath on Model Settings paint. That broke the old
+  kcppsHasModel short-circuit, so CI unit tests that fake a local
+  panel with no preset crashed (kcppsModelPath missing).
+- **What:** Gate the memo on kcppsHasModel again. FakeStorageService
+  now stubs kcppsHasModel/kcppsModelPath as the documented build-time
+  getters.
+- **Files:** model_settings_dialog.local.dart, fakes_storage.dart
+
 ## 2026-08-26 — test(golden): refresh Linux dialog goldens for light + alt-greeting
 - **Why:** Widget Golden Tests went red on the last three Rawhide runs.
   P1.6–10 light-mode paint on Group Settings / Kobold log, then

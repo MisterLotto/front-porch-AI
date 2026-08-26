@@ -34,7 +34,8 @@
 //   ModelSettingsDialog:     useCublas, useVulkan, useMetal, useRocm,
 //                            lastUsedModelPath, gpuLayers, contextSize,
 //                            remoteApiUrl, remoteApiKey, remoteModelName,
-//                            binDir, activeKcppsPath
+//                            binDir, activeKcppsPath, kcppsHasModel,
+//                            kcppsModelPath
 //   ModelManagerPage:        customModelsPath
 
 import 'dart:io';
@@ -96,6 +97,10 @@ class FakeStorageService extends ChangeNotifier implements StorageService {
   String? get activeKcppsPath => null;
   @override
   String? get lastUsedModelPath => null;
+  @override
+  bool get kcppsHasModel => false;
+  @override
+  String? get kcppsModelPath => null;
 
   // Structured settings objects — ChatSettingsDialog.build() calls
   // _gen.resolveX(storage) helpers which delegate to these objects for their

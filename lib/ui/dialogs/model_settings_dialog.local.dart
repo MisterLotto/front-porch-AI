@@ -32,11 +32,15 @@ extension _ModelSettingsLocalSection on _ModelSettingsDialogState {
     final koboldService = Provider.of<KoboldService>(context);
 
     // Auto-select first model if none selected and models exist.
-    // Skip when a kcpps preset with a valid model is active (use "Managed by kcpps")
-    final kcppsModelExists = _kcppsModelExists.of(storage.kcppsModelPath);
+    // Skip when a kcpps preset with a valid model is active (use "Managed by kcpps").
+    // Gate the exists memo on kcppsHasModel — same short-circuit the old
+    // `kcppsHasModel && kcppsModelFileExists` used — so a rebuild without a
+    // preset never reads kcppsModelPath or stats a file.
+    final kcppsModelExists =
+        storage.kcppsHasModel && _kcppsModelExists.of(storage.kcppsModelPath);
     if (_selectedModelPath == null &&
         modelManager.models.isNotEmpty &&
-        !(storage.kcppsHasModel && kcppsModelExists)) {
+        !kcppsModelExists) {
       _selectedModelPath = modelManager.models.first.path;
     }
 
