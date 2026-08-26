@@ -16,7 +16,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-
 part of '../chat_service.dart';
 
 /// Objective System — load/inject/set/clear objectives, task management
@@ -52,6 +51,7 @@ extension ChatServiceObjectives on ChatService {
           false; // secondary zero in _loadActiveObjectives empty (0-session hygiene for summary flag)
       _isGrowthPassRunning =
           false; // growth-pass flag zero in _loadActiveObjectives empty (0-session hygiene; keep reset blocks in sync)
+      _clearTodayPointer();
       return;
     }
     final charId = _getCharacterIdFromCard(_activeCharacter!);
@@ -71,6 +71,7 @@ extension ChatServiceObjectives on ChatService {
       );
       _activeObjectives = [];
     }
+    _rebindTodayObjectiveFromDb();
     notifyListeners(); // Central _disposed guard in ChatService overrides now protects this (and all other) post-async notify sites. Per-site try/catch removed (deletion part of rec 2 task); see god _disposed + notify override + setActiveCharacter:2205 comment.
   }
 
@@ -101,6 +102,7 @@ extension ChatServiceObjectives on ChatService {
     CharacterCard? targetCharacter,
     bool autoGenerateTasks = false,
     bool recordTurnOps = false,
+
     /// v46 — the ambition this quest is a step toward, or null for one that
     /// serves none. Only the autonomous proposal paths pass it; a quest the
     /// user typed has no eval behind it to say which mountain it climbs.
@@ -219,6 +221,42 @@ extension ChatServiceObjectives on ChatService {
     }
   }
 
+  /// Planner today line: one secondary, no tasks, no ambition, no eviction.
+  Future<String?> _insertTodaySideQuest(String goal, {String? id}) async {
+    if (goal.trim().isEmpty || _currentSessionId == null) return null;
+    CharacterCard? target;
+    if (_activeGroup != null) {
+      final currentIsGroupMember =
+          _activeCharacter != null &&
+          _groupCharacters.any(
+            (c) =>
+                _getCharacterIdFromCard(c) ==
+                _getCharacterIdFromCard(_activeCharacter!),
+          );
+      target = currentIsGroupMember
+          ? _activeCharacter
+          : (nextCharacter ?? _groupCharacters.firstOrNull);
+    } else {
+      target = _activeCharacter;
+    }
+    if (target == null) return null;
+    final newId = id ?? const Uuid().v4();
+    await _db.insertObjective(
+      ObjectivesCompanion.insert(
+        id: newId,
+        characterId: _getCharacterIdFromCard(target),
+        objective: goal.trim(),
+        chatId: drift.Value(_currentSessionId),
+        active: const drift.Value(true),
+        isPrimary: const drift.Value(false),
+        servedAmbition: const drift.Value(null),
+      ),
+    );
+    await _persistTodayObjectiveId(newId);
+    await _loadActiveObjectives();
+    return newId;
+  }
+
   /// Promote an existing side quest to the primary quest IN PLACE, demoting any
   /// current primary to a side quest. Unlike calling [setObjective] with the same
   /// text (the old promote pattern), this keeps the objective's id and its
@@ -246,6 +284,12 @@ extension ChatServiceObjectives on ChatService {
         isPrimary: const drift.Value(true),
       ),
     );
+    if (_todayObjectiveId == obj.id) {
+      _todayObjectiveId = null;
+      _todayObjectiveText = null;
+      setTodaySentence(null);
+      await _persistTodayObjectiveId(null);
+    }
     await _loadActiveObjectives();
   }
 
@@ -602,9 +646,7 @@ extension ChatServiceObjectives on ChatService {
     // dance the post-gen checks use, scoped to that member.
     final isGroupMember =
         _activeGroup != null &&
-        _groupCharacters.any(
-          (c) => _getCharacterIdFromCard(c) == characterId,
-        );
+        _groupCharacters.any((c) => _getCharacterIdFromCard(c) == characterId);
     if (isGroupMember) _loadGroupRealismIntoScalars(characterId);
     final ok = await _promiseDebtService.resolveManually(
       sessionId: sessionId,
@@ -648,14 +690,9 @@ extension ChatServiceObjectives on ChatService {
       if (card != null) characterName = card.name;
     }
 
-    // 6, not the judges' 4: a promise often gets fulfilled across a couple
-    // of exchanges, and once the moment scrolls out of this window a missed
-    // KEPT could never be detected again (2026-08-04 report). Through the
-    // ONE window builder since 2026-08-10 — this was the last turn-adjacent
-    // inline window the eval diet missed, and the maintainer's EvalTraffic
-    // line caught it red-handed: 38.3k chars of prompt for a 59-char verdict
-    // on a novella-writing model. recentExchange brings the per-message
-    // clamp, photo markers, and think-stripping in one line.
+    // 6, not the judges' 4: a promise often spans a couple of exchanges
+    // (missed KEPT if it scrolls out — 2026-08-04). recentExchange is the
+    // one window builder (clamp, photo markers, think-strip).
     final recent = recentExchange(_messages, take: 6);
     if (recent.trim().isEmpty) return;
 
@@ -666,7 +703,10 @@ extension ChatServiceObjectives on ChatService {
         characterName: characterName,
         userName: _userPersonaService.persona.name,
         recentExchange: recent,
-        receiptPosition: _messages.isEmpty ? null : _messages.length - 1,
+        receiptPosition: persistTipCite(
+          base: _history.basePosition,
+          length: _messages.length,
+        ).firstOrNull,
         storyDay: _timeService.dayCount,
         storyClock: _timeService.storyClockIso,
       ),
@@ -678,9 +718,7 @@ extension ChatServiceObjectives on ChatService {
 
   /// Returns the personal objectives for a specific character when in group mode.
   /// Falls back to the global list for 1:1 or when no per-char data exists yet.
-  List<Objective> _getObjectivesForGroupCharacterImpl(
-    CharacterCard character,
-  ) {
+  List<Objective> _getObjectivesForGroupCharacterImpl(CharacterCard character) {
     if (_activeGroup == null) return _activeObjectives;
     final id = _getCharacterIdFromCard(character);
     return _groupObjectives[id] ?? const <Objective>[];

@@ -8,6 +8,7 @@
 export 'climate_editor_chrome.dart';
 export 'climate_editor_dialog.dart';
 export 'climate_editor_widgets.dart';
+export 'climate_season_start.dart';
 export 'climate_emoji_picker.dart';
 export 'climate_preview_panel.dart';
 export 'climate_skin_row.dart';

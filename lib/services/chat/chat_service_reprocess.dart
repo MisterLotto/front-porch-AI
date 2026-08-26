@@ -26,7 +26,6 @@ part of '../chat_service.dart';
 /// messages, and dance helpers exactly as before.
 
 extension ChatServiceReprocess on ChatService {
-
   /// Which cast member said [msg]. See [resolveGroupSpeakerForMessage].
   CharacterCard? _resolveGroupSpeakerForMessage(ChatMessage msg) =>
       resolveGroupSpeakerForMessage(_groupCharacters, msg);
@@ -149,14 +148,14 @@ extension ChatServiceReprocess on ChatService {
         _messages.last.sender != 'System' &&
         _messages.last.activeMetadata?['is_dream'] != true &&
         _messages.last.activeMetadata?['is_chance_time_narration'] != true) {
-      // Instead of removing the message, we generate a new swipe
-      // Temporarily remove the last message so the prompt doesn't include it
+      // New swipe; pop first so the cite is persist index, not window 23.
       final lastMsg = _messages.removeLast();
-      // Timeline integrity: the regen replaces this position's active
-      // content — journal cards citing it (or anything after) are phantom
-      // (smoke-test bug 2026-07-21). regenerateMainCharacter's guest-pop
-      // path is covered too: it delegates here with an even lower position.
-      _invalidateJournalFrom(_messages.length);
+      _invalidateJournalFrom(
+        persistMessagePosition(
+          base: _history.basePosition,
+          index: _messages.length,
+        ),
+      );
       // Is this a Scene Guest message? If so the whole regen must stay a
       // parity-safe GUEST turn: skip every Realism/Needs revert + re-eval below
       // and regenerate spoken as the guest (guestSpeaker), exactly like the
@@ -231,6 +230,21 @@ extension ChatServiceReprocess on ChatService {
         // own charId. The journal invalidation above already took the
         // rejected turn's item cards with it.
         _restorePocketsFromStamp(lastMsg, after: false);
+      }
+
+      // Clock rewind for every driver (engine, standalone, Scene Guest).
+      // The post-reply tick stamps story_clock_before; without this a
+      // swipe would double-advance. Manual chevron/calendar nudges on
+      // this bubble survive (same time_nudged flag as the engine path).
+      final clockWasNudged =
+          lastMsg.activeMetadata?['realism_state'] is Map &&
+          (lastMsg.activeMetadata!['realism_state'] as Map)['time_nudged'] ==
+              true;
+      if (_clockRunning && !clockWasNudged) {
+        final before = lastMsg.activeMetadata?['story_clock_before'] as String?;
+        if (StoryClock.parse(before) != null) {
+          _timeService.restoreTimeFromRealismState({'storyClock': before});
+        }
       }
 
       // Revert realism state from the rejected swipe and re-evaluate.
@@ -481,6 +495,11 @@ extension ChatServiceReprocess on ChatService {
             'position: "${_relationshipService.spatialStance}"',
           );
         }
+        final glanceMeta = lastMsg.activeMetadata;
+        if (glanceMeta != null && glanceMeta.containsKey(kWithUserPreTurn)) {
+          final pre = glanceMeta[kWithUserPreTurn];
+          _relationshipService.setWithUser(pre is bool ? pre : null);
+        }
 
         if (isGroupHostRegen) {
           // Persist the reverted baseline into the speaker's _groupRealism
@@ -622,6 +641,16 @@ extension ChatServiceReprocess on ChatService {
         }
       }
 
+      // story_clock_before wins over previousSessionState. A guest (no
+      // realism_state) can sit between two host lines; restoring the last
+      // stamped host snapshot would rewind PAST that guest's decide.
+      if (_clockRunning && !clockWasNudged) {
+        final before = lastMsg.activeMetadata?['story_clock_before'] as String?;
+        if (StoryClock.parse(before) != null) {
+          _timeService.restoreTimeFromRealismState({'storyClock': before});
+        }
+      }
+
       // Invalidate ONNX cache for the new response (delegated)
       _expressionService.invalidateOnnxCacheForNewResponse();
 
@@ -636,7 +665,13 @@ extension ChatServiceReprocess on ChatService {
       // The duplicate post-generation recompute that used to live here was a
       // second source of truth for the same numbers; deleted 2026-08-04.
       final preGenLen = _messages.length;
-      await _generateResponse(GenerationMode.normal, guestSpeaker: regenGuest);
+      await _generateResponse(
+        GenerationMode.normal,
+        guestSpeaker: regenGuest,
+        forceSpeaker: regenGuest == null && _activeGroup != null
+            ? _resolveGroupSpeakerForMessage(lastMsg)
+            : null,
+      );
 
       // After generation, merge the new response as a swipe on the original
       // message — but ONLY when _generateResponse actually appended one. It

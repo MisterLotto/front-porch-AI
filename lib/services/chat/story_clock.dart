@@ -16,6 +16,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'package:front_porch_ai/services/chat/skip_language.dart';
+
 /// The Story Clock — pure calendar/clock math for the passage-of-time
 /// subsystem (design: docs/design/story-calendar.md). No I/O, no state,
 /// fully deterministic: TimeService owns the mutable clock; every
@@ -175,6 +177,161 @@ class StoryClock {
       if (t.isBefore(clock)) return t;
     }
     return representativeTime(date.subtract(const Duration(days: 1)), 'night');
+  }
+
+  /// Sidebar / web chevron step. Period snaps were too coarse once At work
+  /// and Today read the live minute.
+  static const int nudgeStepMinutes = 30;
+
+  static DateTime addMinutes(DateTime clock, int minutes) =>
+      clock.add(Duration(minutes: minutes));
+
+  /// Next occurrence of [hour]:[minute] strictly after [clock] (same
+  /// calendar day if that instant is still ahead, otherwise tomorrow).
+  static DateTime nextNamedClock(DateTime clock, int hour, int minute) {
+    final today = DateTime.utc(
+      clock.year,
+      clock.month,
+      clock.day,
+      hour,
+      minute,
+    );
+    return today.isAfter(clock)
+        ? today
+        : DateTime.utc(clock.year, clock.month, clock.day + 1, hour, minute);
+  }
+
+  /// Next occurrence of [period]'s representative time strictly after [clock].
+  static DateTime nextNamedPeriod(DateTime clock, String period) {
+    final canon = period == 'late morning' ? 'late_morning' : period;
+    final today = representativeTime(dateOnly(clock), canon);
+    return today.isAfter(clock)
+        ? today
+        : representativeTime(
+            dateOnly(clock).add(const Duration(days: 1)),
+            canon,
+          );
+  }
+
+  /// OOC / narrative skip destination. [lower] is quote-stripped lowercase.
+  /// Callers still gate on skip language; this only interprets the target.
+  static DateTime resolveSkipTarget(DateTime clock, String lower) {
+    if (RegExp(
+      r'\b(a|one)? ?month (later|passes)|next month\b',
+    ).hasMatch(lower)) {
+      return DateTime.utc(clock.year, clock.month + 1, 1, 9);
+    }
+    if (RegExp(
+      r'\b((a|one) week (later|passes)|next week|weeks? later)\b',
+    ).hasMatch(lower)) {
+      return clock.add(const Duration(days: 7));
+    }
+    if (isNightSkip(lower)) {
+      return nextMorning(clock);
+    }
+    final namedPeriod = RegExp(
+      r'\b(?:(?:the )?next |skip(?:\s+ahead)?(?:\s+to)? |to )'
+      r'(dawn|late morning|morning|afternoon|evening|night)\b',
+    ).firstMatch(lower);
+    if (namedPeriod != null) {
+      return nextNamedPeriod(clock, namedPeriod.group(1)!);
+    }
+    final ampm = RegExp(
+      r'\b(?:skip(?:\s+ahead)?(?:\s+to)?|to)\s+'
+      r'(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)\b',
+    ).firstMatch(lower);
+    if (ampm != null) {
+      var hour = int.parse(ampm.group(1)!);
+      final minute = int.tryParse(ampm.group(2) ?? '') ?? 0;
+      final pm = ampm.group(3)!.startsWith('p');
+      if (hour == 12) {
+        hour = pm ? 12 : 0;
+      } else if (pm) {
+        hour += 12;
+      }
+      if (hour <= 23 && minute <= 59) {
+        return nextNamedClock(clock, hour, minute);
+      }
+    }
+    final hhmm = RegExp(
+      r'\b(?:skip(?:\s+ahead)?(?:\s+to)?|to)\s+(\d{1,2}):(\d{2})\b',
+    ).firstMatch(lower);
+    if (hhmm != null) {
+      final hour = int.parse(hhmm.group(1)!);
+      final minute = int.parse(hhmm.group(2)!);
+      if (hour <= 23 && minute <= 59) {
+        return nextNamedClock(clock, hour, minute);
+      }
+    }
+    if (RegExp(
+      r'\b(all day|entire day|full day|day passes|the (whole|entire) day)\b',
+    ).hasMatch(lower)) {
+      return clock.add(const Duration(hours: 8));
+    }
+    // Counted durations before the vague "hours pass" bucket. "[6 hours
+    // passed]" used to fall through to +1h (or +3h when "pass" matched),
+    // so the skip chip stamped a time the strip barely moved.
+    final counted = _countedSkip(clock, lower);
+    if (counted != null) return counted;
+    if (RegExp(
+      r'\b(several hours|many hours|a long time|hours? pass)\b',
+    ).hasMatch(lower)) {
+      return clock.add(const Duration(hours: 3));
+    }
+    if (RegExp(
+      r'\b(a few hours|couple.{0,5}hours|2.{0,5}hours|two hours)\b',
+    ).hasMatch(lower)) {
+      return clock.add(const Duration(hours: 2));
+    }
+    return clock.add(const Duration(hours: 1));
+  }
+
+  static const _wordCount = {
+    'a': 1,
+    'an': 1,
+    'one': 1,
+    'two': 2,
+    'three': 3,
+    'four': 4,
+    'five': 5,
+    'six': 6,
+    'seven': 7,
+    'eight': 8,
+    'nine': 9,
+    'ten': 10,
+    'eleven': 11,
+    'twelve': 12,
+  };
+
+  /// Digit or word duration ("6 hours", "six hours"). Null if none.
+  static DateTime? _countedSkip(DateTime clock, String lower) {
+    final digit = RegExp(
+      r'\b(\d+)\s*(minutes?|hours?|days?)\b',
+    ).firstMatch(lower);
+    if (digit != null) {
+      return _addCounted(
+        clock,
+        int.tryParse(digit.group(1)!) ?? 0,
+        digit.group(2)!,
+      );
+    }
+    final word = RegExp(
+      r'\b(an?|one|two|three|four|five|six|seven|eight|nine|ten|'
+      r'eleven|twelve)\s*(minutes?|hours?|days?)\b',
+    ).firstMatch(lower);
+    if (word == null) return null;
+    return _addCounted(clock, _wordCount[word.group(1)!] ?? 0, word.group(2)!);
+  }
+
+  static DateTime? _addCounted(DateTime clock, int n, String unit) {
+    if (n <= 0) return null;
+    if (unit.startsWith('day')) {
+      return clock.add(Duration(days: n.clamp(1, 30)));
+    }
+    if (unit.startsWith('hour')) {
+      return clock.add(Duration(hours: n.clamp(1, 72)));
+    }
+    return clock.add(Duration(minutes: n.clamp(1, 24 * 60)));
   }
 
   // ── Legacy synthesis (design §3) ──────────────────────────────────────────

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api/client';
 import { ChatSocket } from '../api/ws';
 import { CastBar, type CastMember } from '../components/CastBar';
@@ -32,6 +32,9 @@ interface ChatState {
   messages: Message[];
   isGenerating: boolean;
   isSettlingTurn?: boolean;
+  isLoadingSession?: boolean;
+  isBackfillingHistory?: boolean;
+  hasOlderHistory?: boolean;
   isEvaluatingRealism?: boolean;
   isCheckingCompletion?: boolean;
   isProcessingGreeting?: boolean;
@@ -67,10 +70,14 @@ interface ChatState {
   toolSupport?: { state: string; testing: boolean };
   // Per-chat theme overrides (preset + font/color/background/border).
   themeOverrides?: ChatThemeOverrides;
+  // Host LLM connection (additive — older desktops omit it).
+  llmReady?: boolean;
 }
 
 export function ChatPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const opening = searchParams.get('opening') === '1';
   const { setAuthenticated } = useAuth();
   // The insight column is desktop-only (CSS hides it below 1024px) and the
   // Stats drawer is its phone/tablet stand-in — mount whichever one is on
@@ -236,6 +243,26 @@ export function ChatPage() {
     if (focusedId) void focusParticipant(focusedId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [toolsBump]);
+
+  const wasOpening = useRef(false);
+  useEffect(() => {
+    if (opening) {
+      wasOpening.current = true;
+      return;
+    }
+    if (wasOpening.current) {
+      wasOpening.current = false;
+      void refresh();
+    }
+  }, [opening, refresh]);
+
+  useEffect(() => {
+    if (!state?.isBackfillingHistory) return;
+    const t = setTimeout(() => {
+      void refresh();
+    }, 120);
+    return () => clearTimeout(t);
+  }, [state?.isBackfillingHistory, state?.messages.length, refresh]);
 
   useEffect(() => {
     void refresh();
@@ -447,6 +474,17 @@ export function ChatPage() {
     await api.post('/api/chat/continue');
     await refresh();
   }, [refresh]);
+  const fork = useCallback(async (index: number) => {
+    if (
+      !window.confirm(
+        `Create a new branch from message #${index + 1}?\n\nThe current chat will remain unchanged. A new conversation will be created with messages up to this point.`,
+      )
+    ) {
+      return;
+    }
+    await api.post('/api/chat/fork', { index });
+    await refresh();
+  }, [refresh]);
   const swipe = useCallback(async (messageIndex: number, direction: number) => {
     await api.post('/api/chat/swipe', { messageIndex, direction });
     await refresh();
@@ -544,8 +582,8 @@ export function ChatPage() {
     [state?.cast],
   );
 
-  if (!state) {
-    if (loadError) {
+  if (!state || opening || state.isLoadingSession) {
+    if (loadError && !opening) {
       return (
         <div className="page centered-col">
           <p className="muted">⚠️ {loadError}</p>
@@ -754,9 +792,13 @@ export function ChatPage() {
           onSwipe={swipe}
           onRegenerate={regenerate}
           onContinue={continueGen}
+          onFork={fork}
           onDelete={del}
           onReprocess={setReprocessIndex}
           onRevert={revertNeeds}
+          greetCount={state.totalGreetings}
+          greetingIndex={state.greetingIndex}
+          onVariantPicked={() => void refresh()}
         />
 
         {editTarget && (
@@ -799,6 +841,7 @@ export function ChatPage() {
           onImpersonate={(prefix) => {
             void api.post('/api/chat/impersonate', { prefix });
           }}
+          apiReady={state.llmReady !== false}
         />
       </div>
 
@@ -873,6 +916,15 @@ export function ChatPage() {
           activeSessionId={state.sessionId}
           onLoad={loadSession}
           onNew={newChat}
+          onDelete={async (id) => {
+            await api.post('/api/chat/session', {
+              action: 'delete',
+              sessionId: id,
+              startReplacement: id === state.sessionId,
+            });
+            await openSessions();
+            await refresh();
+          }}
           onClose={() => setShowSessions(false)}
           exportTitle={title}
           canExport={state.messages.length > 0}

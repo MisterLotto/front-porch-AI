@@ -70,7 +70,11 @@ Widget _buildRootWidget(AppDatabase db, bool needsMigration) {
     return StoryPipelineService(
       Provider.of<StoryRepository>(context, listen: false),
       llmProvider.activeService,
-      MemoryService(EmbeddingService(storage), storage, liveDb),
+      MemoryService(
+        Provider.of<EmbeddingService>(context, listen: false),
+        storage,
+        liveDb,
+      ),
       liveDb,
     );
   }
@@ -122,7 +126,7 @@ Widget _buildRootWidget(AppDatabase db, bool needsMigration) {
   // Provider tree without touching service init order — legacy providers
   // below are unchanged.
   return riverpod.ProviderScope(
-      child: MultiProvider(
+    child: MultiProvider(
       providers: [
         Provider<AppDatabase>.value(value: db),
         Provider<bool>.value(value: needsMigration), // migration flag
@@ -292,7 +296,7 @@ Widget _buildRootWidget(AppDatabase db, bool needsMigration) {
                 listen: false,
               );
               final memoryService = MemoryService(
-                EmbeddingService(storage),
+                Provider.of<EmbeddingService>(context, listen: false),
                 storage,
                 db,
               );
@@ -460,6 +464,6 @@ Widget _buildRootWidget(AppDatabase db, bool needsMigration) {
         ),
       ],
       child: const MyApp(),
-      ),
+    ),
   );
 }

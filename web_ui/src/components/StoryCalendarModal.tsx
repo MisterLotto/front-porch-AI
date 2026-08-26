@@ -24,6 +24,7 @@ interface CalendarPayload {
   owner: string | null;
   owners: { id: string; name: string }[];
   days: { day: number; cards: CalendarCard[] }[];
+  todaySentence?: string | null;
 }
 
 const MONTHS = [
@@ -135,6 +136,22 @@ export function StoryCalendarModal({
         <p className="muted small">
           {fmtShort(currentMs)} · Day {data.currentDay}
         </p>
+        {data.todaySentence && (
+          <div className="stat-line" style={{ marginBottom: 8 }}>
+            <div>
+              <div className="muted small" style={{ letterSpacing: 0.8, fontWeight: 800 }}>TODAY</div>
+              <div style={{ fontStyle: 'italic' }}>{data.todaySentence}</div>
+            </div>
+            {canEdit && (
+              <button
+                className="link-btn"
+                onClick={() => post({ abandonToday: true })}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="story-cal-nav">
           <button className="link-btn" onClick={() => shiftMonth(-1)}>◀</button>

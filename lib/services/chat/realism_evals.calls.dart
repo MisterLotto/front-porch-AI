@@ -166,7 +166,9 @@ extension RealismEvalCalls on RealismEvals {
       emotionIntensity: getEmotionIntensity(),
     );
     final arousalEnabled = nsfwService.nsfwCooldownEnabled;
-    final labels = getExpressionEnabled() ? EmotionLabels.all : const <String>[];
+    final labels = getExpressionEnabled()
+        ? EmotionLabels.all
+        : const <String>[];
 
     String buildPrompt({required bool toolsMode}) =>
         RealismPromptBuilder.emotionalEvalPrompt(
@@ -212,8 +214,9 @@ extension RealismEvalCalls on RealismEvals {
             'personality': dossier,
             'standing': standing,
             if (labels.isNotEmpty)
-              'emotion_constraint':
-                  RealismPromptBuilder.emotionLabelConstraint(labels),
+              'emotion_constraint': RealismPromptBuilder.emotionLabelConstraint(
+                labels,
+              ),
           },
         });
         return;
@@ -228,8 +231,9 @@ extension RealismEvalCalls on RealismEvals {
           'personality': dossier,
           'standing': standing,
           if (labels.isNotEmpty)
-            'emotion_constraint':
-                RealismPromptBuilder.emotionLabelConstraint(labels),
+            'emotion_constraint': RealismPromptBuilder.emotionLabelConstraint(
+              labels,
+            ),
         },
       );
       text = effectiveText; // rebind (var allows)
@@ -266,6 +270,7 @@ extension RealismEvalCalls on RealismEvals {
     bool timeOnly = false,
     bool postureOnly = false,
     bool skipClockAdvance = false,
+    bool skipTodayEval = false,
   }) async {
     if (!timeOnly) {
       if (!getRealismEnabled()) return;
@@ -308,6 +313,7 @@ extension RealismEvalCalls on RealismEvals {
       timeOnly: timeOnly,
       postureOnly: postureOnly,
       skipClockAdvance: skipClockAdvance,
+      skipTodayEval: skipTodayEval,
     );
   }
 

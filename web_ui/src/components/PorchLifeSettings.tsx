@@ -50,6 +50,7 @@ interface PorchLifeState {
   dreamsEnabled: boolean;
   promiseLedgerEnabled: boolean;
   ambitionsEnabled: boolean;
+  plannerEnabled: boolean;
   absenceBannerEnabled: boolean;
   absenceAckEnabled: boolean;
   absenceThresholdHours: number;
@@ -79,6 +80,7 @@ const DEFAULTS: PorchLifeState = {
   dreamsEnabled: true,
   promiseLedgerEnabled: true,
   ambitionsEnabled: true,
+  plannerEnabled: false,
   absenceBannerEnabled: true,
   absenceAckEnabled: false,
   absenceThresholdHours: 24,
@@ -353,7 +355,7 @@ export function PorchLifeSettings() {
           icon="🧥"
           label="Pockets & Wardrobe"
           need="alone"
-          blurb="What they are wearing and carrying is remembered instead of scrolling out of the conversation — so the keys she picked up an hour ago are still in her pocket, and the coat she took off is still off. Items can change: a candy bar becomes a wrapper, a sword gets notched. Uses one extra AI request per reply to notice what changed, so it is slower and costs more on a paid API. Kept per chat and cleared with it."
+          blurb="What they are wearing and carrying is remembered instead of scrolling out of the conversation — so the keys they picked up an hour ago are still in their pocket, and the coat they took off is still off. Items can change: a candy bar becomes a wrapper, a sword gets notched. Uses one extra AI request per reply to notice what changed, so it is slower and costs more on a paid API. Kept per chat and cleared with it."
           value={st.pocketsEnabled}
           onChange={(v) => set('pocketsEnabled', v)}
         />
@@ -363,7 +365,7 @@ export function PorchLifeSettings() {
           need="needs"
           dependsOn="Pockets & Wardrobe"
           satisfied={st.pocketsEnabled}
-          blurb="In a group chat, when one character hands something to another it actually moves — out of her pocket and into theirs, keeping whatever condition it was in. Without this, a handed-over item simply leaves the giver and reaches no one. Costs nothing extra; it rides the check Pockets is already doing. Best with a frontier model (Claude, GPT, Gemini): it has to name WHO received the thing, which is harder than noticing what changed, and smaller local models often get the name wrong. When the name does not match somebody in the chat, the app declines to guess — the item leaves the giver and goes nowhere, exactly as before."
+          blurb="In a group chat, when one character hands something to another it actually moves — out of their pocket and into theirs, keeping whatever condition it was in. Without this, a handed-over item simply leaves the giver and reaches no one. Costs nothing extra; it rides the check Pockets is already doing. Best with a frontier model (Claude, GPT, Gemini): it has to name WHO received the thing, which is harder than noticing what changed, and smaller local models often get the name wrong. When the name does not match somebody in the chat, the app declines to guess — the item leaves the giver and goes nowhere, exactly as before."
           value={st.pocketTransfersEnabled}
           onChange={(v) => set('pocketTransfersEnabled', v)}
         />
@@ -400,6 +402,16 @@ export function PorchLifeSettings() {
           blurb={"Long-term goals written on the character's card colour how they steer a scene, and finishing an objective moves them a little closer. Costs nothing extra — the goals are already on the card — but finishing a quest is the only thing that moves them, so they need Objectives running."}
           value={st.ambitionsEnabled}
           onChange={(v) => set('ambitionsEnabled', v)}
+        />
+        <FeatureRow
+          icon="📝"
+          label="Planner"
+          need="needs"
+          dependsOn="Passage of Time, Objectives, and the Journal"
+          satisfied={timeOn && objectivesOn && journalOn}
+          blurb="They plan from personality; you only add or delete the line. The character will later remember if it got done (needs time, objectives, journal)."
+          value={st.plannerEnabled}
+          onChange={(v) => set('plannerEnabled', v)}
         />
       </FeatureGroup>
 
@@ -468,7 +480,7 @@ export function PorchLifeSettings() {
             need="needs"
             dependsOn="the Realism Engine"
             satisfied={engineOn}
-            blurb="A character with intimate preferences on her card acts on them instead of only reacting: she asks for what she wants, in her own voice — a dominant character presses where a soft-spoken one hints — and turns down what she is not interested in rather than going along with it. Being refused something she wanted shows in her mood afterwards, sharper or quieter as fits who she is. Needs the engine because that is what scores the answer she gets; without it she would ask and nothing would ever come of it. Costs nothing extra — no AI request, just two more lines in the prompt."
+            blurb="A character with intimate preferences on their card acts on them instead of only reacting: they ask for what they want, in their own voice — a dominant character presses where a soft-spoken one hints — and turn down what they are not interested in rather than going along with it. Being refused something they wanted shows in their mood afterwards, sharper or quieter as fits who they are. Needs the engine because that is what scores the answer they get; without it they would ask and nothing would ever come of it. Costs nothing extra — no AI request, just two more lines in the prompt."
             value={st.intimateAgencyEnabled}
             onChange={(v) => set('intimateAgencyEnabled', v)}
           />

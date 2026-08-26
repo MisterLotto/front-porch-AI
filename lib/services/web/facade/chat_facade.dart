@@ -24,7 +24,7 @@ import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/web/facade/chat_realism_read.dart';
-import 'package:front_porch_ai/utils/utils.dart';
+import 'package:front_porch_ai/services/web/facade/chat_session_facade.dart';
 import 'package:front_porch_ai/services/web/streaming/stream_hub.dart';
 import 'package:front_porch_ai/services/web/util/lorebook_json.dart';
 
@@ -39,7 +39,14 @@ class ChatFacade {
     this._hub,
     this._groups, {
     File? Function(String name)? resolveSavedImage,
-  }) : _resolveSavedImage = resolveSavedImage;
+    LLMProvider? llm,
+  }) : _resolveSavedImage = resolveSavedImage,
+       _llm = llm;
+
+  /// Live LLM connection flag for the chat-input placeholder. Null in tests
+  /// that construct a facade without a provider — treated as ready so they
+  /// do not inherit a "No API connection" hint.
+  final LLMProvider? _llm;
 
   /// Resolves a saved generated image's basename to its file (with the
   /// traversal guard) — wired to [ImageFacade.savedImageFile] by the host so
@@ -55,6 +62,12 @@ class ChatFacade {
   /// Realism-READ leaf (host snapshot + per-member participant realism). Pure
   /// reads of [ChatService]; co-located 1:1/group parity pair lives there.
   late final ChatRealismRead _realism = ChatRealismRead(_chat);
+
+  late final ChatSessionFacade _sessions = ChatSessionFacade(
+    _chat,
+    _characters,
+    _notify,
+  );
 
   /// Context Budget payload (desktop ContextViewerDialog parity): per-section
   /// token estimate + the REAL text each section contributed to the last
@@ -171,6 +184,10 @@ class ChatFacade {
       // Additive (mixed-fleet safe): older web clients ignore it; newer ones
       // can distinguish "streaming tokens" from "still settling".
       'isSettlingTurn': _chat.isSettlingTurn,
+      // Overlay while setActiveCharacter/Group hydrates (navigate-first open).
+      'isLoadingSession': _chat.isLoadingSession,
+      'isBackfillingHistory': _chat.isBackfillingHistory,
+      'hasOlderHistory': _chat.hasOlderHistory,
       // Processing-overlay state (mirrors the desktop Realism + Objective engine
       // overlays). The WS pushes a live `processing` event during eval; these
       // fields let a client that connects mid-eval render the overlay too.
@@ -206,7 +223,10 @@ class ChatFacade {
       'summaryPaused': _chat.summaryPaused,
       'isSummaryGenerating': _chat.isSummaryGenerating,
       'greetingIndex': _chat.greetingIndex,
-      'totalGreetings': activeChar?.allGreetings.length ?? 1,
+      'totalGreetings': () {
+        final n = _chat.openingAllGreetings.length;
+        return n < 1 ? 1 : n;
+      }(),
       'userPersonaName': _personas?.persona.name ?? 'User',
       'lorebook': lorebook,
       // Living Worlds — places attached to this session (ids).
@@ -257,7 +277,18 @@ class ChatFacade {
       },
       // Per-chat theme overrides (preset + font/color/background/border).
       'themeOverrides': _chat.sessionThemeOverrides.toJson(),
+      // LLM backend connection (not a one-off request). Additive; older
+      // PWAs ignore it and keep the normal composer placeholder.
+      'llmReady': _llm?.activeService.isReady ?? true,
     };
+  }
+
+  Map<String, dynamic> variants(int messageIndex) =>
+      _chat.variantPickerPayload(messageIndex);
+
+  Future<void> selectVariant(int messageIndex, int variantIndex) async {
+    await _chat.selectVariant(messageIndex, variantIndex);
+    _notify();
   }
 
   /// Re-probe the current backend+model's tool-calling support (the web
@@ -368,6 +399,15 @@ class ChatFacade {
         .firstOrNull;
     if (card == null) return false;
     await _chat.setActiveCharacter(card);
+    _notify();
+    return true;
+  }
+
+  /// Next older page of the open chat (scroll-up). No-op when the
+  /// window already holds the full transcript.
+  Future<bool> loadOlderHistory() async {
+    if (!_chat.hasOlderHistory) return false;
+    await _chat.loadOlderHistory();
     _notify();
     return true;
   }
@@ -657,46 +697,25 @@ class ChatFacade {
     return true;
   }
 
-  /// All saved conversations for the currently-active character/group, newest
-  /// first — so the web UI can list past chats and let the user resume any of
-  /// them via [session]. Reuses ChatService's own session lister; only adapts
-  /// the `date` field to a JSON-safe ISO string.
-  ///
-  /// With [characterId] (a library dbId), lists that character's 1:1 chats
-  /// WITHOUT touching the active chat — the web AI Enhance flow's "which
-  /// chat?" picker. Additive: absent, behavior is unchanged.
-  Future<List<Map<String, dynamic>>> sessions({String? characterId}) async {
-    List<Map<String, dynamic>> raw;
-    if (characterId != null && characterId.isNotEmpty) {
-      final card = _characters.characters
-          .where((c) => c.dbId == characterId)
-          .firstOrNull;
-      // getSessionsForId keys by imagePath basename (stableGroupId) — a UUID
-      // silently returns [] (the documented fall-through).
-      raw = card == null
-          ? const []
-          : await _chat.getSessionsForId(card.stableGroupId);
-    } else {
-      raw = await _chat.getSessions();
-    }
-    return raw.map((s) {
-      final date = s['date'];
-      return {...s, 'date': date is DateTime ? date.toIso8601String() : date};
-    }).toList();
-  }
+  /// All saved conversations. See [ChatSessionFacade.list].
+  Future<List<Map<String, dynamic>>> sessions({
+    String? characterId,
+    String? groupId,
+  }) => _sessions.list(characterId: characterId, groupId: groupId);
 
-  /// New chat or load an existing session. Returns the resulting session id.
-  Future<String?> session({String? action, String? sessionId}) async {
-    if (action == 'new') {
-      await _chat.startNewChat();
-    } else if (sessionId != null) {
-      await _chat.loadSession(sessionId);
-    } else {
-      return null;
-    }
-    _notify();
-    return _chat.currentSessionId;
-  }
+  /// New / load / delete. See [ChatSessionFacade.apply].
+  Future<String?> session({
+    String? action,
+    String? sessionId,
+    bool startReplacement = true,
+  }) => _sessions.apply(
+    action: action,
+    sessionId: sessionId,
+    startReplacement: startReplacement,
+  );
+
+  /// Fork at [messageIndex]. See [ChatSessionFacade.fork].
+  Future<String?> fork(int messageIndex) => _sessions.fork(messageIndex);
 
   String? get currentSessionId => _chat.currentSessionId;
 
@@ -721,8 +740,7 @@ class ChatFacade {
   /// Save per-chat theme overrides from the web UI.
   Future<bool> setThemeOverrides(Map<String, dynamic> json) async {
     if (_chat.currentSessionId == null) return false;
-    _chat.sessionThemeOverrides =
-        ChatThemeOverrides.fromJson(json);
+    _chat.sessionThemeOverrides = ChatThemeOverrides.fromJson(json);
     _notify();
     return true;
   }

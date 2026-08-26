@@ -21,10 +21,12 @@ void main() {
   test('remembered menu reloads from prefs after a catalog clear', () async {
     final prefs = await SharedPreferences.getInstance();
     attachReasoningEffortMenuStore(prefs);
-    rememberReasoningEffortsForModel(
-      'moonshotai/kimi-k2.6:thinking',
-      {'none', 'low', 'high', 'max'},
-    );
+    rememberReasoningEffortsForModel('moonshotai/kimi-k2.6:thinking', {
+      'none',
+      'low',
+      'high',
+      'max',
+    });
 
     clearReasoningEffortCatalog();
     clearReasoningEffortProbes();
@@ -36,13 +38,33 @@ void main() {
     );
 
     attachReasoningEffortMenuStore(prefs);
-    expect(
-      reasoningEffortChipsFor('moonshotai/kimi-k2.6:thinking'),
-      ['low', 'high', 'max'],
-    );
+    expect(reasoningEffortChipsFor('moonshotai/kimi-k2.6:thinking'), [
+      'low',
+      'high',
+      'max',
+    ]);
     expect(
       reasoningEffortMenuPending('moonshotai/kimi-k2.6:thinking'),
       isFalse,
     );
+  });
+
+  test('a stored LMS host enum hydrates as toggle-only', () async {
+    final prefs = await SharedPreferences.getInstance();
+    attachReasoningEffortMenuStore(prefs);
+    rememberReasoningEffortsForModel('google/gemma-4-26B-A4B', {
+      'none',
+      'minimal',
+      'low',
+      'medium',
+      'high',
+      'xhigh',
+    });
+
+    clearReasoningEffortCatalog();
+    clearReasoningEffortProbes();
+    attachReasoningEffortMenuStore(prefs);
+    expect(reasoningEffortIsToggleOnly('google/gemma-4-26B-A4B'), isTrue);
+    expect(reasoningEffortChipsFor('google/gemma-4-26B-A4B'), isEmpty);
   });
 }

@@ -18,7 +18,7 @@
 
 /// The ONE contract for turning card-authored preference phrases into prompt
 /// text — shared by the behavioural injection (preferences_injection.dart) and
-/// the scoring block (realism_prompt_builder.dart).
+/// the scoring block (preference_scoring.dart).
 ///
 /// It exists because those two halves MUST describe the same character. Review
 /// (Grok, 2026-08-07) found them diverging: one dropped blanks and trimmed

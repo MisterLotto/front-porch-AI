@@ -32,13 +32,20 @@ void attachReasoningEffortMenuStore(SharedPreferences? prefs) {
     try {
       decoded.forEach((key, value) {
         if (key is! String || value is! Map) return;
-        final efforts = (value['efforts'] as List?)
+        final efforts =
+            (value['efforts'] as List?)
                 ?.map((e) => e.toString())
                 .where(kReasoningEffortRank.containsKey)
                 .toSet() ??
             <String>{};
         if (efforts.isNotEmpty) {
-          rememberReasoningEffortsForModel(key, efforts, persist: false);
+          // A previous poke that stored the host enum (Gemma-on-Nano,
+          // 2026-08-25) must not keep showing Minimal…Max after this fix.
+          rememberReasoningEffortsForModel(
+            key,
+            isGenericProviderEffortSchema(efforts) ? const {'none'} : efforts,
+            persist: false,
+          );
         }
         if (value['mandatory'] == true) {
           rememberMandatoryReasoning(key, persist: false);
@@ -93,10 +100,7 @@ void persistAllReasoningEffortMenus() {
   _prefs!.setString(_prefKey(), jsonEncode(all));
 }
 
-void persistReasoningEffortMenu(
-  String model, {
-  required bool probed,
-}) {
+void persistReasoningEffortMenu(String model, {required bool probed}) {
   if (_prefs == null || model.isEmpty) return;
   if (reasoningEffortCatalogIsBatching) return;
   Map<String, dynamic> all = {};

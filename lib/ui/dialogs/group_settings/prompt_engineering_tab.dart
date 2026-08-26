@@ -14,10 +14,15 @@ part 'prompt_engineering_tab.editors.dart';
 class GroupPromptEngineeringTab extends StatefulWidget {
   final ChatService chatService;
   final GroupChatRepository? groupRepo;
-  const GroupPromptEngineeringTab({super.key, required this.chatService, this.groupRepo});
+  const GroupPromptEngineeringTab({
+    super.key,
+    required this.chatService,
+    this.groupRepo,
+  });
 
   @override
-  State<GroupPromptEngineeringTab> createState() => _GroupPromptEngineeringTabState();
+  State<GroupPromptEngineeringTab> createState() =>
+      _GroupPromptEngineeringTabState();
 }
 
 class _GroupPromptEngineeringTabState extends State<GroupPromptEngineeringTab> {
@@ -135,20 +140,26 @@ class _GroupPromptEngineeringTabState extends State<GroupPromptEngineeringTab> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               Icons.group_off_outlined,
               size: 48,
-              color: Colors.white24,
+              color: AppColors.textTertiary(context),
             ),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               'No active group chat',
-              style: TextStyle(color: Colors.white54, fontSize: 14),
+              style: TextStyle(
+                color: AppColors.textSecondary(context),
+                fontSize: 14,
+              ),
             ),
             const SizedBox(height: 4),
             Text(
               'Author\'s notes and group prompts are only available in group mode.',
-              style: TextStyle(color: Colors.white24, fontSize: 12),
+              style: TextStyle(
+                color: AppColors.textTertiary(context),
+                fontSize: 12,
+              ),
               textAlign: TextAlign.center,
             ),
           ],
@@ -165,9 +176,13 @@ class _GroupPromptEngineeringTabState extends State<GroupPromptEngineeringTab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // ── Group System Prompt ─────────────────────────────────────
-                const Row(
+                Row(
                   children: [
-                    Icon(Icons.code, size: 16, color: AppColors.formMasterAccent),
+                    Icon(
+                      Icons.code,
+                      size: 16,
+                      color: AppColors.formMasterAccent,
+                    ),
                     SizedBox(width: 6),
                     Text(
                       'Group System Prompt',
@@ -182,7 +197,10 @@ class _GroupPromptEngineeringTabState extends State<GroupPromptEngineeringTab> {
                 const SizedBox(height: 6),
                 Text(
                   'Overrides the default group system prompt when non-empty.',
-                  style: TextStyle(color: Colors.white24, fontSize: 11),
+                  style: TextStyle(
+                    color: AppColors.textTertiary(context),
+                    fontSize: 11,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 AppTextField(
@@ -215,7 +233,9 @@ class _GroupPromptEngineeringTabState extends State<GroupPromptEngineeringTab> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: AppColors.formMasterAccent),
+                      borderSide: const BorderSide(
+                        color: AppColors.formMasterAccent,
+                      ),
                     ),
                     contentPadding: const EdgeInsets.all(10),
                   ),
@@ -232,7 +252,7 @@ class _GroupPromptEngineeringTabState extends State<GroupPromptEngineeringTab> {
                 const SizedBox(height: 20),
 
                 // ── Per-Character System Prompts (Group Only) ───────────────
-                const Row(
+                Row(
                   children: [
                     Icon(Icons.code, size: 16, color: Colors.tealAccent),
                     SizedBox(width: 6),
@@ -249,7 +269,10 @@ class _GroupPromptEngineeringTabState extends State<GroupPromptEngineeringTab> {
                 const SizedBox(height: 4),
                 Text(
                   'Full system prompt instructions that only apply to this character while inside this specific group. These take precedence over the character\'s normal card system prompt.',
-                  style: TextStyle(color: Colors.white24, fontSize: 11),
+                  style: TextStyle(
+                    color: AppColors.textTertiary(context),
+                    fontSize: 11,
+                  ),
                 ),
                 const SizedBox(height: 12),
 
@@ -260,7 +283,7 @@ class _GroupPromptEngineeringTabState extends State<GroupPromptEngineeringTab> {
                 const SizedBox(height: 20),
 
                 // ── Per-Character Author's Notes ────────────────────────────
-                const Row(
+                Row(
                   children: [
                     Icon(
                       Icons.person_outline,
@@ -281,7 +304,10 @@ class _GroupPromptEngineeringTabState extends State<GroupPromptEngineeringTab> {
                 const SizedBox(height: 4),
                 Text(
                   'Specific notes injected only when that character is the current speaker (after any group note). Strength is independent per character.',
-                  style: TextStyle(color: Colors.white24, fontSize: 11),
+                  style: TextStyle(
+                    color: AppColors.textTertiary(context),
+                    fontSize: 11,
+                  ),
                 ),
                 const SizedBox(height: 12),
 
@@ -297,5 +323,4 @@ class _GroupPromptEngineeringTabState extends State<GroupPromptEngineeringTab> {
       ],
     );
   }
-
 }

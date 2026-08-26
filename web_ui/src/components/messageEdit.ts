@@ -5,10 +5,13 @@
 // lib/utils/think_tags.dart splitMessageForEdit / joinMessageEdit so the web
 // UI never shows raw <think> tags while editing.
 
+import { canonicalizeReasoning } from '../utils/reasoningMarkers'
+
 export type MessageEditParts = { thinking: string; body: string };
 
 /** Pull thinking + body out of a stored message string for the editor. */
 export function splitMessageForEdit(text: string): MessageEditParts {
+  text = canonicalizeReasoning(text)
   const closed = /<think>([\s\S]*?)<\/think>\s*/i.exec(text);
   if (closed && closed.index !== undefined) {
     const thinking = (closed[1] ?? '').trim();

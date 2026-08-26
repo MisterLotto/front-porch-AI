@@ -29,8 +29,10 @@ import 'package:uuid/uuid.dart';
 import 'package:front_porch_ai/app_version.dart';
 import 'package:front_porch_ai/database/session_gen_overrides_heal.dart';
 import 'package:front_porch_ai/services/db_reunification_service.dart';
+import 'package:front_porch_ai/utils/character_id.dart';
 
-part 'database.g.dart'; part 'context_budget_db.dart';
+part 'database.g.dart';
+part 'context_budget_db.dart';
 part 'database.tables.core.dart';
 part 'database.tables.features.dart';
 part 'database.repair.dart';
@@ -41,6 +43,7 @@ part 'database.queries.chat.dart';
 part 'database.queries.groups.dart';
 part 'database.queries.worlds.dart';
 part 'database.queries.memory.dart';
+
 const _uuid = Uuid();
 
 // ── Database Definition ─────────────────────────────────────────────────
@@ -266,11 +269,12 @@ class AppDatabase extends _$AppDatabase {
   }
 
   @override
-  int get schemaVersion => 47;
+  int get schemaVersion => 49;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (Migrator m) => _onCreateMigration(m),
-    onUpgrade: (Migrator m, int from, int to) => _onUpgradeMigration(m, from, to),
+    onUpgrade: (Migrator m, int from, int to) =>
+        _onUpgradeMigration(m, from, to),
   );
 }

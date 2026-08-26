@@ -18,13 +18,8 @@
 
 part of 'edit_group_page.dart';
 
-/// Dialogue tab: First Message field + the disabled "Alternate Greetings —
-/// Coming soon" stub. No Example Dialogue section exists by design (GroupChat
-/// has no mes_example). Split out of `edit_group_page.dart` (extension on
-/// _EditGroupPageState) to keep every file under the 500-LOC cap — same
-/// pattern model_settings_dialog.dart uses. Verbatim: this tab touches only
-/// _firstMessageController, so there are zero setState/rebuildState sites and
-/// zero Provider reads here.
+/// Dialogue tab: First Message + alternate greetings with opening seeds.
+/// No Example Dialogue section exists by design (GroupChat has no mes_example).
 extension _EditGroupDialogueTab on _EditGroupPageState {
   Widget _buildDialogueTab() {
     return SingleChildScrollView(
@@ -80,76 +75,11 @@ extension _EditGroupDialogueTab on _EditGroupPageState {
                 ),
 
                 const SizedBox(height: 20),
-
-                // Alternate Greetings stub — disabled, exact text per spec.
-                // No Example Dialogue section at all (GroupChat has none).
-                Opacity(
-                  opacity: 0.6,
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceContainerOf(context),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: AppColors.borderOf(
-                          context,
-                        ).withValues(alpha: 0.5),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.swap_horiz,
-                              color: AppColors.iconSecondary(context),
-                              size: 18,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Alternate Greetings',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textSecondary(context),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 1,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.resolve(
-                                  context,
-                                  AppColors.surfaceContainer,
-                                  AppColors.surfaceContainerLight,
-                                ),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                'Coming soon',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: AppColors.textTertiary(context),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Alternate greetings for groups are coming in a future update. The opening message above is used for new sessions today.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textTertiary(context),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                GroupAlternateGreetingsEditor(
+                  greetings: _altGreetings,
+                  seeds: _altGreetingSeeds,
+                  showNeeds: true,
+                  onChanged: _setAltGreetings,
                 ),
               ],
             ),

@@ -108,14 +108,16 @@ extension AppDatabaseChatQueries on AppDatabase {
 
   /// Mark a chat's world attachments as decided (see Sessions.worldsInitialized).
   Future<void> markChatWorldsInitialized(String chatId) async {
-    await (update(sessions)..where((t) => t.id.equals(chatId)))
-        .write(const SessionsCompanion(worldsInitialized: Value(true)));
+    await (update(sessions)..where((t) => t.id.equals(chatId))).write(
+      const SessionsCompanion(worldsInitialized: Value(true)),
+    );
   }
 
   /// Whether this chat's world attachments have been decided yet.
   Future<bool> chatWorldsInitialized(String chatId) async {
-    final row = await (select(sessions)..where((t) => t.id.equals(chatId)))
-        .getSingleOrNull();
+    final row = await (select(
+      sessions,
+    )..where((t) => t.id.equals(chatId))).getSingleOrNull();
     return row?.worldsInitialized ?? false;
   }
 
@@ -148,10 +150,10 @@ extension AppDatabaseChatQueries on AppDatabase {
     return result;
   }
 
-  Future<bool> updateSession(SessionsCompanion session) async {
-    final result = await update(sessions).replace(session);
-    await bumpSyncVersion();
-    return result;
+  Future<bool> updateSession(SessionsCompanion session) {
+    // .write() not .replace() — a partial companion must not snap
+    // unspecified columns back to defaults (same trap as updateGroup).
+    return patchSession(session);
   }
 
   /// Partial-update a session — only writes fields that are explicitly set
@@ -248,6 +250,77 @@ extension AppDatabaseChatQueries on AppDatabase {
             ..orderBy([(m) => OrderingTerm.asc(m.position)]))
           .get();
 
+  /// Newest [limit] rows, returned oldest-first so hydrate order matches
+  /// the full-list path. Used to drop the chat spinner before backfill.
+  Future<List<Message>> getMessagesTailForSession(
+    String sessionId,
+    int limit,
+  ) async {
+    final rows =
+        await (select(messages)
+              ..where(
+                (m) => m.sessionId.equals(sessionId) & m.deletedAt.isNull(),
+              )
+              ..orderBy([(m) => OrderingTerm.desc(m.position)])
+              ..limit(limit))
+            .get();
+    return rows.reversed.toList();
+  }
+
+  /// Rows strictly before [position], oldest-first. [limit] takes the
+  /// newest of those (a page sitting just above the current window).
+  Future<List<Message>> getMessagesBeforePosition(
+    String sessionId,
+    int position, {
+    int? limit,
+  }) async {
+    if (limit == null) {
+      return (select(messages)
+            ..where(
+              (m) =>
+                  m.sessionId.equals(sessionId) &
+                  m.deletedAt.isNull() &
+                  m.position.isSmallerThanValue(position),
+            )
+            ..orderBy([(m) => OrderingTerm.asc(m.position)]))
+          .get();
+    }
+    final newestFirst =
+        await (select(messages)
+              ..where(
+                (m) =>
+                    m.sessionId.equals(sessionId) &
+                    m.deletedAt.isNull() &
+                    m.position.isSmallerThanValue(position),
+              )
+              ..orderBy([(m) => OrderingTerm.desc(m.position)])
+              ..limit(limit))
+            .get();
+    return newestFirst.reversed.toList();
+  }
+
+  Future<int> countSessionsForCharacter(String characterId) async {
+    final countExp = sessions.id.count();
+    final query = selectOnly(sessions)
+      ..addColumns([countExp])
+      ..where(
+        sessions.characterId.equals(characterId) & sessions.deletedAt.isNull(),
+      );
+    final row = await query.getSingle();
+    return row.read(countExp) ?? 0;
+  }
+
+  Future<int> deleteMessagesAtPosition(String sessionId, int position) async {
+    final count =
+        await (delete(messages)..where(
+              (m) =>
+                  m.sessionId.equals(sessionId) & m.position.equals(position),
+            ))
+            .go();
+    if (count > 0) await bumpSyncVersion();
+    return count;
+  }
+
   Stream<List<Message>> watchMessagesForSession(String sessionId) =>
       (select(messages)
             ..where((m) => m.sessionId.equals(sessionId) & m.deletedAt.isNull())
@@ -289,8 +362,9 @@ extension AppDatabaseChatQueries on AppDatabase {
         final pos = row.position.value;
         final was = byPos[pos];
         if (was != null) {
-          await (update(messages)..where((t) => t.id.equals(was.id)))
-              .write(row);
+          await (update(
+            messages,
+          )..where((t) => t.id.equals(was.id))).write(row);
         } else {
           toInsert.add(row);
         }

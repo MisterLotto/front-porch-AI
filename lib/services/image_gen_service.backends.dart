@@ -58,7 +58,8 @@ extension ImageGenBackends on ImageGenService {
       await dir.create(recursive: true);
 
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      var base = (preferredFileName != null && preferredFileName.trim().isNotEmpty)
+      var base =
+          (preferredFileName != null && preferredFileName.trim().isNotEmpty)
           ? path.basename(preferredFileName.trim())
           : 'img_$timestamp.png';
       // Strip path traversal; force a png-ish name if empty after sanitize.
@@ -69,7 +70,9 @@ extension ImageGenBackends on ImageGenService {
       var file = File(path.join(dir.path, base));
       if (await file.exists()) {
         final stem = path.basenameWithoutExtension(base);
-        final ext = path.extension(base).isEmpty ? '.png' : path.extension(base);
+        final ext = path.extension(base).isEmpty
+            ? '.png'
+            : path.extension(base);
         var n = 1;
         do {
           file = File(path.join(dir.path, '${stem}_$n$ext'));
@@ -329,8 +332,7 @@ extension ImageGenBackends on ImageGenService {
         ? <String, dynamic>{
             'model': model,
             'prompt': prompt,
-            'imageDataUrl':
-                'data:image/png;base64,${base64Encode(editImage)}',
+            'imageDataUrl': 'data:image/png;base64,${base64Encode(editImage)}',
           }
         : <String, dynamic>{
             'model': model,
@@ -480,7 +482,7 @@ extension ImageGenBackends on ImageGenService {
           if (im is! Map<String, dynamic>) continue;
           final iu = im['image_url'];
           final url = iu is Map<String, dynamic> ? iu['url'] as String? : null;
-          if (url != null) return _imageBytesFromUrl(client, url);
+          if (url != null) return await _imageBytesFromUrl(client, url);
         }
       }
 
@@ -493,7 +495,7 @@ extension ImageGenBackends on ImageGenService {
           }
           final iu = part['image_url'];
           final url = iu is Map<String, dynamic> ? iu['url'] as String? : null;
-          if (url != null) return _imageBytesFromUrl(client, url);
+          if (url != null) return await _imageBytesFromUrl(client, url);
         }
       }
 

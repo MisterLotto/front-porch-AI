@@ -17,7 +17,11 @@ class GroupLorebookWorldsTab extends StatefulWidget {
   final ChatService chatService;
   final GroupChatRepository? groupRepo;
 
-  const GroupLorebookWorldsTab({super.key, required this.chatService, this.groupRepo});
+  const GroupLorebookWorldsTab({
+    super.key,
+    required this.chatService,
+    this.groupRepo,
+  });
 
   @override
   State<GroupLorebookWorldsTab> createState() => _GroupLorebookWorldsTabState();
@@ -249,18 +253,23 @@ class _GroupLorebookWorldsTabState extends State<GroupLorebookWorldsTab> {
                 ),
                 const SizedBox(height: 8),
                 if (_allWorlds.isEmpty)
-                  const Text(
+                  Text(
                     'No places available. Create places in the Worlds tab to attach them here.',
-                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                    style: TextStyle(
+                      color: AppColors.textSecondary(context),
+                      fontSize: 12,
+                    ),
                   )
                 else
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: _allWorlds.map((w) {
-                      final selected = _worldIds.contains(w.id) ||
+                      final selected =
+                          _worldIds.contains(w.id) ||
                           _worldIds.contains(w.name);
-                      final label = w.biomeId != null &&
+                      final label =
+                          w.biomeId != null &&
                               w.biomeId!.isNotEmpty &&
                               w.biomeId != 'temperate'
                           ? '${w.name} · ${w.biomeId}'
@@ -302,17 +311,17 @@ class _GroupLorebookWorldsTabState extends State<GroupLorebookWorldsTab> {
                     const SizedBox(width: 8),
                     OutlinedButton.icon(
                       onPressed: _importGroupLoreFromCharacter,
-                      icon: const Icon(Icons.person_search, size: 16),
-                      label: const Text('From character'),
+                      icon: Icon(Icons.person_search, size: 16),
+                      label: Text('From character'),
                     ),
                     const SizedBox(width: 8),
                     FilledButton.icon(
                       onPressed: () => _showEntryEditor(),
-                      icon: const Icon(Icons.add, size: 16),
-                      label: const Text('Add Entry'),
+                      icon: Icon(Icons.add, size: 16),
+                      label: Text('Add Entry'),
                       style: FilledButton.styleFrom(
                         backgroundColor: Colors.orangeAccent,
-                        foregroundColor: Colors.black,
+                        foregroundColor: AppColors.onChaosAccent,
                       ),
                     ),
                   ],
@@ -326,11 +335,13 @@ class _GroupLorebookWorldsTabState extends State<GroupLorebookWorldsTab> {
                       color: AppColors.surfaceContainerOf(context),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Center(
+                    child: Center(
                       child: Text(
                         'No group-level lorebook entries yet.\nAdd entries or import a JSON file.',
                         textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white54),
+                        style: TextStyle(
+                          color: AppColors.textSecondary(context),
+                        ),
                       ),
                     ),
                   )
@@ -407,5 +418,4 @@ class _GroupLorebookWorldsTabState extends State<GroupLorebookWorldsTab> {
       ],
     );
   }
-
 }

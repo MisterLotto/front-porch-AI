@@ -97,7 +97,7 @@ You are the integration test CI cannot be. After agent work that touches chat:
 | 2 | Group, two characters, hand/set-down item → **regen** that line | Kit stays on the right person |
 | 3 | Light theme → Main Settings menu + Chat Settings | Labels readable (not white-on-cream or black-on-dark) |
 | 4 | If web: Journal / review / 2FA enroll | Can finish or cancel; not stuck; 2FA needs password |
-| 5 | After a “memory” fix: regen a beat that planted a Growth ring | Discarded plot does not keep steering her |
+| 5 | After a “memory” fix: regen a beat that planted a Growth ring | Discarded plot does not keep steering the character |
 
 Ten minutes of this catches more than another thousand unit tests.
 

@@ -18,7 +18,7 @@ import { RealismFormSection } from '../components/realism/RealismFormSection';
 import { useAdultThemes } from '../components/realism/useAdultThemes';
 import { NeedsFormSection } from '../components/realism/NeedsFormSection';
 import { TokenBadge } from '../components/realism/controls';
-import { type RealismValues, realismFromDetail } from '../components/realism/realismTypes';
+import { type RealismValues, compactGreetingPairs, realismFromDetail } from '../components/realism/realismTypes';
 
 interface RawLore {
   name?: string;
@@ -145,11 +145,17 @@ export function CharacterEditPage() {
         systemPrompt: c.systemPrompt,
         postHistoryInstructions: c.postHistoryInstructions,
         tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
-        alternateGreetings: greetings.filter((g) => g.trim()),
-        worldNames,
-        ttsVoice,
-        lorebook: lore.filter((e) => e.key.trim() || e.content.trim()),
-        ...rv,
+        ...(() => {
+          const paired = compactGreetingPairs(greetings, rv.greetingSeeds);
+          return {
+            alternateGreetings: paired.greetings,
+            worldNames,
+            ttsVoice,
+            lorebook: lore.filter((e) => e.key.trim() || e.content.trim()),
+            ...rv,
+            greetingSeeds: paired.seeds,
+          };
+        })(),
       });
       navigate(-1);
     } catch (e) {
@@ -199,7 +205,13 @@ export function CharacterEditPage() {
       </label>
 
       <h3 className="section-label">Alternate greetings</h3>
-      <AltGreetingsEditor greetings={greetings} onChange={setGreetings} />
+      <AltGreetingsEditor
+        greetings={greetings}
+        onChange={setGreetings}
+        seeds={rv.greetingSeeds}
+        showNeeds
+        onSeedsChange={(seeds) => patch({ greetingSeeds: seeds })}
+      />
 
       <h3 className="section-label">Lorebook</h3>
       <LoreEntriesEditor entries={lore} onChange={setLore} />
@@ -309,8 +321,12 @@ export function CharacterEditPage() {
       <h3 className="section-label">Realism Engine</h3>
       <RealismFormSection v={rv} set={patch} showIntimate={adultThemes} />
 
-      <h3 className="section-label">Needs Simulation</h3>
-      <NeedsFormSection v={rv} set={patch} />
+      {rv.realismEnabled && (
+        <>
+          <h3 className="section-label">Needs Simulation</h3>
+          <NeedsFormSection v={rv} set={patch} />
+        </>
+      )}
 
       <h3 className="section-label">Avatars &amp; expressions</h3>
       <AvatarManager characterId={c.id} />

@@ -17,7 +17,7 @@ import { AltGreetingsEditor } from '../components/AltGreetingsEditor';
 import { RealismFormSection } from '../components/realism/RealismFormSection';
 import { useAdultThemes } from '../components/realism/useAdultThemes';
 import { NeedsFormSection } from '../components/realism/NeedsFormSection';
-import { type RealismValues, REALISM_DEFAULTS } from '../components/realism/realismTypes';
+import { type RealismValues, REALISM_DEFAULTS, compactGreetingPairs, inventoryToChips } from '../components/realism/realismTypes';
 
 interface Draft extends RealismValues {
   name: string;
@@ -33,7 +33,7 @@ interface Draft extends RealismValues {
   lorebook: LoreEntry[];
 }
 
-const STEPS = ['Identity', 'Personality', 'Dialogue', 'Lorebook', 'Realism', 'Review'];
+const STEPS = ['Identity', 'Personality', 'Dialogue', 'Lorebook', 'Porch Life', 'Review'];
 
 const EMPTY: Draft = {
   name: '',
@@ -66,15 +66,18 @@ export function CreateCharacterPage() {
     setSaving(true);
     setError('');
     try {
+      const paired = compactGreetingPairs(d.alternateGreetings, d.greetingSeeds);
       const res = await api.post<{ id: string; name: string }>('/api/characters/create', {
         ...d,
         tags: d.tags.split(',').map((t) => t.trim()).filter(Boolean),
-        alternateGreetings: d.alternateGreetings.filter((g) => g.trim()),
+        alternateGreetings: paired.greetings,
+        greetingSeeds: paired.seeds,
       });
       // Open the new character so creation is verifiable end-to-end.
       try {
+        navigate('/chat?opening=1');
         await api.post('/api/chat/select', { characterId: res.id });
-        navigate('/chat');
+        navigate('/chat', { replace: true });
       } catch {
         navigate('/');
       }
@@ -129,7 +132,13 @@ export function CreateCharacterPage() {
               First message (greeting)
               <textarea rows={5} value={d.firstMessage} onChange={(e) => set('firstMessage', e.target.value)} />
             </label>
-            <AltGreetingsEditor greetings={d.alternateGreetings} onChange={(g) => set('alternateGreetings', g)} />
+            <AltGreetingsEditor
+              greetings={d.alternateGreetings}
+              onChange={(g) => set('alternateGreetings', g)}
+              seeds={d.greetingSeeds}
+              showNeeds
+              onSeedsChange={(seeds) => set('greetingSeeds', seeds)}
+            />
             <label>
               Example dialogue
               <textarea rows={4} value={d.mesExample} onChange={(e) => set('mesExample', e.target.value)} />
@@ -152,7 +161,7 @@ export function CreateCharacterPage() {
         {step === 4 && (
           <>
             <RealismFormSection v={d} set={patch} showIntimate={adultThemes} />
-            <NeedsFormSection v={d} set={patch} />
+            {d.realismEnabled && <NeedsFormSection v={d} set={patch} />}
           </>
         )}
 
@@ -164,8 +173,25 @@ export function CreateCharacterPage() {
             <ReviewRow label="Scenario" value={d.scenario} />
             <ReviewRow label="First message" value={d.firstMessage} />
             <ReviewRow label="Lorebook" value={d.lorebook.length ? `${d.lorebook.length} entr${d.lorebook.length === 1 ? 'y' : 'ies'}` : 'None'} />
-            <ReviewRow label="Realism" value={d.realismEnabled ? `On · bond ${d.shortTermBond}, trust ${d.trustLevel}` : 'Off'} />
-            <ReviewRow label="Needs" value={d.needsSimEnabled ? `On · ${d.needsSimStrength}× strength` : 'Off'} />
+            <ReviewRow
+              label="Porch Life"
+              value={[
+                d.realismEnabled ? `Engine on · bond ${d.shortTermBond}` : 'Engine off',
+                d.chaosModeEnabled ? 'Chaos' : null,
+                d.ambitions.length ? `ambitions ${d.ambitions.length}` : null,
+                d.occupation.trim() ? d.occupation : null,
+                d.likes.length ? `likes ${d.likes.length}` : null,
+                inventoryToChips(d.inventory).worn.length
+                  ? `wearing ${inventoryToChips(d.inventory).worn.length}`
+                  : null,
+                inventoryToChips(d.inventory).carrying.length
+                  ? `carrying ${inventoryToChips(d.inventory).carrying.length}`
+                  : null,
+              ].filter(Boolean).join(' · ')}
+            />
+            {d.realismEnabled && (
+              <ReviewRow label="Needs" value={d.needsSimEnabled ? `On · ${d.needsSimStrength}× strength` : 'Off'} />
+            )}
             {error && <p className="error">{error}</p>}
           </div>
         )}

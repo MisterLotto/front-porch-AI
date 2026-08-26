@@ -60,6 +60,27 @@ export interface StoopCard {
   tokenCount: number | null;
 }
 
+export interface StoopCommentReply {
+  authorId: string;
+  displayName: string;
+  authorAvatarAssetId?: string | null;
+  createdAt: string;
+  body: string;
+  deleted?: boolean;
+}
+
+export interface StoopComment {
+  id: string;
+  cardId: string;
+  authorId: string;
+  displayName: string;
+  authorAvatarAssetId?: string | null;
+  createdAt: string;
+  body: string;
+  deleted?: boolean;
+  reply?: StoopCommentReply | null;
+}
+
 export interface StoopBrowsePage {
   total: number;
   page: number;
@@ -72,6 +93,10 @@ export interface StoopCardDetail extends StoopCard {
   card: Record<string, unknown>;
   tags: string[];
   myVote: number;
+  /** Per-card Discussion opt-in. Missing => off. */
+  commentsEnabled?: boolean;
+  /** Owner kill-switch. True hides Discussion without wiping comments. */
+  commentsLocked?: boolean;
 }
 
 export interface StoopCreator {

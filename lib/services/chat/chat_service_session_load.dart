@@ -73,6 +73,7 @@ extension ChatServiceSessionLoad on ChatService {
       // See "keep reset blocks in sync" (setActiveGroup, startNewChat 1:1+group (now explicit in both), load* , setActive* all must hit this; now includes needs/chaos/... + leaves (see CLAUDE.md for full; incomplete zeroing now complete) + " ; now complete in all group/0-session/new-chat hygiene)" ; incomplete zeroing now complete).
       // (cross-ref setActiveCharacter:1572)
       _timeService.resetForFreshChat();
+      _clearTodayPointer();
       // Fresh GROUP session: apply the group's authored scene-time seed on
       // top of the reset (story-calendar "As built" gap fix — the wizard's
       // time seed used to be editor-carried only and never reached the
@@ -122,19 +123,45 @@ extension ChatServiceSessionLoad on ChatService {
     final lastSession = sessions.reduce(
       (a, b) => a.updatedAt.isAfter(b.updatedAt) ? a : b,
     );
-    _currentSessionId = lastSession.id;
-    await _reloadChatWorldIds();
-    await _hydrateSessionScalars(lastSession);
+    // Activate THIS row's persona before _currentSessionId is set and
+    // before overlay-reapply / any hydrate save. setActiveCharacter then
+    // loadSession used to stamp the still-live previous chat (Nightowl)
+    // onto the first row; loadSession then skipped flush (same id) and
+    // "restored" Nightowl. Default is unmoved — setActivePersona is
+    // chat-scoped. Keep loadSession's restore too.
+    await _activateSessionPersona(lastSession);
+    // Stale unauthored RtR from a prior opening must not paint this hydrate.
+    await _invalidateGreetingEval();
+    _preserveSessionPersonaOf[this] = true;
+    try {
+      _currentSessionId = lastSession.id;
+      // Sanitizer + first paint need gen settings and the tail ONLY.
+      // Growth/worlds/scalars used to run first and kept the spinner up
+      // for the same beat as loading 11k messages.
+      _sessionGenSettings = ChatGenerationSettings.fromJsonString(
+        lastSession.generationSettings,
+      );
+      try {
+        await _openSessionMessages(lastSession.id);
+      } catch (e) {
+        print('Error loading chat session: $e');
+      }
+      await _reloadChatWorldIds();
+      await _hydrateSessionScalars(lastSession);
 
-    // v30: Load live per-character group realism/needs (bond/trust/emotion/fixation/arousal/relationships/needs)
-    // from the session column (or fall back to group defaults). Must happen for group entry paths
-    // so that _groupRealism is populated before any eval, prompt injection, or UI read.
-    if (_activeGroup != null) {
-      _loadGroupRealismStateFromSession(lastSession);
-    } else {
-      // 1:1 session: the group realism column ('{}' for plain sessions) may
-      // carry persisted Scene Guest (Lite NPC) dbIds. Tolerant of legacy/empty.
-      _loadSceneGuestsFromSession(lastSession);
+      // v30: Load live per-character group realism/needs (bond/trust/emotion/fixation/arousal/relationships/needs)
+      // from the session column (or fall back to group defaults). Must happen for group entry paths
+      // so that _groupRealism is populated before any eval, prompt injection, or UI read.
+      if (_activeGroup != null) {
+        _loadGroupRealismStateFromSession(lastSession);
+      } else {
+        // 1:1 session: the group realism column ('{}' for plain sessions) may
+        // carry persisted Scene Guest (Lite NPC) dbIds. Tolerant of legacy/empty.
+        _loadSceneGuestsFromSession(lastSession);
+      }
+      await _reapplyOpeningOverlayIfNeeded();
+    } finally {
+      _preserveSessionPersonaOf[this] = false;
     }
 
     // Load messages
@@ -148,22 +175,6 @@ extension ChatServiceSessionLoad on ChatService {
     _isCheckingCompletion = false;
 
     // Load per-chat generation settings override for this session.
-    _sessionGenSettings = ChatGenerationSettings.fromJsonString(
-      lastSession.generationSettings,
-    );
-
-    try {
-      final dbMessages = await _db.getMessagesForSession(_currentSessionId!);
-      _computeAbsenceGap(dbMessages);
-      debugPrint(
-        '[ChatService] 🟢 _loadLastSession: loading ${dbMessages.length} '
-        'messages for session $_currentSessionId',
-      );
-      _messages.clear();
-      _hydrateMessagesFromRows(dbMessages);
-    } catch (e) {
-      print('Error loading chat session: $e');
-    }
     // LLMerta porch memories on last-session open (same as loadSession).
     unawaited(_maybeImportPorchMemories());
   }
@@ -192,9 +203,9 @@ extension ChatServiceSessionLoad on ChatService {
     // Aggregate stats in two queries instead of hydrating every message row
     // of every session — this runs on the tap-to-open-chat path, where the
     // old loop was the dead time before the route push even started.
-    final stats = await _db.getSessionListStats(
-      [for (final s in dbSessions) s.id],
-    );
+    final stats = await _db.getSessionListStats([
+      for (final s in dbSessions) s.id,
+    ]);
 
     List<Map<String, dynamic>> sessions = [];
     for (final s in dbSessions) {
@@ -287,18 +298,15 @@ extension ChatServiceSessionLoad on ChatService {
       List<int> swipeDurations;
       try {
         swipeDurations = List<int>.from(
-          (jsonDecode(m.swipeDurations) as List).map(
-            (e) => (e as num).toInt(),
-          ),
+          (jsonDecode(m.swipeDurations) as List).map((e) => (e as num).toInt()),
         );
       } catch (_) {
         swipeDurations = [0];
       }
 
-      final safeSwipeIndex =
-          (m.swipeIndex >= 0 && m.swipeIndex < swipes.length)
-              ? m.swipeIndex
-              : 0;
+      final safeSwipeIndex = (m.swipeIndex >= 0 && m.swipeIndex < swipes.length)
+          ? m.swipeIndex
+          : 0;
 
       _messages.add(
         ChatMessage(
@@ -328,6 +336,7 @@ extension ChatServiceSessionLoad on ChatService {
     if (_messages.isNotEmpty) {
       _lorebookScanner.scanLatest();
     }
+    _restoreGreetingIndex();
   }
 
   /// Hydrates every session-scoped scalar the two load paths share, from one
@@ -350,9 +359,9 @@ extension ChatServiceSessionLoad on ChatService {
   /// Callers keep what genuinely differs: group-realism/scene-guest branch,
   /// objectives zeroing (library path only), per-chat gen settings placement
   /// (must precede message hydration for the retroactive sanitizer), and the
-  /// persona activation (picker path only, by design — restoring a specific
-  /// chat restores its persona; a library tap must not silently switch the
-  /// user's persona).
+  /// persona activation. Both load paths restore the row's persona so a
+  /// hydrate save cannot stamp the previous chat's live persona onto the
+  /// row. The default is still unmoved (setActivePersona is chat-scoped).
   Future<void> _hydrateSessionScalars(Session s) async {
     _authorNote = s.authorNote;
     _authorNoteStrength = s.authorNoteDepth;
@@ -370,6 +379,7 @@ extension ChatServiceSessionLoad on ChatService {
       activeFixation: s.activeFixation,
       fixationLifespan: s.fixationLifespan,
       spatialStance: s.spatialStance,
+      withUser: s.withUser,
       trustRepairPending: s.trustRepairPending,
       turnsSinceLongTermCheck: s.turnsSinceLongTermCheck,
       shortTermDeltasSummary: s.shortTermDeltasSummary,
@@ -464,6 +474,9 @@ extension ChatServiceSessionLoad on ChatService {
     // did not save. Skipped when a record exists: the chat has moved on.
     seedPocketsFromCards();
 
+    _todayObjectiveId = s.todayObjectiveId;
+    _todayObjectiveText = null;
+
     // Re-sync from the character's current setting so that toggling
     // "Enjoys low hygiene" on the character affects existing chats on next load.
     _enjoysLowHygiene =
@@ -507,6 +520,17 @@ extension ChatServiceSessionLoad on ChatService {
     await _refreshGrowthCache();
   }
 
+  /// Chat-scoped only — never moves [UserPersonaService.defaultPersonaId].
+  Future<void> _activateSessionPersona(Session session) async {
+    final sessionPersonaId = session.userPersonaId;
+    final knownPersona =
+        sessionPersonaId != null &&
+        _userPersonaService.personas.any((p) => p.id == sessionPersonaId);
+    await _userPersonaService.setActivePersona(
+      knownPersona ? sessionPersonaId : _userPersonaService.defaultPersonaId,
+    );
+  }
+
   Future<void> loadSession(String sessionId) async {
     if (_activeCharacter == null && _activeGroup == null) return;
 
@@ -522,12 +546,15 @@ extension ChatServiceSessionLoad on ChatService {
     // "restore" whatever was already live. That broke "reopening a chat
     // restores its persona" everywhere (Rawhide E2E red since 6192ddc:
     // persona_default_test + persona_folder_test; the picker flow after
-    // setActiveCharacter hits it because _loadLastSession sets
-    // _currentSessionId without activating the persona — by design). The
-    // same-session transcript needs no flush here: turns persist when
-    // taken, and _waitForTurnToSettle has already drained the save chain.
+    // setActiveCharacter then loadSession used to hit it because
+    // _loadLastSession set _currentSessionId before activating the
+    // persona). The same-session transcript needs no flush here: turns
+    // persist when taken, and _waitForTurnToSettle has already drained
+    // the save chain. _loadLastSession now activates the row persona
+    // before any hydrate save; the restore below still runs.
     if (_currentSessionId != sessionId) {
       await flushPendingSaves();
+      _clearTodayPointer();
     }
 
     // Reset AFK idle state when loading a new session
@@ -537,17 +564,17 @@ extension ChatServiceSessionLoad on ChatService {
     final session = await _db.getSessionById(sessionId);
     if (session == null) return;
 
+    // Any path that loads a new opening first_mes must bump _greetingEvalGen
+    // before hydrate / _reapplyOpeningOverlayIfNeeded. _waitForTurnToSettle
+    // only drains _isTurnBusy, so a delayed unauthored RtR would still have
+    // a live Zone token and paint fury onto the loaded opening.
+    await _invalidateGreetingEval();
+
     // Speak as the persona this chat was chatted under. A session with no
     // binding (pre-v25 rows) or one naming a persona that has since been
     // DELETED falls back to the default — not to whatever the previously-open
     // chat left behind, which is what the old silent no-op did.
-    final sessionPersonaId = session.userPersonaId;
-    final knownPersona =
-        sessionPersonaId != null &&
-        _userPersonaService.personas.any((p) => p.id == sessionPersonaId);
-    await _userPersonaService.setActivePersona(
-      knownPersona ? sessionPersonaId : _userPersonaService.defaultPersonaId,
-    );
+    await _activateSessionPersona(session);
 
     // Load per-chat generation settings override for this session (must
     // happen before the message loop so retroactive sanitization can
@@ -557,14 +584,9 @@ extension ChatServiceSessionLoad on ChatService {
     );
 
     try {
-      final dbMessages = await _db.getMessagesForSession(sessionId);
-      _computeAbsenceGap(dbMessages);
-      debugPrint(
-        '[ChatService] 🟢 loadSession: loading ${dbMessages.length} '
-        'messages for session $sessionId',
-      );
-      _messages.clear();
-      _hydrateMessagesFromRows(dbMessages);
+      // Backfill checks `_currentSessionId` so this must be set first.
+      _currentSessionId = sessionId;
+      await _openSessionMessages(sessionId);
 
       // Post-load sanitization: force valid swipe indices. This protects
       // against any legacy corrupted rows or previous buggy saves, even if
@@ -580,14 +602,15 @@ extension ChatServiceSessionLoad on ChatService {
       // stripped from the in-memory list so the UI and prompt builders never see it.
       // (v30: _hydrateGroupRealismCheckpointIfPresent removed — state now loads from DB column)
 
-      _currentSessionId = sessionId;
       await _reloadChatWorldIds();
       // Touch updatedAt so this session becomes the "last active" for the
       // character/group — _loadLastSession sorts by updatedAt DESC.
-      _db.patchSession(SessionsCompanion(
-        id: drift.Value(sessionId),
-        updatedAt: drift.Value(DateTime.now()),
-      ));
+      _db.patchSession(
+        SessionsCompanion(
+          id: drift.Value(sessionId),
+          updatedAt: drift.Value(DateTime.now()),
+        ),
+      );
       // Scene Guests are per-session. Without this, switching to a different
       // session via the history picker leaves the PREVIOUS session's guests
       // (and their evolution/detection state) in place — they keep chiming in
@@ -611,6 +634,7 @@ extension ChatServiceSessionLoad on ChatService {
         _loadGroupRealismStateFromSession(session);
       }
       await _hydrateSessionScalars(session);
+      await _reapplyOpeningOverlayIfNeeded();
 
       // Quests are keyed (character, CHAT) — so switching chats has to reload
       // them, exactly like the scalars above. Nothing did: `_activeObjectives`
@@ -649,9 +673,7 @@ extension ChatServiceSessionLoad on ChatService {
   Future<List<PorchDiaryTarget>> _buildPorchDiaryTargets() async {
     if (_activeGroup == null && _activeCharacter != null) {
       final id = _getCharacterIdFromCard(_activeCharacter!);
-      return [
-        PorchDiaryTarget(libraryStableGroupId: id, diaryCharacterId: id),
-      ];
+      return [PorchDiaryTarget(libraryStableGroupId: id, diaryCharacterId: id)];
     }
     if (_activeGroup == null) return const [];
 

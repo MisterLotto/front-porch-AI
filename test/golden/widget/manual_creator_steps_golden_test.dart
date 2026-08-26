@@ -47,7 +47,7 @@ library;
 //   1 — Personality (description, personality, scenario, advanced prompts)
 //   2 — Dialogue   (first message, alt greetings, example dialogues)
 //   3 — Lorebook   (empty list → "no entries" empty state)
-//   4 — Realism Engine (initial-state form)
+//   4 — Porch Life (wardrobe, time, chaos, engine seeds)
 //   5 — Review & Create (character summary + create button)
 //
 // Light + dark for each (10 PNGs total).
@@ -67,17 +67,34 @@ Future<void> _navigateTo(WidgetTester tester, int targetStep) async {
     'Personality',
     'Dialogue',
     'Lorebook',
-    'Realism Engine',
+    'Porch Life',
     'Review & Create',
   ];
   // Enter name — required for the step 0 → 1 guard check.
   await tester.enterText(find.byType(TextFormField).first, 'Aria Vale');
   await tester.pump();
   for (var i = 0; i < targetStep; i++) {
-    await tester.tap(find.text('Next: ${labels[i]}'));
-    // Pump past the 300ms AnimatedSwitcher cross-fade animation.
-    await tester.pump(const Duration(milliseconds: 350));
+    final next = find.text('Next: ${labels[i]}');
+    await tester.ensureVisible(next);
+    await tester.pump();
+    await tester.tap(next);
+    // Start the 300ms AnimatedSwitcher, then let it finish plus a beat
+    // so the outgoing step is gone (Porch Life is taller than 900px and
+    // a single 350ms pump left Lorebook/Porch Life stacked on Review).
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
   }
+  // Scroll back to the step heading so the golden is the page, not the
+  // Next button we just used (Porch Life is taller than the 900px surface).
+  const anchors = [
+    'Define who your character is and the world they inhabit.',
+    "Configure the character's opening message and example dialogue.",
+    'Add world lore entries that inject context into conversations when keywords are detected.',
+    'Wardrobe, likes, the story clock',
+    'Review your character card. All fields are still editable before saving.',
+  ];
+  await tester.ensureVisible(find.textContaining(anchors[targetStep - 1]));
+  await tester.pump();
 }
 
 void main() {
@@ -121,7 +138,7 @@ void main() {
     );
   });
 
-  testWidgets('CreateCharacterPage — step 4 Realism Engine', (tester) async {
+  testWidgets('CreateCharacterPage — step 4 Porch Life', (tester) async {
     await expectThemedGoldens(
       tester,
       childBuilder: () => CreateCharacterPage(key: UniqueKey()),

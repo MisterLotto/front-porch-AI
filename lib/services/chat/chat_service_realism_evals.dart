@@ -16,7 +16,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-
 part of '../chat_service.dart';
 
 /// Realism eval plumbing — chance-time injection, LLM eval fire + think-block
@@ -86,13 +85,8 @@ extension ChatServiceRealismEvals on ChatService {
   Future<void> _evaluateNarrativeCall({void Function(String)? onChunk}) =>
       _realismEvals.evaluateNarrativeCall(onChunk: onChunk);
 
-  Future<void> _evaluateOneShotCall({
-    void Function(String)? onChunk,
-    bool skipClockAdvance = false,
-  }) => _realismEvals.evaluateOneShotCall(
-    onChunk: onChunk,
-    skipClockAdvance: skipClockAdvance,
-  );
+  Future<void> _evaluateOneShotCall({void Function(String)? onChunk}) =>
+      _realismEvals.evaluateOneShotCall(onChunk: onChunk);
 
   /// One-shot trust repair evaluator.
   ///
@@ -136,7 +130,11 @@ extension ChatServiceRealismEvals on ChatService {
 
     try {
       debugPrint('[Realism:TrustRepair] Evaluating repair attempt...');
-      final raw = await _fireLLMEval(prompt, onChunk: onChunk, label: 'trust_repair');
+      final raw = await _fireLLMEval(
+        prompt,
+        onChunk: onChunk,
+        label: 'trust_repair',
+      );
       if (raw == null) return;
 
       final text = _stripThinkBlocks(raw).trim();
@@ -206,6 +204,7 @@ extension ChatServiceRealismEvals on ChatService {
       'activeFixation': _relationshipService.activeFixation,
       'fixationLifespan': _relationshipService.fixationLifespan,
       'spatialStance': _relationshipService.spatialStance,
+      'withUser': _relationshipService.withUser,
       // Pockets & Wardrobe rides the rewind contract like every other
       // per-turn scalar. Without this a regenerate re-runs the detection pass
       // on a NEW reply while the record still carries the discarded reply's
@@ -216,9 +215,7 @@ extension ChatServiceRealismEvals on ChatService {
         final c = _activeCharacter;
         if (c == null) return const <String, dynamic>{};
         final p = pocketsFor(_getCharacterIdFromCard(c));
-        return p == null
-            ? const <String, dynamic>{}
-            : {'pockets': p.toJson()};
+        return p == null ? const <String, dynamic>{} : {'pockets': p.toJson()};
       })(),
     };
 
@@ -251,28 +248,17 @@ extension ChatServiceRealismEvals on ChatService {
   }
 
   // ── Phase 1: Per-character realism evaluation for the upcoming speaker ────
-  /// Fire the four realism eval calls (relationship / emotional / physical /
-  /// narrative) concurrently with the standard dispatch stagger. This exact
-  /// 4-call block was duplicated byte-for-byte in the centralized 1:1 path and
-  /// the per-speaker group path; sharing it is the first DRY step toward a single
-  /// eval path. The caller decides whether to wrap it in batched verification
-  /// (`beginCollect`/`finalize`) — that wrapping currently differs between the
-  /// two paths and is deliberately left to the caller until that divergence is
-  /// reconciled.
-  Future<void> _fireStaggeredRealismEvals(
-    void Function(String) onChunk, {
-    bool skipClockAdvance = false,
-  }) async {
-    // Dispatch order is a caching decision, not a semantics one (maintainer,
-    // 2026-08-10: firing order is free to change; eval PHASE is not — all
-    // four remain pre-generation). Relationship, emotional and narrative
-    // open with the byte-identical judgePrefix, so on KoboldCpp's FIFO
-    // queue the first pays the prefill and the next two fast-forward
-    // through it — but only if they arrive CONSECUTIVELY. Scene-time's
-    // prompt is deliberately lean and shares nothing; dispatched in the
-    // middle it would evict the shared prefix between two judges, so it
-    // fires last. (test/services/chat/realism_shared_prefix_test.dart pins
-    // both the prefix and this order.)
+  /// Fire the three pre-generation judges (relationship / emotional /
+  /// narrative) concurrently with the standard dispatch stagger. Scene-time
+  /// is a reply-reader now — it fires after generation, like posture.
+  Future<void> _fireStaggeredRealismEvals(void Function(String) onChunk) async {
+    // Dispatch order is a caching decision (maintainer, 2026-08-10: firing
+    // order is free; eval PHASE is not for the judges). Relationship,
+    // emotional and narrative open with the byte-identical judgePrefix, so
+    // on KoboldCpp's FIFO queue the first pays the prefill and the next two
+    // fast-forward through it — but only if they arrive CONSECUTIVELY.
+    // (test/services/chat/realism_shared_prefix_test.dart pins the prefix
+    // and this order.)
     await Future.wait([
       _evaluateRelationshipCall(onChunk: onChunk),
       Future.delayed(
@@ -283,35 +269,19 @@ extension ChatServiceRealismEvals on ChatService {
         _kEvalDispatchStagger * 2,
         () => _evaluateNarrativeCall(onChunk: onChunk),
       ),
-      Future.delayed(
-        _kEvalDispatchStagger * 3,
-        () => _evaluatePhysicalStateCall(
-          onChunk: onChunk,
-          skipClockAdvance: skipClockAdvance,
-        ),
-      ),
     ]);
   }
 
-  /// Emotion + narrative + scene-time only — the remaining judges after a
-  /// trust-repair relationship substitute (audit P1.11). Same stagger /
-  /// scene-time-last order as [_fireStaggeredRealismEvals].
+  /// Emotion + narrative only — the remaining judges after a trust-repair
+  /// relationship substitute (audit P1.11). Scene-time is post-generation.
   Future<void> _fireTrustRepairRemainingEvals(
-    void Function(String) onChunk, {
-    bool skipClockAdvance = false,
-  }) async {
+    void Function(String) onChunk,
+  ) async {
     await Future.wait([
       _evaluateEmotionalStateCall(onChunk: onChunk),
       Future.delayed(
         _kEvalDispatchStagger,
         () => _evaluateNarrativeCall(onChunk: onChunk),
-      ),
-      Future.delayed(
-        _kEvalDispatchStagger * 2,
-        () => _evaluatePhysicalStateCall(
-          onChunk: onChunk,
-          skipClockAdvance: skipClockAdvance,
-        ),
       ),
     ]);
   }
@@ -388,5 +358,53 @@ extension ChatServiceRealismEvals on ChatService {
         RealismVerification.kMetaKey: summary.toMetadata(),
       };
     }
+  }
+
+  /// Glance bit only. Runs AFTER posture so it can read the stance that
+  /// pass just wrote. Never writes spatial stance.
+  Future<void> _runWithUserPass(String reply) async {
+    if (!_realismEnabled) return;
+    if (reply.trim().isEmpty) return;
+    final speaker = _activeCharacter;
+    if (speaker == null) return;
+    final userName = _userPersonaService.persona.name.trim();
+    final verdict =
+        await WithUserEval(
+          fire:
+              ({
+                required debugLabel,
+                required tools,
+                required buildPrompt,
+              }) async {
+                return fireStructuredEval(
+                  probe: _toolProbe,
+                  backendIdentity: _evalBackendIdentity,
+                  debugLabel: debugLabel,
+                  tools: tools,
+                  buildPrompt: buildPrompt,
+                  callToText: (resp) => realismToolCallToJson(
+                    WithUserEval.kWithUserTool,
+                    resp.calls,
+                  ),
+                  fireToolEval: _fireToolEval,
+                  fireTextEval: (p, {onChunk}) => _fireLLMEval(
+                    p,
+                    repeatPenalty: kScalarEvalRepeatPenalty,
+                    label: 'with_user',
+                  ),
+                );
+              },
+        ).detect(
+          charName: speaker.name,
+          userName: userName.isEmpty ? 'the user' : userName,
+          reply: clampEvalMessage(reply),
+          recentExchange: recentExchange(_messages),
+          stance: _relationshipService.spatialStance,
+        );
+    _relationshipService.applyWithUserVerdict(verdict);
+    debugPrint(
+      '[Presence] with_user=$verdict '
+      '(glance=${_relationshipService.withUser})',
+    );
   }
 }

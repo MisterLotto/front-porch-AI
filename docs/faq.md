@@ -73,7 +73,7 @@ The full details are in the [Privacy Policy](https://github.com/linux4life1/fron
 ### What platforms are supported?
 
 - **Windows** 10 and 11 — a normal `.exe` installer
-- **macOS** — a signed, Apple-notarized `.pkg`. Apple Silicon (M-series) runs local models natively; Intel Macs can run the app, but local models are switched off there — the app says so and you switch yourself to **Remote API** in Settings → Backend
+- **macOS** 12 Monterey or newer — a signed, Apple-notarized `.pkg`. Apple Silicon (M-series) runs local models natively; Intel Macs can run the app, but local models are switched off there — the app says so and you switch yourself to **Remote API** in Settings → Backend
 - **Linux** — the APT repo, the RPM repo, the AUR, or a standalone `.deb`, `.rpm`, AppImage, or `.tar.gz`
 
 See the [Installation Guide](install.md) for step-by-step instructions.

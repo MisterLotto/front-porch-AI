@@ -16,11 +16,11 @@ void _setupPathProviderMock() {
   const channel = MethodChannel('plugins.flutter.io/path_provider');
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMethodCallHandler(channel, (MethodCall call) async {
-    if (call.method == 'getApplicationDocumentsDirectory') {
-      return Directory.systemTemp.createTempSync('fpai_docs_').path;
-    }
-    return null;
-  });
+        if (call.method == 'getApplicationDocumentsDirectory') {
+          return Directory.systemTemp.createTempSync('fpai_docs_').path;
+        }
+        return null;
+      });
 }
 
 void main() {
@@ -92,58 +92,101 @@ void main() {
       expect(facade.detail('nope'), isNull);
     });
 
-    test('importWorld keeps place traits and custom climate (shared core)',
-        () async {
-      // A minimal .fpworld envelope with hostile air and a custom biome —
-      // the web import must preserve both, exactly like desktop file import.
+    test(
+      'importWorld keeps place traits and custom climate (shared core)',
+      () async {
+        // A minimal .fpworld envelope with hostile air and a custom biome —
+        // the web import must preserve both, exactly like desktop file import.
+        expect(
+          await facade.importWorld({
+            'formatVersion': 1,
+            'id': 'pkg-123',
+            'name': 'The Cindermaw',
+            'description': 'Black glass and live lava.',
+            'lorebook': {
+              'entries': [
+                {
+                  'keys': ['White Peak'],
+                  'content': 'The frozen mountain.',
+                },
+              ],
+            },
+            'place_traits': {'atmosphere': 'hostile', 'gravity': 'low'},
+            'biome': {
+              'id': 'custom',
+              'displayName': 'Cindermaw climate',
+              'description': 'Furnace seasons.',
+              'weights': {
+                'winter': [50, 20, 12, 8, 4, 6, 0],
+                'spring': [50, 20, 12, 8, 4, 6, 0],
+                'summer': [50, 20, 12, 8, 4, 6, 0],
+                'autumn': [50, 20, 12, 8, 4, 6, 0],
+              },
+              'baseTemp': {'winter': 4, 'spring': 6, 'summer': 7, 'autumn': 6},
+              'bandRange': [3, 6],
+              'displayAnchorsC': {
+                'winter': 62,
+                'spring': 240,
+                'summer': 540,
+                'autumn': 205,
+              },
+              'diurnalAmplitude': 2.6,
+            },
+          }),
+          isTrue,
+        );
+        final detail = facade.list().firstWhere(
+          (m) => m['name'] == 'The Cindermaw',
+        );
+        final imported = facade.detail(detail['id'] as String)!;
+        expect(imported['atmosphere'], 'hostile');
+        expect(imported['gravity'], 'low');
+        expect(
+          imported['biomeId'],
+          'custom',
+          reason: 'custom climate must survive web import',
+        );
+      },
+    );
+
+    test('save custom climate and reject overlapping starts', () async {
+      final template = Map<String, dynamic>.from(
+        facade.climates().firstWhere((c) => c['id'] == 'temperate')['template']
+            as Map,
+      );
+      template['id'] = 'custom';
+      template['seasonLabels'] = {'summer': 'High Sun'};
       expect(
-        await facade.importWorld({
-          'formatVersion': 1,
-          'id': 'pkg-123',
-          'name': 'The Cindermaw',
-          'description': 'Black glass and live lava.',
-          'lorebook': {
-            'entries': [
-              {'keys': ['White Peak'], 'content': 'The frozen mountain.'},
-            ],
-          },
-          'place_traits': {'atmosphere': 'hostile', 'gravity': 'low'},
-          'biome': {
-            'id': 'custom',
-            'displayName': 'Cindermaw climate',
-            'description': 'Furnace seasons.',
-            'weights': {
-              'winter': [50, 20, 12, 8, 4, 6, 0],
-              'spring': [50, 20, 12, 8, 4, 6, 0],
-              'summer': [50, 20, 12, 8, 4, 6, 0],
-              'autumn': [50, 20, 12, 8, 4, 6, 0],
-            },
-            'baseTemp': {
-              'winter': 4,
-              'spring': 6,
-              'summer': 7,
-              'autumn': 6,
-            },
-            'bandRange': [3, 6],
-            'displayAnchorsC': {
-              'winter': 62,
-              'spring': 240,
-              'summer': 540,
-              'autumn': 205,
-            },
-            'diurnalAmplitude': 2.6,
-          },
+        await facade.save({
+          'name': 'Solaria',
+          'biomeId': 'custom',
+          'biome': template,
         }),
         isTrue,
       );
-      final detail = facade.list().firstWhere(
-            (m) => m['name'] == 'The Cindermaw',
-          );
-      final imported = facade.detail(detail['id'] as String)!;
-      expect(imported['atmosphere'], 'hostile');
-      expect(imported['gravity'], 'low');
-      expect(imported['biomeId'], 'custom',
-          reason: 'custom climate must survive web import');
+      final d = facade.detail('Solaria')!;
+      expect(d['biomeId'], 'custom');
+      expect((d['biome'] as Map)['seasonLabels'], {'summer': 'High Sun'});
+
+      template['seasonStarts'] = {
+        'winter': 1,
+        'spring': 1,
+        'summer': 152,
+        'autumn': 244,
+      };
+      expect(
+        await facade.save({
+          'name': 'Solaria',
+          'originalName': 'Solaria',
+          'biomeId': 'custom',
+          'biome': template,
+        }),
+        isFalse,
+      );
+      expect(
+        facade.climateErrors(template).join(' '),
+        contains('cannot overlap'),
+      );
     });
   });
 }

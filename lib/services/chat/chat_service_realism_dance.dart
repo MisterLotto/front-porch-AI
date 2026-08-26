@@ -16,7 +16,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-
 part of '../chat_service.dart';
 
 /// Per-speaker realism evaluation + the load/save impersonation dance
@@ -58,10 +57,7 @@ extension ChatServiceRealismDance on ChatService {
   /// be identical. When two regens disagree, that is a bug in what was rewound
   /// — not the engine being lifelike. See restoreFromMessageState +
   /// captureCadenceAndFeelings for the pair that keeps the rewind honest.
-  Future<void> _evaluateRealismForUpcomingSpeaker(
-    CharacterCard speaker, {
-    bool skipClockAdvance = false,
-  }) async {
+  Future<void> _evaluateRealismForUpcomingSpeaker(CharacterCard speaker) async {
     // Unified gate: runs for the 1:1 host AND each group speaker (one at a time);
     // skips group observer mode and realism-off. This is the single realism eval
     // path — the former centralized 1:1 block was removed in favour of this.
@@ -138,7 +134,10 @@ extension ChatServiceRealismDance on ChatService {
       // (the 1:1 host runs this inside tickDecay). Persist the recovery floor
       // back to the speaker's group entry so it sticks.
       _needsSimulation.applyCatastropheIfNeeded();
-      _setGroupNeeds(sidForDecay, Map<String, int>.from(_needsSimulation.vector));
+      _setGroupNeeds(
+        sidForDecay,
+        Map<String, int>.from(_needsSimulation.vector),
+      );
     } else if (_activeGroup != null) {
       // Group speaker (observer mode or needs-off): load this speaker's persisted
       // group realism state into the scalar fields the eval will read and mutate.
@@ -252,9 +251,9 @@ extension ChatServiceRealismDance on ChatService {
       if (_relationshipService.pendingTrustRepair) {
         // Trust-repair is a RELATIONSHIP substitute, not a full pre-gen freeze
         // (audit P1.11). Docs once claimed it only replaced the relationship
-        // judge; the code ran ONLY trust-repair and skipped emotion/narrative/
-        // scene-time — freezing mood and the clock for a turn. After the
-        // repair call we still run emotion + narrative + physical (time).
+        // judge; the code ran ONLY trust-repair and skipped emotion/narrative
+        // — freezing mood for a turn. After the repair call we still run
+        // emotion + narrative. Scene-time is post-generation.
         debugPrint(
           '[Realism:Unified] Trust-repair eval for ${speaker.name} ($charId) '
           '+ remaining judges (not a full freeze)',
@@ -269,31 +268,22 @@ extension ChatServiceRealismDance on ChatService {
         await _evaluateTrustRepairCall(userText, onChunk: handleChunk);
         if (_realismEvalCancelled) return;
         await _runBatchedRealismVerification(
-          () => _fireTrustRepairRemainingEvals(
-            handleChunk,
-            skipClockAdvance: skipClockAdvance,
-          ),
+          () => _fireTrustRepairRemainingEvals(handleChunk),
         );
       } else if (_oneShotActive) {
         debugPrint(
           '[Realism:Unified] One-shot eval for ${speaker.name} ($charId)',
         );
-        await _evaluateOneShotCall(
-          onChunk: handleChunk,
-          skipClockAdvance: skipClockAdvance,
-        );
+        await _evaluateOneShotCall(onChunk: handleChunk);
       } else {
-        // Run the four evals AND the batched verifier pass — identical to the
-        // (former) centralized 1:1 path, so EVERY speaker (host or group member)
-        // gets the same double-checked realism. This is the parity unification.
+        // The three judges (relationship / emotional / narrative). Scene-time
+        // moved to post-generation — it decides the NEXT speaker's clock
+        // from the reply that does not exist yet.
         debugPrint(
-          '[Realism:Unified] 4-call eval + verifier for ${speaker.name} ($charId)',
+          '[Realism:Unified] 3-call eval + verifier for ${speaker.name} ($charId)',
         );
         await _runBatchedRealismVerification(
-          () => _fireStaggeredRealismEvals(
-            handleChunk,
-            skipClockAdvance: skipClockAdvance,
-          ),
+          () => _fireStaggeredRealismEvals(handleChunk),
           logSpeakerName: speaker.name,
         );
       }
@@ -391,5 +381,4 @@ extension ChatServiceRealismDance on ChatService {
       _setGroupNeeds(charId, Map<String, int>.from(_needsSimulation.vector));
     }
   }
-
 }

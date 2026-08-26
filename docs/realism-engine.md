@@ -32,7 +32,7 @@ The Realism Engine is Front Porch AI's signature feature — the system that tur
 
 Without the Realism Engine, every message you send is judged in isolation. A character can pour their heart out one turn and greet you like a stranger the next. Nothing deepens, nothing heals, no time passes.
 
-With it on, the app quietly asks your AI model a few short follow-up questions after each exchange — things like *"Did that change how she feels about him?"* and *"Is she still upset about earlier?"* — and keeps a running score of the relationship. Those scores are then woven back into the next reply, so the character's warmth, guardedness, mood, and sense of time all carry forward naturally.
+With it on, the app quietly asks your AI model a few short follow-up questions after each exchange — things like *"Did that change how they feel about the user?"* and *"Are they still upset about earlier?"* — and keeps a running score of the relationship. Those scores are then woven back into the next reply, so the character's warmth, guardedness, mood, and sense of time all carry forward naturally.
 
 What that feels like in practice:
 
@@ -57,7 +57,7 @@ You can control the Realism Engine at three levels:
 
 ![The settings page, where the Realism Engine defaults live](screenshots/new_settings.png)
 
-> **Tip:** The engine even runs once on the character's greeting — before you've typed anything — so the opening mood matches the opening message. You'll see a brief *"Reading the room..."* overlay when that happens.
+> **Tip:** Front Porch cards keep the card's authored opening seed on the first message (`first_mes`) — that greeting does **not** Read the Room. Unauthored alternate greetings (a missing / null overlay slot) still do, so the opening mood matches *that* greeting. An authored seed on an alt — including an empty `{}` inherit — skips Read the Room and uses the seed (mood, bond, trust, clock, needs, wardrobe). Swiping back to the first message restores the card defaults. Groups match 1:1.
 
 ---
 

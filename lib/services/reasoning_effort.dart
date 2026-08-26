@@ -23,27 +23,27 @@ const Map<String, int> kReasoningEffortRank = {
 
 /// Short display title for a strength id.
 String reasoningEffortTitle(String id) => switch (id) {
-      'none' => 'Off',
-      'minimal' => 'Minimal',
-      'low' => 'Low',
-      'medium' => 'Medium',
-      'high' => 'High',
-      'xhigh' => 'Extra high',
-      'max' => 'Max',
-      _ => id,
-    };
+  'none' => 'Off',
+  'minimal' => 'Minimal',
+  'low' => 'Low',
+  'medium' => 'Medium',
+  'high' => 'High',
+  'xhigh' => 'Extra high',
+  'max' => 'Max',
+  _ => id,
+};
 
 /// One-line blurb under a strength chip.
 String reasoningEffortBlurb(String id) => switch (id) {
-      'low' => 'Light think — faster, cheaper',
-      'medium' => 'Balanced — default',
-      'high' => 'Deep think — slower, richer',
-      'xhigh' => 'Heavier than high',
-      'max' => 'Full thinking budget',
-      'none' => 'No thinking tokens',
-      'minimal' => 'Bare-minimum thinking',
-      _ => '',
-    };
+  'low' => 'Light think — faster, cheaper',
+  'medium' => 'Balanced — default',
+  'high' => 'Deep think — slower, richer',
+  'xhigh' => 'Heavier than high',
+  'max' => 'Full thinking budget',
+  'none' => 'No thinking tokens',
+  'minimal' => 'Bare-minimum thinking',
+  _ => '',
+};
 
 /// Models whose provider taught us a supported set (process lifetime).
 final Map<String, Set<String>> kLearnedReasoningEffortsByModel =
@@ -132,10 +132,12 @@ Set<String>? reasoningEffortSupportedFor(String model) {
 /// any thinking tier exists.
 String nearestReasoningEffort(String requested, Set<String> supported) {
   if (supported.contains(requested)) return requested;
-  final req = kReasoningEffortRank[requested] ?? kReasoningEffortRank['medium']!;
+  final req =
+      kReasoningEffortRank[requested] ?? kReasoningEffortRank['medium']!;
   final thinking = supported.where((s) => s != 'none');
-  final pool = (thinking.isNotEmpty ? thinking : supported)
-      .where(kReasoningEffortRank.containsKey);
+  final pool = (thinking.isNotEmpty ? thinking : supported).where(
+    kReasoningEffortRank.containsKey,
+  );
   if (pool.isEmpty) return requested;
   return pool.reduce((a, b) {
     final da = (kReasoningEffortRank[a]! - req).abs();
@@ -149,7 +151,26 @@ String nearestReasoningEffort(String requested, Set<String> supported) {
 String wireReasoningEffort(String model, String requested) {
   final supported = reasoningEffortSupportedFor(model);
   if (supported == null) return requested;
+  // Toggle-only ({none}): effort is not a real ladder. Never rewrite the
+  // user's pick to `none` while thinking is on — that would disable thinking
+  // on hosts that map effort none → off (NanoGPT / OpenRouter).
+  final thinking = supported.where((s) => s != 'none');
+  if (thinking.isEmpty) return requested;
   return nearestReasoningEffort(requested, supported);
+}
+
+/// llama.cpp / LM Studio / OpenAI-compat **server enum**, not a per-model
+/// menu. Live LMS 0.4.21: `none, minimal, low, medium, high, xhigh`.
+/// DeepSeek/Kimi listings never pair `minimal` with `xhigh`.
+bool isGenericProviderEffortSchema(Set<String> listing) =>
+    listing.contains('minimal') && listing.contains('xhigh');
+
+/// Learned `{none}` (or only none): on/off, no strength chips. Same shape
+/// oMLX writes for a template `toggle` verdict.
+bool reasoningEffortIsToggleOnly(String model) {
+  final supported = reasoningEffortSupportedFor(model);
+  if (supported == null || supported.isEmpty) return false;
+  return supported.every((s) => s == 'none');
 }
 
 /// True when this model rejects turning thinking off.
@@ -186,11 +207,14 @@ const int kMandatoryReasoningThinkHeadroomTokens = 16000;
 List<String> reasoningEffortChipsFor(String model) {
   final supported = reasoningEffortSupportedFor(model);
   if (supported == null) return List<String>.from(kAppReasoningEfforts);
-  final chips = supported
-      .where((s) => s != 'none' && kReasoningEffortRank.containsKey(s))
-      .toList()
-    ..sort((a, b) =>
-        kReasoningEffortRank[a]!.compareTo(kReasoningEffortRank[b]!));
+  final chips =
+      supported
+          .where((s) => s != 'none' && kReasoningEffortRank.containsKey(s))
+          .toList()
+        ..sort(
+          (a, b) =>
+              kReasoningEffortRank[a]!.compareTo(kReasoningEffortRank[b]!),
+        );
   if (chips.isEmpty) return const <String>[];
   return chips;
 }
@@ -265,7 +289,7 @@ void rememberMandatoryReasoning(String model, {bool persist = true}) {
 
 /// Wired by [attachReasoningEffortMenuStore] so this file does not import disk.
 void Function(String model, {required bool probed})?
-    persistReasoningEffortMenuHook;
+persistReasoningEffortMenuHook;
 
 /// Seed from an OpenRouter (or similar) `reasoning` catalog object.
 void rememberReasoningProfileFromCatalog(String model, Object? reasoning) {

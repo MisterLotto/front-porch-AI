@@ -539,21 +539,35 @@
         ui.downloadCard({ id: id, name: c.name, type: c.type, primaryAssetId: c.primaryAssetId }, dlBtn);
       });
 
-      /* --- report (account only) --- */
+      /* --- report: signed-in + email-verified only; reason required --- */
+      var me = Api.state.user;
+      var canReport = !!me && me.emailVerified !== false;
       function showReport() {
+        if (!canReport) return;
         var sel = el('select', { class: 'hub-select hub-wide' }, REPORT_CATEGORIES.map(function (r) {
           return el('option', { value: r.key }, r.label);
         }));
-        var reason = el('textarea', { class: 'hub-textarea', rows: '3', maxlength: '500', placeholder: 'What’s wrong? (optional, but it helps)' });
+        var reason = el('textarea', {
+          class: 'hub-textarea',
+          rows: '3',
+          maxlength: '500',
+          required: true,
+          placeholder: 'What’s wrong? (required)',
+        });
         ui.dialog('Report “' + c.name + '”', [
-          el('p', { class: 'hub-dim' }, 'Reports go straight to the moderators. Honest reports only — see the AUP.'),
+          el('p', { class: 'hub-dim' }, 'Reports go straight to the moderators. Honest reports only — see the AUP. A written reason is required.'),
           sel, reason,
         ], [
           { label: 'Cancel', kind: 'btn-ghost' },
           {
             label: 'Send report', kind: 'btn-danger',
             onclick: function () {
-              Api.report(id, sel.value, reason.value.trim())
+              var text = reason.value.trim();
+              if (!text) {
+                ui.toast('Please add a reason.', 'err');
+                return false;
+              }
+              return Api.report(id, sel.value, text)
                 .then(function () { ui.toast('Report sent. Thank you for keeping the porch clean.'); })
                 .catch(function (e) { ui.toast(e.message, 'err'); });
             },
@@ -619,13 +633,18 @@
             'This card works in any V2-compatible app, but its Realism & Needs data (moods, bond, trust) only comes alive in FPAI — the recommended app for every card on The Stoop.',
           ]);
 
-      // Guests can download but not vote/report — invite them to join instead.
-      // Sharing is for everyone.
+      // Guests can download but not vote/report. Reporting also needs a
+      // confirmed email so throwaway signups cannot flood the queue.
+      var reportControl = !signedIn
+        ? null
+        : canReport
+          ? el('button', { class: 'hub-linklike', type: 'button', onclick: showReport }, '⚑ Report')
+          : el('a', { class: 'hub-signin-nudge', href: '#/account' }, 'Confirm email to report');
       var actionExtras = signedIn
         ? [
             el('span', { class: 'hub-votebox' }, [upBtn, dnBtn]),
             shareBtn('card', id),
-            el('button', { class: 'hub-linklike', type: 'button', onclick: showReport }, '⚑ Report'),
+            reportControl,
           ]
         : [shareBtn('card', id), el('a', { class: 'hub-signin-nudge', href: '#/signin' }, 'Sign in to vote, follow & report')];
 

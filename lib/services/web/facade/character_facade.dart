@@ -24,6 +24,7 @@ import 'package:path/path.dart' as p;
 import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
+import 'package:front_porch_ai/services/chargen/chargen.dart';
 import 'package:front_porch_ai/services/web/util/util.dart';
 
 /// Thin read adapter over the character store for the rewritten web server.
@@ -282,10 +283,17 @@ class CharacterFacade {
     if (tags is List) card.tags = tags.map((e) => e.toString()).toList();
     final greetings = fields['alternateGreetings'];
     if (greetings is List) {
-      card.alternateGreetings = greetings
-          .map((e) => e.toString())
-          .where((g) => g.trim().isNotEmpty)
-          .toList();
+      // Seeds omitted + alts present: compact against empty/null, not unpaired
+      // base leftovers. Group updateSettings writes both; frontPorchFromFields
+      // below writes the compacted seeds so leftover furious cannot land on
+      // Get out.
+      final paired = compactGreetingPairs(
+        greetingSlotsFromRaw(greetings),
+        fields.containsKey('greetingSeeds')
+            ? parseGreetingSeeds(fields['greetingSeeds'])
+            : const [],
+      );
+      card.alternateGreetings = paired.greetings;
     }
     // Linked worlds (attach worlds/lorebooks to a character). Worlds are keyed
     // by name; only replace when present so a partial edit doesn't clear them.
@@ -358,9 +366,10 @@ class CharacterFacade {
       systemPrompt: fields['systemPrompt']?.toString() ?? '',
       postHistoryInstructions:
           fields['postHistoryInstructions']?.toString() ?? '',
-      alternateGreetings: asStrList(
-        fields['alternateGreetings'],
-      ).where((g) => g.trim().isNotEmpty).toList(),
+      alternateGreetings: compactGreetingPairs(
+        greetingSlotsFromRaw(fields['alternateGreetings']),
+        parseGreetingSeeds(fields['greetingSeeds']),
+      ).greetings,
       tags: asStrList(fields['tags']),
       lorebook: buildLorebookFromJson(fields['lorebook']),
       frontPorchExtensions: fpExt,
@@ -402,7 +411,11 @@ class CharacterFacade {
         );
         await File(sourceImagePath).writeAsBytes(portraitBytes);
       }
-      await V2CardService().saveCardAsPng(card, card.imagePath!, sourceImagePath);
+      await V2CardService().saveCardAsPng(
+        card,
+        card.imagePath!,
+        sourceImagePath,
+      );
       await repo.addCharacter(card);
       return {'id': card.dbId, 'name': card.name};
     } catch (_) {
@@ -453,8 +466,7 @@ class CharacterFacade {
       } catch (_) {
         peeked = null;
       }
-      final name =
-          peeked?.name ?? p.basenameWithoutExtension(filename);
+      final name = peeked?.name ?? p.basenameWithoutExtension(filename);
       final stableId = peeked?.frontPorchExtensions?.stableId;
       final stableMatch = repo.findByStableId(stableId);
 
@@ -466,11 +478,7 @@ class CharacterFacade {
               'status': 'name_collision',
               'name': name,
               'existing': [
-                for (final c in existing)
-                  {
-                    'id': c.dbId,
-                    'name': c.name,
-                  },
+                for (final c in existing) {'id': c.dbId, 'name': c.name},
               ],
             };
           }
@@ -532,9 +540,7 @@ class CharacterFacade {
   /// route through [CharacterRepository.coverImageFileFor]'s rules).
   Future<File?> avatarFile(String id) async {
     try {
-      final hydrated = _repo?.characters
-          .where((c) => c.dbId == id)
-          .firstOrNull;
+      final hydrated = _repo?.characters.where((c) => c.dbId == id).firstOrNull;
       if (hydrated != null) {
         final cover = _repo?.coverImageFileFor(hydrated);
         if (cover != null && cover.existsSync()) return cover;
@@ -559,7 +565,9 @@ class CharacterFacade {
       // realism columns), so source them from the in-memory card. Flattened via
       // the shared helper so the edit page's Realism/Needs form sections can
       // round-trip them losslessly.
-      final ext = cardByDbId(id)?.frontPorchExtensions;
+      final inMemory = cardByDbId(id);
+      final ext = inMemory?.frontPorchExtensions;
+      final voice = readNarrativeVoice(inMemory);
       return {
         'id': c.id,
         'name': c.name,
@@ -577,6 +585,9 @@ class CharacterFacade {
         'ttsVoice': c.ttsVoice,
         'imagePath': c.imagePath,
         'realism': ext != null ? frontPorchToJson(ext) : null,
+        'narrativePerspective': voice.perspective,
+        'narrativeTense': voice.tense,
+        'sex': voice.sex,
         // (The old evolved*/evolutionCount fields are gone — growth is served
         // per-participant by /api/chat/tools/growth; the bundled web UI ships
         // in lockstep with this facade.)

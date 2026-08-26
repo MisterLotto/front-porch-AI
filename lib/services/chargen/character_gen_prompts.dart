@@ -67,9 +67,16 @@ extension GenPrompts on CharacterGenService {
     // The user's active system prompt or API default applies at chat time.
     const sysSpec = '';
 
+    final fieldVoice =
+        cardFieldVoiceClause(
+          voice: _narrativeVoice,
+          pronouns: resolveNarrativePronouns(_narrativeSex),
+        ) ??
+        'third person';
+
     // Description spec — only included for guided mode
     final descriptionSpec = generateDescription
-        ? '- "description": (string) $descriptionDetail, third person. Physical appearance ONLY: body type, height, skin tone, hair, eyes, clothing, distinguishing marks. Do NOT put these in description: personality/motives (those go in "personality"), scenario/setting (goes in "scenario"), NSFW/sexual details, backstory, or speech patterns. STRICTLY obey the word limit\n'
+        ? '- "description": (string) $descriptionDetail, $fieldVoice. Physical appearance ONLY: body type, height, skin tone, hair, eyes, clothing, distinguishing marks. Do NOT put these in description: personality/motives (those go in "personality"), scenario/setting (goes in "scenario"), NSFW/sexual details, backstory, or speech patterns. STRICTLY obey the word limit\n'
         : '';
 
     // Description exclusion note — only when NOT generating description
@@ -86,7 +93,7 @@ Character name: $name
 Concept: $concept
 $ageLine$sexLine$relationshipLine$backstoryLine$scenarioLine$keywordsLine$loreLine
 Required JSON keys (generate them IN THIS ORDER):
-$descriptionSpec- "personality": (string) 2-3 paragraphs, third person. Go beyond surface-level traits — write a personality that makes this character feel REAL and fun to roleplay with. Cover ALL of these dimensions:
+$descriptionSpec- "personality": (string) 2-3 paragraphs, $fieldVoice. Go beyond surface-level traits — write a personality that makes this character feel REAL and fun to roleplay with. Cover ALL of these dimensions:
   * Core traits AND their contradictions (e.g. "fiercely protective but terrified of emotional vulnerability")
   * Speech patterns — do they ramble, speak tersely, use slang, swear, use formal language, have verbal tics or catchphrases?
   * Emotional triggers — what makes them angry, what softens them, what shuts them down, what makes them laugh?
@@ -239,7 +246,19 @@ $excerpt''';
           '\n\n== ESTABLISHED WORLD LORE ==\nThe scene is taking place in this world. Strictly follow its rules, terminology, magic, and locations:\n$worldLore';
     }
 
-    return '''Write an opening roleplay message as $name (first person: "I", "my", "me"). This is the very first moment of the story — set the scene and introduce who $name is through vivid prose. Output ONLY the message text.
+    final pronouns = resolveNarrativePronouns(_narrativeSex);
+    final leadIn = greetingLeadIn(
+      name: name,
+      voice: _narrativeVoice,
+      pronouns: pronouns,
+    );
+    final personRule = greetingPersonRule(
+      name: name,
+      voice: _narrativeVoice,
+      pronouns: pronouns,
+    );
+
+    return '''$leadIn
 
 == WHO $name IS ==
 Description: $description
@@ -254,7 +273,7 @@ $toneSpec
 4. ENCOUNTER — The moment $name notices or interacts with {{user}}. Include inner thoughts, emotional reactions, and end with spoken dialogue that invites {{user}} to respond. The dialogue MUST be consistent with the Scenario and the context established above — reference shared history, inside jokes, or established dynamics. End on a note that DEMANDS a response — a question, a challenge, a revelation, or an emotionally charged moment.
 
 == RULES ==
-- First person ONLY ("I", "my", "me") — never third person, never use "$name" to refer to yourself
+$personRule
 - *Asterisks* for physical actions only. "Quotes" for dialogue. Plain text for narration/thoughts/description.
 - Use {{user}} (with curly braces) when mentioning the other person — never vague references like "the stranger"
 - NEVER write actions, thoughts, feelings, appearance, or dialogue for {{user}} — {{user}} is a blank slate

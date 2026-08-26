@@ -19,12 +19,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:front_porch_ai/services/chat/chat.dart' show kMaxWorn;
+import 'package:front_porch_ai/services/chat/chat.dart'
+    show PocketItem, isEmptyWardrobeRef, kMaxWorn;
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 // Sibling in this file's OWN barrel directory — importing widgets.dart here
 // would be a self-import (the structural exemption in CLAUDE.md).
 import 'package:front_porch_ai/ui/widgets/chip_list_editor.dart';
+import 'package:front_porch_ai/ui/widgets/plan_lines_editor.dart';
+import 'package:front_porch_ai/ui/widgets/work_row.dart';
 
 /// The install's 18+ master switch — the same one that shows or hides the
 /// After Dark group in Settings — or `false` when no [StorageService] is in
@@ -51,6 +54,14 @@ bool adultThemesEnabledOf(BuildContext context) {
   }
 }
 
+bool plannerEnabledOf(BuildContext context) {
+  try {
+    return Provider.of<StorageService>(context).realismSettings.plannerEnabled;
+  } catch (_) {
+    return false;
+  }
+}
+
 /// The card-authored IDENTITY lists — Ambitions, Likes & Dislikes, and the 18+
 /// pair — every one of them a short list of short phrases edited as chips.
 ///
@@ -67,6 +78,16 @@ class IdentityChipLists extends StatelessWidget {
     super.key,
     this.ambitions,
     this.onAmbitionsChanged,
+    this.planLines,
+    this.onPlanLinesChanged,
+    this.occupation,
+    this.onOccupationChanged,
+    this.occupationBrief,
+    this.onOccupationBriefChanged,
+    this.hours,
+    this.onHoursChanged,
+    this.workDays,
+    this.onWorkDaysChanged,
     this.likes,
     this.onLikesChanged,
     this.dislikes,
@@ -84,6 +105,18 @@ class IdentityChipLists extends StatelessWidget {
 
   final List<String>? ambitions;
   final ValueChanged<List<String>>? onAmbitionsChanged;
+
+  final List<String>? planLines;
+  final ValueChanged<List<String>>? onPlanLinesChanged;
+
+  final String? occupation;
+  final ValueChanged<String>? onOccupationChanged;
+  final String? occupationBrief;
+  final ValueChanged<String>? onOccupationBriefChanged;
+  final String? hours;
+  final ValueChanged<String>? onHoursChanged;
+  final List<int>? workDays;
+  final ValueChanged<List<int>>? onWorkDaysChanged;
 
   final List<String>? likes;
   final ValueChanged<List<String>>? onLikesChanged;
@@ -139,6 +172,17 @@ class IdentityChipLists extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasAmbitions = ambitions != null && onAmbitionsChanged != null;
+    final hasPlanLines =
+        plannerEnabledOf(context) &&
+        planLines != null &&
+        onPlanLinesChanged != null;
+    final hasWork =
+        occupation != null &&
+        onOccupationChanged != null &&
+        occupationBrief != null &&
+        onOccupationBriefChanged != null &&
+        hours != null &&
+        onHoursChanged != null;
     final hasTastes =
         likes != null &&
         onLikesChanged != null &&
@@ -157,7 +201,12 @@ class IdentityChipLists extends StatelessWidget {
         carrying != null &&
         onCarryingChanged != null;
 
-    if (!hasAmbitions && !hasTastes && !hasIntimate && !hasWardrobe) {
+    if (!hasAmbitions &&
+        !hasPlanLines &&
+        !hasWork &&
+        !hasTastes &&
+        !hasIntimate &&
+        !hasWardrobe) {
       return const SizedBox.shrink();
     }
 
@@ -189,6 +238,34 @@ class IdentityChipLists extends StatelessWidget {
           const SizedBox(height: 20),
         ],
 
+        if (hasPlanLines) ...[
+          PlanLinesEditor(
+            enabled: true,
+            values: planLines!,
+            onChanged: onPlanLinesChanged!,
+          ),
+          const SizedBox(height: 20),
+        ],
+
+        if (hasWork) ...[
+          _header(Icons.work_outline, 'Work', AppColors.taskAccent),
+          const SizedBox(height: 12),
+          _card(
+            context,
+            WorkRow(
+              occupation: occupation!,
+              occupationBrief: occupationBrief!,
+              hours: hours!,
+              workDays: workDays,
+              onOccupationChanged: onOccupationChanged!,
+              onOccupationBriefChanged: onOccupationBriefChanged!,
+              onHoursChanged: onHoursChanged!,
+              onWorkDaysChanged: onWorkDaysChanged,
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+
         // ── Likes & Dislikes ──
         if (hasTastes) ...[
           _header(
@@ -209,9 +286,10 @@ class IdentityChipLists extends StatelessWidget {
                   hintText: 'e.g. thunderstorms',
                   helper:
                       'Small, specific things this character warms to. They '
-                      'colour how the character reacts to what is already '
-                      'happening — and, with the Realism Engine on, how much '
-                      'a moment moves them.',
+                      'colour how they react — and, with the Realism Engine on, '
+                      'which way a moment moves them. A chase or struggle they '
+                      'are drawn to can raise bond and desire instead of '
+                      'reading as rejection.',
                 ),
                 const SizedBox(height: 16),
                 ChipListEditor(
@@ -260,7 +338,11 @@ class IdentityChipLists extends StatelessWidget {
                 ChipListEditor(
                   label: 'Wearing',
                   values: worn!,
-                  onChanged: onWornChanged!,
+                  onChanged: (v) => onWornChanged!([
+                    for (final s in v)
+                      if (!isEmptyWardrobeRef(PocketItem.parseDisplay(s).name))
+                        s,
+                  ]),
                   hintText: 'e.g. flour-dusted apron',
                 ),
                 const SizedBox(height: 16),
@@ -294,8 +376,10 @@ class IdentityChipLists extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Suggestive tastes for 18+ scenes. These stay out of the '
-                  'prompt entirely unless 18+ themes are switched on.',
+                  'Suggestive tastes for 18+ scenes. Hidden unless 18+ is on. '
+                  'With the engine on these own the sign: pinning, struggle, or '
+                  'being fled from that they warm to raises desire (and can '
+                  'raise bond), not humiliation.',
                   style: TextStyle(
                     fontSize: 12,
                     height: 1.35,

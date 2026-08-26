@@ -169,7 +169,7 @@ class GuidedConfigStep extends StatelessWidget {
                     label: 'Distinguishing Features',
                     controller: state.guidedFeaturesController,
                     hint:
-                        "e.g. 'a jagged scar across her left eye, pointed elf ears'",
+                        "e.g. 'a jagged scar across their left eye, pointed elf ears'",
                     suggestions: CreatorOptions.guidedFeatureSuggestions,
                     onChanged: _save,
                   ),
@@ -234,7 +234,7 @@ class GuidedConfigStep extends StatelessWidget {
                     label: 'Origin / Background',
                     controller: state.guidedOriginController,
                     hint:
-                        "e.g. 'Grew up on the streets after her parents disappeared'",
+                        "e.g. 'Grew up on the streets after their parents disappeared'",
                     suggestions: CreatorOptions.guidedOriginSuggestions,
                     maxLines: 2,
                     onChanged: _save,
@@ -272,7 +272,7 @@ class GuidedConfigStep extends StatelessWidget {
                     label: 'Dynamic',
                     controller: state.guidedRelDynamicController,
                     hint:
-                        "e.g. 'Coworkers who secretly like each other' or 'She's my bodyguard'",
+                        "e.g. 'Coworkers who secretly like each other' or 'They're my bodyguard'",
                     suggestions: CreatorOptions.guidedRelSuggestions,
                     maxLines: 2,
                     onChanged: _save,
@@ -344,7 +344,7 @@ class GuidedConfigStep extends StatelessWidget {
                       label: 'Turn-ons & Kinks',
                       controller: state.guidedNsfwKinksController,
                       hint:
-                          "What are they into? e.g. 'Loves being praised, goes weak when you grab her hair'",
+                          "What are they into? e.g. 'Loves being praised, goes weak when you grab their hair'",
                       suggestions: CreatorOptions.guidedNsfwKinkSuggestions,
                       maxLines: 2,
                       isNsfw: true,
@@ -365,7 +365,7 @@ class GuidedConfigStep extends StatelessWidget {
                       label: 'Sexual Personality',
                       controller: state.guidedNsfwPersonalityController,
                       hint:
-                          "How do they act during intimacy? e.g. 'Giggly and playful, hides her face when embarrassed'",
+                          "How do they act during intimacy? e.g. 'Giggly and playful, hides their face when embarrassed'",
                       maxLines: 2,
                       isNsfw: true,
                       onChanged: _save,
@@ -431,5 +431,4 @@ class GuidedConfigStep extends StatelessWidget {
       ),
     );
   }
-
 }

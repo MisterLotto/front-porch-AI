@@ -84,8 +84,7 @@ class ChatToolsFacade {
         // Embedding-engine status (desktop RagEngineCard parity). Model
         // download only runs on the host desktop; web surfaces progress
         // and tells the user to use desktop if setup is needed.
-        'embedding':
-            _chat.memoryService?.embeddingService.statusSnapshot,
+        'embedding': _chat.memoryService?.embeddingService.statusSnapshot,
         'journalEnabled': _storage.journalEnabled,
         'journalInterval': _storage.journalInterval,
         // Review-first (audit P2.12) — parks proposals until Apply/Discard.
@@ -186,21 +185,16 @@ class ChatToolsFacade {
         'dayCount': time.dayCount,
         'weekday': time.narrativeWeekday,
         'passageEnabled': time.passageOfTimeEnabled,
-        // Living Time story weather (living-time-features.md §3) — additive
-        // and nullable; older web bundles simply ignore it.
         'weather': weather == null
             ? null
             : {
                 'condition': weather.condition.name,
                 'temp': weather.temp.name,
-                'season': weather.season,
+                'season': seasonDisplayName(
+                  weather.season,
+                  _chat.activeChatBiome.seasonLabels,
+                ),
                 'label': switch (_chat.currentSegmentWeather) {
-                  // Intra-day (v3): the label leads with the CURRENT
-                  // day-part's condition + numeric temp in the user's unit —
-                  // older bundles render it as opaque text, so this upgrade
-                  // reaches every web client with zero TS changes. Skinned
-                  // conditions (phase 2 step ④) surface their renamed label
-                  // through the shared helpers — parity by construction.
                   final seg? => skinnedChipLabel(
                     seg,
                     _chat.activeChatBiome,
@@ -209,13 +203,15 @@ class ChatToolsFacade {
                   null => WeatherEngine.label(weather),
                 },
                 'emoji': switch (_chat.currentSegmentWeather) {
-                  final seg? =>
-                    skinnedEmoji(_chat.activeChatBiome, seg.condition),
-                  null =>
-                    skinnedEmoji(_chat.activeChatBiome, weather.condition),
+                  final seg? => skinnedEmoji(
+                    _chat.activeChatBiome,
+                    seg.condition,
+                  ),
+                  null => skinnedEmoji(
+                    _chat.activeChatBiome,
+                    weather.condition,
+                  ),
                 },
-                // Intra-day fields (additive, v3) — day-part identity plus
-                // both units so richer web UIs can format freely.
                 'segment': _chat.currentSegmentWeather?.segment.name,
                 'segmentCondition': _chat.currentSegmentWeather?.condition.name,
                 'tempC': _chat.currentSegmentWeather?.tempC,
@@ -225,15 +221,15 @@ class ChatToolsFacade {
                 },
                 'unit': _storage.weatherFahrenheit ? 'f' : 'c',
                 'dayLabel': WeatherEngine.label(weather),
-                // Deterministic forecast (additive) — the prefix-stable walk
-                // means tomorrow is already decided, so the web UI can show
-                // incoming fronts exactly like the desktop chip.
                 'tomorrow': switch (_chat.upcomingWeather) {
                   null => null,
                   final n => {
                     'condition': n.condition.name,
                     'temp': n.temp.name,
-                    'season': n.season,
+                    'season': seasonDisplayName(
+                      n.season,
+                      _chat.activeChatBiome.seasonLabels,
+                    ),
                     'label': WeatherEngine.label(n),
                     'emoji': WeatherEngine.emoji(n.condition),
                   },
@@ -246,6 +242,8 @@ class ChatToolsFacade {
         'dateLong': time.displayDate,
         'storyClock': time.storyClockIso,
         'storyStartDate': time.storyStartDateIso,
+        'presence': _presenceWord(),
+        'todaySentence': _chat.todaySentence,
       },
       // Objectives are per-character; scope to the focused participant (lite
       // guests have none). getObjectivesForGroupCharacter returns the global
@@ -316,6 +314,8 @@ class ChatToolsFacade {
       'systemPrompt': g.systemPrompt,
       'scenario': g.scenario,
       'firstMessage': g.firstMessage,
+      'alternateGreetings': g.alternateGreetings,
+      'greetingSeeds': [for (final s in g.greetingSeeds) s?.toFields()],
       'members': _chat.cast
           .map(
             (p) => {
@@ -381,14 +381,13 @@ class ChatToolsFacade {
 
   /// Add one pocket item by hand from the web panel — the other half of the
   /// eraser, delegating to the SAME [ChatService.addPocketItem] the desktop
-  /// dialog calls (gift → her hands + she knows it came from the user;
-  /// otherwise the surprise Easter egg). Same section strings, same
-  /// silent-no-op contract for a stale bundle.
+  /// dialog calls. [correction] is additive (stale bundles omit it).
   Future<void> addPocketItem({
     String? participantId,
     required String section,
     required String name,
     bool gift = false,
+    bool correction = false,
   }) async {
     final focused = _focusedParticipant(participantId);
     // Same guest guard as the eraser — an add would otherwise write the
@@ -408,6 +407,7 @@ class ChatToolsFacade {
       section: target,
       name: name,
       gift: gift,
+      correction: correction,
     );
     _notify();
   }
@@ -450,7 +450,12 @@ class ChatToolsFacade {
   Map<String, dynamic> growth(String? participantId) {
     final owner = _growthOwner(participantId);
     if (owner == null) {
-      return {'name': '', 'ownerId': '', 'rings': const [], 'passRunning': false};
+      return {
+        'name': '',
+        'ownerId': '',
+        'rings': const [],
+        'passRunning': false,
+      };
     }
     final rings = _chat.growthRingsForOwner(owner.id);
     return {
@@ -592,7 +597,6 @@ class ChatToolsFacade {
     return _chat.cast.firstOrNull;
   }
 
-
   Future<void> setChaosEnabled(bool v) async {
     await _chat.setChaosModeEnabled(v);
     _notify();
@@ -638,8 +642,8 @@ class ChatToolsFacade {
     final sessionId = _chat.currentSessionId;
     final time = _chat.timeService;
     final owners = _chat.cast.where((p) => !p.isLite).toList();
-    final owner = owners.where((p) => p.id == ownerId).firstOrNull ??
-        owners.firstOrNull;
+    final owner =
+        owners.where((p) => p.id == ownerId).firstOrNull ?? owners.firstOrNull;
     final days = <Map<String, dynamic>>[];
     if (sessionId != null && owner != null) {
       final cards = await _chat.journalStore.cardsFor(sessionId, owner.id);
@@ -669,6 +673,7 @@ class ChatToolsFacade {
         for (final p in owners) {'id': p.id, 'name': p.name},
       ],
       'days': days,
+      'todaySentence': _chat.todaySentence,
     };
   }
 
@@ -697,11 +702,7 @@ class ChatToolsFacade {
         });
       }
     }
-    return {
-      'owner': owner?.id,
-      'ownerName': owner?.name,
-      'belongings': rows,
-    };
+    return {'owner': owner?.id, 'ownerName': owner?.name, 'belongings': rows};
   }
 
   /// Promise ledger read (web Promises panel — desktop Journal "Promises"
@@ -757,8 +758,8 @@ class ChatToolsFacade {
   Future<Map<String, dynamic>> timeline(String? ownerId) async {
     final sessionId = _chat.currentSessionId;
     final owners = _chat.cast.where((p) => !p.isLite).toList();
-    final owner = owners.where((p) => p.id == ownerId).firstOrNull ??
-        owners.firstOrNull;
+    final owner =
+        owners.where((p) => p.id == ownerId).firstOrNull ?? owners.firstOrNull;
     final entries = <Map<String, dynamic>>[];
     if (sessionId != null && owner != null) {
       for (final e in await _chat.milestoneFeed.entriesFor(
@@ -812,10 +813,34 @@ class ChatToolsFacade {
     return {'id': project.dbId, 'title': project.title};
   }
 
-  /// Manually nudge the scene clock forward/back one period (desktop chevrons).
+  /// Manually nudge the scene clock forward/back 30 minutes (desktop chevrons).
   Future<void> nudgeTime(int delta) async {
     await _chat.nudgeTimePeriod(delta);
     _notify();
+  }
+
+  void abandonToday() {
+    _chat.abandonToday();
+    _notify();
+  }
+
+  String? _presenceWord() {
+    final card = _chat.activeCharacter;
+    if (card == null || _chat.isGroupMode) return null;
+    final ext = card.frontPorchExtensions;
+    return presenceGlanceLabel(
+      derivePresence(
+        occupation: ext?.occupation ?? '',
+        hours: ext?.hours ?? '',
+        clockMinutes: _chat.timeService.clockMinutes,
+        weekday: _chat.timeService.clock.weekday,
+        workDays: ext?.workDays,
+        inScene: inSceneForPresence(
+          stance: _chat.relationshipService.spatialStance,
+          withUser: _chat.relationshipService.withUser,
+        ),
+      ),
+    );
   }
 
   // ── Summary controls ─────────────────────────────────────────────────────
@@ -865,11 +890,11 @@ class ChatToolsFacade {
 
   /// Web Journal diary (audit P2.12) — Growth twin for cards + review-first.
   JournalWebSurface get journalWeb => JournalWebSurface(
-        chat: _chat,
-        storage: _storage,
-        notify: _notify,
-        resolveOwner: _growthOwner,
-      );
+    chat: _chat,
+    storage: _storage,
+    notify: _notify,
+    resolveOwner: _growthOwner,
+  );
 
   // ── Objectives (per-character; scoped to the focused cast participant so a
   //    new goal attaches to whoever the sidebar is focused on) ───────────────

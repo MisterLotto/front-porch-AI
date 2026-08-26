@@ -20,6 +20,11 @@ export interface BackendStatus {
   engineProgress?: number;
   engineStatusMessage?: string;
   engineError?: string;
+  /** Remote live ping (additive). Green Ready is remoteReachable, not a saved key. */
+  isReady?: boolean;
+  remoteConfigured?: boolean;
+  remoteReachable?: boolean;
+  remoteReachability?: 'unknown' | 'checking' | 'reachable' | 'unreachable';
 }
 
 export interface LocalModel {

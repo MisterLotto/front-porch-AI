@@ -18,6 +18,8 @@
 
 library;
 
+import 'package:front_porch_ai/services/chat/season_calendar.dart';
+import 'package:front_porch_ai/services/chat/season_labels.dart';
 import 'package:front_porch_ai/services/chat/weather_biomes.dart';
 
 /// Deterministic story weather (docs/design/living-time-features.md §3).
@@ -155,8 +157,10 @@ class WeatherEngine {
     required String sessionSeed,
     required int dayCount,
     required DateTime date,
+
     /// Living Worlds biome. Null ⇒ temperate (byte-identical to pre-biome).
     Biome? biome,
+
     /// Per-day climate (mid-chat spans). When null, [biome] is used for all days.
     Biome Function(int day)? biomeAtDay,
   }) {
@@ -164,8 +168,7 @@ class WeatherEngine {
     final base = _fnv1a(sessionSeed);
     // Fixed climate path keeps a single reference so temperate/null stays
     // bit-identical to the pre-span engine (acceptance gate).
-    final Biome? fixed =
-        biomeAtDay == null ? (biome ?? Biome.temperate) : null;
+    final Biome? fixed = biomeAtDay == null ? (biome ?? Biome.temperate) : null;
 
     WeatherCondition cond = WeatherCondition.clear;
     TempBand temp = TempBand.mild;
@@ -173,7 +176,9 @@ class WeatherEngine {
     for (int d = 1; d <= days; d++) {
       final climate = fixed ?? biomeAtDay!(d);
       final dayDate = date.subtract(Duration(days: days - d));
-      season = seasonOf(dayDate);
+      season = climate.seasonStarts.isEmpty
+          ? seasonOf(dayDate)
+          : seasonOnDate(dayDate, climate.seasonStarts);
       final rng = WeatherRng(base ^ (d * 0x9E3779B9));
       final stay = d > 1 && rng.nextPermille() < _stayPermille;
       temp = _tempFor(season, rng, climate);
@@ -198,7 +203,9 @@ class WeatherEngine {
   }
 
   static TempBand _tempFor(String season, WeatherRng rng, Biome biome) {
-    final baseMap = biome.baseTemp.isNotEmpty ? biome.baseTemp : _seasonBaseTemp;
+    final baseMap = biome.baseTemp.isNotEmpty
+        ? biome.baseTemp
+        : _seasonBaseTemp;
     final jitter = rng.nextPermille() < 250
         ? -1
         : rng.nextPermille() < 250
@@ -241,9 +248,9 @@ class WeatherEngine {
     WeatherRng rng,
     Biome biome,
   ) {
-    final weightMap =
-        biome.weights.isNotEmpty ? biome.weights : _seasonWeights;
-    final weights = weightMap[season] ?? weightMap['spring'] ?? _seasonWeights['spring']!;
+    final weightMap = biome.weights.isNotEmpty ? biome.weights : _seasonWeights;
+    final weights =
+        weightMap[season] ?? weightMap['spring'] ?? _seasonWeights['spring']!;
     final total = weights.fold(0, (a, b) => a + b);
     if (total <= 0) {
       return WeatherCondition.clear; // defensive: zero-sum weights
@@ -301,9 +308,9 @@ class WeatherEngine {
 
   /// One banded prose phrase for the prompt state block — words only, no
   /// numbers (prompt-state-injection.md contract).
-  static String prose(DailyWeather w) {
+  static String prose(DailyWeather w, {Map<String, String>? seasonLabels}) {
     final t = _tempWord(w.temp);
-    final s = _seasonWord(w.season);
+    final s = seasonPromptName(w.season, seasonLabels ?? const {});
     switch (w.condition) {
       case WeatherCondition.clear:
         return 'The sky is clear and the air is $t — a bright $s day.';
@@ -433,17 +440,6 @@ class WeatherEngine {
     }
   }
 
-  static String _seasonWord(String season) {
-    switch (season) {
-      case 'winter':
-        return 'midwinter';
-      case 'summer':
-        return 'high-summer';
-      default:
-        return season;
-    }
-  }
-
   /// FNV-1a 32-bit — stable across platforms/VM versions, unlike
   /// String.hashCode.
   static int _fnv1a(String s) {
@@ -462,7 +458,7 @@ class WeatherEngine {
 class WeatherRng {
   int _state;
   WeatherRng(int seed)
-      : _state = (seed & 0xFFFFFFFF) == 0 ? 0xDEADBEEF : (seed & 0xFFFFFFFF);
+    : _state = (seed & 0xFFFFFFFF) == 0 ? 0xDEADBEEF : (seed & 0xFFFFFFFF);
 
   int next() {
     var x = _state;

@@ -81,8 +81,10 @@ class WebChatToolsRoutes {
   }
 
   /// Add one pocket item by hand — the web half of the desktop add dialog
-  /// (parity, 2026-08-13). `gift: true` = handed over in-scene; otherwise the
-  /// surprise Easter egg fires on the next reply.
+  /// (parity, 2026-08-13). `gift: true` = handed over in-scene; `correction:
+  /// true` = record fix (worn, no intro); otherwise the surprise Easter egg
+  /// fires on the next reply. `correction` is additive — omitted = old
+  /// behaviour, so a stale PWA bundle stays compatible.
   Future<shelf.Response> _pocketAdd(shelf.Request request) async {
     final body = await _json(request);
     await _facade.addPocketItem(
@@ -90,6 +92,7 @@ class WebChatToolsRoutes {
       section: body['section']?.toString() ?? '',
       name: body['name']?.toString() ?? '',
       gift: body['gift'] == true,
+      correction: body['correction'] == true,
     );
     return JsonResponse.ok(_snapshot(request));
   }
@@ -171,10 +174,14 @@ class WebChatToolsRoutes {
       );
       return JsonResponse.ok(_snapshot(request));
     }
+    if (body['abandonToday'] == true) {
+      _facade.abandonToday();
+      return JsonResponse.ok(_snapshot(request));
+    }
     final delta = body['delta'];
     if (delta is! int) {
       return JsonResponse.badRequest(
-        'delta (int), setClock, or setStartDate is required',
+        'delta (int), setClock, setStartDate, or abandonToday is required',
       );
     }
     await _facade.nudgeTime(delta);
@@ -349,7 +356,14 @@ class WebChatToolsRoutes {
         body['participant']?.toString() ??
         request.url.queryParameters['participant'];
     const known = {
-      'plant', 'edit', 'pin', 'retire', 'restore', 'delete', 'reset', 'check',
+      'plant',
+      'edit',
+      'pin',
+      'retire',
+      'restore',
+      'delete',
+      'reset',
+      'check',
     };
     if (!known.contains(action)) {
       return JsonResponse.badRequest('Unknown growth action: $action');

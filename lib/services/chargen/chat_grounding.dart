@@ -36,6 +36,7 @@ class EnhanceSelection {
     this.scenario = false,
     this.greetings = false,
     this.lorebook = false,
+    this.porchLife = false,
   });
 
   final bool description;
@@ -45,12 +46,17 @@ class EnhanceSelection {
   final bool greetings;
   final bool lorebook;
 
+  /// Wardrobe, pockets, ambitions, likes — same keep/accept review as
+  /// the text fields. Default off so older clients and existing tests
+  /// that omit the key do not silently grow a new LLM pass.
+  final bool porchLife;
+
   /// True when the enrichment call (which rewrites description + personality +
   /// scenario in one shot) needs to run at all.
   bool get needsEnrichment => description || personality || scenario;
 
   bool get anySelected =>
-      needsEnrichment || exampleDialogue || greetings || lorebook;
+      needsEnrichment || exampleDialogue || greetings || lorebook || porchLife;
 
   factory EnhanceSelection.fromJson(Map<String, dynamic> json) =>
       EnhanceSelection(
@@ -60,16 +66,18 @@ class EnhanceSelection {
         scenario: json['scenario'] as bool? ?? false,
         greetings: json['greetings'] as bool? ?? false,
         lorebook: json['lorebook'] as bool? ?? false,
+        porchLife: json['porchLife'] as bool? ?? false,
       );
 
   Map<String, dynamic> toJson() => {
-        'description': description,
-        'personality': personality,
-        'exampleDialogue': exampleDialogue,
-        'scenario': scenario,
-        'greetings': greetings,
-        'lorebook': lorebook,
-      };
+    'description': description,
+    'personality': personality,
+    'exampleDialogue': exampleDialogue,
+    'scenario': scenario,
+    'greetings': greetings,
+    'lorebook': lorebook,
+    'porchLife': porchLife,
+  };
 }
 
 /// One speaker-attributed line of chat transcript.

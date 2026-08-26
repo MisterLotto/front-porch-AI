@@ -82,7 +82,9 @@ class ChargenFacade {
   /// endpoints.
   ///
   /// Body: `{characterId, sessionId, fields: EnhanceSelection JSON,
-  /// nsfwEnabled, modelId?}` — `modelId` (remote backends only) runs the
+  /// nsfwEnabled, modelId?, narrativePerspective?, narrativeTense?, sex?}` —
+  /// voice fields keep the Create choice; omitted falls back to the card
+  /// stamp, then first-person present. `modelId` (remote backends only) runs the
   /// enhance on that model via the same ad-hoc resolver the creator wizard
   /// uses, without switching the app's active model.
   Map<String, dynamic> startEnhance(Map<String, dynamic> body) {
@@ -106,14 +108,19 @@ class ChargenFacade {
     if (!selection.anySelected) {
       return {'ok': false, 'error': 'no fields selected'};
     }
-    unawaited(_runEnhance(
-      card,
-      sessionId,
-      selection,
-      body['nsfwEnabled'] == true,
-      svc,
-      db,
-    ));
+    unawaited(
+      _runEnhance(
+        card,
+        sessionId,
+        selection,
+        body['nsfwEnabled'] == true,
+        svc,
+        db,
+        narrativePerspective: body['narrativePerspective']?.toString(),
+        narrativeTense: body['narrativeTense']?.toString(),
+        sex: body['sex']?.toString(),
+      ),
+    );
     return {'ok': true};
   }
 
@@ -123,8 +130,11 @@ class ChargenFacade {
     EnhanceSelection selection,
     bool nsfwEnabled,
     LLMService svc,
-    AppDatabase db,
-  ) async {
+    AppDatabase db, {
+    String? narrativePerspective,
+    String? narrativeTense,
+    String? sex,
+  }) async {
     try {
       final ctx = await buildEnhanceContext(
         db: db,
@@ -136,7 +146,8 @@ class ChargenFacade {
         recap: ctx.recap,
         memoryCards: ctx.memoryCards,
         maxChars: enhanceGroundingCharBudget(
-          isLocalKobold: _llm.activeBackend == BackendType.kobold &&
+          isLocalKobold:
+              _llm.activeBackend == BackendType.kobold &&
               _llm.koboldService.isReady,
           contextSize: _storage?.contextSize ?? 8192,
         ),
@@ -147,6 +158,9 @@ class ChargenFacade {
         selection: selection,
         chatGrounding: grounding,
         nsfwEnabled: nsfwEnabled,
+        narrativePerspective: narrativePerspective,
+        narrativeTense: narrativeTense,
+        sex: sex,
         // Same rule as the desktop flow and the Scene Guest mint: never kill
         // evals a live chat may have in flight on the shared backend.
         abortInFlight: false,
@@ -160,6 +174,9 @@ class ChargenFacade {
         });
         return;
       }
+      final porch = selection.porchLife
+          ? porchLifeIdentityOf(result.frontPorchExtensions)
+          : null;
       _hub?.broadcast({
         'event': 'chargen_enhance_done',
         'characterId': card.dbId,
@@ -173,6 +190,16 @@ class ChargenFacade {
             'alternateGreetings': result.alternateGreetings,
           if (selection.lorebook && result.lorebook != null)
             'lorebook': result.lorebook!.toJson(),
+          if (porch != null)
+            'porchLife': {
+              'ambitions': porch.ambitions,
+              'likes': porch.likes,
+              'dislikes': porch.dislikes,
+              'worn': porch.worn,
+              'carrying': porch.carrying,
+              'intimateInto': porch.intimateInto,
+              'intimateNotInto': porch.intimateNotInto,
+            },
         },
       });
     } catch (e) {
@@ -315,6 +342,9 @@ class ChargenFacade {
         loreCategories: _strList(fields['loreCategories'], const []),
         loreDepth: fields['loreDepth']?.toString() ?? 'Standard',
         includeDynamicMacros: fields['includeDynamicMacros'] == true,
+        narrativePerspective:
+            fields['narrativePerspective']?.toString() ?? 'first',
+        narrativeTense: fields['narrativeTense']?.toString() ?? 'present',
         age: fields['age']?.toString() ?? '',
         sex: fields['sex']?.toString() ?? '',
         relationship: fields['relationship']?.toString() ?? '',

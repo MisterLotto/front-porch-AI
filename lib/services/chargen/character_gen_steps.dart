@@ -121,7 +121,8 @@ Respond with ONLY the JSON:''';
     // history (what they want from {{user}}, unspoken tension) actively hurts a
     // "you just met" card. Empty OR a stranger-like preset counts as no relationship.
     final relLower = relationship.trim().toLowerCase();
-    final hasRelationship = relLower.isNotEmpty &&
+    final hasRelationship =
+        relLower.isNotEmpty &&
         relLower != 'stranger' &&
         relLower != 'strangers' &&
         relLower != 'none';
@@ -203,9 +204,15 @@ Respond with ONLY the JSON:''';
     // must sound like the character as PLAYED, not as originally sketched.
     final groundingSection = chatGrounding.trim().isNotEmpty
         ? '\nREAL CHAT EXCERPTS ($name as actually played with {{user}} — equally '
-            'authoritative as the interview; match this voice, history, and '
-            'relationship exactly):\n$chatGrounding\n'
+              'authoritative as the interview; match this voice, history, and '
+              'relationship exactly):\n$chatGrounding\n'
         : '';
+    final fieldVoice =
+        cardFieldVoiceClause(
+          voice: _narrativeVoice,
+          pronouns: resolveNarrativePronouns(_narrativeSex),
+        ) ??
+        'Third-person';
     final prompt =
         '''
 You have just completed an in-character interview with $name.
@@ -227,8 +234,8 @@ ${card.scenario}
 
 Rewrite these fields using the specific details, voice, and texture revealed in the interview:
 
-- "description": (string) Third-person. Physical appearance ONLY: body, face, hair, eyes, clothing, posture, distinguishing marks. Use specific concrete details that emerged in the interview — not generic adjectives like "beautiful" or "attractive." Replace vague descriptors with precise ones ("calloused hands" not "strong hands", "a crooked nose from an old break" not "an interesting face"). 2-3 paragraphs. Do NOT include personality, backstory, or scenario.
-- "personality": (string) Third-person. Write 2-3 rich paragraphs covering ALL of the following dimensions:
+- "description": (string) $fieldVoice. Physical appearance ONLY: body, face, hair, eyes, clothing, posture, distinguishing marks. Use specific concrete details that emerged in the interview — not generic adjectives like "beautiful" or "attractive." Replace vague descriptors with precise ones ("calloused hands" not "strong hands", "a crooked nose from an old break" not "an interesting face"). 2-3 paragraphs. Do NOT include personality, backstory, or scenario.
+- "personality": (string) $fieldVoice. Write 2-3 rich paragraphs covering ALL of the following dimensions:
   * Core traits and their contradictions (e.g. "fiercely loyal but slow to trust")
   * Speech patterns and verbal habits (catchphrases, how they curse, whether they ramble or speak tersely)
   * Emotional triggers — what makes them angry, what softens them, what makes them shut down
@@ -312,9 +319,15 @@ Respond with ONLY the JSON:''';
     // inventing synthetic ones.
     final groundingSection = chatGrounding.trim().isNotEmpty
         ? '\nREAL CHAT LINES ($name speaking in an actual roleplay — the '
-            'strongest reference for voice; prefer adapting the best genuine '
-            'exchanges over inventing new ones):\n$chatGrounding\n'
+              'strongest reference for voice; prefer adapting the best genuine '
+              'exchanges over inventing new ones):\n$chatGrounding\n'
         : '';
+    final voiceRule = exampleDialogueVoiceRule(
+      name: name,
+      voice: _narrativeVoice,
+      pronouns: resolveNarrativePronouns(_narrativeSex),
+    );
+    final voiceRuleLine = voiceRule == null ? '' : '\n$voiceRule';
     final prompt =
         '''Write example dialogue exchanges for a roleplay character named $name.
 These examples teach the AI how $name speaks — their vocabulary, sentence structure, emotional reactions, and mannerisms.
@@ -345,7 +358,7 @@ RULES:
 - Use the EXACT speech patterns from the interview — if they use slang, contractions, or unusual phrasing, replicate it
 - Include *action descriptions* and emotional reactions, not just dialogue
 - {{char}} responses should feel like they come from a real person with opinions, not a generic AI
-- Use {{char}} and {{user}} as placeholders — never real names
+- Use {{char}} and {{user}} as placeholders — never real names$voiceRuleLine
 
 Output ONLY the example dialogue. No commentary, no JSON, no explanation. Start directly with <START>:''';
 

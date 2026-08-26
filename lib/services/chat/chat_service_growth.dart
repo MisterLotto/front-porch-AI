@@ -130,7 +130,10 @@ extension ChatServiceGrowth on ChatService {
   }
 
   /// Manual "Check now" (panel button). Force-runs even on an empty window.
-  Future<void> forceGrowthPass() => _growthService.runGrowthPass(force: true);
+  Future<void> forceGrowthPass() async {
+    await _awaitHistoryHydrated();
+    await _growthService.runGrowthPass(force: true);
+  }
 
   /// Check whether a growth pass is due and trigger it non-blockingly.
   /// Cadence (design §4.2): user messages since the growth cursor vs the
@@ -146,27 +149,32 @@ extension ChatServiceGrowth on ChatService {
     final sessionId = _currentSessionId;
     if (sessionId == null) return;
 
-    final windowStart = _growthStore
-        .cursorCachedFor(sessionId)
-        .clamp(0, _messages.length);
-    int userMessagesSincePass = 0;
-    for (int i = windowStart; i < _messages.length; i++) {
-      if (_messages[i].isUser) userMessagesSincePass++;
-    }
-    if (userMessagesSincePass == 0) return;
-
-    final due =
-        userMessagesSincePass >= _storageService.memorySettings.growthInterval;
-    final eventKick =
-        _growthService.eventKickPending ||
-        JournalPhysics.hasSalientEvent(_messages.sublist(windowStart));
-
-    if (due || eventKick) {
-      // Fire and forget — don't await. The pass consumes eventKickPending
-      // itself once it actually starts, so a parked review batch (or an
-      // already-running pass) can't silently eat the kick.
-      _growthService.runGrowthPass();
-    }
+    // Cursor is an index into the FULL transcript — same wait as Journal
+    // so a 24-row open window cannot clamp 11200 down to 24.
+    unawaited(() async {
+      await _awaitHistoryHydrated();
+      if (!_storageService.memorySettings.characterEvolutionEnabled) return;
+      if (_isGrowthPassRunning) return;
+      final sid = _currentSessionId;
+      if (sid == null) return;
+      final windowStart = _growthStore
+          .cursorCachedFor(sid)
+          .clamp(0, _messages.length);
+      var userMessagesSincePass = 0;
+      for (var i = windowStart; i < _messages.length; i++) {
+        if (_messages[i].isUser) userMessagesSincePass++;
+      }
+      if (userMessagesSincePass == 0) return;
+      final due =
+          userMessagesSincePass >=
+          _storageService.memorySettings.growthInterval;
+      final eventKick =
+          _growthService.eventKickPending ||
+          JournalPhysics.hasSalientEvent(_messages.sublist(windowStart));
+      if (due || eventKick) {
+        _growthService.runGrowthPass();
+      }
+    }());
   }
 
   /// Re-scope the store's sync injection cache to the current session +

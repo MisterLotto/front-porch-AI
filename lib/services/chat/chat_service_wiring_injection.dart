@@ -74,9 +74,7 @@ extension ChatServiceWiringInjection on ChatService {
           for (final m in _messages.sublist(start))
             m.characterId == '__director__'
                 ? '[Director: ${m.text}]'
-                : (includeNames
-                      ? m.toPromptHistoryLine()
-                      : m.promptText),
+                : (includeNames ? m.toPromptHistoryLine() : m.promptText),
         ];
       },
       getGlobalScanDepth: () => _storageService.lorebookSettings.scanDepth,
@@ -271,7 +269,8 @@ extension ChatServiceWiringInjection on ChatService {
       // Objectives off ⇒ nothing about quests reaches the model. Reading the
       // gate here rather than clearing _activeObjectives keeps the rows intact
       // for when the switch comes back on.
-      getActiveObjectives: () => objectivesActive ? _activeObjectives : const [],
+      getActiveObjectives: () =>
+          objectivesActive ? _activeObjectives : const [],
       getPrimaryObjective: () => primaryObjective,
       tasksForObjective: (o) => tasksForObjective(o),
       getSecondaryObjectives: () => secondaryObjectives,
@@ -308,6 +307,13 @@ extension ChatServiceWiringInjection on ChatService {
     return BehavioralInjection(
       relationshipService: _relationshipService,
       getRealismEnabled: () => _realismEnabled,
+      getOccupation: () => _workFieldsForCurrentSpeaker().occupation,
+      getHours: () => _workFieldsForCurrentSpeaker().hours,
+      getOccupationBrief: () => _workFieldsForCurrentSpeaker().occupationBrief,
+      getWorkDays: () => _workFieldsForCurrentSpeaker().workDays,
+      getClockMinutes: () => _timeService.clockMinutes,
+      getWeekday: () => _timeService.clock.weekday,
+      getIsGroup: () => _activeGroup != null,
     );
   }
 
@@ -394,6 +400,20 @@ extension ChatServiceWiringInjection on ChatService {
     );
   }
 
+  PlanInjection _buildPlanInjection() {
+    return PlanInjection(
+      getTodayLine: () => todaySentence,
+      getPlannerEnabled: () => _storageService.realismSettings.plannerEnabled,
+      getClockMinutes: () => _timeService.clockMinutes,
+      getWeekday: () => _timeService.clock.weekday,
+      getActiveCharacter: () => _activeCharacter,
+      getIsGroupNonObserverMode: () => (_activeGroup != null && !_observerMode),
+      getCurrentSpeakerIdForRealism: _getCurrentSpeakerIdForRealism,
+      getGroupCharacters: () => _groupCharacters,
+      getCharacterIdFromCard: _getCharacterIdFromCard,
+    );
+  }
+
   AmbitionInjection _buildAmbitionInjection() {
     return AmbitionInjection(
       ambitionService: _ambitionService,
@@ -417,8 +437,7 @@ extension ChatServiceWiringInjection on ChatService {
       // the After Dark group in Settings. A card may carry intimate
       // preferences; with 18+ off they stay out of the prompt entirely rather
       // than relying on the model's discretion.
-      getNsfwEnabled: () =>
-          _storageService.realismSettings.adultThemesEnabled,
+      getNsfwEnabled: () => _storageService.realismSettings.adultThemesEnabled,
       // BOTH halves resolved here, so there is exactly one place the decision
       // is made. The engine half is a HARD dependency and not the usual
       // inherited gate: the feature is a loop — she asks, the user answers,
@@ -548,6 +567,7 @@ extension ChatServiceWiringInjection on ChatService {
       timeInjection: _timeInjection,
       weatherInjection: _weatherInjection,
       ambitionInjection: _ambitionInjection,
+      planInjection: _planInjection,
       preferencesInjection: _preferencesInjection,
       inventoryInjection: _inventoryInjection,
       promiseDebtInjection: _promiseDebtInjection,

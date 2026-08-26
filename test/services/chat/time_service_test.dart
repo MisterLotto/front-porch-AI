@@ -8,17 +8,33 @@
 // Design: docs/design/story-calendar.md.
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:front_porch_ai/services/chat/pass_support.dart';
+import 'package:front_porch_ai/services/chat/realism_tools.dart';
 import 'package:front_porch_ai/services/chat/story_clock.dart';
 import 'package:front_porch_ai/services/chat/time_service.dart';
+import 'package:front_porch_ai/services/llm_service.dart'
+    show LlmToolCall, LlmToolResponse;
 
 TimeService makeService({
   void Function(String, dynamic)? onPending,
   void Function(String, int, String)? onPatch,
+  void Function()? onStoryDayChanged,
+  bool Function()? getPlannerEnabled,
+  void Function(String line)? onTodayEval,
+  Future<LlmToolResponse?> Function(String, List<Map<String, dynamic>>)?
+  fireToolEval,
+  ToolTransportProbe? probe,
 }) => TimeService(
   onNotify: () {},
   onSaveChat: () async {},
   onSetPendingRealismMetadata: onPending ?? (_, _) {},
   onPatchLastMessageRealismState: onPatch ?? (_, _, _) {},
+  onStoryDayChanged: onStoryDayChanged,
+  getPlannerEnabled: getPlannerEnabled,
+  onTodayEval: onTodayEval,
+  fireToolEval: fireToolEval,
+  probe: probe,
+  getBackendIdentity: () => 'test-backend',
 );
 
 /// Seed to a fixed, deterministic moment: Day 3 (Thu 2026-07-02).
@@ -124,17 +140,20 @@ void main() {
   });
 
   group('TimeService manual control', () {
-    test('nudge forward/back snaps periods and rolls days', () {
+    test('nudge forward/back is 30 minutes and can roll a day', () {
       String? patchedIso;
       final t = makeService(onPatch: (_, _, iso) => patchedIso = iso);
       seedFixed(t, timeOfDay: 'night'); // Thu 22:30
       t.nudgeTimePeriod(1);
-      expect(t.timeOfDay, 'dawn');
-      expect(t.dayCount, 4); // rolled into Friday
+      expect(t.clock, DateTime.utc(2026, 7, 2, 23, 0));
+      expect(t.dayCount, 3);
       expect(patchedIso, t.storyClockIso);
       t.nudgeTimePeriod(-1);
-      expect(t.timeOfDay, 'night');
-      expect(t.dayCount, 3);
+      expect(t.clock, DateTime.utc(2026, 7, 2, 22, 30));
+      t.setClockDirect(DateTime.utc(2026, 7, 2, 23, 50));
+      t.nudgeTimePeriod(1);
+      expect(t.clock, DateTime.utc(2026, 7, 3, 0, 20));
+      expect(t.dayCount, 4);
     });
 
     test('setStartDate slides the whole timeline (Day N preserved)', () {
@@ -246,6 +265,20 @@ void main() {
       },
     );
 
+    test('(OOC: skip to 2pm) lands on 2pm, not plus an hour', () {
+      final t = makeService();
+      seedFixed(t, timeOfDay: 'morning'); // 09:00
+      t.detectOocTimeSkip('(ooc: skip to 2pm)');
+      expect(t.clock, DateTime.utc(2026, 7, 2, 14, 0));
+    });
+
+    test('"next afternoon" lands on the next afternoon, not plus an hour', () {
+      final t = makeService();
+      seedFixed(t, timeOfDay: 'morning'); // 09:00
+      t.detectOocTimeSkip('the next afternoon they meet again');
+      expect(t.clock, DateTime.utc(2026, 7, 2, 14, 30));
+    });
+
     test('does nothing when passage is disabled or no trigger present', () {
       final t = makeService();
       seedFixed(t);
@@ -324,7 +357,7 @@ void main() {
       },
     );
 
-    test('new_day from evening onward jumps to 08:00 next day', () async {
+    test('corroborated new_day jumps to 08:00 next morning any hour', () async {
       final t = makeService();
       seedFixed(t); // evening 18:30
       await runEval(
@@ -334,14 +367,14 @@ void main() {
       );
       expect(t.clock, DateTime.utc(2026, 7, 3, 8, 0));
 
-      // new_day mid-afternoon is ignored (not a valid transition).
+      // Mid-afternoon sleep is still a night crossed when corroborated.
       t.setClockDirect(DateTime.utc(2026, 7, 3, 14, 0));
       await runEval(
         t,
         oneShotText: '{"minutes_elapsed": 0, "new_day": true}',
-        recent: 'Nia: *she wakes from her nap*',
+        recent: 'Nia: *she falls asleep in the sun*\nUser: *morning comes*',
       );
-      expect(t.clock.hour, 14);
+      expect(t.clock, DateTime.utc(2026, 7, 4, 8, 0));
     });
 
     test(
@@ -404,6 +437,26 @@ void main() {
       },
     );
 
+    test('applyFailureDrift is the skip-banner 5-minute step', () async {
+      final t = makeService();
+      seedFixed(t, timeOfDay: 'morning');
+      await t.applyFailureDrift();
+      expect(
+        t.clock,
+        DateTime.utc(2026, 7, 2, 9, StoryClock.failureDriftMinutes),
+      );
+      t.detectOocTimeSkip('(ooc: skip ahead an hour)');
+      expect(
+        t.clock,
+        DateTime.utc(2026, 7, 2, 10, StoryClock.failureDriftMinutes),
+      );
+      await t.applyFailureDrift();
+      expect(
+        t.clock,
+        DateTime.utc(2026, 7, 2, 10, StoryClock.failureDriftMinutes),
+      );
+    });
+
     test('passage disabled: one-shot is a no-op for the clock', () async {
       final t = makeService();
       seedFixed(t, timeOfDay: 'morning');
@@ -414,6 +467,152 @@ void main() {
         oneShotText: '{"minutes_elapsed": 120, "new_day": true}',
       );
       expect(t.clock, before);
+    });
+  });
+
+  group('TimeService story-day callback', () {
+    test('onStoryDayChanged fires only when the day rolls', () {
+      var n = 0;
+      final t = makeService(onStoryDayChanged: () => n++);
+      seedFixed(t, timeOfDay: 'evening');
+      t.nudgeTimePeriod(1); // 18:30 → 19:00, same day
+      expect(n, 0);
+      expect(t.dayCount, 3);
+      t.detectOocTimeSkip('the next morning, sunlight woke them');
+      expect(t.dayCount, 4);
+      expect(n, 1);
+    });
+
+    test('same-day clock set does not fire', () {
+      var n = 0;
+      final t = makeService(onStoryDayChanged: () => n++);
+      seedFixed(t);
+      t.setClockDirect(DateTime.utc(2026, 7, 2, 21, 0));
+      expect(n, 0);
+      t.setClockDirect(DateTime.utc(2026, 7, 3, 9, 0));
+      expect(n, 1);
+    });
+  });
+
+  group('TimeService today eval', () {
+    test('JSON path (one-shot text) sets todaySentence', () async {
+      String? seen;
+      final t = makeService(
+        getPlannerEnabled: () => true,
+        onTodayEval: (line) => seen = line,
+      );
+      seedFixed(t);
+      await runEval(
+        t,
+        oneShotText:
+            '{"minutes_elapsed": 8, "new_day": false, "today_sentence": "Finish the lighthouse log."}',
+      );
+      expect(seen, 'Finish the lighthouse log.');
+    });
+
+    test('JSON path (multi-call text) sets todaySentence', () async {
+      String? seen;
+      final t = makeService(
+        getPlannerEnabled: () => true,
+        onTodayEval: (line) => seen = line,
+      );
+      seedFixed(t);
+      await runEval(
+        t,
+        fire: (_) async =>
+            '{"minutes_elapsed": 8, "new_day": false, "today_sentence": "Finish the lighthouse log."}',
+      );
+      expect(seen, 'Finish the lighthouse log.');
+    });
+
+    test('tool path sets todaySentence from tool args', () async {
+      String? seen;
+      List<Map<String, dynamic>>? seenTools;
+      final t = makeService(
+        getPlannerEnabled: () => true,
+        onTodayEval: (line) => seen = line,
+        probe: ToolTransportProbe(),
+        fireToolEval: (prompt, tools) async {
+          seenTools = tools;
+          expect(prompt, contains('today_sentence'));
+          return const LlmToolResponse(
+            calls: [
+              LlmToolCall(
+                name: kSceneTimeTool,
+                arguments: {
+                  'minutes_elapsed': 8,
+                  'new_day': false,
+                  'today_sentence': 'Finish the lighthouse log.',
+                },
+              ),
+            ],
+            text: '',
+          );
+        },
+      );
+      seedFixed(t);
+      await runEval(t, fire: (_) async => 'MUST NOT FALL BACK TO TEXT');
+      expect(seen, 'Finish the lighthouse log.');
+      final required =
+          ((seenTools!.single['function'] as Map)['parameters']
+                  as Map)['required']
+              as List;
+      expect(required, contains('today_sentence'));
+    });
+
+    test('tool path empty today_sentence abandons', () async {
+      String? seen;
+      final t = makeService(
+        getPlannerEnabled: () => true,
+        onTodayEval: (line) => seen = line,
+        probe: ToolTransportProbe(),
+        fireToolEval: (prompt, tools) async => const LlmToolResponse(
+          calls: [
+            LlmToolCall(
+              name: kSceneTimeTool,
+              arguments: {'minutes_elapsed': 4, 'today_sentence': ''},
+            ),
+          ],
+          text: '',
+        ),
+      );
+      seedFixed(t);
+      await runEval(t, fire: (_) async => 'MUST NOT FALL BACK TO TEXT');
+      expect(seen, isEmpty);
+    });
+
+    test('JSON omit keeps the hold (callback not fired)', () async {
+      String? seen = 'held';
+      var fired = false;
+      final t = makeService(
+        getPlannerEnabled: () => true,
+        onTodayEval: (line) {
+          fired = true;
+          seen = line;
+        },
+      );
+      seedFixed(t);
+      await runEval(
+        t,
+        fire: (_) async => '{"minutes_elapsed": 8, "new_day": false}',
+      );
+      expect(fired, isFalse);
+      expect(seen, 'held');
+    });
+
+    test('planner off does not apply today_sentence', () async {
+      String? seen;
+      final t = makeService(
+        getPlannerEnabled: () => false,
+        onTodayEval: (line) => seen = line,
+      );
+      seedFixed(t);
+      await runEval(
+        t,
+        oneShotText:
+            '{"minutes_elapsed": 8, "new_day": false, "today_sentence": "Finish the lighthouse log."}',
+      );
+      expect(seen, isNull);
     });
   });
 }

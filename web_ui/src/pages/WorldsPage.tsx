@@ -6,8 +6,10 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../api/client';
+import { ClimateSeasonEditor } from '../components/ClimateSeasonEditor';
 import { LoreEntriesEditor, type LoreEntry } from '../components/LoreEntriesEditor';
 import { WorldCard, type WorldSummary } from '../components/WorldCard';
+import type { BiomeDraft } from '../lib/seasonCalendar';
 import '../styles/ws-g.css';
 
 interface Climate {
@@ -15,6 +17,7 @@ interface Climate {
   displayName: string;
   description: string;
   feel: string;
+  template?: BiomeDraft;
 }
 
 interface WorldDetail {
@@ -27,6 +30,7 @@ interface WorldDetail {
   entries: LoreEntry[];
   atmosphere?: string;
   gravity?: string;
+  biome?: BiomeDraft | null;
 }
 
 type EditState = {
@@ -40,6 +44,7 @@ type EditState = {
   entries: LoreEntry[];
   atmosphere: string;
   gravity: string;
+  biome: BiomeDraft | null;
 } | null;
 
 function download(url: string) {
@@ -57,6 +62,7 @@ export function WorldsPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [toast, setToast] = useState<string | null>(null);
+  const [climateErrors, setClimateErrors] = useState<string[]>([]);
 
   const load = () =>
     api
@@ -99,14 +105,33 @@ export function WorldsPage() {
         entries: d.entries,
         atmosphere: d.atmosphere ?? 'breathable',
         gravity: d.gravity ?? 'earth',
+        biome: d.biome ?? null,
       });
+      setClimateErrors([]);
     } catch {
       setError('Could not load place');
     }
   };
 
-  const save = () => {
+  const save = async () => {
     if (!edit) return;
+    if (edit.biomeId === 'custom' && edit.biome) {
+      try {
+        const r = await api.post<{ errors: string[] }>(
+          '/api/worlds/climate/check',
+          { biome: edit.biome },
+        );
+        const errs = r.errors ?? [];
+        setClimateErrors(errs);
+        if (errs.length) {
+          setError(errs[0] ?? 'Seasons cannot overlap');
+          return;
+        }
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : 'Could not check climate');
+        return;
+      }
+    }
     apply(
       api.post('/api/worlds', {
         id: edit.id,
@@ -114,6 +139,7 @@ export function WorldsPage() {
         originalName: edit.originalName,
         description: edit.description,
         biomeId: edit.biomeId,
+        biome: edit.biomeId === 'custom' ? edit.biome : undefined,
         injectDescription: edit.injectDescription,
         coverImage: edit.coverImage,
         entries: edit.entries,
@@ -206,6 +232,7 @@ export function WorldsPage() {
                 entries: [],
                 atmosphere: 'breathable',
                 gravity: 'earth',
+                biome: null,
               })
             }
           >
@@ -330,7 +357,26 @@ export function WorldsPage() {
             Climate
             <select
               value={edit.biomeId}
-              onChange={(e) => setEdit({ ...edit, biomeId: e.target.value })}
+              onChange={(e) => {
+                const id = e.target.value;
+                if (id !== 'custom') {
+                  setEdit({ ...edit, biomeId: id, biome: null });
+                  setClimateErrors([]);
+                  return;
+                }
+                const starter =
+                  edit.biome ??
+                  climates.find((c) => c.id === 'temperate')?.template ??
+                  climates[0]?.template ??
+                  null;
+                setEdit({
+                  ...edit,
+                  biomeId: 'custom',
+                  biome: starter
+                    ? { ...starter, id: 'custom', displayName: edit.name || 'Custom climate' }
+                    : null,
+                });
+              }}
             >
               {(climates.length
                 ? climates
@@ -340,9 +386,21 @@ export function WorldsPage() {
                   {c.displayName}
                 </option>
               ))}
+              <option value="custom">Custom climate…</option>
             </select>
           </label>
-          {selectedClimate && (
+          {edit.biomeId === 'custom' && edit.biome && (
+            <ClimateSeasonEditor
+              biome={edit.biome}
+              errors={climateErrors}
+              onChange={(biome) => {
+                setEdit({ ...edit, biome });
+                setClimateErrors([]);
+                setError('');
+              }}
+            />
+          )}
+          {selectedClimate && edit.biomeId !== 'custom' && (
             <div className="climate-feel-card">
               <strong>What it feels like</strong>
               <p>{selectedClimate.description}</p>
@@ -400,7 +458,7 @@ export function WorldsPage() {
             <button
               type="button"
               className="primary"
-              disabled={busy || !edit.name.trim()}
+              disabled={busy || !edit.name.trim() || climateErrors.length > 0}
               onClick={save}
             >
               {busy ? 'Saving…' : 'Save place'}

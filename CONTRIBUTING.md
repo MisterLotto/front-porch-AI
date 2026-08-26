@@ -67,7 +67,8 @@ are almost never accepted.
 
 ### Prerequisites
 
-- **Flutter 3.44.8** (what CI uses). The Dart SDK constraint is `^3.10.8`.
+- **Flutter 3.47.0** (what CI uses). The Dart SDK constraint is `^3.10.8`.
+  macOS **12 Monterey** is the floor (Flutter 3.47's minimum).
 - [Git](https://git-scm.com/)
 - Windows 10+, macOS 12+, or Linux
 - **Linux only**, for desktop builds:
@@ -147,12 +148,16 @@ Two of these surprise people:
   invisible on macOS and 10–100× slower on Windows under Defender. A line that
   genuinely cannot run in a build path can carry a trailing `// io-ok: <reason>`.
 
-### Do NOT run `dart format` over whole files
+### Format only the Dart files you already touched
 
-The codebase is mid-migration to the Dart 3.11 "tall style" formatter. Running the
-new formatter on a not-yet-migrated file rewraps hundreds of unrelated lines and
-buries your actual change. Match the surrounding style by hand in the regions you
-edit. A whole-file reformat is its own separate, intentional commit.
+Same law as barrels: if you edited `foo.dart`, run `dart format foo.dart` so
+it leaves on the current tall style. Do **not** run `dart format .` or format
+a directory — that is an 856-file rewrite and it is still forbidden. Do **not**
+format an existing test you were not already changing (`test-integrity.yml`).
+After formatting, fix any lint the wrap introduced (a split `if (x) return;`
+trips `curly_braces_in_flow_control_structures`). A repo-wide reformat is its
+own separate, intentional commit, and it needs `approved-test-change` if it
+touches tests.
 
 ## Project Rules That Trip People Up
 

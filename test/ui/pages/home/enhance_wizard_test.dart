@@ -11,12 +11,15 @@
 //
 // New route + multi-step navigation → interaction test per the routes rule.
 
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -80,14 +83,33 @@ void main() {
       await storage.setRemoteApiKey('test-key');
       kobold = KoboldService(storage);
       backendManager = BackendManager(storage);
-      llm = LLMProvider(kobold, OpenRouterService(), storage, backendManager);
+      // TestWidgetsFlutterBinding turns every HTTP call into a bodiless
+      // 400. Mock /models so SetupStep's fetch (and a live ping if one
+      // fires) never leaves the process.
+      final openRouter = OpenRouterService();
+      openRouter.httpClientFactory = () => MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'data': [
+              {'id': 'current/model', 'name': 'current/model'},
+            ],
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        ),
+      );
+      llm = LLMProvider(kobold, openRouter, storage, backendManager);
       // Same-isolate DB — a background-isolate DB deadlocks the fake-async
       // test zone (see the AppDatabase.forTesting doc).
       db = AppDatabase.forTesting(sameIsolate: true);
       repo = CharacterRepository(db, storage);
       chat =
-          ChatService(kobold, UserPersonaService(db), storage,
-              WorldRepository(storage, db))
+          ChatService(
+              kobold,
+              UserPersonaService(db),
+              storage,
+              WorldRepository(storage, db),
+            )
             ..setDatabase(db)
             ..setCharacterRepository(repo);
     });
@@ -118,115 +140,132 @@ void main() {
   }
 
   testWidgets(
-      'About step explains the feature; zero chats disables Next with a '
-      '"have a chat first" callout', (tester) async {
-    _setupPathProviderMock();
-    SharedPreferences.setMockInitialValues({});
-    final s = await buildServices(tester);
-    // No PNG / not in the repo → getSessionsForId resolves nothing.
-    final card = CharacterCard(name: 'Nina', description: 'desc');
+    'About step explains the feature; zero chats disables Next with a '
+    '"have a chat first" callout',
+    (tester) async {
+      _setupPathProviderMock();
+      SharedPreferences.setMockInitialValues({});
+      final s = await buildServices(tester);
+      // No PNG / not in the repo → getSessionsForId resolves nothing.
+      final card = CharacterCard(name: 'Nina', description: 'desc');
 
-    await tester.pumpWidget(wrap(s, card));
-    await tester.runAsync(() => Future<void>.delayed(
-        const Duration(milliseconds: 100)));
-    await settle(tester);
+      await tester.pumpWidget(wrap(s, card));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await settle(tester);
 
-    // The explainer is the whole point of step 0.
-    expect(find.text('What is AI Enhance?'), findsOneWidget);
-    expect(find.text('How it works'), findsOneWidget);
-    expect(find.text('You review everything'), findsOneWidget);
-    expect(find.textContaining('Have a chat with Nina first'), findsOneWidget);
+      // The explainer is the whole point of step 0.
+      expect(find.text('What is AI Enhance?'), findsOneWidget);
+      expect(find.text('How it works'), findsOneWidget);
+      expect(find.text('You review everything'), findsOneWidget);
+      expect(
+        find.textContaining('Have a chat with Nina first'),
+        findsOneWidget,
+      );
 
-    final next = tester.widget<ElevatedButton>(
-      find.widgetWithText(ElevatedButton, 'Next: Model'),
-    );
-    expect(next.onPressed, isNull,
-        reason: 'no chats → the wizard cannot proceed past About');
-  });
+      final next = tester.widget<ElevatedButton>(
+        find.widgetWithText(ElevatedButton, 'Next: Model'),
+      );
+      expect(
+        next.onPressed,
+        isNull,
+        reason: 'no chats → the wizard cannot proceed past About',
+      );
+    },
+  );
 
   testWidgets(
-      'walks About → Model (real SetupStep, ready-gated) → Chat → Interview '
-      'checklist', (tester) async {
-    _setupPathProviderMock();
-    SharedPreferences.setMockInitialValues({});
-    final s = await buildServices(tester);
+    'walks About → Model (real SetupStep, ready-gated) → Chat → Interview '
+    'checklist',
+    (tester) async {
+      _setupPathProviderMock();
+      SharedPreferences.setMockInitialValues({});
+      final s = await buildServices(tester);
 
-    late final CharacterCard card;
-    await tester.runAsync(() async {
-      card = CharacterCard(
-        name: 'Mara',
-        description: 'Exists only inside the enhance-wizard test.',
-        firstMessage: 'The porch light hums.',
-      );
-      final tmpDir = Directory.systemTemp.createTempSync('enw_card_');
-      final pngPath = '${tmpDir.path}/Mara.png';
-      await V2CardService().saveCardAsPng(card, pngPath, null);
-      card.imagePath = pngPath;
-      await s.repo.addCharacter(card);
-      await s.db.insertSession(
-        SessionsCompanion.insert(
-          id: '1700000000001',
-          characterId: Value(card.dbId),
-        ),
-      );
-      for (final (i, line) in ['Hello there.', 'Hi yourself.'].indexed) {
-        await s.db.insertMessage(
-          MessagesCompanion.insert(
-            id: 'sess-m$i',
-            sessionId: '1700000000001',
-            position: i,
-            sender: i.isEven ? 'You' : card.name,
-            isUser: i.isEven,
-            swipes: Value('["$line"]'),
+      late final CharacterCard card;
+      await tester.runAsync(() async {
+        card = CharacterCard(
+          name: 'Mara',
+          description: 'Exists only inside the enhance-wizard test.',
+          firstMessage: 'The porch light hums.',
+        );
+        final tmpDir = Directory.systemTemp.createTempSync('enw_card_');
+        final pngPath = '${tmpDir.path}/Mara.png';
+        await V2CardService().saveCardAsPng(card, pngPath, null);
+        card.imagePath = pngPath;
+        await s.repo.addCharacter(card);
+        await s.db.insertSession(
+          SessionsCompanion.insert(
+            id: '1700000000001',
+            characterId: Value(card.dbId),
           ),
         );
-      }
-    });
+        for (final (i, line) in ['Hello there.', 'Hi yourself.'].indexed) {
+          await s.db.insertMessage(
+            MessagesCompanion.insert(
+              id: 'sess-m$i',
+              sessionId: '1700000000001',
+              position: i,
+              sender: i.isEven ? 'You' : card.name,
+              isUser: i.isEven,
+              swipes: Value('["$line"]'),
+            ),
+          );
+        }
+      });
 
-    await tester.pumpWidget(wrap(s, card));
-    await tester.runAsync(() => Future<void>.delayed(
-        const Duration(milliseconds: 100)));
-    await settle(tester);
+      await tester.pumpWidget(wrap(s, card));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await settle(tester);
 
-    // About: the chat was found, Next is live.
-    expect(find.textContaining('1 chat to learn from'), findsOneWidget);
-    await tester.tap(find.text('Next: Model'));
-    await settle(tester);
+      // About: the chat was found, Next is live.
+      expect(find.textContaining('1 chat to learn from'), findsOneWidget);
+      await tester.tap(find.text('Next: Model'));
+      await settle(tester);
 
-    // Model: the creator's REAL step (full picker was a maintainer
-    // requirement; a cut-down row was rejected), Continue gated on an
-    // actually ready backend — remote is configured + keyed, so it's live.
-    expect(find.byType(SetupStep), findsOneWidget);
-    expect(find.text('Backend & Model Setup'), findsOneWidget);
-    expect(find.text('KoboldCpp (Local)'), findsOneWidget);
-    await tester.tap(find.text('Next: Chat'));
-    await settle(tester);
+      // Model: the creator's REAL step (full picker was a maintainer
+      // requirement; a cut-down row was rejected), Continue gated on an
+      // actually ready backend — remote is configured + keyed, so it's live.
+      expect(find.byType(SetupStep), findsOneWidget);
+      expect(find.text('Backend & Model Setup'), findsOneWidget);
+      expect(find.text('KoboldCpp (Local)'), findsOneWidget);
+      await tester.tap(find.text('Next: Chat'));
+      await settle(tester);
 
-    // Chat: the single session is listed and auto-selected.
-    expect(find.textContaining('already selected'), findsOneWidget);
-    expect(find.byIcon(Icons.radio_button_checked), findsOneWidget);
-    await tester.tap(find.text('Next: Interview'));
-    await tester.runAsync(() => Future<void>.delayed(
-        const Duration(milliseconds: 100)));
-    await settle(tester);
+      // Chat: the single session is listed and auto-selected.
+      expect(find.textContaining('already selected'), findsOneWidget);
+      expect(find.byIcon(Icons.radio_button_checked), findsOneWidget);
+      await tester.tap(find.text('Next: Interview'));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await settle(tester);
 
-    // Interview: checklist with the persona trio + 18+ toggle; one user
-    // turn → the short-chat warning; the run button is armed.
-    expect(find.text('What should the interview rewrite?'), findsOneWidget);
-    expect(find.text('Description'), findsOneWidget);
-    expect(find.text('Personality'), findsOneWidget);
-    expect(find.text('Allow 18+ themes'), findsOneWidget);
-    expect(find.textContaining('very short'), findsOneWidget);
-    expect(find.text('Start the Interview'), findsOneWidget);
+      // Interview: checklist with the persona trio + 18+ toggle; one user
+      // turn → the short-chat warning; the run button is armed.
+      expect(find.text('What should the interview rewrite?'), findsOneWidget);
+      expect(find.text('Description'), findsOneWidget);
+      expect(find.text('Personality'), findsOneWidget);
+      expect(
+        find.text('Porch Life (wardrobe, ambitions, likes)'),
+        findsOneWidget,
+      );
+      expect(find.text('Allow 18+ themes'), findsOneWidget);
+      expect(find.textContaining('very short'), findsOneWidget);
+      expect(find.text('Start the Interview'), findsOneWidget);
 
-    // Back returns to the Chat step — linear progression both ways.
-    await tester.tap(find.text('Back'));
-    await settle(tester);
-    expect(find.textContaining('already selected'), findsOneWidget);
+      // Back returns to the Chat step — linear progression both ways.
+      await tester.tap(find.text('Back'));
+      await settle(tester);
+      expect(find.textContaining('already selected'), findsOneWidget);
 
-    await tester.runAsync(() async {
-      s.chat.dispose();
-      await s.db.close();
-    });
-  });
+      await tester.runAsync(() async {
+        s.chat.dispose();
+        await s.db.close();
+      });
+    },
+  );
 }

@@ -12,6 +12,8 @@ import {
   anySelected,
   buildApplyBody,
   buildEnhancePayload,
+  mergeLorebook,
+  withEmptyTextUseOff,
   type EnhanceProposal,
 } from './enhanceForm';
 
@@ -28,6 +30,7 @@ describe('buildEnhancePayload', () => {
         scenario: false,
         greetings: false,
         lorebook: false,
+        porchLife: true,
       },
       nsfwEnabled: true,
     });
@@ -43,7 +46,13 @@ describe('buildEnhancePayload', () => {
   it('defaults: persona trio on, the rest off, and counts as selected', () => {
     expect(anySelected(DEFAULT_ENHANCE_SELECTION)).toBe(true);
     expect(
-      anySelected({ ...DEFAULT_ENHANCE_SELECTION, description: false, personality: false, exampleDialogue: false }),
+      anySelected({
+        ...DEFAULT_ENHANCE_SELECTION,
+        description: false,
+        personality: false,
+        exampleDialogue: false,
+        porchLife: false,
+      }),
     ).toBe(false);
   });
 });
@@ -65,6 +74,7 @@ describe('buildApplyBody', () => {
     scenario: true,
     greetings: true,
     lorebook: true,
+    porchLife: true,
   };
 
   it('includes only accepted sections', () => {
@@ -92,6 +102,53 @@ describe('buildApplyBody', () => {
     expect(body).toEqual({ description: 'only desc' });
   });
 
+  it('accepted Porch Life writes ambitions and inventory', () => {
+    const body = buildApplyBody(
+      {
+        porchLife: {
+          ambitions: ['stay fed'],
+          likes: ['hot coffee'],
+          dislikes: ['being interrupted'],
+          worn: ['flour-dusted apron'],
+          carrying: ['shop keys'],
+          intimateInto: [],
+          intimateNotInto: [],
+        },
+      },
+      { ...allOn, description: false, personality: false, exampleDialogue: false, scenario: false, greetings: false, lorebook: false },
+    );
+    expect(body.ambitions).toEqual(['stay fed']);
+    expect(body.inventory).toEqual({
+      worn: ['flour-dusted apron'],
+      carrying: ['shop keys'],
+    });
+    expect(body).not.toHaveProperty('description');
+  });
+
+  it('empty proposed worn keeps authored old coat', () => {
+    const body = buildApplyBody(
+      {
+        porchLife: {
+          ambitions: ['stay fed'],
+          likes: [],
+          dislikes: [],
+          worn: [],
+          carrying: [],
+          intimateInto: [],
+          intimateNotInto: [],
+        },
+      },
+      { ...allOn, description: false, personality: false, exampleDialogue: false, scenario: false, greetings: false, lorebook: false },
+      {},
+      { ambitions: ['old goal'], inventory: { worn: ['old coat'] } },
+    );
+    expect(body.ambitions).toEqual(['stay fed']);
+    expect(body.inventory).toEqual({
+      worn: ['old coat'],
+      carrying: [],
+    });
+  });
+
   it('nothing accepted → empty body (duplicate stays pristine)', () => {
     const body = buildApplyBody(proposal, {
       description: false,
@@ -100,7 +157,79 @@ describe('buildApplyBody', () => {
       scenario: false,
       greetings: false,
       lorebook: false,
+      porchLife: false,
     });
     expect(body).toEqual({});
+  });
+
+  it('appends proposed lore onto the original book (merge by name)', () => {
+    const body = buildApplyBody(
+      proposal,
+      { ...allOn, description: false, personality: false, exampleDialogue: false, scenario: false, greetings: false, porchLife: false },
+      {},
+      { lorebook: { entries: [{ name: 'The Kitchen', content: 'kept' }] } },
+    );
+    expect(body.lorebook).toEqual({
+      entries: [
+        { name: 'The Kitchen', content: 'kept' },
+        { name: 'The Bar' },
+      ],
+    });
+  });
+});
+
+describe('withEmptyTextUseOff', () => {
+  const allOn = {
+    description: true,
+    personality: true,
+    exampleDialogue: true,
+    scenario: true,
+    greetings: true,
+    lorebook: true,
+    porchLife: true,
+  };
+
+  it('empty proposed description/personality/greetings default Use this off', () => {
+    const seeded = withEmptyTextUseOff(allOn, {
+      description: '   ',
+      personality: '',
+      firstMessage: '',
+      alternateGreetings: ['  '],
+    });
+    expect(seeded.description).toBe(false);
+    expect(seeded.personality).toBe(false);
+    expect(seeded.greetings).toBe(false);
+  });
+
+  it('non-empty proposed text still defaults Use this on', () => {
+    const seeded = withEmptyTextUseOff(allOn, {
+      description: 'rewritten',
+      personality: 'new voice',
+      firstMessage: 'Hey.',
+    });
+    expect(seeded.description).toBe(true);
+    expect(seeded.personality).toBe(true);
+    expect(seeded.greetings).toBe(true);
+  });
+});
+
+describe('mergeLorebook', () => {
+  it('keeps original entries and appends new ones', () => {
+    const merged = mergeLorebook(
+      { entries: [{ name: 'The Kitchen', content: 'kept' }] },
+      { entries: [{ name: 'The Bar', content: 'new' }] },
+    );
+    expect(merged.entries).toEqual([
+      { name: 'The Kitchen', content: 'kept' },
+      { name: 'The Bar', content: 'new' },
+    ]);
+  });
+
+  it('replaces an original entry when the incoming name matches', () => {
+    const merged = mergeLorebook(
+      { entries: [{ name: 'The Kitchen', content: 'old' }] },
+      { entries: [{ name: 'The Kitchen', content: 'rewritten' }] },
+    );
+    expect(merged.entries).toEqual([{ name: 'The Kitchen', content: 'rewritten' }]);
   });
 });

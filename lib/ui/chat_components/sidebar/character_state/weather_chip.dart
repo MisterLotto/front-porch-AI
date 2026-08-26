@@ -18,6 +18,7 @@
 
 import 'package:flutter/material.dart';
 
+import 'package:front_porch_ai/services/chat/season_labels.dart';
 import 'package:front_porch_ai/services/chat/weather_skins.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
@@ -32,11 +33,7 @@ class WeatherChip extends StatelessWidget {
   final ChatService chat;
   final bool fahrenheit;
 
-  const WeatherChip({
-    super.key,
-    required this.chat,
-    required this.fahrenheit,
-  });
+  const WeatherChip({super.key, required this.chat, required this.fahrenheit});
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +54,7 @@ class WeatherChip extends StatelessWidget {
           'Now (${now.segment.name}): '
           '${skinnedChipLabel(now, climate, fahrenheit: fahrenheit)}\n'
           'Today: ${skinnedConditionLabel(climate, now.day.condition)} · '
-          '${now.day.season}\n'
+          '${seasonDisplayName(now.day.season, climate.seasonLabels)}\n'
           'Tomorrow: ${skinnedEmoji(climate, tomorrow.condition)} '
           '${skinnedConditionLabel(climate, tomorrow.condition)}'
           '$climateNote\n'

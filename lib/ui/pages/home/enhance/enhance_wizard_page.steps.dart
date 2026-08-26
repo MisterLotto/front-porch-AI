@@ -198,7 +198,9 @@ extension _EnhanceWizardSteps on _EnhanceWizardPageState {
     final amber = AppColors.porchAmberOf(context);
 
     return Card(
-      color: selected ? amber.withValues(alpha: 0.12) : AppColors.cardOf(context),
+      color: selected
+          ? amber.withValues(alpha: 0.12)
+          : AppColors.cardOf(context),
       margin: const EdgeInsets.symmetric(vertical: 4),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
@@ -215,10 +217,7 @@ extension _EnhanceWizardSteps on _EnhanceWizardPageState {
         ),
         title: Text(
           s['preview'] as String? ?? '',
-          style: TextStyle(
-            fontSize: 13,
-            color: AppColors.textPrimary(context),
-          ),
+          style: TextStyle(fontSize: 13, color: AppColors.textPrimary(context)),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -260,7 +259,10 @@ extension _EnhanceWizardSteps on _EnhanceWizardPageState {
         ),
         subtitle: Text(
           hint,
-          style: TextStyle(fontSize: 11, color: AppColors.textTertiary(context)),
+          style: TextStyle(
+            fontSize: 11,
+            color: AppColors.textTertiary(context),
+          ),
         ),
       );
     }
@@ -320,6 +322,12 @@ extension _EnhanceWizardSteps on _EnhanceWizardPageState {
         _selLorebook,
         (v) => _selLorebook = v,
       ),
+      row(
+        'Porch Life (wardrobe, ambitions, likes)',
+        'Propose what they wear and carry, long-term goals, and tastes — you keep or accept each list on the next step',
+        _selPorchLife,
+        (v) => _selPorchLife = v,
+      ),
       Divider(color: AppColors.borderOf(context)),
       SwitchListTile(
         value: _nsfw,
@@ -333,7 +341,10 @@ extension _EnhanceWizardSteps on _EnhanceWizardPageState {
         ),
         subtitle: Text(
           'Lets suggestive material from the chat shape the card',
-          style: TextStyle(fontSize: 11, color: AppColors.textTertiary(context)),
+          style: TextStyle(
+            fontSize: 11,
+            color: AppColors.textTertiary(context),
+          ),
         ),
       ),
       if (_runError != null) ...[

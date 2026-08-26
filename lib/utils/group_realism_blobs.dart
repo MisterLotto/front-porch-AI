@@ -10,6 +10,8 @@
 
 import 'dart:convert';
 
+import 'package:front_porch_ai/models/greeting_realism_seed.dart';
+
 /// Canonical (de)serialization for a group's per-member realism/needs/dynamics
 /// seeds ↔ the two GroupChat blobs (`defaultMemberRealismState`,
 /// `baselineRealismState`). Extracted verbatim from the group creator so that
@@ -53,6 +55,8 @@ GroupRealismBlobs buildGroupRealismBlobs({
   required int dayCount,
   String? storyStartDate,
   String? storyStartTime,
+  List<String> alternateGreetings = const [],
+  List<GreetingRealismSeed?> greetingSeeds = const [],
 }) {
   final defaultMember = <String, dynamic>{
     'perChar': <String, dynamic>{},
@@ -60,6 +64,7 @@ GroupRealismBlobs buildGroupRealismBlobs({
     'dayCount': dayCount,
     'storyStartDate': ?storyStartDate,
     'storyStartTime': ?storyStartTime,
+    ..._groupOpeningAltsFragment(alternateGreetings, greetingSeeds),
   };
   final baseline = <String, dynamic>{};
 
@@ -201,7 +206,12 @@ Map<String, Map<String, dynamic>> parseGroupRealismSeeds(
 /// falls back to the first per-member baseline entry — where the pre-fix
 /// wizard stored its only copy — so existing groups' authored time finally
 /// applies too. Null when neither blob carries a time (realism-off groups).
-({int dayCount, String timeOfDay, String? storyStartDate, String? storyStartTime})?
+({
+  int dayCount,
+  String timeOfDay,
+  String? storyStartDate,
+  String? storyStartTime,
+})?
 parseGroupTimeSeed(String defaultMemberJson, String baselineJson) {
   Map<String, dynamic>? source;
   try {
@@ -213,9 +223,7 @@ parseGroupTimeSeed(String defaultMemberJson, String baselineJson) {
     }
     if (source == null && baselineJson.isNotEmpty && baselineJson != '{}') {
       final decoded = jsonDecode(baselineJson);
-      if (decoded is Map &&
-          decoded.isNotEmpty &&
-          decoded.values.first is Map) {
+      if (decoded is Map && decoded.isNotEmpty && decoded.values.first is Map) {
         final first = decoded.values.first as Map;
         if (first['timeOfDay'] is String) {
           source = Map<String, dynamic>.from(first);
@@ -232,4 +240,60 @@ parseGroupTimeSeed(String defaultMemberJson, String baselineJson) {
     storyStartDate: source['storyStartDate'] as String?,
     storyStartTime: source['storyStartTime'] as String?,
   );
+}
+
+Map<String, dynamic> _decodeGroupBlob(String json) {
+  if (json.isEmpty || json == '{}') return <String, dynamic>{};
+  try {
+    final decoded = jsonDecode(json);
+    return decoded is Map
+        ? Map<String, dynamic>.from(decoded)
+        : <String, dynamic>{};
+  } catch (_) {
+    return <String, dynamic>{};
+  }
+}
+
+Map<String, dynamic> _groupOpeningAltsFragment(
+  List<String> alternateGreetings,
+  List<GreetingRealismSeed?> greetingSeeds,
+) {
+  final paired = compactGreetingPairs(alternateGreetings, greetingSeeds);
+  return {
+    if (paired.greetings.isNotEmpty) 'alternateGreetings': paired.greetings,
+    if (paired.seeds.isNotEmpty)
+      'greetingSeeds': [for (final s in paired.seeds) s?.toJson()],
+  };
+}
+
+/// Group-level alt openings (custom group first_message only). Stored next
+/// to the scene-time seed on `defaultMemberRealismState` so Group Cards
+/// round-trip without a schema bump — same home as timeOfDay/dayCount.
+({List<String> greetings, List<GreetingRealismSeed?> seeds})
+parseGroupOpeningPairs(String defaultMemberJson) {
+  final map = _decodeGroupBlob(defaultMemberJson);
+  final greets = greetingSlotsFromRaw(map['alternateGreetings']);
+  return compactGreetingPairs(greets, parseGreetingSeeds(map['greetingSeeds']));
+}
+
+List<String> parseGroupAlternateGreetings(String defaultMemberJson) {
+  return parseGroupOpeningPairs(defaultMemberJson).greetings;
+}
+
+List<GreetingRealismSeed?> parseGroupGreetingSeeds(String defaultMemberJson) {
+  return parseGroupOpeningPairs(defaultMemberJson).seeds;
+}
+
+/// Patch alt greetings onto an existing group blob without touching perChar
+/// or scene time. Used by the group editor / settings save.
+String withGroupOpeningAlts(
+  String defaultMemberJson, {
+  required List<String> alternateGreetings,
+  required List<GreetingRealismSeed?> greetingSeeds,
+}) {
+  final map = _decodeGroupBlob(defaultMemberJson);
+  map.remove('alternateGreetings');
+  map.remove('greetingSeeds');
+  map.addAll(_groupOpeningAltsFragment(alternateGreetings, greetingSeeds));
+  return jsonEncode(map);
 }

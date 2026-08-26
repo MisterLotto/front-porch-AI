@@ -45,7 +45,7 @@ export function ChatColorsSettings() {
       </div>
 
       <div className="chat-messages color-preview">
-        <div className="bubble ai"><MessageContent text={'"Took you long enough," *she smirks* — **finally** here.'} /></div>
+        <div className="bubble ai"><MessageContent text={'"Took you long enough," *they smirk* — **finally** here.'} /></div>
         <div className="bubble user"><MessageContent text={'"I got held up," *I shrug* and sit down.'} /></div>
       </div>
 

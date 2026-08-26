@@ -136,6 +136,8 @@ class RelationshipService {
   final String Function(String charId, {String defaultValue})
   getGroupSpatialStance;
   final void Function(String charId, String value) setGroupSpatialStance;
+  final bool? Function(String charId)? getGroupWithUser;
+  final void Function(String charId, bool? value)? setGroupWithUser;
 
   // Inter-character hidden feelings map (per speaker, only when group <=4).
   final Map<String, int> Function(String charId)
@@ -178,6 +180,9 @@ class RelationshipService {
   int _fixationLifespan = 0; // turns until fixation naturally clears
   String _spatialStance = '';
 
+  /// null = unknown (fail closed — glance uses keywords / inScene).
+  bool? _withUser;
+
   // Armed on each severe trust drop (≥ -20 delta). Consumed on the very next user
   // message, then resets so future drops each get one shot.
   bool pendingTrustRepair = false;
@@ -214,6 +219,8 @@ class RelationshipService {
     this.setGroupCounter,
     required this.getGroupSpatialStance,
     required this.setGroupSpatialStance,
+    this.getGroupWithUser,
+    this.setGroupWithUser,
     required this.getGroupInterCharacterRelationships,
     required this.setGroupInterCharacterRelationships,
     this.onTierCrossing,
@@ -231,6 +238,7 @@ class RelationshipService {
   String get activeFixation => _activeFixation;
   int get fixationLifespan => _fixationLifespan;
   String get spatialStance => _spatialStance;
+  bool? get withUser => _withUser;
 
   // Counters for snapshot/restore parity (used by capture in parent).
   int get turnsSinceLongTermCheck => _turnsSinceLongTermCheck;
@@ -281,7 +289,8 @@ class RelationshipService {
       RelationshipTiers.trustScalePercent(level);
 
   /// See [RelationshipTiers.bondTierLabel].
-  static String bondTierLabel(int tier) => RelationshipTiers.bondTierLabel(tier);
+  static String bondTierLabel(int tier) =>
+      RelationshipTiers.bondTierLabel(tier);
 
   /// See [RelationshipTiers.longTermTierLabel].
   static String longTermTierLabel(int tier) =>
@@ -304,7 +313,8 @@ class RelationshipService {
   String bondTierNameForScore(int score) => bondTierLabel(calculateTier(score));
   String longTermTierNameForScore(int score) =>
       longTermTierLabel(calculateTier(score));
-  String trustTierNameForLevel(int level) => trustTierLabel(calculateTier(level));
+  String trustTierNameForLevel(int level) =>
+      trustTierLabel(calculateTier(level));
   double bondPercentForScore(int score) => bondScalePercent(score);
   double trustPercentForLevel(int level) => trustScalePercent(level);
 
@@ -350,6 +360,7 @@ class RelationshipService {
     String activeFixation = '',
     int fixationLifespan = 0,
     String spatialStance = '',
+    bool? withUser,
     bool trustRepairPending = false,
     int turnsSinceLongTermCheck = 0,
     int shortTermDeltasSummary = 0,
@@ -361,6 +372,7 @@ class RelationshipService {
     _activeFixation = activeFixation;
     _fixationLifespan = fixationLifespan;
     _spatialStance = spatialStance;
+    _withUser = withUser;
     pendingTrustRepair = trustRepairPending;
     _turnsSinceLongTermCheck = turnsSinceLongTermCheck;
     _shortTermDeltasSummary = shortTermDeltasSummary;

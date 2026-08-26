@@ -33,6 +33,7 @@ extension RelationshipServicePersistence on RelationshipService {
     _activeFixation = '';
     _fixationLifespan = 0;
     _spatialStance = '';
+    _withUser = null;
     pendingTrustRepair = false;
   }
 
@@ -64,6 +65,7 @@ extension RelationshipServicePersistence on RelationshipService {
     _activeFixation = getGroupFixation(charId);
     _fixationLifespan = getGroupFixationLifespan(charId, defaultValue: 0);
     _spatialStance = getGroupSpatialStance(charId);
+    _withUser = getGroupWithUser?.call(charId);
 
     final relT = getGroupRelationshipTier(charId, defaultValue: 0);
     _relationshipTier = relT != 0 ? relT : _calculateTier(_affectionScore);
@@ -106,6 +108,7 @@ extension RelationshipServicePersistence on RelationshipService {
     setGroupFixation(charId, _activeFixation);
     setGroupFixationLifespan(charId, _fixationLifespan);
     setGroupSpatialStance(charId, _spatialStance);
+    setGroupWithUser?.call(charId, _withUser);
 
     setGroupRelationshipTier(charId, _relationshipTier);
     setGroupLongTermTier(charId, _longTermTier);

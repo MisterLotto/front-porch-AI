@@ -16,36 +16,29 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-// THE FUSED ONE-SHOT CALL IS THE CLOCK'S ONLY DRIVER (1.3 sweep, _idx 145).
+// THE FUSED ONE-SHOT CALL IS NOT THE CLOCK DRIVER.
 //
-// One-shot Auto fuses on exactly the backends whose tool probe says
-// "supported", so the tools lane IS the one-shot lane. `minutes_elapsed` rode
-// the schema but was never REQUIRED — and the is_climax incident already
-// taught this file that a model fills in what the schema demands and skips
-// what it does not. An omitted minutes_elapsed makes TimeService substitute
-// StoryClock.failureDriftMinutes, i.e. every turn advances a flat 5 minutes
-// while the multi-call path gets a real estimate. `new_day` stays optional,
-// matching its standalone twin.
+// Clock decide is post-generation (time-only eval after the reply). One-shot
+// must not demand minutes_elapsed or it would double-count. The standalone
+// scene-time twin still requires it — that call is the clock.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:front_porch_ai/services/chat/realism_tools.dart';
 
 List<String> _required(List<Map<String, dynamic>> tools) {
-  final params =
-      tools.single['function']['parameters'] as Map<String, dynamic>;
+  final params = tools.single['function']['parameters'] as Map<String, dynamic>;
   return (params['required'] as List).cast<String>();
 }
 
 Map<String, dynamic> _properties(List<Map<String, dynamic>> tools) {
-  final params =
-      tools.single['function']['parameters'] as Map<String, dynamic>;
+  final params = tools.single['function']['parameters'] as Map<String, dynamic>;
   return params['properties'] as Map<String, dynamic>;
 }
 
 void main() {
   group('one-shot tool schema', () {
-    test('demands minutes_elapsed, like the standalone scene-time twin', () {
-      expect(_required(kOneShotEvalTools), contains('minutes_elapsed'));
+    test('one-shot does not demand minutes_elapsed; scene-time-only does', () {
+      expect(_required(kOneShotEvalTools), isNot(contains('minutes_elapsed')));
       expect(_required(kSceneTimeOnlyEvalTools), contains('minutes_elapsed'));
     });
 
@@ -61,10 +54,10 @@ void main() {
       );
     });
 
-    test('new_day stays optional on both lanes', () {
-      expect(_properties(kOneShotEvalTools), contains('new_day'));
-      expect(_required(kOneShotEvalTools), isNot(contains('new_day')));
+    test('new_day lives only on the scene-time lane', () {
+      expect(_properties(kOneShotEvalTools), isNot(contains('new_day')));
       expect(_required(kSceneTimeOnlyEvalTools), isNot(contains('new_day')));
+      expect(_properties(kSceneTimeOnlyEvalTools), contains('new_day'));
     });
 
     test('every required field is actually declared in the schema', () {
@@ -72,6 +65,22 @@ void main() {
       for (final key in _required(kOneShotEvalTools)) {
         expect(props, contains(key), reason: '$key is demanded but undeclared');
       }
+    });
+
+    test('planner-on scene-time demands today_sentence; one-shot does not', () {
+      expect(
+        _required(kOneShotEvalToolsWithToday),
+        isNot(contains('today_sentence')),
+      );
+      expect(
+        _required(kSceneTimeOnlyEvalToolsWithToday),
+        contains('today_sentence'),
+      );
+      expect(_required(kOneShotEvalTools), isNot(contains('today_sentence')));
+      expect(
+        _required(kSceneTimeOnlyEvalTools),
+        isNot(contains('today_sentence')),
+      );
     });
   });
 }

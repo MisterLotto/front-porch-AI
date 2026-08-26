@@ -18,14 +18,9 @@
 
 part of '../chat_service.dart';
 
-/// Message-list mutation operations: swipe navigation, continue, session
-/// reload/clear/delete, [deleteMessage] (the needs-refund + group
-/// deleted-speaker rewind parity block), generation cancellation, Journal
-/// timeline invalidation, and [cancelRealismEval]. Extracted verbatim from
-/// `chat_service.dart` — zero behaviour change; `deleteMessage` in
-/// particular moves whole, exactly as it was, because the needs-refund
-/// arithmetic and the group rewind ordering are pinned by
-/// `delete_message_needs_rollback_test.dart`.
+/// Message-list mutation: swipe, continue, session reload/clear/delete,
+/// [deleteMessage], generation cancel, [cancelRealismEval]. Timeline
+/// invalidation lives in chat_service_timeline.dart.
 extension ChatServiceMessageOps on ChatService {
   /// Navigate swipes on a specific message. direction: -1 = left, +1 = right.
   /// If swiping right past the last swipe on the last bot message, regenerates.
@@ -36,57 +31,52 @@ extension ChatServiceMessageOps on ChatService {
 
     final newIndex = msg.swipeIndex + direction;
 
-    // Guest-message swipes carry no Realism/Needs, so navigating between them
-    // must never touch the active character's state (parity) — true even for a
-    // guest who has since left the scene, hence the authoritative check.
-    final isGuestMsg = _isGuestAuthoredMessage(msg);
-
-    // …and the state rewind belongs to the TIP of the chat only. Re-reading an
-    // OLD variant is navigation, not time travel: restoring that message's
-    // snapshot rewound bond/trust/emotion/arousal/needs/story clock/pockets to
-    // that turn while every later message stayed, and the `_saveChat()` below
-    // wrote the rewind onto the session row permanently. Same rule the delete
-    // door states out loud ("restore from the NEW LAST message"). Guest
-    // replies are transparent here — they stamp no Realism/Needs — so a host
-    // buried only under guest chime-ins is still the tip, matching
-    // regenerableHostBelowGuestsIndex.
-    final isTip =
-        !isGuestMsg &&
-        _messages.skip(messageIndex + 1).every(_isGuestAuthoredMessage);
-
     // Swiping left
     if (direction < 0) {
       if (newIndex >= 0) {
-        msg.swipeIndex = newIndex;
-        if (isTip) _syncRealismStateForSwipe(msg);
-        // Pockets follow the selected variant too — this swipe's own
-        // post-turn record, or the shared pre-turn base when this variant's
-        // pass changed nothing (hostile review 2026-08-11).
-        if (isTip) _restorePocketsFromStamp(msg, after: true);
-        // Timeline integrity: the active variant at this position changed —
-        // cards journaled from the other swipe are now phantom.
-        _invalidateJournalFrom(messageIndex);
-        await _saveChat();
-        notifyListeners();
+        await _commitSwipeIndex(messageIndex, newIndex);
       }
       return;
     }
 
     // Swiping right
     if (newIndex < msg.swipes.length) {
-      // Navigate to existing swipe
-      msg.swipeIndex = newIndex;
-      if (isTip) _syncRealismStateForSwipe(msg);
-      // Same pockets rewind as the left branch.
-      if (isTip) _restorePocketsFromStamp(msg, after: true);
-      // Timeline integrity — same as the left-swipe branch above.
-      _invalidateJournalFrom(messageIndex);
-      await _saveChat();
-      notifyListeners();
+      await _commitSwipeIndex(messageIndex, newIndex);
     } else if (messageIndex == _messages.length - 1 && !_isTurnBusy) {
       // Past last swipe on last message — regenerate
       await regenerateLastMessage();
     }
+  }
+
+  /// Apply an already-stored swipe index. Guest replies never rewind
+  /// Realism/Needs; only the tip of the chat restores that snapshot
+  /// (re-reading an old variant is navigation, not time travel).
+  Future<void> _commitSwipeIndex(int messageIndex, int newIndex) async {
+    final msg = _messages[messageIndex];
+    if (newIndex == msg.swipeIndex) return;
+    if (newIndex < 0 || newIndex >= msg.swipes.length) return;
+
+    final isGuestMsg = _isGuestAuthoredMessage(msg);
+    final isTip =
+        !isGuestMsg &&
+        _messages.skip(messageIndex + 1).every(_isGuestAuthoredMessage);
+
+    msg.swipeIndex = newIndex;
+    if (isTip) _syncRealismStateForSwipe(msg);
+    // Pockets follow the selected variant too — this swipe's own
+    // post-turn record, or the shared pre-turn base when this variant's
+    // pass changed nothing (hostile review 2026-08-11).
+    if (isTip) _restorePocketsFromStamp(msg, after: true);
+    // Timeline integrity: the active variant at this position changed —
+    // cards journaled from the other swipe are now phantom. Item-memory
+    // cards that THIS swipe planted are re-sown after the purge so
+    // swipe-back restores the diary with the kit.
+    _invalidateJournalFrom(
+      persistMessagePosition(base: _history.basePosition, index: messageIndex),
+      thenReplantPlanted: isTip ? msg : null,
+    );
+    await _saveChat();
+    notifyListeners();
   }
 
   void _syncRealismStateForSwipe(ChatMessage msg) {
@@ -135,7 +125,15 @@ extension ChatServiceMessageOps on ChatService {
 
   /// Delete a specific chat session and its messages.
   /// If it's the current session, switches to the most recent remaining one.
-  Future<void> deleteSession(String sessionId) async {
+  ///
+  /// [startReplacement] is the in-chat folder behaviour (default): when the
+  /// deleted id is the open session and nothing remains, [startNewChat] so
+  /// the user is not left staring at a missing chat. Home / the web library
+  /// pass false so emptying a card's history does not spawn a replacement.
+  Future<void> deleteSession(
+    String sessionId, {
+    bool startReplacement = true,
+  }) async {
     await _db.deleteMessagesForSession(sessionId);
     await _db.deleteSessionById(sessionId);
 
@@ -143,15 +141,22 @@ extension ChatServiceMessageOps on ChatService {
     if (sessionId == _currentSessionId) {
       final remaining = await getSessions();
       if (remaining.isNotEmpty) {
-        await loadSession(remaining.first['id']);
+        if (startReplacement) {
+          await loadSession(remaining.first['id']);
+        } else {
+          _messages.clear();
+          _currentSessionId = null;
+        }
       } else {
-        // No sessions left — start fresh
+        // No sessions left — start fresh only when the open chat asked.
         debugPrint(
           '[ChatService] 🟡 deleteSession: no sessions left, clearing messages',
         );
         _messages.clear();
         _currentSessionId = null;
-        await startNewChat();
+        if (startReplacement) {
+          await startNewChat();
+        }
       }
     }
     notifyListeners();
@@ -163,9 +168,21 @@ extension ChatServiceMessageOps on ChatService {
     // journal invalidation) — and made a dream banner the last message,
     // where the aborted turn's writes landed (2026-07-28). Stop first.
     if (_isTurnBusy) return;
+    if (index < 0 || index >= _messages.length) return;
+    final dbPos = persistMessagePosition(
+      base: _history.basePosition,
+      index: index,
+    );
+    final wasTail = index == _messages.length - 1;
+    // Middle-of-history delete needs the full prefix so replaceAll
+    // cannot drop the 11k rows we have not loaded yet.
+    if (!wasTail && _history.hasMore) {
+      await _awaitHistoryHydrated();
+      index = dbPos;
+      if (index < 0 || index >= _messages.length) return;
+    }
     if (index >= 0 && index < _messages.length) {
       final deleted = _messages[index];
-      final wasTail = index == _messages.length - 1;
 
       // Pockets stamp restore runs AFTER realism time-travel below (not
       // here). realism_state.pockets was historically pre-gen and, even
@@ -181,7 +198,8 @@ extension ChatServiceMessageOps on ChatService {
       final deletedSpeaker = (!deleted.isUser && deleted.sender != 'System')
           ? _resolveGroupSpeakerForMessage(deleted)
           : null;
-      final String? deletedSid = (_activeGroup != null && deletedSpeaker != null)
+      final String? deletedSid =
+          (_activeGroup != null && deletedSpeaker != null)
           ? _getCharacterIdFromCard(deletedSpeaker)
           : null;
       // In a group, refund ONLY when the speaker resolved unambiguously —
@@ -197,13 +215,8 @@ extension ChatServiceMessageOps on ChatService {
 
       _messages.removeAt(index);
 
-      // Timeline integrity: the delete rewrites history from [index] on
-      // (later positions shift down), so cards citing that region and the
-      // pass cursor both roll back — replaces the old cursor-decrement drift
-      // fix, which kept phantom cards alive (smoke-test bug 2026-07-21).
-      // (Growth uses a DB-backed per-session cursor; it re-reads its stored
-      // index on the next pass.)
-      _invalidateJournalFrom(index);
+      // Persist index, not the on-screen 0..23 of a tail window.
+      _invalidateJournalFrom(dbPos);
 
       // Time-travel rollback for realism when deleting a character message.
       // Restore from the new last message if it has a snapshot, regardless
@@ -255,14 +268,26 @@ extension ChatServiceMessageOps on ChatService {
         groupSid: deletedSid,
       );
 
-      // Pockets AFTER realism: the stamp is the truth for the discarded
-      // turn (speaker + any transfer recipients). Runs only on tail
-      // character deletes — same contract as before.
-      if (wasTail && !deleted.isUser && deleted.sender != 'System') {
-        _restorePocketsFromStamp(deleted, after: false);
+      if (!deleted.isUser && deleted.sender != 'System') {
+        _rewindPocketsForDeletedMessage(deleted, wasTail: wasTail);
+        if (wasTail) {
+          final before =
+              deleted.activeMetadata?['story_clock_before'] as String?;
+          if (_clockRunning && StoryClock.parse(before) != null) {
+            _timeService.restoreTimeFromRealismState({'storyClock': before});
+          }
+        }
       }
 
-      await _saveChat(replaceAll: true);
+      if (wasTail && _history.hasMore) {
+        await _saveChat(replaceAll: false);
+        final sid = _currentSessionId;
+        if (sid != null) {
+          await _db.deleteMessagesAtPosition(sid, dbPos);
+        }
+      } else {
+        await _saveChat(replaceAll: true);
+      }
       notifyListeners();
     }
   }
@@ -286,162 +311,61 @@ extension ChatServiceMessageOps on ChatService {
     }
   }
 
-  /// Timeline-integrity invalidation (Journal + Growth twin, audit P1.9):
-  /// content at [position] was rewritten — regen, swipe, edit, or delete.
-  /// Cards/rings citing positions ≥ [position] describe events that no longer
-  /// happened, so they are removed. Pass cursors roll back when the rewrite
-  /// sits inside the consumed window so the next pass re-reads it.
-  ///
-  /// Item-memory cards are written deterministically from pocket ops and
-  /// cite the reply position WITHOUT advancing [_summaryLastIndex], so the
-  /// old early-return (`position >= cursor`) left them as phantoms on every
-  /// regen/delete of a fresh turn (release audit 2026-08-11). Card purge
-  /// therefore always runs; cursor rollback stays gated.
-  ///
-  /// Recap ("Where we are") is CLEARED on rewrite (M3, 2026-08-11): it is a
-  /// free-form paragraph with no per-line receipt, so it cannot be surgically
-  /// rewound. Leaving it would assert discarded plot as "earlier in this
-  /// story." Empty is honest; [buildRecapBlock] injects nothing; the next
-  /// maintenance pass (kicked below) refills it from the new timeline.
-  void _invalidateJournalFrom(int position) {
-    final sessionId = _currentSessionId;
-    if (sessionId == null) return;
-    _journalReview.abandon();
-    _growthReview.abandon();
-    if (position < _summaryLastIndex) {
-      _summaryLastIndex = position;
+  void _rewindPocketsForDeletedMessage(
+    ChatMessage deleted, {
+    required bool wasTail,
+  }) {
+    if (wasTail) {
+      _restorePocketsFromStamp(deleted, after: false);
+      return;
     }
-
-    // Clear stale recap before the next generation can re-inject it.
-    var recapCleared = false;
-    if (_summary.isNotEmpty) {
-      _summary = '';
-      recapCleared = true;
-      debugPrint(
-        '[Journal] Timeline rewrite at $position — cleared stale recap '
-        '(refill on next journal pass)',
-      );
+    unawaited(_replantItemCards(deleted, key: 'item_cards_retired'));
+    if (!_storageService.realismSettings.pocketsEnabled) return;
+    final before = deleted.metadata?['pockets_before'];
+    if (before is! Map) return;
+    final speakerId = before['char'];
+    if (speakerId is! String || speakerId.isEmpty) return;
+    final othersBefore = <String, Pockets>{};
+    final rawOthers = before['others'];
+    if (rawOthers is List) {
+      for (final o in rawOthers) {
+        if (o is Map && o['char'] is String) {
+          othersBefore[o['char'] as String] = Pockets.fromJson(o['record']);
+        }
+      }
     }
-
-    // Fire-and-forget BUT error-contained: this select+delete chain can
-    // outlive the service (delete a message, then close the app — or a test
-    // teardown closing the Drift isolate), and an unhandled "Channel was
-    // closed" from the zone is exactly how ec82f27's H3 guard went red on CI
-    // while every assertion in it passed. Same containment contract as
-    // _doSaveChat: log, never crash the zone; nothing could retry anyway.
-    unawaited(
-      _journalStore
-          .invalidateCardsCitingFrom(sessionId, position)
-          .then((removed) {
-            if (_disposed) return;
-            // Kick whether cards or only recap moved — both need a refill.
-            if (removed > 0 || recapCleared) {
-              _journalMaintenance.eventKickPending = true;
-            }
-            if (removed > 0) {
-              debugPrint(
-                '[Journal] Timeline rewrite at $position — removed $removed '
-                'card(s) citing the discarded region',
-              );
-            }
-            if (removed > 0 || recapCleared) notifyListeners();
-          })
-          .catchError((Object e) {
-            debugPrint(
-              '[Journal] ⚠ card invalidation at $position skipped: $e',
-            );
-            // Recap already cleared synchronously; still ask for a refill.
-            if (!_disposed && recapCleared) {
-              _journalMaintenance.eventKickPending = true;
-              notifyListeners();
-            }
-          }),
+    final othersAfter = <String, Pockets>{};
+    final rawAfter = deleted.activeMetadata?['pockets_after_others'];
+    if (rawAfter is List) {
+      for (final o in rawAfter) {
+        if (o is Map && o['char'] is String) {
+          othersAfter[o['char'] as String] = Pockets.fromJson(o['record']);
+        }
+      }
+    }
+    final ids = <String>{
+      speakerId,
+      ...othersBefore.keys,
+      ...othersAfter.keys,
+      if (_activeGroup != null)
+        for (final c in _groupCharacters) _getCharacterIdFromCard(c),
+      if (_activeGroup == null && _activeCharacter != null)
+        _getCharacterIdFromCard(_activeCharacter!),
+    };
+    final live = <String, Pockets>{
+      for (final id in ids)
+        if (id.isNotEmpty) id: (pocketsFor(id) ?? Pockets()).copy(),
+    };
+    invertDeletedPocketTurn(
+      speakerId: speakerId,
+      speakerBefore: Pockets.fromJson(before['record']),
+      speakerAfter: pocketsStamp(deleted.activeMetadata?['pockets_after']),
+      othersBefore: othersBefore,
+      othersAfter: othersAfter,
+      live: live,
     );
-
-    // Growth twin: same rewrite must not leave discarded-plot rings injecting
-    // as personality, or a stuck cursor that never re-scores the tip.
-    unawaited(_invalidateGrowthFrom(sessionId, position));
-
-    // RAG twin (release audit 2026-08-15): the embedded message-window corpus
-    // cites the same positions and had NO invalidation at all.
-    unawaited(_invalidateEmbeddingsFrom(sessionId, position));
-
-    // Recap clear is sync — notify even if the card future is still pending
-    // so the sidebar "Where we are" empties immediately.
-    if (recapCleared) {
-      _journalMaintenance.eventKickPending = true;
-      notifyListeners();
-    }
-  }
-
-  /// Growth half of timeline integrity (audit P1.9). Journal twin: purge rings
-  /// citing the rewritten region; roll the growth cursor back when needed.
-  Future<void> _invalidateGrowthFrom(String sessionId, int position) async {
-    try {
-      final cursor = await _growthStore.cursorFor(sessionId);
-      if (position < cursor) {
-        await _growthStore.setCursor(sessionId, position);
-        debugPrint(
-          '[Growth] Timeline rewrite at $position — cursor rolled back '
-          'from $cursor',
-        );
-      }
-      final removed =
-          await _growthStore.invalidateRingsCitingFrom(sessionId, position);
-      if (_disposed) return;
-      if (removed > 0) {
-        debugPrint(
-          '[Growth] Timeline rewrite at $position — removed $removed '
-          'ring(s) citing the discarded region',
-        );
-        // Rebuild cache — a bare invalidate() left injection empty until
-        // reload. Journal twin re-reads the DB; Growth cannot.
-        //
-        // Through the CANONICAL builder, not a hand-rolled id list: refresh()
-        // clears the cache and repopulates only the ids it is handed while
-        // marking it valid, so the copy here (which forgot Scene Guests) made
-        // a guest's rings read as "none" — silently dropping their growth from
-        // the injection after any regen/edit/delete that purged a ring.
-        await _refreshGrowthCache();
-        notifyListeners();
-      }
-    } catch (e) {
-      debugPrint('[Growth] ⚠ ring invalidation at $position skipped: $e');
-    }
-  }
-
-  /// RAG half of timeline integrity (Journal/Growth twin). Drops every stored
-  /// message-window embedding whose window reaches [position] or later.
-  ///
-  /// Two failures, one delete. The window's stored `content` is the text as it
-  /// was BEFORE the rewrite, and [MemoryService]'s dedupe is purely positional
-  /// — a window whose range already exists is skipped forever — so the
-  /// discarded/edited reply stayed retrievable and got injected 20+ turns
-  /// later under "Exact earlier lines from this chat … already happened". And
-  /// after a DELETE every later window's (start,end) addresses different
-  /// messages, which mis-stamps story days and mis-aligns the journal de-dupe.
-  /// Removing the rows is what lets `_maybeEmbedMessages` rebuild them from
-  /// the live timeline on the next turn.
-  ///
-  /// Runs regardless of the RAG switch: rows written while it was on must not
-  /// survive a rewrite just because it is off today. Same fire-and-forget,
-  /// error-contained contract as the Journal/Growth invalidators.
-  Future<void> _invalidateEmbeddingsFrom(String sessionId, int position) async {
-    try {
-      final removed = await _db.customUpdate(
-        'DELETE FROM message_embeddings '
-        'WHERE session_id = ? AND position_end >= ?',
-        variables: [drift.Variable(sessionId), drift.Variable(position)],
-        updates: {_db.messageEmbeddings},
-      );
-      if (removed > 0) {
-        debugPrint(
-          '[RAG] Timeline rewrite at $position — removed $removed embedded '
-          'window(s) citing the discarded region',
-        );
-      }
-    } catch (e) {
-      debugPrint('[RAG] ⚠ embedding invalidation at $position skipped: $e');
+    for (final e in live.entries) {
+      setPocketsFor(e.key, e.value);
     }
   }
 

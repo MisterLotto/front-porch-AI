@@ -72,6 +72,31 @@ FrontPorchExtensions frontPorchFromFields(
       ? fields[key].toString()
       : fallback;
 
+  /// Missing key keeps [fallback]. Present `[]` is never-at-work. Junk →
+  /// fallback rather than throwing, same as [asStrList].
+  List<int>? asWorkDays(String key, List<int>? fallback) {
+    if (!fields.containsKey(key) || fields[key] == null) return fallback;
+    final v = fields[key];
+    if (v is! List) return fallback;
+    if (v.isEmpty) return const [];
+    final days = <int>{};
+    for (final e in v) {
+      final n = e is int
+          ? e
+          : e is num
+          ? e.toInt()
+          : e is String
+          ? int.tryParse(e.trim())
+          : null;
+      if (n != null && n >= DateTime.monday && n <= DateTime.sunday) {
+        days.add(n);
+      }
+    }
+    if (days.isEmpty) return fallback;
+    final list = days.toList()..sort();
+    return list;
+  }
+
   return FrontPorchExtensions(
     // Preserved identity / non-form state (carried from base, never wiped).
     stableId: b.stableId,
@@ -95,6 +120,27 @@ FrontPorchExtensions frontPorchFromFields(
     storyStartDate: b.storyStartDate,
     storyStartTime: b.storyStartTime,
     favoriteAvatarId: b.favoriteAvatarId,
+    // Same class of bug as inventory/storyStart: the React editor used to
+    // omit greetingSeeds, and rebuilding without carrying the base wiped
+    // per-alt opening state on every phone save. If the POST *does* rewrite
+    // alts but omits seeds, do not keep unpaired base leftovers — compact
+    // against empty/null so leftover furious cannot land on Get out.
+    greetingSeeds: () {
+      final altsPresent = fields['alternateGreetings'] is List;
+      if (!fields.containsKey('greetingSeeds')) {
+        if (!altsPresent) return b.greetingSeeds;
+        return compactGreetingPairs(
+          greetingSlotsFromRaw(fields['alternateGreetings']),
+          const [],
+        ).seeds;
+      }
+      final parsed = parseGreetingSeeds(fields['greetingSeeds']);
+      if (!altsPresent) return parsed;
+      return compactGreetingPairs(
+        greetingSlotsFromRaw(fields['alternateGreetings']),
+        parsed,
+      ).seeds;
+    }(),
 
     // Realism Engine core.
     realismEnabled: asBool('realismEnabled', b.realismEnabled),
@@ -113,6 +159,11 @@ FrontPorchExtensions frontPorchFromFields(
     chaosModeEnabled: asBool('chaosModeEnabled', b.chaosModeEnabled),
     currentTask: asStr('currentTask', b.currentTask),
     ambitions: asStrList('ambitions', b.ambitions),
+    planLines: asStrList('planLines', b.planLines),
+    occupation: asStr('occupation', b.occupation),
+    hours: asStr('hours', b.hours),
+    occupationBrief: asStr('occupationBrief', b.occupationBrief),
+    workDays: asWorkDays('workDays', b.workDays),
     likes: asStrList('likes', b.likes),
     dislikes: asStrList('dislikes', b.dislikes),
     // The 18+ pair travels FLAT over this bridge (`intimateInto` /
@@ -199,6 +250,11 @@ Map<String, dynamic> frontPorchToJson(FrontPorchExtensions e) => {
   'chaosModeEnabled': e.chaosModeEnabled,
   'currentTask': e.currentTask,
   'ambitions': e.ambitions,
+  'planLines': e.planLines,
+  'occupation': e.occupation,
+  'hours': e.hours,
+  'occupationBrief': e.occupationBrief,
+  'workDays': e.workDays,
   'likes': e.likes,
   'dislikes': e.dislikes,
   'intimateInto': e.intimateInto,
@@ -225,4 +281,5 @@ Map<String, dynamic> frontPorchToJson(FrontPorchExtensions e) => {
   'needsDecayFun': e.needsDecayFun,
   'needsDecayHygiene': e.needsDecayHygiene,
   'needsDecayComfort': e.needsDecayComfort,
+  'greetingSeeds': [for (final s in e.greetingSeeds) s?.toFields()],
 };

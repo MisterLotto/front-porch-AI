@@ -46,10 +46,24 @@ export function AiEngineStrip() {
   let action: React.ReactNode;
 
   if (!status.isLocal) {
-    // Remote API — readiness is config-based and not fully visible here; show
-    // a neutral pointer to Settings instead of guessing.
-    tone = 'ok';
-    text = 'AI engine: Remote API — stories use the same backend as chat.';
+    const reach = status.remoteReachability;
+    const configured = status.remoteConfigured ?? false;
+    if (reach === 'reachable') {
+      tone = 'ok';
+      text = `AI engine ready · ${status.loadedModel}`;
+    } else if (reach === 'checking') {
+      tone = 'busy';
+      text = 'AI engine: checking remote API…';
+    } else if (reach === 'unreachable') {
+      tone = 'down';
+      text = 'AI engine: configured but unreachable.';
+    } else if (configured) {
+      tone = 'busy';
+      text = 'AI engine: Remote API configured — not yet verified live.';
+    } else {
+      tone = 'down';
+      text = 'AI engine: Remote API not configured.';
+    }
     action = <Link to="/settings">Settings</Link>;
   } else if (status.running && status.modelReady) {
     tone = 'ok';

@@ -70,6 +70,11 @@ extension _CreateCharacterSave on _CreateCharacterPageState {
         needsSimEnabled: _realismNeedsSim,
         enjoysLowHygiene: _realismEnjoysLowHygiene,
         ambitions: _realismAmbitions,
+        planLines: _realismPlanLines,
+        occupation: _realismOccupation,
+        occupationBrief: _realismOccupationBrief,
+        hours: _realismHours,
+        workDays: _realismWorkDays,
         likes: _realismLikes,
         dislikes: _realismDislikes,
         intimateInto: _realismIntimateInto,
@@ -101,6 +106,10 @@ extension _CreateCharacterSave on _CreateCharacterPageState {
         needsDecayFun: _needsDecayFun,
         needsDecayHygiene: _needsDecayHygiene,
         needsDecayComfort: _needsDecayComfort,
+        greetingSeeds: compactGreetingPairs(
+          [for (final c in _altGreetingControllers) c.text],
+          _altGreetingSeeds,
+        ).seeds,
       );
 
       fpExt.ensureStableId();
@@ -114,10 +123,10 @@ extension _CreateCharacterSave on _CreateCharacterPageState {
         mesExample: _exampleDialogueController.text,
         systemPrompt: _systemPromptController.text,
         postHistoryInstructions: _postHistoryController.text,
-        alternateGreetings: _altGreetingControllers
-            .map((c) => c.text)
-            .where((t) => t.trim().isNotEmpty)
-            .toList(),
+        alternateGreetings: compactGreetingPairs(
+          [for (final c in _altGreetingControllers) c.text],
+          _altGreetingSeeds,
+        ).greetings,
         tags: List.from(_tags),
         lorebook: _lorebookEntries.isNotEmpty
             ? Lorebook(entries: List.from(_lorebookEntries))
@@ -208,11 +217,14 @@ extension _CreateCharacterSave on _CreateCharacterPageState {
         c.dispose();
       }
       _altGreetingControllers.clear();
+      _altGreetingSeeds.clear();
       _lorebookEntries.clear();
       _tags.clear();
       _realismEnabled = false;
       _realismTimeOfDay = 'morning';
       _realismDayCount = 1;
+      _realismStoryStartDate = null;
+      _realismStoryStartTime = null;
       _realismShortTermBond = 0;
       _realismLongTermBond = 0;
       _realismTrustLevel = 0;
@@ -220,7 +232,14 @@ extension _CreateCharacterSave on _CreateCharacterPageState {
       _realismEmotionIntensity = 'mild';
       _realismNsfwCooldown = false;
       _realismChaosMode = false;
+      _realismNeedsSim = true;
+      _realismEnjoysLowHygiene = false;
       _realismAmbitions = const [];
+      _realismPlanLines = const [];
+      _realismOccupation = '';
+      _realismOccupationBrief = '';
+      _realismHours = '';
+      _realismWorkDays = null;
       _realismLikes = const [];
       _realismDislikes = const [];
       _realismIntimateInto = const [];
@@ -231,6 +250,20 @@ extension _CreateCharacterSave on _CreateCharacterPageState {
       _realismVerificationMaxReprocesses = 1;
       _realismVerificationStrictness = 3;
       _realismNeedsDirectorAuthority = false;
+      _needsBaselineHunger = 80;
+      _needsBaselineBladder = 80;
+      _needsBaselineEnergy = 80;
+      _needsBaselineSocial = 80;
+      _needsBaselineFun = 80;
+      _needsBaselineHygiene = 80;
+      _needsBaselineComfort = 80;
+      _needsDecayHunger = 5;
+      _needsDecayBladder = 5;
+      _needsDecayEnergy = 5;
+      _needsDecaySocial = 5;
+      _needsDecayFun = 5;
+      _needsDecayHygiene = 5;
+      _needsDecayComfort = 5;
       _tokenNotifier.value = 0;
     });
   }

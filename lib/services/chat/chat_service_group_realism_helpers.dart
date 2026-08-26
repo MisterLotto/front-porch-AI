@@ -51,6 +51,62 @@ extension ChatServiceGroupRealismHelpers on ChatService {
     return _getCharacterIdFromCard(_groupCharacters.first);
   }
 
+  /// Card the work prompt (occupation / hours / brief) reads.
+  ///
+  /// 1:1 uses [_activeCharacter]. Group looks up the member whose id is
+  /// [_getCurrentSpeakerIdForRealism] — never [_activeCharacter], which
+  /// [setActiveGroup] nulls for the whole turn. No matching card
+  /// (empty roster / unknown id) returns null so the three fields stay empty.
+  CharacterCard? _workSpeakerCard() {
+    if (_activeGroup == null) return _activeCharacter;
+    final sid = _getCurrentSpeakerIdForRealism();
+    for (final c in _groupCharacters) {
+      if (_getCharacterIdFromCard(c) == sid) return c;
+    }
+    return null;
+  }
+
+  ({
+    String occupation,
+    String hours,
+    String occupationBrief,
+    List<int>? workDays,
+  })
+  _workFieldsForCurrentSpeaker() {
+    final card = _workSpeakerCard();
+    if (card == null) {
+      return (occupation: '', hours: '', occupationBrief: '', workDays: null);
+    }
+    return _workFieldsFor(card);
+  }
+
+  /// Test-only: pin the group speaker the same way `_generateResponse` does
+  /// (`_turnSpeakerIdForRealism`). Do not assign `_activeCharacter`.
+  @visibleForTesting
+  void debugPinTurnSpeakerForRealism(String? charId) {
+    _turnSpeakerIdForRealism = charId;
+  }
+
+  /// Test-only: live position injection through the wired BehavioralInjection.
+  /// Does not stub `getOccupationBrief`.
+  @visibleForTesting
+  String debugBuildPositionInjection() =>
+      _behavioralInjection.buildPositionInjection();
+
+  /// Test-only: first-speaker [_loadGroupRealismIntoScalars] without a turn.
+  @visibleForTesting
+  void debugReloadFirstGroupSpeakerScalars() {
+    if (_groupCharacters.isEmpty) return;
+    _loadGroupRealismIntoScalars(
+      _getCharacterIdFromCard(_groupCharacters.first),
+    );
+  }
+
+  /// Test-only: emotion sitting in a group member slot (not live scalars).
+  @visibleForTesting
+  String debugGroupSlotEmotion(String charId) =>
+      _groupRealism[charId]?.emotion ?? '';
+
   // ── Per-character realism state access (group mode, typed — U7) ─────────
   /// The one write door to a member's typed state. Outside group mode it
   /// hands back a THROWAWAY object, so writes vanish — observationally the
@@ -214,7 +270,7 @@ extension ChatServiceGroupRealismHelpers on ChatService {
   /// update sticks through the regen swipe merge and persists. 1:1 and group
   /// alike: the speaker's scalars are loaded when this runs. Guests carry no
   /// realism_state, so this no-ops for them.
-  void _restampRealismSnapshotPostGen(ChatMessage msg) {
+  Future<void> _restampRealismSnapshotPostGen(ChatMessage msg) async {
     if (msg.isUser) return;
     // She named a time ("six in the morning") that disagrees with the
     // pre-gen snap (new_day → 08:00). Fiction wins so the sidebar matches
@@ -222,7 +278,7 @@ extension ChatServiceGroupRealismHelpers on ChatService {
     // must not start chasing dialogue.
     if (_clockRunning) {
       final named = clockNamedInReply(msg.text, _timeService.clock);
-      if (named != null) _timeService.applyReconciledClock(named);
+      if (named != null) await _timeService.applyReconciledClock(named);
     }
     final meta = msg.activeMetadata;
     final rs = meta?['realism_state'];
@@ -245,6 +301,13 @@ extension ChatServiceGroupRealismHelpers on ChatService {
         () => rs['spatialStance'] as String? ?? '',
       );
       rs['spatialStance'] = _relationshipService.spatialStance;
+    }
+    // Same shape as posture: only stamp when the snapshot carried the
+    // key. Unconditional putIfAbsent(null) would wipe a previous-message
+    // restore on regen of a pre-glance chat.
+    if (rs.containsKey('withUser')) {
+      meta!.putIfAbsent(kWithUserPreTurn, () => rs['withUser']);
+      rs['withUser'] = _relationshipService.withUser;
     }
     // Pockets was captured pre-gen in _captureRealismState and never
     // restamped, so swipe/delete restore put the PRE-ops kit back after a

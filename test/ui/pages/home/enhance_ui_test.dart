@@ -27,13 +27,20 @@ Widget _app(Widget child) => MaterialApp(home: Scaffold(body: child));
 
 void main() {
   group('characterCardMenuItems', () {
-    testWidgets('contains AI Enhance between Edit and Avatar Gallery',
-        (tester) async {
+    testWidgets('contains AI Enhance between Edit and Avatar Gallery', (
+      tester,
+    ) async {
       late List<PopupMenuItem<String>> items;
-      await tester.pumpWidget(_app(Builder(builder: (context) {
-        items = characterCardMenuItems(context, inFolder: false);
-        return const SizedBox.shrink();
-      })));
+      await tester.pumpWidget(
+        _app(
+          Builder(
+            builder: (context) {
+              items = characterCardMenuItems(context, inFolder: false);
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
       final values = items.map((i) => i.value).toList();
       expect(values, contains('ai_enhance'));
       expect(
@@ -45,18 +52,43 @@ void main() {
 
       // Full parity with the pre-extraction menu (plus the new entry).
       expect(values, [
-        'new_chat', 'edit', 'ai_enhance', 'avatar_gallery', 'duplicate',
-        'export', 'export_json', 'move_folder', 'delete', //
+        'new_chat', 'chat_history', 'edit', 'ai_enhance', 'avatar_gallery',
+        'duplicate', 'export', 'export_json', 'move_folder', 'delete', //
       ]);
     });
 
     testWidgets('inFolder adds remove_folder', (tester) async {
       late List<PopupMenuItem<String>> items;
-      await tester.pumpWidget(_app(Builder(builder: (context) {
-        items = characterCardMenuItems(context, inFolder: true);
-        return const SizedBox.shrink();
-      })));
+      await tester.pumpWidget(
+        _app(
+          Builder(
+            builder: (context) {
+              items = characterCardMenuItems(context, inFolder: true);
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
       expect(items.map((i) => i.value), contains('remove_folder'));
+    });
+
+    testWidgets('group menu puts Chat History after Start New Chat', (
+      tester,
+    ) async {
+      late List<PopupMenuItem<String>> items;
+      await tester.pumpWidget(
+        _app(
+          Builder(
+            builder: (context) {
+              items = groupCardMenuItems(context, inFolder: false);
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+      final values = items.map((i) => i.value).toList();
+      expect(values.indexOf('chat_history'), values.indexOf('new_chat') + 1);
+      expect(values, isNot(contains('remove_folder')));
     });
   });
 
@@ -76,15 +108,19 @@ void main() {
 
     testWidgets('shows old vs new for SELECTED fields only; unticking '
         'disables the editor', (tester) async {
-      await tester.pumpWidget(_app(EnhanceReviewBody(
-        original: original,
-        enhanced: enhanced,
-        selection: const EnhanceSelection(
-          description: true,
-          personality: false,
-          exampleDialogue: true,
+      await tester.pumpWidget(
+        _app(
+          EnhanceReviewBody(
+            original: original,
+            enhanced: enhanced,
+            selection: const EnhanceSelection(
+              description: true,
+              personality: false,
+              exampleDialogue: true,
+            ),
+          ),
         ),
-      )));
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Old description'), findsOneWidget);

@@ -20,7 +20,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/services/chat/chat.dart'
-    show AmbitionService, Pockets;
+    show AmbitionService, PocketSection, Pockets;
+import 'package:front_porch_ai/services/chat/presence_derive.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/dialogs/dialogs.dart'
     show showPocketItemDialog;
@@ -32,6 +33,7 @@ import 'pockets_row.dart';
 import 'bond_bars.dart';
 import 'character_state_settings.dart';
 import 'time_strip.dart';
+import 'presence_word.dart';
 
 /// 🎭 Character State — the first warm-porch accordion: everything about who
 /// the character *is right now* in one card. 1:1 shows the emotion line,
@@ -300,12 +302,13 @@ class _CharacterStateGroupState extends State<CharacterStateGroup> {
                   child: PocketsRow(
                     pockets: p,
                     day: chat.storyDayCount,
-                    onRemove: ({required section, required index}) =>
-                        chat.removePocketItem(id, section: section, index: index),
-                    onAdd: () async {
+                    onRemove: ({required section, required index}) => chat
+                        .removePocketItem(id, section: section, index: index),
+                    onAdd: ({section}) async {
                       final add = await showPocketItemDialog(
                         context,
                         characterName: card.name,
+                        initialSection: section ?? PocketSection.carrying,
                       );
                       if (add == null) return;
                       await chat.addPocketItem(
@@ -313,6 +316,7 @@ class _CharacterStateGroupState extends State<CharacterStateGroup> {
                         section: add.section,
                         name: add.name,
                         gift: add.gift,
+                        correction: add.correction,
                       );
                     },
                   ),
@@ -323,6 +327,31 @@ class _CharacterStateGroupState extends State<CharacterStateGroup> {
           if (realismOn || widget.isGroup || clockRunning) ...[
             const SizedBox(height: 10),
             TimeStrip(chat: chat),
+            ListenableBuilder(
+              listenable: chat,
+              builder: (context, _) {
+                final ext = chat.activeCharacter?.frontPorchExtensions;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (!widget.isGroup)
+                      PresenceWord(
+                        where: derivePresence(
+                          occupation: ext?.occupation ?? '',
+                          hours: ext?.hours ?? '',
+                          clockMinutes: chat.timeService.clockMinutes,
+                          weekday: chat.timeService.clock.weekday,
+                          workDays: ext?.workDays,
+                          inScene: inSceneForPresence(
+                            stance: chat.relationshipService.spatialStance,
+                            withUser: chat.relationshipService.withUser,
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
           ],
           if (_showSettings) ...[
             const SizedBox(height: 10),

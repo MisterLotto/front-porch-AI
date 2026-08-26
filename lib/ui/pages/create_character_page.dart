@@ -25,6 +25,7 @@ import 'package:front_porch_ai/services/chat/chat.dart' show Pockets;
 import 'package:front_porch_ai/ui/avatar_creation/avatar_generation_panel.dart';
 import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
+import 'package:front_porch_ai/ui/widgets/greeting_seed_form.dart';
 import 'package:front_porch_ai/ui/widgets/needs_form_section.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/providers/app_state.dart';
@@ -42,7 +43,7 @@ part 'create_character_page.steps_core.dart';
 /// Step 1: Personality (description, personality, scenario, advanced prompts)
 /// Step 2: Dialogue (first message, alt greetings, example dialogues)
 /// Step 3: Lorebook (CRUD)
-/// Step 4: Realism Engine (initial state)
+/// Step 4: Porch Life + Realism Engine (wardrobe, time, chaos, engine seeds)
 /// Step 5: Review & Create (the card is SAVED advancing out of here)
 /// Step 6: Portrait & Avatars — the shared AvatarGenerationPanel (phase #12);
 ///         post-save by design, so a failed generation can't lose the writing.
@@ -76,16 +77,31 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
   bool _panelBusy = false;
 
   // ── Personality (Step 1) ──
-  final _descriptionController = StyledTextController(preset: StyledTextPreset.macros);
-  final _personalityController = StyledTextController(preset: StyledTextPreset.macros);
-  final _scenarioController = StyledTextController(preset: StyledTextPreset.macros);
-  final _systemPromptController = StyledTextController(preset: StyledTextPreset.macros);
-  final _postHistoryController = StyledTextController(preset: StyledTextPreset.macros);
+  final _descriptionController = StyledTextController(
+    preset: StyledTextPreset.macros,
+  );
+  final _personalityController = StyledTextController(
+    preset: StyledTextPreset.macros,
+  );
+  final _scenarioController = StyledTextController(
+    preset: StyledTextPreset.macros,
+  );
+  final _systemPromptController = StyledTextController(
+    preset: StyledTextPreset.macros,
+  );
+  final _postHistoryController = StyledTextController(
+    preset: StyledTextPreset.macros,
+  );
 
   // ── Dialogue (Step 2) ──
-  final _firstMessageController = StyledTextController(preset: StyledTextPreset.prose);
-  final _exampleDialogueController = StyledTextController(preset: StyledTextPreset.prose);
+  final _firstMessageController = StyledTextController(
+    preset: StyledTextPreset.prose,
+  );
+  final _exampleDialogueController = StyledTextController(
+    preset: StyledTextPreset.prose,
+  );
   final List<StyledTextController> _altGreetingControllers = [];
+  final List<GreetingRealismSeed?> _altGreetingSeeds = [];
 
   // ── Lorebook (Step 3) ──
   final List<LorebookEntry> _lorebookEntries = [];
@@ -105,11 +121,19 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
   String _realismEmotionIntensity = 'mild';
   bool _realismNsfwCooldown = false;
   bool _realismChaosMode = false;
-  bool _realismNeedsSim = false;
+  // AND-gated at chat start (card && Porch Life global). Default true so
+  // a new card does not silently veto Needs — the form used to hide this
+  // toggle unless the engine was on, so every manual create baked false.
+  bool _realismNeedsSim = true;
   bool _realismEnjoysLowHygiene = false;
 
   /// Long-term ambitions (approved sketch §4) — a list, not newline text.
   List<String> _realismAmbitions = const [];
+  List<String> _realismPlanLines = const [];
+  String _realismOccupation = '';
+  String _realismOccupationBrief = '';
+  String _realismHours = '';
+  List<int>? _realismWorkDays;
   List<String> _realismLikes = const [];
   List<String> _realismDislikes = const [];
   List<String> _realismIntimateInto = const [];
@@ -253,8 +277,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
             bottom: 24,
             child: ValueListenableBuilder<int>(
               valueListenable: _tokenNotifier,
-              builder: (context, tokens, child) =>
-                  _buildTokenBadge(tokens),
+              builder: (context, tokens, child) => _buildTokenBadge(tokens),
             ),
           ),
         ],
@@ -278,7 +301,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
         _stepLine(),
         _stepDot(3, 'Lorebook'),
         _stepLine(),
-        _stepDot(4, 'Realism'),
+        _stepDot(4, 'Porch Life'),
         _stepLine(),
         _stepDot(5, 'Review'),
         _stepLine(),
@@ -398,7 +421,7 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
       'Personality',
       'Dialogue',
       'Lorebook',
-      'Realism Engine',
+      'Porch Life',
       'Review & Create',
     ];
     final nextText =
@@ -471,6 +494,4 @@ class _CreateCharacterPageState extends State<CreateCharacterPage> {
   // ═══════════════════════════════════════════════════════════════
   //  STEP 0: IDENTITY
   // ═══════════════════════════════════════════════════════════════
-
-
 }

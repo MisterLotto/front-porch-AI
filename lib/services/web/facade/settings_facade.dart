@@ -44,6 +44,10 @@ class SettingsFacade {
 
   static const List<String> backends = ['kobold', 'openRouter', 'omlx'];
 
+  /// Live remote API base — used by the settings route to decide whether a
+  /// POST would actually change the generation host (step-up gate).
+  String get currentRemoteApiUrl => _storage.backendSettings.remoteApiUrl;
+
   static String? _seededReasoningCatalogUrl;
 
   /// The identity the shared reasoning-effort helpers key on: the remote model
@@ -109,8 +113,17 @@ class SettingsFacade {
       return;
     }
     final name = _storage.backendSettings.remoteModelName;
-    if (name.isEmpty || !_usesTemplateResolve) return;
-    await _resolveTemplate(name);
+    if (name.isEmpty) return;
+    if (_usesTemplateResolve) {
+      await _resolveTemplate(name);
+      return;
+    }
+    final b = _storage.backendSettings;
+    await probeReasoningEfforts(
+      model: name,
+      apiUrl: b.remoteApiUrl,
+      apiKey: b.remoteApiKey,
+    );
   }
 
   void _seedReasoningCatalog() {
@@ -123,8 +136,30 @@ class SettingsFacade {
     unawaited(_llm.openRouterService.fetchAvailableModels());
   }
 
+  void _kickRemoteEffortProbe() {
+    if (_llm.isLocal || _usesTemplateResolve) return;
+    final b = _storage.backendSettings;
+    if (b.remoteModelName.isEmpty || b.remoteApiUrl.isEmpty) return;
+    kickReasoningEffortProbe(
+      model: b.remoteModelName,
+      apiUrl: b.remoteApiUrl,
+      apiKey: b.remoteApiKey,
+    );
+  }
+
+  /// Remote poke that learned `{none}` is the same UI as a template toggle.
+  String? get _thinkingSupportName {
+    final local = _localThinkingSupport;
+    if (local != null) return local.name;
+    if (reasoningEffortIsToggleOnly(_reasoningModelKey)) {
+      return ThinkingSupport.toggle.name;
+    }
+    return null;
+  }
+
   Map<String, dynamic> read() {
     _seedReasoningCatalog();
+    _kickRemoteEffortProbe();
     final g = _storage.generationSettings;
     final b = _storage.backendSettings;
     return {
@@ -135,6 +170,8 @@ class SettingsFacade {
       'remoteApiUrl': b.remoteApiUrl,
       'remoteModelName': b.remoteModelName,
       'hasApiKey': b.remoteApiKey.isNotEmpty,
+      'remoteConfigured': _llm.openRouterService.isConfigured,
+      'remoteReachability': _llm.openRouterService.reachability.name,
       'contextSize': b.contextSize,
       // Reasoning / "thinking" — for reasoning models (GLM-*:thinking, etc.) this
       // must be on or the provider's reasoning tokens are discarded and no
@@ -147,7 +184,7 @@ class SettingsFacade {
       // only a template verdict can produce ("this model cannot think").
       'reasoningMandatory': reasoningEffortIsMandatory(_reasoningModelKey),
       'reasoningEfforts': reasoningEffortChipsFor(_reasoningModelKey),
-      'reasoningLocalSupport': _localThinkingSupport?.name,
+      'reasoningLocalSupport': _thinkingSupportName,
       'generation': {
         'temperature': g.temperature,
         'minP': g.minP,
@@ -161,6 +198,7 @@ class SettingsFacade {
         'maxLength': g.maxLength,
         'minLength': g.minLength,
         'dynamicTempEnabled': g.dynamicTempEnabled,
+        'dynamicTempRange': g.dynamicTempRange,
         'dynamicResponses': g.dynamicResponses,
         'dynamicResponseInterval': g.dynamicResponseInterval,
         'dynamicResponseMaxMessages': g.dynamicResponseMaxMessages,
@@ -168,15 +206,21 @@ class SettingsFacade {
         'dynamicResponsePacePeriods': g.dynamicResponsePacePeriods,
         // Output Sanitizer (audit P2.13) — additive; older PWAs ignore.
         'outputSanitizerEnabled': g.outputSanitizerEnabled,
+        'sanitiseExistingHistory': g.sanitiseExistingHistory,
         'outputSanitizerRules': [
           for (final r in g.outputSanitizerRules) r.toJson(),
         ],
+        'stopSequences': g.stopSequences,
       },
+      // General-tab extras the Generation card on web also hosts.
+      'systemPrompt': g.systemPrompt,
+      'bannedPhrases': _storage.bannedPhrases,
       // Ambitions + the promise ledger. Both work with the Realism Engine off,
       // so they are the two realism-adjacent settings the web needs first.
       // Additive and nullable-safe: an older web client ignores the key.
       'realism': {
         'ambitionsEnabled': _storage.realismSettings.ambitionsEnabled,
+        'plannerEnabled': _storage.realismSettings.plannerEnabled,
         'promiseLedgerEnabled': _storage.realismSettings.promiseLedgerEnabled,
         // The rest of the Porch Life tab (2026-08-07). Additive keys only —
         // an older PWA simply ignores what it does not know.
@@ -193,8 +237,7 @@ class SettingsFacade {
             _storage.realismSettings.pocketTransfersEnabled,
         // 2026-08-08: "Acts on desires" (After Dark) and the global Chaos Mode
         // default. Additive, as always — an older PWA ignores both keys.
-        'intimateAgencyEnabled':
-            _storage.realismSettings.intimateAgencyEnabled,
+        'intimateAgencyEnabled': _storage.realismSettings.intimateAgencyEnabled,
         'chaosModeDefault': _storage.realismSettings.chaosModeDefault,
         'sceneGuestDetectionEnabled':
             _storage.realismSettings.sceneGuestDetectionEnabled,
@@ -204,8 +247,7 @@ class SettingsFacade {
         'dreamsEnabled': _storage.realismSettings.dreamsEnabled,
         'absenceBannerEnabled': _storage.realismSettings.absenceBannerEnabled,
         'absenceAckEnabled': _storage.realismSettings.absenceAckEnabled,
-        'absenceThresholdHours':
-            _storage.realismSettings.absenceThresholdHours,
+        'absenceThresholdHours': _storage.realismSettings.absenceThresholdHours,
         // Read-only context so the web can show the same honest warnings the
         // desktop does: the promise pass needs the Journal, and with realism
         // off there is no passage of time.
@@ -238,6 +280,10 @@ class SettingsFacade {
     if (realism is Map) {
       final amb = realism['ambitionsEnabled'];
       if (amb is bool) await _storage.realismSettings.setAmbitionsEnabled(amb);
+      final planner = realism['plannerEnabled'];
+      if (planner is bool) {
+        await _storage.realismSettings.setPlannerEnabled(planner);
+      }
       final prom = realism['promiseLedgerEnabled'];
       if (prom is bool) {
         await _storage.realismSettings.setPromiseLedgerEnabled(prom);
@@ -362,8 +408,8 @@ class SettingsFacade {
 
     final reasoning = body['reasoningEnabled'];
     if (reasoning is bool) {
-      final lockedOff = !reasoning &&
-          reasoningEffortIsMandatory(b.remoteModelName);
+      final lockedOff =
+          !reasoning && reasoningEffortIsMandatory(b.remoteModelName);
       if (!lockedOff) await b.setReasoningEnabled(reasoning);
     }
     final effort = body['reasoningEffort']?.toString();
@@ -411,6 +457,8 @@ class SettingsFacade {
       if (mn is num) await g.setMinLength(mn.toInt());
       final dt = gen['dynamicTempEnabled'];
       if (dt is bool) await g.setDynamicTempEnabled(dt);
+      final dtr = gen['dynamicTempRange'];
+      if (dtr is num) await g.setDynamicTempRange(dtr.toDouble());
       final dr = gen['dynamicResponses'];
       if (dr is bool) await g.setDynamicResponses(dr);
       final dri = gen['dynamicResponseInterval'];
@@ -427,6 +475,30 @@ class SettingsFacade {
       if (osr is List) {
         await g.setOutputSanitizerRules(OutputSanitizerRule.listFromJson(osr));
       }
+      final seh = gen['sanitiseExistingHistory'];
+      // Apply AFTER the enable flag: turning sanitizer off clears this in
+      // setOutputSanitizerEnabled, and a stale true from the PWA must not
+      // re-arm a history rewrite without the confirm dialog.
+      if (seh is bool && g.outputSanitizerEnabled) {
+        await g.setSanitiseExistingHistory(seh);
+      }
+      final stops = gen['stopSequences'];
+      if (stops is List) {
+        await g.setStopSequences([
+          for (final s in stops)
+            if (s is String && s.isNotEmpty) s,
+        ]);
+      }
+    }
+
+    final prompt = body['systemPrompt']?.toString();
+    if (prompt != null) await g.setSystemPrompt(prompt);
+    final bans = body['bannedPhrases'];
+    if (bans is List) {
+      await _storage.setBannedPhrases([
+        for (final s in bans)
+          if (s is String && s.isNotEmpty) s,
+      ]);
     }
   }
 
@@ -442,19 +514,19 @@ class SettingsFacade {
   }
 
   static String _name(BackendType t) => switch (t) {
-        BackendType.kobold => 'kobold',
-        BackendType.openRouter => 'openRouter',
-        BackendType.omlx => 'omlx',
-      };
+    BackendType.kobold => 'kobold',
+    BackendType.openRouter => 'openRouter',
+    BackendType.omlx => 'omlx',
+  };
 
   static BackendType? _parse(String s) => switch (s) {
-        'kobold' => BackendType.kobold,
-        // Legacy 'pseudoRemote' now maps to the local Kobold backend.
-        'pseudoRemote' => BackendType.kobold,
-        'openRouter' => BackendType.openRouter,
-        'omlx' => BackendType.omlx,
-        _ => null,
-      };
+    'kobold' => BackendType.kobold,
+    // Legacy 'pseudoRemote' now maps to the local Kobold backend.
+    'pseudoRemote' => BackendType.kobold,
+    'openRouter' => BackendType.openRouter,
+    'omlx' => BackendType.omlx,
+    _ => null,
+  };
 
   /// Legacy-engine model files still on the host's disk (sidecar
   /// retirement cleanup — desktop parity: the Reclaim Disk Space card).

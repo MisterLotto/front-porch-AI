@@ -55,9 +55,7 @@ import 'package:front_porch_ai/services/chat/prompt_injection/prompt_injection.d
 import 'package:front_porch_ai/services/macro_resolver.dart';
 import 'package:drift/drift.dart' as drift;
 
-// Cohesive method groups extracted into part files to keep this file shrinking
-// toward the 500-line cap (see CLAUDE.md). Parts share this library's imports and
-// private members; behaviour is unchanged.
+// Parts share this library's imports and privates. Keep this file under 1000.
 part 'chat/chat_service_group_read.dart';
 part 'chat/chat_service_group_settings.dart';
 part 'chat/chat_service_growth.dart';
@@ -76,6 +74,7 @@ part 'chat/chat_service_chat_entry.dart';
 part 'chat/chat_service_group_entry.dart';
 part 'chat/chat_service_session_state.dart';
 part 'chat/chat_service_session_load.dart';
+part 'chat/chat_service_session_window.dart';
 part 'chat/chat_service_realism_evals.dart';
 part 'chat/chat_service_actions.dart';
 part 'chat/chat_service_objectives.dart';
@@ -91,6 +90,9 @@ part 'chat/chat_service_generation_request.dart';
 part 'chat/chat_service_generation_stream.dart';
 part 'chat/chat_service_generation_postgen.dart';
 part 'chat/chat_service_pockets.dart';
+part 'chat/chat_service_item_cards.dart';
+part 'chat/chat_service_episode_crumbs.dart';
+part 'chat/chat_service_night_skip.dart';
 part 'chat/chat_service_reply_facts.dart';
 part 'chat/chat_service_mood.dart';
 part 'chat/chat_service_climax.dart';
@@ -99,6 +101,8 @@ part 'chat/chat_service_images.dart';
 part 'chat/chat_service_photo.dart';
 part 'chat/chat_service_idle_autonomous.dart';
 part 'chat/chat_service_greeting.dart';
+part 'chat/chat_service_greeting_seed.dart';
+part 'chat/chat_service_variants.dart';
 part 'chat/chat_service_prompt_blocks.dart';
 part 'chat/chat_service_scene_guest.dart';
 part 'chat/chat_service_controls.dart';
@@ -110,15 +114,14 @@ part 'chat/chat_service_wiring_injection.dart';
 part 'chat/chat_service_send.dart';
 part 'chat/chat_service_turn_flow.dart';
 part 'chat/chat_service_message_ops.dart';
+part 'chat/chat_service_timeline.dart';
 part 'chat/chat_service_guest_flow.dart';
 part 'chat/chat_service_accessors.dart';
 part 'chat/chat_service_defaults.dart';
 
-// (_realismEvalCancelled — the file-scope realism-eval cancel flag — and the
-// GBNF grammar-removal historical note both moved to chat_service_defaults.dart;
-// both are library top-level, so every part file's access is unaffected.)
+// Realism-eval cancel flag + GBNF note live in chat_service_defaults.dart.
 
-class ChatService extends ChangeNotifier {
+class ChatService extends ChangeNotifier with ChatServiceTodaySentence {
   final KoboldService _koboldService;
   final UserPersonaService _userPersonaService;
   final StorageService _storageService;
@@ -138,6 +141,7 @@ class ChatService extends ChangeNotifier {
   LLMService? testLlmServiceOverride;
   @visibleForTesting
   bool testIsLocalOverride = false;
+
   /// Test hook: import awaits this before mutating so a Send can race it.
   @visibleForTesting
   Completer<void>? testImportHold;
@@ -243,8 +247,12 @@ class ChatService extends ChangeNotifier {
     String prompt, {
     String? senderName,
     String? characterId,
-  }) => _addGeneratedImageMessageImpl(path, prompt,
-      senderName: senderName, characterId: characterId);
+  }) => _addGeneratedImageMessageImpl(
+    path,
+    prompt,
+    senderName: senderName,
+    characterId: characterId,
+  );
 
   /// Scene Guests auto-chime after the primary (in-memory default ON).
   bool autoChimeEnabled = true;
@@ -254,6 +262,7 @@ class ChatService extends ChangeNotifier {
 
   final List<ChatMessage> _messages = [];
   Future<void> _saveChain = Future.value();
+
   /// Serializes [sendMessage] so two composer taps during settle cannot
   /// both pass `_isGenerating` and then both run after the wait.
   Future<void> _sendChain = Future.value();
@@ -291,6 +300,7 @@ class ChatService extends ChangeNotifier {
   // drop the shared field entirely.)
   bool _entrancesInFlight = false;
   bool _isLoadingSession = false;
+  final _history = SessionHistoryWindow();
   bool _cancelRequested = false;
   int _generationEpoch = 0;
   String? _currentSessionId;
@@ -561,8 +571,7 @@ class ChatService extends ChangeNotifier {
   // (chatWorldIds moved to chat_service_accessors.dart)
 
   /// Climate active on the current story day (span override or world default).
-  Biome get activeChatBiome =>
-      _biomeSchedule.biomeAt(_timeService.dayCount);
+  Biome get activeChatBiome => _biomeSchedule.biomeAt(_timeService.dayCount);
 
   /// Central macro resolver for prompt template expansion.
   late final _macroResolver = MacroResolver();
@@ -611,6 +620,7 @@ class ChatService extends ChangeNotifier {
       _ambitionsForImpl(card);
 
   late final _ambitionInjection = _buildAmbitionInjection();
+  late final _planInjection = _buildPlanInjection();
 
   /// Likes & Dislikes fragment — NOT realism-gated (see PreferencesInjection).
   late final _preferencesInjection = _buildPreferencesInjection();
@@ -805,6 +815,7 @@ class ChatService extends ChangeNotifier {
 
   CharacterCard? get activeCharacter => _activeCharacter;
   List<ChatMessage> get messages => List.unmodifiable(_messages);
+
   /// Token streaming — deliberately the NARROW sense. It drives the send
   /// button, and widening it to cover post-generation was tried and REVERTED:
   /// background evals then held the composer disabled for most of a turn on
@@ -902,32 +913,20 @@ class ChatService extends ChangeNotifier {
   bool get summaryPaused => _summaryPaused;
   int get summaryLastIndex => _summaryLastIndex;
   bool get isSummaryGenerating => _isSummaryGenerating;
-  // Domain services are read directly by callers (chat.relationshipService /
-  // timeService / nsfwService / etc.); the god keeps ONLY the late finals —
-  // for 1:1+group dispatch, _groupRealism load/save, callbacks, notify and
-  // reset hygiene. Barrel not updated (internal; <3 public cross locations).
   RelationshipService get relationshipService => _relationshipService;
   TimeService get timeService => _timeService;
   NsfwService get nsfwService => _nsfwService;
   ChaosModeService get chaosModeService => _chaosModeService;
   NeedsSimulation get needsSimulation => _needsSimulation;
 
-  // (expressionService / chaosPressure / activeFixation / pendingTrustRepair /
-  // currentExpressionLabel / resolveExpressionAvatar / _realismActiveThisMode /
-  // isCancellingRealismEval moved to chat_service_accessors.dart — thin
-  // delegation to the respective *Service, 1:1 vs group parity via the
-  // services' cbs + god impersonation dance, unchanged)
   bool get realismEnabled => _realismEnabled;
-  // Fake-pinned (see the class doc): body in accessors, member stays here.
+  String spatialStanceForGroupCharacter(CharacterCard c) =>
+      _spatialStanceForGroupCharacterImpl(c);
+  bool? withUserForGroupCharacter(CharacterCard c) =>
+      _withUserForGroupCharacterImpl(c);
   bool get objectivesActive => _objectivesActiveImpl;
-
-  /// RAG [MemoryService] when wired. Class-pinned for FakeChatService.
   MemoryService? get memoryService => _memoryService;
-
-  /// Last RAG receipt (or null). Class-pinned; body in accessors.
   Map<String, dynamic>? get lastRagReceipt => _lastRagReceiptImpl;
-
-  /// Standing mood line, or ''. Fake-pinned; body in chat_service_mood.dart.
   String get standingMoodSummary => standingMoodSummaryImpl;
 
   bool get isEvaluatingRealism => _isEvaluatingRealism;
@@ -989,8 +988,6 @@ class ChatService extends ChangeNotifier {
     super.notifyListeners();
   }
 
-  /// Cleanup body (everything but the mandatory `super.dispose()` call,
-  /// which must stay in the class) lives in chat_service_accessors.dart.
   @override
   void dispose() {
     _disposeCleanupImpl();

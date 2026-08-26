@@ -90,6 +90,7 @@ class _RemoteApiSectionState extends State<RemoteApiSection> {
   @override
   Widget build(BuildContext context) {
     final storageService = Provider.of<StorageService>(context);
+    final remote = Provider.of<OpenRouterService>(context);
     final theme = Theme.of(context);
     final accent = AppColors.porchAmberOf(context);
 
@@ -98,6 +99,8 @@ class _RemoteApiSectionState extends State<RemoteApiSection> {
       children: [
         const SizedBox(height: 24),
         const SectionHeader('API Configuration'),
+        const SizedBox(height: 8),
+        RemoteReadyBadge(service: remote),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.all(16),

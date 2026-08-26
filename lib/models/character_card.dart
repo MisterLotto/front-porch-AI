@@ -17,6 +17,7 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'package:front_porch_ai/models/avatar_image.dart';
+import 'package:front_porch_ai/models/greeting_realism_seed.dart';
 import 'package:front_porch_ai/models/lorebook.dart';
 import 'package:front_porch_ai/models/lorebook_export.dart';
 import 'package:front_porch_ai/services/macro_resolver.dart';
@@ -56,6 +57,31 @@ Map<String, dynamic> _intimate(Map<String, dynamic> realism) {
   return v is Map ? Map<String, dynamic>.from(v) : const {};
 }
 
+/// Card `workDays`: key missing → null (derive treats as Mon–Fri). Written
+/// `[]` stays empty (never at work). Junk / all-invalid → null, not [].
+List<int>? _workDays(Map<String, dynamic> realism) {
+  if (!realism.containsKey('workDays')) return null;
+  final raw = realism['workDays'];
+  if (raw is! List) return null;
+  if (raw.isEmpty) return const [];
+  final days = <int>{};
+  for (final e in raw) {
+    final n = e is int
+        ? e
+        : e is num
+        ? e.toInt()
+        : e is String
+        ? int.tryParse(e.trim())
+        : null;
+    if (n != null && n >= DateTime.monday && n <= DateTime.sunday) {
+      days.add(n);
+    }
+  }
+  if (days.isEmpty) return null;
+  final list = days.toList()..sort();
+  return list;
+}
+
 class FrontPorchExtensions {
   bool realismEnabled;
   int shortTermBond; // -300 to 300
@@ -84,6 +110,22 @@ class FrontPorchExtensions {
   /// not story state: they travel with the card; per-chat PROGRESS lives in
   /// journal cards (Living Time §6). Authored in the character editor.
   List<String> ambitions;
+
+  /// Short plan-line sentences. Identity like [ambitions]: travel with the card.
+  /// The today sentence is session state, never stored here.
+  List<String> planLines;
+
+  /// Occupation, hours, job brief, and which weekdays they work — identity.
+  /// Travel with the card like [planLines]. Blank occupation/hours/brief are
+  /// omitted from JSON. [workDays] is DateTime.weekday ints (1=Mon…7=Sun);
+  /// missing means Mon–Fri at derive; written `[]` means never at work.
+  /// At-work is derived from these plus the story clock, not stored here.
+  /// [occupationBrief] grounds at-work narration; empty means today — do
+  /// not invent the job.
+  String occupation;
+  String hours;
+  String occupationBrief;
+  List<int>? workDays;
 
   /// What this character is drawn to, and what puts them off — short phrases,
   /// authored on the card. Identity like [ambitions]: they travel with it.
@@ -171,6 +213,12 @@ class FrontPorchExtensions {
 
   String currentTask; // initial quest/task for the character
 
+  /// Sparse opening-state overlays, parallel to [CharacterCard.alternateGreetings].
+  /// Index 0 = first alternate (`allGreetings[1]`). Null slot = read-the-room;
+  /// empty overlay = inherit this object's card-level seeds and skip eval.
+  /// `first_mes` keeps using the fields above.
+  List<GreetingRealismSeed?> greetingSeeds;
+
   /// Stable identity UUID for this logical character.
   /// Carried inside the PNG (under extensions.front_porch.realism_engine.stable_id).
   /// Generated once per library entry (on create/import/touch); used to match on
@@ -212,6 +260,11 @@ class FrontPorchExtensions {
     // Never mutated in place — always replaced wholesale (copyWith/editor),
     // so the const default is safe.
     this.ambitions = const [],
+    this.planLines = const [],
+    this.occupation = '',
+    this.hours = '',
+    this.occupationBrief = '',
+    this.workDays,
     this.likes = const [],
     this.dislikes = const [],
     this.intimateInto = const [],
@@ -241,8 +294,8 @@ class FrontPorchExtensions {
     this.needsBaselineHygiene = 80,
     this.needsBaselineComfort = 80,
 
-    this.needsDecayHunger = 4,
-    this.needsDecayBladder = 6,
+    this.needsDecayHunger = 2,
+    this.needsDecayBladder = 3,
     this.needsDecayEnergy = 3,
     this.needsDecaySocial = 2,
     this.needsDecayFun = 2,
@@ -264,6 +317,7 @@ class FrontPorchExtensions {
     this.chatFontFamily,
 
     this.currentTask = '',
+    this.greetingSeeds = const [],
     this.stableId,
     this.tier,
     this.favoriteAvatarId,
@@ -290,6 +344,11 @@ class FrontPorchExtensions {
         'needs_sim_enabled': needsSimEnabled,
         'enjoys_low_hygiene': enjoysLowHygiene,
         'ambitions': ambitions,
+        'plan_lines': planLines,
+        if (occupation.isNotEmpty) 'occupation': occupation,
+        if (hours.isNotEmpty) 'hours': hours,
+        if (occupationBrief.isNotEmpty) 'occupationBrief': occupationBrief,
+        if (hours.isNotEmpty && workDays != null) 'workDays': workDays,
         'likes': likes,
         'dislikes': dislikes,
         // Nested so the 18+ pair can be stripped from a share as one object.
@@ -335,13 +394,20 @@ class FrontPorchExtensions {
         'chat_font_family': chatFontFamily,
 
         'current_task': currentTask,
+        if (compactGreetingSeeds(greetingSeeds).isNotEmpty)
+          'greeting_seeds': [
+            for (final s in compactGreetingSeeds(greetingSeeds)) s?.toJson(),
+          ],
         'tier': ?tier,
         'favorite_avatar_id': ?favoriteAvatarId,
       },
     };
   }
 
-  factory FrontPorchExtensions.fromJson(Map<String, dynamic> json) {
+  factory FrontPorchExtensions.fromJson(
+    Map<String, dynamic> json, {
+    List<String> alternateGreetings = const [],
+  }) {
     // `is Map` + copy rather than `as Map<String, dynamic>?`: jsonDecode always
     // hands back Map<String, dynamic>, but a card map BUILT IN DART (a group
     // member seed, a test fixture, anything assembled from literals) can be
@@ -369,6 +435,11 @@ class FrontPorchExtensions {
       needsSimEnabled: realism['needs_sim_enabled'] as bool? ?? false,
       enjoysLowHygiene: realism['enjoys_low_hygiene'] as bool? ?? false,
       ambitions: _phrases(realism['ambitions']),
+      planLines: _phrases(realism['plan_lines']),
+      occupation: realism['occupation'] as String? ?? '',
+      hours: realism['hours'] as String? ?? '',
+      occupationBrief: realism['occupationBrief'] as String? ?? '',
+      workDays: _workDays(realism),
       likes: _phrases(realism['likes']),
       dislikes: _phrases(realism['dislikes']),
       intimateInto: _phrases(_intimate(realism)['into']),
@@ -392,8 +463,8 @@ class FrontPorchExtensions {
       needsBaselineFun: realism['needs_baseline_fun'] as int? ?? 80,
       needsBaselineHygiene: realism['needs_baseline_hygiene'] as int? ?? 80,
       needsBaselineComfort: realism['needs_baseline_comfort'] as int? ?? 80,
-      needsDecayHunger: realism['needs_decay_hunger'] as int? ?? 4,
-      needsDecayBladder: realism['needs_decay_bladder'] as int? ?? 6,
+      needsDecayHunger: realism['needs_decay_hunger'] as int? ?? 2,
+      needsDecayBladder: realism['needs_decay_bladder'] as int? ?? 3,
       needsDecayEnergy: realism['needs_decay_energy'] as int? ?? 3,
       needsDecaySocial: realism['needs_decay_social'] as int? ?? 2,
       needsDecayFun: realism['needs_decay_fun'] as int? ?? 2,
@@ -425,6 +496,11 @@ class FrontPorchExtensions {
       chatFontFamily: realism['chat_font_family'] as String?,
 
       currentTask: realism['current_task'] as String? ?? '',
+      greetingSeeds: () {
+        final parsed = parseGreetingSeeds(realism['greeting_seeds']);
+        if (alternateGreetings.isEmpty) return parsed;
+        return compactGreetingPairs(alternateGreetings, parsed).seeds;
+      }(),
       tier: realism['tier'] as String?,
       favoriteAvatarId: realism['favorite_avatar_id'] as String?,
     );
@@ -448,6 +524,11 @@ class FrontPorchExtensions {
     bool? needsSimEnabled,
     bool? enjoysLowHygiene,
     List<String>? ambitions,
+    List<String>? planLines,
+    String? occupation,
+    String? hours,
+    String? occupationBrief,
+    List<int>? workDays,
     List<String>? likes,
     List<String>? dislikes,
     List<String>? intimateInto,
@@ -486,6 +567,7 @@ class FrontPorchExtensions {
     String? chatFontFamily,
 
     String? currentTask,
+    List<GreetingRealismSeed?>? greetingSeeds,
     String? stableId,
     String? tier,
     String? favoriteAvatarId,
@@ -507,6 +589,11 @@ class FrontPorchExtensions {
       needsSimEnabled: needsSimEnabled ?? this.needsSimEnabled,
       enjoysLowHygiene: enjoysLowHygiene ?? this.enjoysLowHygiene,
       ambitions: ambitions ?? this.ambitions,
+      planLines: planLines ?? this.planLines,
+      occupation: occupation ?? this.occupation,
+      hours: hours ?? this.hours,
+      occupationBrief: occupationBrief ?? this.occupationBrief,
+      workDays: workDays ?? this.workDays,
       likes: likes ?? this.likes,
       dislikes: dislikes ?? this.dislikes,
       intimateInto: intimateInto ?? this.intimateInto,
@@ -550,6 +637,7 @@ class FrontPorchExtensions {
       chatFontFamily: chatFontFamily ?? this.chatFontFamily,
 
       currentTask: currentTask ?? this.currentTask,
+      greetingSeeds: greetingSeeds ?? this.greetingSeeds,
       stableId: stableId ?? this.stableId,
       tier: tier ?? this.tier,
       favoriteAvatarId: favoriteAvatarId ?? this.favoriteAvatarId,
@@ -567,6 +655,28 @@ class FrontPorchExtensions {
       stableId = _uuid.v4();
     }
   }
+
+  /// Card-level opening used as the merge base for greeting overlays.
+  GreetingOpeningBase get openingBase => GreetingOpeningBase(
+    shortTermBond: shortTermBond,
+    longTermBond: longTermBond,
+    trustLevel: trustLevel,
+    dayCount: dayCount,
+    timeOfDay: timeOfDay,
+    storyStartDate: storyStartDate,
+    storyStartTime: storyStartTime,
+    characterEmotion: characterEmotion,
+    emotionIntensity: emotionIntensity,
+    currentTask: currentTask,
+    needsBaselineHunger: needsBaselineHunger,
+    needsBaselineBladder: needsBaselineBladder,
+    needsBaselineEnergy: needsBaselineEnergy,
+    needsBaselineSocial: needsBaselineSocial,
+    needsBaselineFun: needsBaselineFun,
+    needsBaselineHygiene: needsBaselineHygiene,
+    needsBaselineComfort: needsBaselineComfort,
+    inventory: inventory,
+  );
 }
 
 class CharacterCard {
@@ -591,12 +701,14 @@ class CharacterCard {
   /// (e.g. 'af_heart' for Kokoro, 'en_US-lessac-medium' for Piper, etc.).
   /// The UI now prevents (and warns about) cross-engine assignments.
   String? ttsVoice;
+
   /// V2 spec credits — round-trip so Stoop/Chub author names survive import.
   String creator;
   String creatorNotes;
   String characterVersion;
   String? dbId; // UUID primary key (runtime only, not serialized)
-  DateTime? createdAt; // library "date added" from DB (runtime only, not serialized)
+  DateTime?
+  createdAt; // library "date added" from DB (runtime only, not serialized)
   FrontPorchExtensions? frontPorchExtensions; // V2.5 Realism Engine defaults
   Map<String, dynamic>?
   rawExtensions; // Preserve unknown third-party extension keys
@@ -633,7 +745,28 @@ class CharacterCard {
   List<String> get allGreetings {
     final greetings = <String>[firstMessage];
     greetings.addAll(alternateGreetings);
-    return greetings.where((g) => g.isNotEmpty).toList();
+    return greetings.where((g) => g.trim().isNotEmpty).toList();
+  }
+
+  /// Replace [alternateGreetings] with rewritten [alts].
+  ///
+  /// Seeds not authored with the rewrite compact against empty so leftover
+  /// source seeds cannot land on the new alts. A `copyWith` that only
+  /// replaces alts must pass the compacted seeds (or `[]`) — never silently
+  /// keep source [greetingSeeds]. Pass [authoredSeeds] when the rewrite
+  /// wrote seeds alongside the new alts.
+  void assignRewrittenAlternateGreetings(
+    List<String> alts, {
+    List<GreetingRealismSeed?>? authoredSeeds,
+  }) {
+    final paired = compactRewrittenGreetingAlts(alts, authoredSeeds);
+    alternateGreetings = paired.greetings;
+    final ext = frontPorchExtensions;
+    if (ext != null) {
+      ext.greetingSeeds = paired.seeds;
+    } else if (paired.seeds.isNotEmpty) {
+      frontPorchExtensions = FrontPorchExtensions(greetingSeeds: paired.seeds);
+    }
   }
 
   Map<String, dynamic> toJson() {
@@ -661,7 +794,9 @@ class CharacterCard {
       'post_history_instructions': postHistoryInstructions,
       'alternate_greetings': alternateGreetings,
       'tags': tags,
-      'character_book': lorebook == null ? null : encodeCharacterBook(lorebook!),
+      'character_book': lorebook == null
+          ? null
+          : encodeCharacterBook(lorebook!),
       'world_names': worldNames,
       if (ttsVoice != null) 'tts_voice': ttsVoice,
       if (creator.isNotEmpty) 'creator': creator,

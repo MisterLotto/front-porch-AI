@@ -1,50 +1,38 @@
 # Rawhide — What's New (Nightlies)
 
 These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge builds.
-**Only list what landed after the last shipped nightly.** Clear or rewrite this section when a new nightly goes out — do not accumulate history since stable.
+**Only list what landed after the last shipped nightly.** Clear this section when a new nightly goes out — delete the old bullets; do not accumulate them.
 
 ## Recent improvements (unreleased — ships in the next build)
 
-*Since nightly `20260814` (`cd38e672` — sidebar overflow).*
+- ⑂ **Fork a chat from the phone** — same “new branch from this message” as desktop. The old conversation stays put.
 
-- 💛 **Long-term bond notices a stretch a little sooner** — it now cements every 3 warm turns instead of 5. Existing chats keep the score they already earned; nothing is replayed from old history.
+- 🎛️ **Phone Settings now has the rest of the sampler row** — Top-P, Top-K, DRY, dynatemp range, stop sequences, banned phrases, sanitise-history, and the global system prompt. Voice & Media can turn speech on without opening the desktop tab.
 
-- 🛠️ **Sweep leftovers closed** — Enhance after restore uses the live database; thinking chips follow the .kcpps model not the last picker file; starting the web server no longer freezes the UI looking for Tailscale/ngrok; Memory search no longer loads every other chat's vectors; expressions stop flickering during streaming; Group Settings actually save a member's Needs; "Dinner's 6 p.m." no longer jumps the clock; two Sends during settle cannot pile up; switching chats on the phone mid-reply no longer pastes the old tokens into the new chat; Draw Things hides off macOS; turning TTS off frees the voice engine; imported cards keep the author's name.
+- 👥 **Stoop groups and places show their real contents on the phone** — member carousel and greetings for groups; climate, traits, and lore for worlds.
 
+- 💬 **Stoop comments go to the hub now** — desktop and phone. They used to vanish when you quit the app. The card owner can turn discussion on from the listing.
 
-- 📱 **Phone Stoop stays signed in through a blip** — opening The Stoop on the phone after a timeout or 502 used to wipe the saved login even though a retry would have worked. It now keeps the session, same as desktop.
+- 🔐 **Only the Vite dev server may use cookies from localhost** — a random local page on another port cannot ride your session.
 
-- 👗 **Three more, approved by hand:** clothes she set aside now survive past midnight and vanish at the story's next morning (as always promised); a character who enjoys her natural musk finally reads the scale the right way around (filthy = content and quiet, scrubbed = genuinely uncomfortable); and adding list entries (ambitions, likes) keeps the box open for rapid entry instead of closing after every item.
-- 🧽 **~75 more sweep fixes land (medium wave + review leftovers)** — highlights: Group Settings edits (member needs, baselines, per-member prompts, the General tab) actually persist now; swiping through an OLD message no longer rewinds the whole chat's realism state; chat switching can't leak the previous chat's chaos pressure or needs flags into a group; the story clock ignores remembered times ("It was 5 a.m.") and can't roll the day backwards at midnight; a regenerated turn gives back the item-diary lines it erased; card imports survive malformed files instead of saving an empty character; the KoboldCpp downloader stages to a temp file so a dropped download can't brick the installed binary; phone Stoop stops signing you out over one bad packet; the web library search stops racing itself; mid-word typing works in the Emotion/Day fields; and a pile of UI-thread stalls (sync file checks in hot paths) were moved off the frame.
-- 🧹 **53 more fixes from a full-codebase sweep ahead of 1.3** — the ones you'd notice: deleting a character now removes their chats' memory/journal/quest leftovers (their old lines could resurface in other chats' Memory); switching chats no longer carries the previous chat's quests along; Group Settings' per-member Bond/Trust/Emotion and Needs editors actually save now (they wrote keys nothing read); "New Chat" inside a group keeps Needs alive; a forked 1:1→group keeps its images and history stamps; edited or deleted lines stop resurfacing through Memory search; TTS no longer deletes the audio it's about to play, and two overlapping Speaks don't talk over each other; the story clock ignores spoken appointments ("pick you up at 5") instead of teleporting; changing the storage folder moves group portraits and backgrounds too — and refuses, with a plain explanation, rather than half-moving into a folder that already has data; Kimi-class fixes across the board on the web app too (a failed send hands your text back with a Try again button instead of eating it).
-- 📖 **"Turn this chat into a story" actually creates the project** — it was silently saving nothing, then erroring on the way to the dashboard, on both desktop and web.
-- 🛟 **A failed regenerate can no longer eat the message** — if the backend errors (or you cancel the realism pass) mid-regenerate, the original reply and all its swipes come back exactly where they were, instead of vanishing for good.
-- 💾 **Restoring a backup now really restores the open chat** — the conversation on screen used to quietly write its old self back into the restored library the next time you sent a line. It now reloads to match the snapshot.
-- 🐧 **Linux self-update can't uninstall the app anymore** — the updater used to delete the running AppImage before checking the download was good; a bad download left you with nothing. It now verifies first and swaps atomically.
+- 🧼 **Filthy means they reek and hate it — not that they magically freshen up** — hitting rock-bottom hygiene, they notice and feel awful, but the meter stays down until they actually wash. Characters who enjoy being musky still like it. Same on the phone.
 
-- ✍️ **Impersonate is on the web too** — the same wand as desktop: tap ✦ and the AI writes your next line into the box. A start you already typed is continued as you, not answered as the character. Stop cancels.
+- 🎭 **Alternate greetings now seed Needs the same way they seed bond and mood** — same section cards as the Realism editor, including hunger and the rest. Blank still inherits the card. Same on the phone.
 
-- ✍️ **Impersonate keeps writing as you when the box is not empty** — the wand already filled a blank composer. A start you had typed ("I walk toward…") used to make it switch into the character's voice, especially on cards that say "do not decide for the user." It now treats that text as an unfinished line of yours and only continues it.
+- 🔐 **Signing Tailscale in from the phone now asks for your web password** — same confirm as turning HTTPS on, so a stolen session cannot bind this computer to someone else's tailnet.
 
-- 🎭 **Scene Guests answer the line you just sent** — after a long stretch talking to one guest (name first), bringing the narrator back in used to make that guest reply to an older question further up the chat. Regen usually fixed it; eventually it got stuck. The guest turn now pins your most recent line, a squeezed context can no longer drop that line and keep only the narrator's reaction, and guest turns no longer pull Memory search or a stale "Where we are" into the prompt (thinking models were treating those old lines as the live question).
+- 💡 **Light mode on Group Settings, Chat History, Database Cleanup, and the Kobold log** — helper text and empty states are readable on paper, not white-on-white.
 
-- ▶️ **Continue no longer mashes the last word into the next one** — hitting Continue used to glue the new text straight onto whatever was already there, so "She waved from the steps." plus "Then she sat" became "steps.Then". Models often skip the leading space. Continue now puts a word-break in (same as editing a space onto the end yourself) and will not add a second space if the model already sent one.
+- 🧹 **Deleting a group now takes its diary, growth, and memories with it** — leftover knowledge from that chat does not keep showing up elsewhere. Same when you delete a character: their Data Bank goes too.
 
-- 🔧 **Kimi 2.6 thinking evals work again — and no longer flip a coin** — The first Realism judge was 400ing because that model cannot turn thinking off, then the fallback hid the answer inside discarded thought tokens (90 seconds, then a blank line). Judges now keep that channel and parse the JSON out of it. On top of that, whether deltas showed up used to depend on how long the model happened to deliberate: its thinking was eating the judges' own word budget, so a long think got cut off before the verdict was written. Judges now give thinking models room to finish, and a final verdict always beats a mid-thought draft. Needs and pockets already worked; bond/trust/emotion/time catch up.
+- 🛟 **Renaming a chat from Chat History no longer resets Porch Life** — Realism, Needs, Chaos, and the relationship numbers stay as they were. Same on the phone.
 
-- 🕐 **If she says it is 6am, the clock becomes 6am** — After a night skip the story clock used to park at 8:00 AM even when she wrote dawn. The sidebar now follows a time she actually names in the reply (within a few hours), so the line you just read and the clock agree. Regen that reply on an old chat to heal it.
+- ▶️ **Continue keeps speaking as whoever started the line** — a Scene Guest or a group member with a shared name is not hijacked by the host. Same on the phone.
 
-- 🧠 **Local models stop pretending they can think** — Thinking strength used to show Low · Medium · High for every local model, including the many that have no thinking mode at all, so the setting quietly did nothing. Front Porch now reads the model file itself and tells you the truth: a model with no reasoning says so and the switch is greyed out; one that only does on/off says it has no strength levels instead of showing three that don't work; one that can't stop thinking locks Off; and only models with real levels show the chips. No extra requests and no waiting — the answer comes from the file you already loaded. Same on the web Settings. **KoboldCpp, oMLX, and LM Studio** all do this now. Front Porch never loads a model just to ask — it reads the template off disk.
+- 👜 **Taking back a gift from the middle of a group chat returns it on both sides** — unique things no longer exist twice. Swiping a “I set my keys down” line keeps the diary matching the kit. Same on the phone.
 
-- 🎁 **Hand her something in the story and she actually has it** — Typing "here, take my keys" and having her pocket them used to leave her record empty: the bookkeeping was told to ignore anything she "was offered", which is exactly what your gift looks like. Now an offer she **accepts** goes into her pockets, while one she ignores or turns down still counts for nothing. This is the only kind of handover a 1:1 chat has, so giving your character things by narration works there now — the same as passing an item between characters in a group. (The sidebar's **Hand it over** button still does it directly if you'd rather not leave it to the story.)
+- 💛 **Intimate preferences now guide the Realism evals** — listed tastes can change the direction of a score, not only how hard it hits. Blank preferences keep the old defaults. Same on the phone.
 
-- 🧹 **Scan & Clean no longer wipes group memory or your “remember these characters” lists** — group chat archives and those checkboxes were being treated as leftovers. They stay.
-- ▶️ **Continue no longer eats Chance Time / night-porch / “she picked up the keys” / a Needs crash** — those still fire on the next real Send. And if you Stop mid-thought then Continue, the new words show up as spoken text, not a blank bubble.
-- 🌙 **A dream cannot land in the wrong chat** if you switch conversations while it is still writing.
-- 🎁 **Group gifts survive a fork, and swipe will not duplicate them.** Picking an item up also forgets the old “I set it down” diary note. Forking keeps the diary cards; the “Where we are” recap starts a new chapter until enough new turns land.
-- 💾 **Group Settings → General actually saves** (name, scenario, first message, turn rules). Light mode no longer paints those fields — or Create Character’s later headings — as white-on-cream.
+- 🧠 **Thinking strength chips only show when this model actually has levels** — a host that accepts every value is not a menu. On/off still works. Same on the phone.
 
-- 🖼️ **Web chat asks before loading pictures from the internet** — a `![alt](https://…)` in a message no longer fetches on its own. You get a **Load external image?** button first (same idea as desktop's External Image Detected). Only real `http`/`https` links count; other schemes stay as text.
-- 🎯 **Web Objectives stay off when you turn them off** — the sidebar hides the quest details, and Generate tasks / Set a goal are refused until Objectives is on again.
-- 📓 **Web Journal edits stay in that character's diary** — pin / edit / retire only touch cards for the focused speaker in this chat.
-- 🛡️ **Lore-from-URL and web backend "test connection" ignore private addresses** — localhost, LAN, and cloud-metadata URLs are refused so a logged-in web session cannot poke the host's network.
+- 💭 **Thinking dumped inside the reply is folded into the Thought chip** — same as when the host already splits it. Same on the phone.

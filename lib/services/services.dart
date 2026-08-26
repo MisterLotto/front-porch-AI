@@ -58,6 +58,7 @@ export 'kobold_service.dart';
 export 'chat_service.dart';
 export 'backend_manager.dart';
 export 'open_router_service.dart';
+export 'remote_reachability.dart';
 export 'reasoning_effort.dart';
 export 'reasoning_effort_probe.dart';
 export 'reasoning_effort_store.dart';

@@ -29,6 +29,7 @@ import 'package:front_porch_ai/services/lmstudio_log_streamer.dart';
 import 'package:front_porch_ai/services/kobold_service.dart';
 import 'package:front_porch_ai/services/omlx_status_poller.dart';
 import 'package:front_porch_ai/services/open_router_service.dart';
+import 'package:front_porch_ai/services/remote_reachability.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
 
 /// The available backend types. The former `pseudoRemote` (a local KoboldCpp
@@ -157,8 +158,14 @@ class LLMProvider extends ChangeNotifier {
     }
     if (selectedModelId.isNotEmpty &&
         selectedModelId != _openRouterService.modelName) {
+      // oMLX is a fixed local URL. Using remoteApiUrl here sent Enhance
+      // at OpenRouter (or whatever Remote API is set to) with an MLX
+      // model id — or, when that URL happened to be oMLX, still worked
+      // only by accident. Same literal LLMProvider configures on sync.
       return OpenRouterService(
-        apiUrl: _storageService.remoteApiUrl,
+        apiUrl: _activeBackend == BackendType.omlx
+            ? 'http://localhost:8000/v1'
+            : _storageService.remoteApiUrl,
         apiKey: _storageService.remoteApiKey,
         modelName: selectedModelId,
       );
@@ -265,19 +272,18 @@ class LLMProvider extends ChangeNotifier {
         newType = BackendType.kobold;
     }
 
-    if (newType == BackendType.omlx) {
-      _openRouterService.configure(
-        apiUrl: 'http://localhost:8000/v1',
-        apiKey: _storageService.remoteApiKey,
-        modelName: _storageService.remoteModelName,
-      );
-    } else {
-      _openRouterService.configure(
-        apiUrl: _storageService.remoteApiUrl,
-        apiKey: _storageService.remoteApiKey,
-        modelName: _storageService.remoteModelName,
-      );
-    }
+    final cfgChanged = newType == BackendType.omlx
+        ? _openRouterService.configure(
+            apiUrl: 'http://localhost:8000/v1',
+            apiKey: _storageService.remoteApiKey,
+            modelName: _storageService.remoteModelName,
+          )
+        : _openRouterService.configure(
+            apiUrl: _storageService.remoteApiUrl,
+            apiKey: _storageService.remoteApiKey,
+            modelName: _storageService.remoteModelName,
+          );
+    _maybePingRemote(newType, configChanged: cfgChanged);
     debugPrint(
       '[LLMProvider] Synced from storage: backend=$typeStr, URL=${_storageService.remoteApiUrl}',
     );
@@ -308,7 +314,6 @@ class LLMProvider extends ChangeNotifier {
       _syncLiveStatusSources();
       notifyListeners();
     }
-
   }
 
   /// Last model-identity string synced from storage; used to clear stale
@@ -342,7 +347,21 @@ class LLMProvider extends ChangeNotifier {
     }
 
     _syncLiveStatusSources();
+    _maybePingRemote(type, configChanged: true);
     notifyListeners();
+  }
+
+  bool _isRemoteBackend(BackendType type) =>
+      type == BackendType.openRouter || type == BackendType.omlx;
+
+  /// Live `GET /models` when the remote backend is (or becomes) active.
+  /// Skipped under `flutter test` so constructing a provider never hits
+  /// the network; tests that care call [OpenRouterService.refreshReachability].
+  void _maybePingRemote(BackendType type, {required bool configChanged}) {
+    if (kSkipRemoteAutoPing) return;
+    if (!_isRemoteBackend(type)) return;
+    if (!configChanged && type == _activeBackend) return;
+    unawaited(_openRouterService.refreshReachability());
   }
 
   /// Stop the managed KoboldCpp process if it is running.

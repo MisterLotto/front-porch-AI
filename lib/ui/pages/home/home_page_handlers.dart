@@ -23,7 +23,6 @@ part of '../home_page.dart';
 /// Split out of the _HomePageState god file as a private extension
 /// (part of the same library, so it keeps full access to page state).
 extension _HomePageHandlers on _HomePageState {
-
   void _confirmDeleteGroup(BuildContext context, GroupChat group) {
     showWarmDialog(
       context,
@@ -344,7 +343,9 @@ extension _HomePageHandlers on _HomePageState {
     final charCount = folderService
         .getCharactersInFolderRecursive(folder.id)
         .length;
-    final groupCount = folderService.groupIdsInFolderRecursive(folder.id).length;
+    final groupCount = folderService
+        .groupIdsInFolderRecursive(folder.id)
+        .length;
     showWarmDialog(
       context,
       title: 'Delete Folder',
@@ -410,9 +411,7 @@ extension _HomePageHandlers on _HomePageState {
               filenames.contains(path.basename(c.imagePath!)),
         )
         .toList();
-    final subfolders = folderService
-        .getSubfolders(folder.id)
-        .length;
+    final subfolders = folderService.getSubfolders(folder.id).length;
 
     await _runMassDelete(
       cards,
@@ -431,6 +430,20 @@ extension _HomePageHandlers on _HomePageState {
   }
 
   // ─── Character Actions ──────────────────────────────────────────
+
+  void _handleImport(String source) {
+    switch (source) {
+      case 'cards':
+        _importCharacter(context);
+        break;
+      case 'folder':
+        _folderImportCharacters(context);
+        break;
+      case 'byaf':
+        _importByaf(context);
+        break;
+    }
+  }
 
   ButtonStyle _buttonStyle() {
     return ElevatedButton.styleFrom(

@@ -16,11 +16,15 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/services/chat/pass_support.dart';
 import 'package:front_porch_ai/services/chat/realism_tools.dart';
+import 'package:front_porch_ai/services/chat/skip_language.dart';
 import 'package:front_porch_ai/services/chat/story_clock.dart';
+import 'package:front_porch_ai/services/chat/today_line_tag.dart';
 import 'package:front_porch_ai/services/services.dart' show LlmToolResponse;
 import 'package:front_porch_ai/utils/utils.dart' show stripQuotedSpeech;
 
@@ -32,15 +36,16 @@ import 'package:front_porch_ai/utils/utils.dart' show stripQuotedSpeech;
 /// weekday are all pure derivations; every conversion/snap/synthesis lives in
 /// the [StoryClock] leaf.
 ///
-/// Advancement is continuous and per-turn: the scene-time eval (which fires
-/// every turn, BEFORE generation, so the character knows what time it is
-/// while writing) reports `minutes_elapsed` for the latest exchange,
-/// hard-clamped by
-/// [StoryClock.maxMinutesPerTurn], with [StoryClock.failureDriftMinutes] as
-/// the deterministic floor on eval failure and a
-/// [StoryClock.stallBackstopTurns]-turn backstop that snaps to the next
-/// period so time can never freeze forever. The old 6-turn gate, its
-/// `hold_time` veto, and the eligible/not-eligible prompt branching are gone.
+/// Advancement is announce-then-decide. Pre-turn the prompt says
+/// "It is currently …" (OOC skip lands first so that line is honest). The
+/// scene-time eval fires AFTER the reply, reports `minutes_elapsed` for the
+/// beat that was just written, and that instant is what the NEXT speaker is
+/// told — group bucket brigade, Scene Guests included. Continue does not
+/// tick (same beat). Hard-clamped by [StoryClock.maxMinutesPerTurn], with
+/// [StoryClock.failureDriftMinutes] as the deterministic floor on eval
+/// failure and a [StoryClock.stallBackstopTurns]-turn backstop so time can
+/// never freeze forever. The old 6-turn gate, its `hold_time` veto, and the
+/// eligible/not-eligible prompt branching are gone.
 ///
 /// ── PASSAGE OF TIME AND THE REALISM ENGINE: THE SEAM, AND WHERE IT IS ────
 ///
@@ -86,12 +91,10 @@ import 'package:front_porch_ai/utils/utils.dart' show stripQuotedSpeech;
 /// because it costs one model call per turn — see that flag for why the
 /// existing Passage-of-Time default could not be treated as consent.
 ///
-/// Deliberately NOT changed: nothing rewinds the standalone clock on
-/// swipe/regen, and nothing needs to. The engine path rewinds because it
-/// re-runs its eval and would otherwise double-advance; the standalone eval
-/// fires once per user turn from sendMessage and never re-fires on a
-/// regenerate, so the clock already sits at exactly one advance for the turn.
-/// Adding a rewind there would be a bug, not a parity fix.
+/// Regen/swipe rewind the clock from the rejected reply's
+/// `story_clock_before` stamp, then the post-reply eval decides again —
+/// engine, standalone, and Scene Guest share that receipt. Without it a
+/// swipe would double-advance.
 ///
 /// The OOC time-skip path ([detectOocTimeSkip]) is pure regex and stands on
 /// its own — but it is a narrow fast path over enumerated phrasings and does
@@ -132,6 +135,18 @@ class TimeService {
   final void Function(String timeOfDay, int dayCount, String storyClockIso)
   onPatchLastMessageRealismState;
 
+  /// Fires when the story day actually rolls. ChatService journals
+  /// the held today sentence here — not in a getter.
+  final FutureOr<void> Function()? onStoryDayChanged;
+
+  /// When true, the scene-time eval (and one-shot text) asks for
+  /// `today_sentence`. Default off so existing constructors stay valid.
+  final bool Function()? getPlannerEnabled;
+
+  /// Empty string = abandon; non-empty = set. Do not write [todayLine]
+  /// from the eval — ChatService owns the hold via this callback.
+  final FutureOr<void> Function(String line)? onTodayEval;
+
   // Owned state — the whole subsystem.
   DateTime _clock = StoryClock.representativeTime(
     StoryClock.todayAnchor(),
@@ -144,6 +159,30 @@ class TimeService {
   // One clock authority per turn: set when detectOocTimeSkip moves the clock,
   // consumed by the per-turn eval so it can't re-count the same exchange.
   bool _oocSkipMovedClockThisTurn = false;
+  String? todayLine;
+  int? _todayLineDayCount;
+
+  void clearTodayLine() {
+    todayLine = null;
+    _todayLineDayCount = null;
+  }
+
+  Future<void> _ifDayChanged(int dayBefore) async {
+    if (dayCount == dayBefore) return;
+    clearTodayLine();
+    await onStoryDayChanged?.call();
+  }
+
+  String? get visibleTodayLine {
+    final line = todayLine?.trim();
+    if (line == null || line.isEmpty) return null;
+    if (_todayLineDayCount != null && _todayLineDayCount != dayCount) {
+      todayLine = null;
+      _todayLineDayCount = null;
+      return null;
+    }
+    return line;
+  }
 
   // Tools transport for the scene-time and posture evals (nullable — tests and
   // any host without the tools door stay on the text path).
@@ -160,9 +199,12 @@ class TimeService {
     required this.onSaveChat,
     required this.onSetPendingRealismMetadata,
     required this.onPatchLastMessageRealismState,
+    this.onStoryDayChanged,
     this.fireToolEval,
     this.probe,
     this.getBackendIdentity,
+    this.getPlannerEnabled,
+    this.onTodayEval,
   });
 
   // ── Public surface ────────────────────────────────────────────────────────
@@ -170,6 +212,10 @@ class TimeService {
   DateTime get clock => _clock;
   DateTime get startDate => _startDate;
   String get timeOfDay => StoryClock.periodForHour(_clock.hour);
+
+  /// Live clock as minutes from midnight. Presence matches this, not
+  /// the period's representative hour.
+  int get clockMinutes => _clock.hour * 60 + _clock.minute;
   int get dayCount => StoryClock.dayCountFor(_clock, _startDate);
 
   /// The set-aside-clothing day: flips at the story MORNING (08:00), not
@@ -208,8 +254,6 @@ class TimeService {
   /// columns are only written by a full chat save — opening a chat, reading it
   /// and closing it never froze the date, so those chats wandered indefinitely.
   bool get canonicalClockWasSynthesised => _canonicalClockWasSynthesised;
-
-
 
   /// "9:40 PM" / "Tue, Mar 3" / "Tuesday, March 3rd(, 1887)" for the UI.
   String get displayClock => StoryClock.formatClock(_clock);
@@ -261,6 +305,8 @@ class TimeService {
     // through the ordinary save. Leaving a previous chat's `true` standing here
     // would ask the loader to patch a row this service no longer describes.
     _canonicalClockWasSynthesised = false;
+    todayLine = null;
+    _todayLineDayCount = null;
   }
 
   /// Seed from a V2 card / ext-seed payload (design §3a). [storyStartDate]
@@ -300,6 +346,8 @@ class TimeService {
         : StoryClock.representativeTime(current, timeOfDay);
     _passageOfTimeEnabled = passageOfTimeEnabled;
     _turnsSinceClockMoved = 0;
+    todayLine = null;
+    _todayLineDayCount = null;
   }
 
   /// Load from a session row. Canonical columns win; legacy rows synthesize
@@ -331,6 +379,7 @@ class TimeService {
     // never survive a reopen, and the next save wrote `true` back over it. The
     // setting was not merely ignored; it was destroyed.
     _passageOfTimeEnabled = passageOfTimeEnabled;
+    clearTodayLine();
 
     final clock = StoryClock.parse(storyClock);
     final anchor = StoryClock.parse(storyStartDate);
@@ -408,22 +457,39 @@ class TimeService {
 
   // ── Manual control (chevrons + calendar dialog) ───────────────────────────
 
-  /// Sidebar chevrons: snap to the previous/next period's representative
-  /// time. delta = +1 (forward) or -1 (back). Signals god to patch the last
-  /// msg realism_state so swipe/regen cannot revert it.
-  void nudgeTimePeriod(int delta) {
-    _clock = delta >= 0
-        ? StoryClock.snapToNextPeriod(_clock)
-        : StoryClock.snapToPreviousPeriod(_clock);
+  /// Sidebar / web chevrons: ±[StoryClock.nudgeStepMinutes]. delta = +1
+  /// (forward) or -1 (back). Signals god to patch the last msg
+  /// realism_state so swipe/regen cannot revert it. Period snaps still
+  /// exist for AFK ([advanceTimePeriods]); the strip needed minute fidelity
+  /// once At work / Today read the live clock.
+  Future<void> nudgeTimePeriod(int delta) async {
+    final dayBefore = dayCount;
+    final step = StoryClock.nudgeStepMinutes * (delta >= 0 ? 1 : -1);
+    _clock = StoryClock.addMinutes(_clock, step);
     if (_clock.isBefore(_startDate)) _startDate = StoryClock.dateOnly(_clock);
     _turnsSinceClockMoved = 0;
     onPatchLastMessageRealismState(timeOfDay, dayCount, storyClockIso);
+    await _ifDayChanged(dayBefore);
+  }
+
+  /// All-away skip banner: no reply to score, so no LLM. Same 5-minute
+  /// floor the eval uses on failure. An OOC skip that already owned this
+  /// turn is left alone (and consumes the flag, matching the eval).
+  Future<void> applyFailureDrift() async {
+    if (!_passageOfTimeEnabled) return;
+    if (_oocSkipMovedClockThisTurn) {
+      _oocSkipMovedClockThisTurn = false;
+      return;
+    }
+    await _applyElapsed(minutes: null, newDay: false);
+    onNotify();
   }
 
   /// Calendar dialog: set the story's current moment directly. Pulls the
   /// anchor back when the new moment predates Day 1 (the story now starts
   /// earlier). Same swipe-survival patch as a nudge.
-  void setClockDirect(DateTime newClock) {
+  Future<void> setClockDirect(DateTime newClock) async {
+    final dayBefore = dayCount;
     _clock = DateTime.utc(
       newClock.year,
       newClock.month,
@@ -434,11 +500,13 @@ class TimeService {
     if (_clock.isBefore(_startDate)) _startDate = StoryClock.dateOnly(_clock);
     _turnsSinceClockMoved = 0;
     onPatchLastMessageRealismState(timeOfDay, dayCount, storyClockIso);
+    await _ifDayChanged(dayBefore);
   }
 
   /// Post-reply: she named a time, so the live clock follows. Not a user
   /// nudge — swipe/regen still rewind from the previous snapshot.
-  void applyReconciledClock(DateTime newClock) {
+  Future<void> applyReconciledClock(DateTime newClock) async {
+    final dayBefore = dayCount;
     _clock = DateTime.utc(
       newClock.year,
       newClock.month,
@@ -448,6 +516,7 @@ class TimeService {
     );
     if (_clock.isBefore(_startDate)) _startDate = StoryClock.dateOnly(_clock);
     _turnsSinceClockMoved = 0;
+    await _ifDayChanged(dayBefore);
   }
 
   /// Calendar dialog: re-anchor "story begins on…". Shifts the clock by the
@@ -507,7 +576,7 @@ class TimeService {
   /// going to sleep" are SPOKEN, so stripping quotes there would delete the
   /// evidence that a night was really crossed and quietly stop day rolls
   /// altogether. Opposite question, opposite answer.
-  void detectOocTimeSkip(String text) {
+  Future<void> detectOocTimeSkip(String text) async {
     if (!_passageOfTimeEnabled) {
       debugPrint(
         '[Realism:OOC] Time-skip requested but passageOfTimeEnabled=false, ignoring',
@@ -516,63 +585,11 @@ class TimeService {
     }
 
     final lower = stripQuotedSpeech(text).toLowerCase();
+    if (!shouldDetectTimeSkip(lower)) return;
 
-    final hasOocMarker = RegExp(
-      r'\(ooc[:\s]|\[ooc|\*ooc\b|ooc:',
-    ).hasMatch(lower);
-    final hasSkipPhrase = RegExp(
-      r'\b(time.?skip|fast.?forward|skip ahead|several hours|a few hours|hours? later|'
-      r'the next (morning|day|evening|afternoon|night|dawn)|'
-      r'next (morning|day|evening|afternoon|night|dawn)|'
-      r'hours? pass|time passes|the following (morning|day)|'
-      r'wake up the next|woke up|the next day|'
-      r'(a|one) week (later|passes)|next week|weeks? later|'
-      r'(a|one) month (later|passes)|next month)\b',
-    ).hasMatch(lower);
+    final next = StoryClock.resolveSkipTarget(_clock, lower);
 
-    if (!hasOocMarker && !hasSkipPhrase) return;
-
-    // An OOC marker alone is not a time skip. Without actual time language
-    // ("skip an hour", "a while later") the note is direction/flavor — a
-    // bare "(OOC: ...)" used to advance the clock a silent +1h per note.
-    final hasDurationHint = RegExp(
-      r'\b(an? hour|half an hour|\d+\s*(minutes?|hours?|days?|weeks?)|'
-      r'a while|some ?time|later|skip|fast.?forward|advance|pass(es|ing)?)\b',
-    ).hasMatch(lower);
-    if (!hasSkipPhrase && !hasDurationHint) return;
-
-    // Most specific duration language first.
-    DateTime next;
-    if (RegExp(
-      r'\b(a|one)? ?month (later|passes)|next month\b',
-    ).hasMatch(lower)) {
-      // The 1st of the following month, mid-morning (design §7).
-      next = DateTime.utc(_clock.year, _clock.month + 1, 1, 9);
-    } else if (RegExp(
-      r'\b((a|one) week (later|passes)|next week|weeks? later)\b',
-    ).hasMatch(lower)) {
-      next = _clock.add(const Duration(days: 7));
-    } else if (RegExp(
-      r'\b(next (morning|day)|the following (morning|day)|wake up|woke up|overnight|the next day)\b',
-    ).hasMatch(lower)) {
-      next = StoryClock.nextMorning(_clock);
-    } else if (RegExp(
-      r'\b(all day|entire day|full day|day passes|the (whole|entire) day)\b',
-    ).hasMatch(lower)) {
-      next = _clock.add(const Duration(hours: 8));
-    } else if (RegExp(
-      r'\b(several hours|many hours|a long time|hours? pass)\b',
-    ).hasMatch(lower)) {
-      next = _clock.add(const Duration(hours: 3));
-    } else if (RegExp(
-      r'\b(a few hours|couple.{0,5}hours|2.{0,5}hours|two hours)\b',
-    ).hasMatch(lower)) {
-      next = _clock.add(const Duration(hours: 2));
-    } else {
-      // "an hour", "a while", "some time", or a bare OOC marker.
-      next = _clock.add(const Duration(hours: 1));
-    }
-
+    final dayBefore = dayCount;
     _clock = next;
     _turnsSinceClockMoved = 0;
     _oocSkipMovedClockThisTurn = true;
@@ -584,13 +601,18 @@ class TimeService {
     debugPrint(
       '[Realism:OOC] Time-skip → $displayClock $displayShortDate (Day $dayCount)',
     );
+    await _ifDayChanged(dayBefore);
   }
 
   // ── Per-turn time advance (delegated from the physical / one-shot evals) ──
 
   /// Apply one turn's elapsed time. [minutes] null means the eval failed —
   /// deterministic drift applies. Returns whether the clock moved.
-  bool _applyElapsed({required int? minutes, required bool newDay}) {
+  Future<bool> _applyElapsed({
+    required int? minutes,
+    required bool newDay,
+  }) async {
+    final dayBefore = dayCount;
     var moved = false;
     final m = (minutes ?? StoryClock.failureDriftMinutes).clamp(
       0,
@@ -600,9 +622,11 @@ class TimeService {
       _clock = _clock.add(Duration(minutes: m));
       moved = true;
     }
-    // Explicit next-day transition — valid from evening onward (incl. the
-    // small hours past midnight, which ARE "that night" narratively).
-    if (newDay && (_clock.hour >= 17 || _clock.hour < 5)) {
+    // Corroborated next-day transition. The hour gate (17:00–05:00) was
+    // dropped: a nap that becomes "we slept through to morning" at 2pm is
+    // still a night crossed. Hallucinations are the corroboration regex's
+    // job, not the wall clock's.
+    if (newDay) {
       _clock = StoryClock.nextMorning(_clock);
       moved = true;
     }
@@ -614,12 +638,19 @@ class TimeService {
       moved = true;
       debugPrint('[Realism:Time] Stall backstop — snapped to $timeOfDay');
     }
+    await _ifDayChanged(dayBefore);
     return moved;
   }
 
   static int? _extractMinutes(String text) {
     final m = RegExp(r'"minutes_elapsed"\s*:\s*"?(-?\d+)').firstMatch(text);
     return m == null ? null : int.tryParse(m.group(1)!);
+  }
+
+  Future<void> _maybeApplyTodayEval(String text) async {
+    if (!(getPlannerEnabled?.call() ?? false)) return;
+    final parsed = TodayLineTag.parseEvalSentence(text);
+    if (parsed != null) await onTodayEval?.call(parsed);
   }
 
   /// The posture question alone — shared VERBATIM between the standalone
@@ -686,8 +717,10 @@ class TimeService {
   /// So posture is now exactly the kind of fact Pockets and Afterglow are —
   /// something the REPLY changed — and it runs where they run, reading the
   /// text that was just written (chat_service_generation_postgen.dart).
-  /// TIME did not move: the clock must advance before the reply so the
-  /// character knows what time it is while writing it.
+  /// TIME now moves AFTER the reply, same family as posture: the prompt
+  /// already announced the current clock, she wrote at that time, and this
+  /// call decides what the NEXT speaker will be told. Pre-gen application
+  /// made At work / Today lie (the strip jumped before she opened her mouth).
   ///
   /// [postureOnly] is that pass. It is the SAME branch that used to serve
   /// "passage of time is off, so ask about posture alone" — promoted to a
@@ -732,6 +765,7 @@ class TimeService {
     bool timeOnly = false,
     bool postureOnly = false,
     bool skipClockAdvance = false,
+    bool skipTodayEval = false,
   }) async {
     // Realism context, and therefore skipped entirely in timeOnly mode.
     final emotionCtx = !timeOnly && getCharacterEmotion().isNotEmpty
@@ -802,20 +836,22 @@ class TimeService {
       // The fused JSON already carries minutes_elapsed/new_day. Clock math
       // only — no LLM call. (Posture is NOT in it any more; it has its own
       // post-generation pass.)
+      final text = oneShotText ?? '';
       if (skipOwnsClock) {
         debugPrint(
           '[Realism:Time] OOC skip owns this turn — one-shot clock '
           'movement suppressed',
         );
+        if (!skipTodayEval) await _maybeApplyTodayEval(text);
         return;
       }
-      final text = oneShotText ?? '';
       final saidNewDay = extractJsonBool(text, 'new_day') ?? false;
       if (saidNewDay && !newDayCorroborated) logSuppressedNewDay();
-      _applyElapsed(
+      await _applyElapsed(
         minutes: _extractMinutes(text),
         newDay: saidNewDay && newDayCorroborated,
       );
+      if (!skipTodayEval) await _maybeApplyTodayEval(text);
       debugPrint(
         '[Realism:Time] One-shot elapsed applied → $displayClock (Day $dayCount)',
       );
@@ -825,12 +861,16 @@ class TimeService {
     // The two minutes_elapsed / new_day rules are written once and shared, so
     // the standalone clock cannot be tuned apart from the engine's by someone
     // editing one copy.
+    final plannerToday = getPlannerEnabled?.call() ?? false;
     final timeRules =
-        '1. "minutes_elapsed": how many in-story minutes passed during the LATEST exchange below (integer, 0-${StoryClock.maxMinutesPerTurn}). '
+        '1. "minutes_elapsed": how many in-story minutes passed during the reply that was JUST written (integer, 0-${StoryClock.maxMinutesPerTurn}). '
+        'This sets the clock the NEXT speaker will be told. '
         'Most conversational exchanges take 2-15 minutes; activities (a meal, a walk, a task, travel) take longer. '
         'Use 0 ONLY when the scene is a continuous instant (mid-action, mid-sentence).\n'
         '2. "new_day": true ONLY if the conversation explicitly transitioned to the next day (slept, woke up, scene break). false otherwise. '
-        'Merely MENTIONING yesterday, tomorrow, or another day does NOT count — the characters must actually cross a night.\n';
+        'Merely MENTIONING yesterday, tomorrow, or another day does NOT count — the characters must actually cross a night.\n'
+        '${plannerToday ? '3. "today_sentence": one sentence of what they are doing or planning today. '
+                  'Empty or "none" abandons the current hold. Omit to keep it.\n' : ''}';
 
     // ONE time prompt for both drivers. The engine adds its scene framing
     // (mood, last known position, relationship tension); the standalone clock
@@ -847,7 +887,7 @@ class TimeService {
         'Current story time: $displayClock on $narrativeWeekday, Day $dayCount.\n\n'
         '$timeRules\n'
         'Recent conversation:\n$recent\n\n'
-        '${toolsMode ? 'Report by calling the $kSceneTimeTool tool with "minutes_elapsed" and "new_day". Use ONLY the tool — no plain-text reply.' : 'Respond with ONLY a flat JSON object containing "minutes_elapsed" and "new_day". '
+        '${toolsMode ? 'Report by calling the $kSceneTimeTool tool with "minutes_elapsed" and "new_day"${plannerToday ? ' and "today_sentence"' : ''}. Use ONLY the tool — no plain-text reply.' : 'Respond with ONLY a flat JSON object containing "minutes_elapsed" and "new_day"${plannerToday ? ' and "today_sentence"' : ''}. '
                   'Do NOT use markdown code blocks — return raw JSON only.'}';
 
     try {
@@ -855,7 +895,9 @@ class TimeService {
         buildPrompt,
         fireLLMEval: fireLLMEval,
         onChunk: onChunk,
-        tools: kSceneTimeOnlyEvalTools,
+        tools: plannerToday
+            ? kSceneTimeOnlyEvalToolsWithToday
+            : kSceneTimeOnlyEvalTools,
       );
       if (raw != null) {
         final text = stripThinkBlocks(raw).isNotEmpty
@@ -869,19 +911,20 @@ class TimeService {
         } else {
           final saidNewDay = extractJsonBool(text, 'new_day') ?? false;
           if (saidNewDay && !newDayCorroborated) logSuppressedNewDay();
-          _applyElapsed(
+          await _applyElapsed(
             minutes: _extractMinutes(text),
             newDay: saidNewDay && newDayCorroborated,
           );
         }
+        if (!skipTodayEval) await _maybeApplyTodayEval(text);
       } else if (!skipOwnsClock) {
-        _applyElapsed(minutes: null, newDay: false);
+        await _applyElapsed(minutes: null, newDay: false);
       }
     } catch (e) {
       // Eval failed — deterministic drift so time never freezes (unless the
       // OOC skip already moved this turn's clock).
       if (!skipOwnsClock) {
-        _applyElapsed(minutes: null, newDay: false);
+        await _applyElapsed(minutes: null, newDay: false);
       }
       debugPrint('[Realism:Time] Eval error, drifted to $displayClock: $e');
     }

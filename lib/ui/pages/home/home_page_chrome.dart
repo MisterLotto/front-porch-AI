@@ -23,7 +23,6 @@ part of '../home_page.dart';
 /// Split out of the _HomePageState god file as a private extension
 /// (part of the same library, so it keeps full access to page state).
 extension _HomePageChrome on _HomePageState {
-
   Widget _buildModeToggle() {
     return HomeModeToggle(
       showStories: _showStories,
@@ -98,10 +97,33 @@ extension _HomePageChrome on _HomePageState {
     );
   }
 
-  /// Shows a dialog letting the user choose which saved session to resume.
-  /// Returns the session ID, '__new__' for a new chat, or null if cancelled.
-
   // ─── CharacterCardGrid Callback Handlers ────────────────────────
+
+  /// Push ChatPage immediately and drain [load] after pop. The session
+  /// overlay covers hydrate — awaiting load first is the home-grid freeze.
+  /// A failed load pops the ghost ChatPage and snacks the error.
+  Future<void> _pushChatWhile(Future<void> load) async {
+    if (!mounted) {
+      await load;
+      return;
+    }
+    final nav = Navigator.of(context);
+    final route = nav.push(MaterialPageRoute(builder: (_) => const ChatPage()));
+    try {
+      await load;
+    } catch (e, st) {
+      debugPrint('[Home] open chat failed: $e\n$st');
+      if (mounted && nav.canPop()) {
+        nav.pop();
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not open chat: $e')));
+      }
+      return;
+    }
+    await route;
+    if (mounted) _refreshLastActivityCache();
+  }
 
   Future<void> _handleTapCharacter(CharacterCard character) async {
     // Use State.mounted — NOT context.mounted. Reading State.context after
@@ -111,6 +133,13 @@ extension _HomePageChrome on _HomePageState {
     _openingChat = true;
     try {
       final chatService = Provider.of<ChatService>(context, listen: false);
+      // One session (the common case): skip the full session list + the
+      // getAllCharacters scan inside getSessionsForId. The picker still
+      // uses the basename id when there are several chats.
+      if (!await chatService.hasMultipleSavedSessions(character)) {
+        await _pushChatWhile(chatService.setActiveCharacter(character));
+        return;
+      }
       // getSessionsForId resolves 1:1 ids by imagePath basename (stableGroupId)
       // — the dbId UUID silently returns [] and kills the session picker
       // (documented identity gotcha; same warning at enhance_wizard_page.dart).
@@ -126,21 +155,22 @@ extension _HomePageChrome on _HomePageState {
           character.name,
         );
         if (selectedId == null || !mounted) return;
-        await chatService.setActiveCharacter(character);
-        if (!mounted) return;
-        if (selectedId != '__new__') {
-          await chatService.loadSession(selectedId);
-        } else {
-          await chatService.startNewChat();
-        }
+        chatService.beginSessionLoad();
+        await _pushChatWhile(() async {
+          try {
+            await chatService.setActiveCharacter(character);
+            if (selectedId != '__new__') {
+              await chatService.loadSession(selectedId);
+            } else {
+              await chatService.startNewChat();
+            }
+          } finally {
+            chatService.endSessionLoad();
+          }
+        }());
       } else {
-        await chatService.setActiveCharacter(character);
+        await _pushChatWhile(chatService.setActiveCharacter(character));
       }
-      if (!mounted) return;
-      await Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const ChatPage()));
-      if (mounted) _refreshLastActivityCache();
     } finally {
       _openingChat = false;
     }
@@ -151,7 +181,10 @@ extension _HomePageChrome on _HomePageState {
     _openingChat = true;
     try {
       final chatService = Provider.of<ChatService>(context, listen: false);
-      final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
+      final groupRepo = Provider.of<GroupChatRepository>(
+        context,
+        listen: false,
+      );
       final groupId = 'group_${group.id}';
       final sessions = await chatService.getSessionsForId(groupId);
 
@@ -164,21 +197,24 @@ extension _HomePageChrome on _HomePageState {
           group.name,
         );
         if (selectedId == null || !mounted) return;
-        await chatService.setActiveGroup(group, groupRepo: groupRepo);
-        if (!mounted) return;
-        if (selectedId != '__new__') {
-          await chatService.loadSession(selectedId);
-        } else {
-          await chatService.startNewChat();
-        }
+        chatService.beginSessionLoad();
+        await _pushChatWhile(() async {
+          try {
+            await chatService.setActiveGroup(group, groupRepo: groupRepo);
+            if (selectedId != '__new__') {
+              await chatService.loadSession(selectedId);
+            } else {
+              await chatService.startNewChat();
+            }
+          } finally {
+            chatService.endSessionLoad();
+          }
+        }());
       } else {
-        await chatService.setActiveGroup(group, groupRepo: groupRepo);
+        await _pushChatWhile(
+          chatService.setActiveGroup(group, groupRepo: groupRepo),
+        );
       }
-      if (!mounted) return;
-      await Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const ChatPage()));
-      if (mounted) _refreshLastActivityCache();
     } finally {
       _openingChat = false;
     }
@@ -196,23 +232,23 @@ extension _HomePageChrome on _HomePageState {
     _openingChat = true;
     try {
       final subject = character?.name ?? group?.name ?? '';
-      final personaId = await showPersonaPickerDialog(context, subject: subject);
+      final personaId = await showPersonaPickerDialog(
+        context,
+        subject: subject,
+      );
       if (personaId == null || !mounted) return;
 
       final chatService = Provider.of<ChatService>(context, listen: false);
-      await chatService.startFreshChatWith(
-        character: character,
-        group: group,
-        groupRepo: group == null
-            ? null
-            : Provider.of<GroupChatRepository>(context, listen: false),
-        personaId: personaId,
+      await _pushChatWhile(
+        chatService.startFreshChatWith(
+          character: character,
+          group: group,
+          groupRepo: group == null
+              ? null
+              : Provider.of<GroupChatRepository>(context, listen: false),
+          personaId: personaId,
+        ),
       );
-      if (!mounted) return;
-      await Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => const ChatPage()));
-      if (mounted) _refreshLastActivityCache();
     } finally {
       _openingChat = false;
     }
@@ -222,6 +258,9 @@ extension _HomePageChrome on _HomePageState {
     switch (action) {
       case 'new_chat':
         _startNewChatWith(character: character);
+        break;
+      case 'chat_history':
+        _showChatHistory(character: character);
         break;
       case 'edit':
         _editCharacter(context, character);
@@ -292,6 +331,9 @@ extension _HomePageChrome on _HomePageState {
       case 'new_chat':
         _startNewChatWith(group: group);
         break;
+      case 'chat_history':
+        _showChatHistory(group: group);
+        break;
       case 'edit':
         _editGroup(group);
         break;
@@ -351,21 +393,6 @@ extension _HomePageChrome on _HomePageState {
       );
     }
   }
-
-  void _handleImport(String source) {
-    switch (source) {
-      case 'cards':
-        _importCharacter(context);
-        break;
-      case 'folder':
-        _folderImportCharacters(context);
-        break;
-      case 'byaf':
-        _importByaf(context);
-        break;
-    }
-  }
-
 
   /// One drop handler for both draggable kinds: characters are keyed by image
   /// filename, group casts by their group id (see FolderService).

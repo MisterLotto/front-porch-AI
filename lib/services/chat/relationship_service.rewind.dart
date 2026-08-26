@@ -33,9 +33,7 @@ Map<String, dynamic> rejectedTurnRewindPatch(Map? realismState) {
   if (realismState == null) return const {};
   final rels = realismState['interCharacterRelationships'];
   if (rels is! Map) return const {};
-  return {
-    'interCharacterRelationships': Map<dynamic, dynamic>.from(rels),
-  };
+  return {'interCharacterRelationships': Map<dynamic, dynamic>.from(rels)};
 }
 
 // ── The two registers that live outside the scalar set ────────────────────
@@ -231,6 +229,10 @@ extension RelationshipServiceRewind on RelationshipService {
     _fixationLifespan =
         (state['fixationLifespan'] as int?) ?? _fixationLifespan;
     _spatialStance = (state['spatialStance'] as String?) ?? _spatialStance;
+    if (state.containsKey('withUser')) {
+      final v = state['withUser'];
+      _withUser = v is bool ? v : null;
+    }
 
     // The pair to captureCadenceAndFeelings. Messages written before these keys
     // existed simply carry neither, so both stay null and nothing is restored —

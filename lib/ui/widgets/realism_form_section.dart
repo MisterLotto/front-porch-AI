@@ -23,10 +23,12 @@ import 'package:front_porch_ai/ui/widgets/identity_chip_lists.dart';
 import 'package:front_porch_ai/ui/widgets/story_begins_row.dart';
 import 'package:front_porch_ai/ui/widgets/synced_text_field.dart';
 
-/// Shared Realism Engine configuration form.
+/// Shared Realism + Porch Life authoring form.
 ///
-/// Used by both the Manual Character Creator and AI Character Creator
-/// to configure initial Realism Engine state for a character card.
+/// The engine master switch only hides bond/emotion/needs/afterglow/verifier
+/// — those need the Realism Engine at runtime. Time, Chaos, wardrobe,
+/// ambitions and likes are Porch Life and stay editable with the engine off
+/// (docs: porch_life_tab / feature independence).
 class RealismFormSection extends StatelessWidget {
   final bool enabled;
   final ValueChanged<bool> onEnabledChanged;
@@ -64,6 +66,20 @@ class RealismFormSection extends StatelessWidget {
   /// rendered rather than rendered empty and dead.
   final List<String>? ambitions;
   final ValueChanged<List<String>>? onAmbitionsChanged;
+
+  /// Plan-line sentences. Same optional-pair convention as [ambitions].
+  final List<String>? planLines;
+  final ValueChanged<List<String>>? onPlanLinesChanged;
+
+  /// Occupation + hours + job brief. Same optional-pair convention as [planLines].
+  final String? occupation;
+  final ValueChanged<String>? onOccupationChanged;
+  final String? occupationBrief;
+  final ValueChanged<String>? onOccupationBriefChanged;
+  final String? hours;
+  final ValueChanged<String>? onHoursChanged;
+  final List<int>? workDays;
+  final ValueChanged<List<int>>? onWorkDaysChanged;
 
   /// Likes & Dislikes, and the 18+ pair — same optional-pair convention as
   /// [ambitions]: pass values + callback or the section is absent, so surfaces
@@ -135,6 +151,16 @@ class RealismFormSection extends StatelessWidget {
     required this.onChaosModeChanged,
     this.ambitions,
     this.onAmbitionsChanged,
+    this.planLines,
+    this.onPlanLinesChanged,
+    this.occupation,
+    this.onOccupationChanged,
+    this.occupationBrief,
+    this.onOccupationBriefChanged,
+    this.hours,
+    this.onHoursChanged,
+    this.workDays,
+    this.onWorkDaysChanged,
     this.likes,
     this.onLikesChanged,
     this.dislikes,
@@ -297,7 +323,8 @@ class RealismFormSection extends StatelessWidget {
                       Text(
                         enabled
                             ? 'Character will start with pre-configured state'
-                            : 'Realism Engine will use default values',
+                            : 'Wardrobe, likes, time and Chaos still apply. '
+                                  'Bond, mood and Needs stay off.',
                         style: TextStyle(
                           color: enabled
                               ? AppColors.formMasterAccent
@@ -320,131 +347,127 @@ class RealismFormSection extends StatelessWidget {
             ),
           ),
 
-        // ── Configuration Form (only when enabled) ──
-        if (enabled) ...[
-          const SizedBox(height: 20),
+        // Time / Chaos / identity chips are Porch Life — they run without
+        // the engine. Do not hide them behind [enabled].
+        const SizedBox(height: 20),
 
-          if (showTimeAndDay) ...[
-            // Time & Day Section
-            _sectionHeader(
-              Icons.schedule,
-              'Time & Day',
-              AppColors.timeDayAccent,
+        if (showTimeAndDay) ...[
+          // Time & Day Section
+          _sectionHeader(Icons.schedule, 'Time & Day', AppColors.timeDayAccent),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.cardOf(context),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.borderOf(context)),
             ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.cardOf(context),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.borderOf(context)),
-              ),
-              child: Row(
-                children: [
-                  // Time of Day dropdown
-                  Expanded(
-                    flex: 2,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Time of Day', style: labelStyle),
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceContainerOf(context),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: AppColors.borderOf(context),
-                            ),
-                          ),
-                          child: DropdownButton<String>(
-                            value: timeOfDay,
-                            isExpanded: true,
-                            dropdownColor: AppColors.surfaceContainerOf(
-                              context,
-                            ),
-                            underline: const SizedBox(),
-                            style: TextStyle(
-                              color: AppColors.textPrimary(context),
-                              fontSize: 14,
-                            ),
-                            items: _timeOptions
-                                .map(
-                                  (t) => DropdownMenuItem(
-                                    value: t,
-                                    child: Text(_formatTimeLabel(t)),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (v) {
-                              if (v != null) onTimeOfDayChanged(v);
-                            },
+            child: Row(
+              children: [
+                // Time of Day dropdown
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Time of Day', style: labelStyle),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceContainerOf(context),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: AppColors.borderOf(context),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  // Day Number
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Day Number', style: labelStyle),
-                        const SizedBox(height: 8),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceContainerOf(context),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: AppColors.borderOf(context),
-                            ),
+                        child: DropdownButton<String>(
+                          value: timeOfDay,
+                          isExpanded: true,
+                          dropdownColor: AppColors.surfaceContainerOf(context),
+                          underline: const SizedBox(),
+                          style: TextStyle(
+                            color: AppColors.textPrimary(context),
+                            fontSize: 14,
                           ),
-                          // SyncedTextField, not a TextField with an inline
-                          // controller: every caller rebuilds this section on
-                          // each keystroke, and a controller built in build()
-                          // loses the caret (and any IME composition) every
-                          // frame.
-                          child: SyncedTextField(
-                            value: dayCount.toString(),
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly,
-                            ],
-                            style: TextStyle(
-                              color: AppColors.textPrimary(context),
-                              fontSize: 14,
-                            ),
-                            onChanged: (v) {
-                              final n = int.tryParse(v);
-                              if (n != null && n >= 1) onDayCountChanged(n);
-                            },
-                            decoration: const InputDecoration(
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 10,
-                              ),
+                          items: _timeOptions
+                              .map(
+                                (t) => DropdownMenuItem(
+                                  value: t,
+                                  child: Text(_formatTimeLabel(t)),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (v) {
+                            if (v != null) onTimeOfDayChanged(v);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                // Day Number
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Day Number', style: labelStyle),
+                      const SizedBox(height: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceContainerOf(context),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: AppColors.borderOf(context),
+                          ),
+                        ),
+                        // SyncedTextField, not a TextField with an inline
+                        // controller: every caller rebuilds this section on
+                        // each keystroke, and a controller built in build()
+                        // loses the caret (and any IME composition) every
+                        // frame.
+                        child: SyncedTextField(
+                          value: dayCount.toString(),
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          style: TextStyle(
+                            color: AppColors.textPrimary(context),
+                            fontSize: 14,
+                          ),
+                          onChanged: (v) {
+                            final n = int.tryParse(v);
+                            if (n != null && n >= 1) onDayCountChanged(n);
+                          },
+                          decoration: const InputDecoration(
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
                             ),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-            if (onStoryStartDateChanged != null) ...[
-              const SizedBox(height: 8),
-              StoryBeginsRow(
-                storyStartDate: storyStartDate,
-                onStoryStartDateChanged: onStoryStartDateChanged!,
-                storyStartTime: storyStartTime,
-                onStoryStartTimeChanged: onStoryStartTimeChanged,
-              ),
-            ],
-          ], // end showTimeAndDay
+          ),
+          if (onStoryStartDateChanged != null) ...[
+            const SizedBox(height: 8),
+            StoryBeginsRow(
+              storyStartDate: storyStartDate,
+              onStoryStartDateChanged: onStoryStartDateChanged!,
+              storyStartTime: storyStartTime,
+              onStoryStartTimeChanged: onStoryStartTimeChanged,
+            ),
+          ],
+        ], // end showTimeAndDay
+
+        if (enabled) ...[
           const SizedBox(height: 20),
 
           // Needs Simulation (rendered separately when provided by caller).
@@ -715,30 +738,62 @@ class RealismFormSection extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 20),
+        ],
 
-          // The card-authored identity lists — Ambitions, Likes & Dislikes,
-          // and the 18+ pair. All chips, all optional, all in one leaf
-          // (identity_chip_lists.dart) so this file stops growing a section
-          // per field.
-          IdentityChipLists(
-            ambitions: ambitions,
-            onAmbitionsChanged: onAmbitionsChanged,
-            likes: likes,
-            onLikesChanged: onLikesChanged,
-            dislikes: dislikes,
-            onDislikesChanged: onDislikesChanged,
-            intimateInto: intimateInto,
-            onIntimateIntoChanged: onIntimateIntoChanged,
-            intimateNotInto: intimateNotInto,
-            onIntimateNotIntoChanged: onIntimateNotIntoChanged,
-            showIntimate: showIntimate,
-            worn: worn,
-            onWornChanged: onWornChanged,
-            carrying: carrying,
-            onCarryingChanged: onCarryingChanged,
+        if (showChaosToggle && !enabled) ...[
+          const SizedBox(height: 20),
+          _sectionHeader(
+            Icons.tune,
+            'Optional Features',
+            AppColors.optionalAccent,
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.cardOf(context),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.borderOf(context)),
+            ),
+            child: buildToggleRow(
+              icon: Icons.casino,
+              label: 'Chaos Mode (Chance Time)',
+              subtitle: 'Random narrative events during roleplay',
+              value: chaosModeEnabled,
+              onChanged: onChaosModeChanged,
+              context: context,
+            ),
           ),
         ],
+
+        // Identity / wardrobe — Porch Life, not the engine.
+        IdentityChipLists(
+          ambitions: ambitions,
+          onAmbitionsChanged: onAmbitionsChanged,
+          planLines: planLines,
+          onPlanLinesChanged: onPlanLinesChanged,
+          occupation: occupation,
+          onOccupationChanged: onOccupationChanged,
+          occupationBrief: occupationBrief,
+          onOccupationBriefChanged: onOccupationBriefChanged,
+          hours: hours,
+          onHoursChanged: onHoursChanged,
+          workDays: workDays,
+          onWorkDaysChanged: onWorkDaysChanged,
+          likes: likes,
+          onLikesChanged: onLikesChanged,
+          dislikes: dislikes,
+          onDislikesChanged: onDislikesChanged,
+          intimateInto: intimateInto,
+          onIntimateIntoChanged: onIntimateIntoChanged,
+          intimateNotInto: intimateNotInto,
+          onIntimateNotIntoChanged: onIntimateNotIntoChanged,
+          showIntimate: showIntimate,
+          worn: worn,
+          onWornChanged: onWornChanged,
+          carrying: carrying,
+          onCarryingChanged: onCarryingChanged,
+        ),
       ],
     );
   }

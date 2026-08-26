@@ -4,7 +4,9 @@
 // The Conversations slide-over drawer (past sessions + "New chat"). Extracted
 // verbatim from ChatPage to keep that page under the file-size cap.
 
+import { useState } from 'react';
 import { ChatPackageBar } from './ChatPackageBar';
+import { ConfirmDialog } from './library/LibraryDialogs';
 
 export interface SessionSummary {
   id: string;
@@ -28,6 +30,7 @@ export function ConversationsDrawer({
   activeSessionId,
   onLoad,
   onNew,
+  onDelete,
   onClose,
   exportTitle,
   canExport,
@@ -39,14 +42,22 @@ export function ConversationsDrawer({
   activeSessionId: string | null;
   onLoad: (id: string) => void;
   onNew: () => void;
+  onDelete: (id: string) => void | Promise<void>;
   onClose: () => void;
   exportTitle: string;
   canExport: boolean;
   canImport: boolean;
   onImported: (message: string) => void;
 }) {
+  const [pending, setPending] = useState<SessionSummary | null>(null);
+
   return (
-    <div className="drawer-backdrop" onClick={onClose}>
+    <div
+      className="drawer-backdrop"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className="sessions-drawer" onClick={(e) => e.stopPropagation()}>
         <div className="drawer-head">
           <span>Conversations</span>
@@ -66,7 +77,7 @@ export function ConversationsDrawer({
         ) : (
           <ul className="conv-list">
             {sessions.map((s) => (
-              <li key={s.id}>
+              <li key={s.id} className="conv-row">
                 <button
                   className={`conv-item${s.id === activeSessionId ? ' active' : ''}`}
                   onClick={() => onLoad(s.id)}
@@ -76,11 +87,34 @@ export function ConversationsDrawer({
                     {formatDate(s.date)} · {s.message_count} msgs
                   </span>
                 </button>
+                <button
+                  type="button"
+                  className="icon-btn conv-delete"
+                  aria-label="Delete chat"
+                  title="Delete chat"
+                  onClick={() => setPending(s)}
+                >
+                  🗑
+                </button>
               </li>
             ))}
           </ul>
         )}
       </div>
+      {pending && (
+        <ConfirmDialog
+          title="Delete Chat?"
+          message={`This will permanently delete this chat and all its messages.\n\n"${pending.session_name || pending.preview}"`}
+          confirmLabel="Delete"
+          danger
+          onConfirm={() => {
+            const id = pending.id;
+            setPending(null);
+            void onDelete(id);
+          }}
+          onClose={() => setPending(null)}
+        />
+      )}
     </div>
   );
 }

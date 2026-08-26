@@ -167,7 +167,8 @@ void main() {
     expect(
       llm.chatPrompts.last,
       contains('NO memory of how it got there'),
-      reason: 'the Easter egg: a conjured item must reach the reply as '
+      reason:
+          'the Easter egg: a conjured item must reach the reply as '
           'genuine surprise, not slip in unremarked',
     );
     expect(llm.chatPrompts.last, contains('brass key (scuffed)'));
@@ -193,7 +194,8 @@ void main() {
     expect(
       llm.chatPrompts.last,
       isNot(contains('NO memory of how it got there')),
-      reason: 'the reaction already played out — repeating it every turn '
+      reason:
+          'the reaction already played out — repeating it every turn '
           'would make her permanently baffled by her own keys',
     );
     // The item itself stays in the ordinary inventory fragment.
@@ -223,7 +225,8 @@ void main() {
     expect(
       llm.chatPrompts.last,
       isNot(contains('NO memory of how it got there')),
-      reason: 'a gift is the opposite fiction — she knows exactly where it '
+      reason:
+          'a gift is the opposite fiction — she knows exactly where it '
           'came from',
     );
   });
@@ -238,7 +241,12 @@ void main() {
     // the missing filter (that is how this guard's first red-proof failed
     // to go red).
     await chat.setActiveCharacter(
-      card('char-padd-4', inventory: {'carrying': ['sun hat']}),
+      card(
+        'char-padd-4',
+        inventory: {
+          'carrying': ['sun hat'],
+        },
+      ),
     );
     final id = chat.characterIdFor(chat.activeCharacter!);
     final firstSession = chat.currentSessionId!;
@@ -257,7 +265,8 @@ void main() {
     expect(
       llm.chatPrompts.last,
       isNot(contains('NO memory of how it got there')),
-      reason: 'the add belongs to the FIRST chat — reacting here would have '
+      reason:
+          'the add belongs to the FIRST chat — reacting here would have '
           'her baffled by an item this record does not hold',
     );
 
@@ -268,7 +277,8 @@ void main() {
     expect(
       llm.chatPrompts.last,
       contains('NO memory of how it got there'),
-      reason: 'returning to the chat the add happened in must still pay off '
+      reason:
+          'returning to the chat the add happened in must still pay off '
           'the queued reaction',
     );
   });
@@ -289,13 +299,15 @@ void main() {
     expect(
       itemIntro,
       greaterThan(porchNight),
-      reason: 'the one-shot directive belongs after the suffix with the '
+      reason:
+          'the one-shot directive belongs after the suffix with the '
           'event class, or models ignore it again',
     );
     expect(
       plan.contains("plan.section('item_intro').text = ''"),
       isTrue,
-      reason: 'Continue extends the reply that already reacted — '
+      reason:
+          'Continue extends the reply that already reacted — '
           're-injecting has her notice the same thing twice in one message',
     );
   });
@@ -319,5 +331,66 @@ void main() {
       isNull,
       reason: 'the one Pockets switch gates the add like every other surface',
     );
+  });
+
+  test('correction: lands on worn, gift is ignored, next reply is NOT '
+      'surprised and is NOT a gift', () async {
+    // Wardrobe error-correction (2026-08-20): the model stripped them; the
+    // user puts a coat back on the record. That is neither a gift (hands)
+    // nor an Easter egg (magic coat). The inventory fragment already states
+    // wearing as fact — that is enough for the next reply to be dressed.
+    await chat.setActiveCharacter(card('char-padd-corr'));
+    final id = chat.characterIdFor(chat.activeCharacter!);
+
+    await chat.addPocketItem(
+      id,
+      section: PocketSection.worn,
+      name: 'coat (buttoned)',
+      gift: true,
+      correction: true,
+    );
+    final p = chat.pocketsFor(id)!;
+    expect(p.worn.single.display, 'coat (buttoned)');
+    expect(
+      p.carrying,
+      isEmpty,
+      reason: 'correction ignores gift — it must not force carrying',
+    );
+
+    await chat.sendMessage('You look cold.');
+    await drainTurn();
+    expect(
+      llm.chatPrompts.last,
+      isNot(contains('NO memory of how it got there')),
+      reason: 'correcting a wardrobe error is not an Easter egg',
+    );
+    expect(
+      llm.chatPrompts.last,
+      isNot(contains('has just handed')),
+      reason: 'correction is not a gift either',
+    );
+    expect(
+      llm.chatPrompts.last,
+      contains('coat (buttoned)'),
+      reason: 'the ordinary inventory fragment still names what they wear',
+    );
+  });
+
+  test('1:1 and group add-item callers both pass correction into the same '
+      'addPocketItem', () {
+    // Path-complete pin: there is ONE write path. Both surfaces that open
+    // the dialog must forward the dialog's correction flag; a 1:1-only
+    // dress button would leave group members naked-with-keys forever.
+    final one = File(
+      'lib/ui/chat_components/sidebar/character_state/'
+      'character_state_group.dart',
+    ).readAsStringSync();
+    final group = File(
+      'lib/ui/widgets/group_member_card.dart',
+    ).readAsStringSync();
+    expect(one.contains('correction: add.correction'), isTrue);
+    expect(group.contains('correction: add.correction'), isTrue);
+    expect(one.contains('chat.addPocketItem'), isTrue);
+    expect(group.contains('chat.addPocketItem'), isTrue);
   });
 }

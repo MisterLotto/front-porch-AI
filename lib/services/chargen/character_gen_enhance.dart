@@ -28,6 +28,9 @@ extension GenEnhance on CharacterGenService {
     bool nsfwEnabled = false,
     bool reasoningEnabled = false,
     bool abortInFlight = false,
+    String? narrativePerspective,
+    String? narrativeTense,
+    String? sex,
     void Function(String accumulated)? onProgress,
     void Function(String error)? onError,
     void Function(String status)? onStatus,
@@ -63,6 +66,16 @@ extension GenEnhance on CharacterGenService {
     if (abortInFlight) _llmService.abortGeneration();
     _reasoningEnabled = reasoningEnabled;
     _includeDynamicMacros = false;
+    // Keep the card's Create voice. Params override the stamp; omitted
+    // (and unstamped cards) stay first-person present.
+    final resolved = resolveEnhanceVoice(
+      narrativePerspective: narrativePerspective,
+      narrativeTense: narrativeTense,
+      sex: sex,
+      source: source,
+    );
+    _narrativeVoice = resolved.voice;
+    _narrativeSex = resolved.sex;
 
     // ── Interview, grounded in the real chat (always runs) ─────────
     onStatus?.call('Interviewing $name about the chat...');
@@ -202,8 +215,41 @@ extension GenEnhance on CharacterGenService {
             alts.add(_cleanGreeting(altOutput));
           }
         }
-        card.alternateGreetings = alts;
+        // Seeds are not authored with these rewritten alts — compact against
+        // empty so leftover source furious cannot land on Get out.
+        card.assignRewrittenAlternateGreetings(alts);
       }
+    }
+    if (_aborted || _generationEpoch != currentEpoch) return null;
+
+    // Same seed as AI Create, proposed not applied — Review's "Use this"
+    // is what writes it onto the (Enhanced) duplicate.
+    if (selection.porchLife) {
+      onStatus?.call('Proposing wardrobe and ambitions...');
+      onProgress?.call('');
+      // copyWith() keeps source greetingSeeds. When greetings were rewritten
+      // without authored seeds, pass compact-empty so leftover furious cannot
+      // land on Get out. Authored enhance seeds (if any) pair as written.
+      final sourceExt =
+          source.frontPorchExtensions ??
+          FrontPorchExtensions(needsSimEnabled: true);
+      if (selection.greetings) {
+        card.frontPorchExtensions = sourceExt.copyWith(
+          greetingSeeds: compactRewrittenGreetingAlts(
+            card.alternateGreetings,
+            card.frontPorchExtensions?.greetingSeeds,
+          ).seeds,
+        );
+      } else {
+        card.frontPorchExtensions = sourceExt.copyWith();
+      }
+      await _seedPorchLifeIdentity(
+        card: card,
+        name: name,
+        interviewTranscript: interviewTranscript,
+        nsfwEnabled: nsfwEnabled,
+        onProgress: onProgress,
+      );
     }
     if (_aborted || _generationEpoch != currentEpoch) return null;
 

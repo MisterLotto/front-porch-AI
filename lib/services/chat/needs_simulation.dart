@@ -74,6 +74,10 @@ class NeedsSimulation {
   String? _pendingCatastrophe;
   String?
   _lastSceneReason; // from model/Director for better chip reasons on scene deltas
+  /// Speakers who already got the "I reek" beat at hygiene 0. Cleared
+  /// when hygiene rises (they washed). Stops a no-rebound meter from
+  /// re-firing the canon scene event every turn.
+  final Set<String> _hygieneCrisisAcked = {};
 
   NeedsSimulation({
     required this.onNotify,
@@ -118,8 +122,8 @@ class NeedsSimulation {
   };
 
   static const Map<String, int> needDecay = {
-    'hunger': 4,
-    'bladder': 6,
+    'hunger': 2,
+    'bladder': 3,
     'energy': 3,
     'social': 2,
     'fun': 2,
@@ -227,11 +231,10 @@ class NeedsSimulation {
   // Mandatory "this just happened" events fired when a HARD-EVENT need bottoms
   // out (≤0). Neutral voice (they/them). Each line carries its OWN observable
   // evidence, so the injection wrapper stays generic (no bladder-centric list).
-  // Deliberately NO social/fun entries — those are moods, not discrete events
-  // (the old "fun=0 → do something dangerous/sexual/chaotic" line was a model-
-  // derailment vector); they max out as intense distress in the stepped text
-  // instead. Hygiene is skipped entirely for "enjoys low hygiene" characters
-  // (for them 0 hygiene is comfort, not a crisis).
+  // Deliberately NO social/fun entries — moods, not discrete events.
+  // Hygiene still GETS a beat (they notice they reek, they hate it) but
+  // has no recovery floor — the meter stays at 0 until they actually wash.
+  // Enjoys-low-hygiene skips the beat (0 hygiene is comfort for them).
   static const Map<String, String> needCatastropheText = {
     'hunger':
         '''Starvation buckles them — they sag, grey-faced and unsteady, and have to catch themselves on the nearest support just to stay upright. Their body has hit its limit and it shows.''',
@@ -240,7 +243,7 @@ class NeedsSimulation {
     'energy':
         '''Exhaustion drops them mid-action — their knees buckle and they collapse, briefly blacking out as they slump to the floor or the nearest surface. They come to a few seconds later, dazed and groggy, barely able to keep their eyes open or form a clear thought.''',
     'hygiene':
-        '''Their own grime and body odor turn undeniable this turn — sharp enough that they notice it on their own skin, or the people around them visibly react to it. It's an unmistakable, distracting presence in the scene.''',
+        '''They can smell themselves — grimy, sour, unmistakable — and it makes them self-conscious, uncomfortable, embarrassed. They do not drop what they are doing to go wash; the stink just sits on them.''',
     'comfort':
         '''The strain becomes unbearable — the cramped position, the temperature, the pressure, the restraint, whatever is causing it. They have to shift, break contact with the source, or otherwise ease it; they can't simply hold still through it any longer.''',
   };
@@ -251,12 +254,12 @@ class NeedsSimulation {
   ///     energy (came to groggy, NOT a full rest — user said collapse-and-groggy,
   ///     not fall-asleep).
   ///   crisis-vent — a behavioral/sensory peak with only partial relief:
-  ///     hygiene, comfort (the moment passes; nothing was actually cleaned/fixed).
+  ///     comfort (the moment passes; nothing was actually fixed).
+  /// Hygiene is deliberately ABSENT: noticing they reek does not clean them.
   static const Map<String, int> needPostCatastropheFloor = {
     'bladder': 85,
     'hunger': 70,
     'energy': 65,
-    'hygiene': 55,
     'comfort': 60,
   };
 
@@ -327,6 +330,7 @@ class NeedsSimulation {
     _vector = Map<String, int>.from(needDefaults);
     _pendingCatastrophe = null;
     _lastSceneReason = null;
+    _hygieneCrisisAcked.clear();
     // No buffer state to zero.
   }
 
@@ -360,6 +364,7 @@ class NeedsSimulation {
     _vector = Map<String, int>.from(defaults);
     _pendingCatastrophe = null;
     _lastSceneReason = null;
+    _hygieneCrisisAcked.clear();
     // No buffer state to zero.
   }
 
@@ -367,12 +372,14 @@ class NeedsSimulation {
     _vector.clear();
     _pendingCatastrophe = null;
     _lastSceneReason = null;
+    _hygieneCrisisAcked.clear();
   }
 
   void resetBuffers() {
     // Buffer reset is now a no-op (buffers expunged). Kept for god reset hygiene calls.
     _pendingCatastrophe = null;
     _lastSceneReason = null;
+    _hygieneCrisisAcked.clear();
   }
 
   /// How far ONE exchange may push a need DOWN, at strength 1x.
@@ -391,9 +398,9 @@ class NeedsSimulation {
   ///
   /// PER-NEED, because a single number is either too tight for the needs whose
   /// mechanism IS events or too loose for the ones decay already owns:
-  ///   * bladder (decay 6) gets the widest bite. It is a fast clock AND the
+  ///   * bladder (decay 3) gets the widest bite. It is a fast clock AND the
   ///     need most obviously moved by a described act — drinking, a long
-  ///     drive, holding it. 18 is about three turns of normal build.
+  ///     drive, holding it. 18 is several turns of normal build.
   ///   * hygiene (decay 1) barely drifts at all; sex, mud and rain are the
   ///     only things that move it, so it needs room despite the tiny decay.
   ///   * hunger, energy, comfort sit at 12 — a real cost, not a cliff.
@@ -523,20 +530,26 @@ class NeedsSimulation {
   }
 
   /// When a hard-event need has bottomed out (≤0) this turn, arm ONE mandatory
-  /// catastrophe (the worst such need) for the prompt builder and lift that
-  /// need to its recovery floor so it can't instantly re-fire. Operates on the
-  /// live [_vector] — the 1:1 host's (called from [tickDecay]), or a group
-  /// speaker's after their scalars are loaded (called from the realism dance),
-  /// so 1:1 and group behave identically. Hygiene is skipped for "enjoys low
-  /// hygiene" characters (0 hygiene is comfort, not a crisis, for them).
+  /// catastrophe (the worst such need) for the prompt builder. Needs with a
+  /// [needPostCatastropheFloor] lift so they can't instantly re-fire; hygiene
+  /// has none — they stay filthy until a scene actually washes them. Operates
+  /// on the live [_vector] — the 1:1 host's (called from [tickDecay]), or a
+  /// group speaker's after their scalars are loaded (called from the realism
+  /// dance), so 1:1 and group behave identically. Enjoys-low-hygiene skips
+  /// the hygiene beat (0 is comfort for them).
   void applyCatastropheIfNeeded() {
     if (!getNeedsSimEnabled() || !getRealismEnabled()) return;
     if (_pendingCatastrophe != null) return; // one pending event at a time
+    final speaker = getCurrentSpeakerIdForRealism();
+    if ((_vector['hygiene'] ?? 80) > 0) {
+      _hygieneCrisisAcked.remove(speaker);
+    }
     final enjoysLow = getEnjoysLowHygiene();
     String? worst;
     int worstVal = 1; // only needs at 0 or below qualify
     for (final key in catastropheNeeds) {
       if (key == 'hygiene' && enjoysLow) continue;
+      if (key == 'hygiene' && _hygieneCrisisAcked.contains(speaker)) continue;
       final v = _vector[key];
       if (v == null) continue;
       if (v <= 0 && v < worstVal) {
@@ -546,9 +559,16 @@ class NeedsSimulation {
     }
     if (worst == null) return;
     _pendingCatastrophe = needCatastropheText[worst];
-    _vector[worst] = needPostCatastropheFloor[worst] ?? 50;
+    if (worst == 'hygiene') {
+      _hygieneCrisisAcked.add(speaker);
+    }
+    final floor = needPostCatastropheFloor[worst];
+    if (floor != null) {
+      _vector[worst] = floor;
+    }
     debugPrint(
-      '[Realism:Needs] ⚠️ CATASTROPHE armed for $worst → floor ${_vector[worst]}',
+      '[Realism:Needs] ⚠️ CATASTROPHE armed for $worst'
+      '${floor == null ? ' (no floor)' : ' → floor $floor'}',
     );
   }
 
@@ -624,12 +644,9 @@ class NeedsSimulation {
   }
 
   /// Returns the lowest (worst) needs that should receive background state
-  /// text this turn — those whose effective step is 4 or lower (mild or worse
-  /// after the enjoys-low-hygiene inversion), worst-first, capped at 3. Both
-  /// 1:1 and group paths use this for consistent selection, and so
-  /// slow-decaying needs (Comfort, Hygiene) can appear even when not the
-  /// absolute lowest. Sated needs never surface (words-only salience gating,
-  /// docs/design/prompt-state-injection.md §3).
+  /// this turn, worst-first, capped at 3. Hunger and bladder stay silent at
+  /// mild (step 4) — a faint urge made every chat about peeing and eating.
+  /// Other needs still inject at step 4. Sated needs never surface.
   ///
   /// [enjoysLowHygieneOverride] MUST carry the specific speaker's flag in
   /// group chats (same reason as [getInjectionEffectiveStep]) — without it the
@@ -661,6 +678,15 @@ class NeedsSimulation {
           final byStep = a.effectiveStep.compareTo(b.effectiveStep);
           return byStep != 0 ? byStep : a.value.compareTo(b.value);
         });
-    return ranked.where((e) => e.effectiveStep <= 4).take(3).toList();
+    return ranked
+        .where((e) => _injectsNeed(e.key, e.effectiveStep))
+        .take(3)
+        .toList();
+  }
+
+  /// Hunger/bladder at step 4 is "a faint urge" — too loud for ambient clocks.
+  static bool _injectsNeed(String key, int effectiveStep) {
+    if (key == 'hunger' || key == 'bladder') return effectiveStep <= 3;
+    return effectiveStep <= 4;
   }
 }

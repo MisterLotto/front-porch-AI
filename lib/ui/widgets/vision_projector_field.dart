@@ -16,8 +16,6 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'dart:io';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
@@ -26,6 +24,7 @@ import 'package:front_porch_ai/services/capability/capability.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/utils/gguf_vision.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Optional "Vision projector (mmproj)" control for a local GGUF model.
 ///
@@ -62,6 +61,7 @@ class _VisionProjectorFieldState extends State<VisionProjectorField> {
   GgufVisionInfo? _info;
   bool _loading = false;
   bool _showCustomOverride = false;
+  final _mmprojMemo = PathExistsMemo();
 
   @override
   void initState() {
@@ -105,10 +105,7 @@ class _VisionProjectorFieldState extends State<VisionProjectorField> {
     return (v != null && v.isNotEmpty) ? v : null;
   }
 
-  bool get _mmprojExists {
-    final m = _mmprojPath;
-    return m != null && File(m).existsSync();
-  }
+  bool get _mmprojExists => _mmprojMemo.of(_mmprojPath);
 
   Future<void> _pickMmproj() async {
     final path = widget.modelPath;

@@ -24,6 +24,8 @@ import 'package:front_porch_ai/services/llm_tool_parsing.dart';
 import 'package:front_porch_ai/services/reasoning_effort.dart';
 import 'package:front_porch_ai/services/reasoning_stream_wrapper.dart';
 import 'package:front_porch_ai/services/remote_model_info.dart';
+import 'package:front_porch_ai/services/remote_reachability.dart';
+import 'package:front_porch_ai/services/openai_completions_fallback.dart';
 
 // RemoteModelInfo lived here for years — re-export so importers keep working.
 export 'package:front_porch_ai/services/remote_model_info.dart';
@@ -71,7 +73,7 @@ class OpenRouterService extends LLMService {
   String _apiUrl;
   String _apiKey;
   String _modelName;
-  bool _isReady = false;
+  final RemoteApiHealth _health = RemoteApiHealth();
 
   /// Every client with a call in flight, so [abortGeneration] can close all of
   /// them. A SET rather than one slot because this is a single shared instance
@@ -81,18 +83,34 @@ class OpenRouterService extends LLMService {
   /// the rest kept streaming (and billing).
   final Set<http.Client> _activeClients = {};
 
+  /// Test seam: a MockClient so reachability tests never hit the network.
+  http.Client Function()? get httpClientFactory => _health.httpClientFactory;
+  set httpClientFactory(http.Client Function()? factory) =>
+      _health.httpClientFactory = factory;
+
   String get apiUrl => _apiUrl;
   String get apiKey => _apiKey;
   String get modelName => _modelName;
+  RemoteReachability get reachability => _health.reachability;
+  bool get isReachable => _health.isReachable;
+  bool get isCheckingReachability => _health.isChecking;
 
   /// Local backends (LM Studio, vLLM, etc.) are usable without an API key.
   bool get _isLocalUrl =>
       _apiUrl.contains('localhost') || _apiUrl.contains('127.0.0.1');
 
+  /// Credentials + model are filled in. Not a live ping.
+  bool get isConfigured =>
+      _modelName.isNotEmpty && (_apiKey.isNotEmpty || _isLocalUrl);
+
+  /// Generation gate: configured, and not proven unreachable. Unknown /
+  /// checking stay provisionally ready so a 5s ping does not freeze send;
+  /// a failed ping flips this off (composer: "No API connection").
   @override
   bool get isReady {
-    if (!_isReady || _modelName.isEmpty) return false;
-    return _apiKey.isNotEmpty || _isLocalUrl;
+    if (!isConfigured) return false;
+    if (reachability == RemoteReachability.unreachable) return false;
+    return true;
   }
 
   @override
@@ -105,40 +123,45 @@ class OpenRouterService extends LLMService {
   }) : _apiUrl = apiUrl,
        _apiKey = apiKey,
        _modelName = modelName {
-    _isReady = (_apiKey.isNotEmpty || _isLocalUrl) && _modelName.isNotEmpty;
+    _health.onChanged = _emit;
+  }
+
+  void _emit() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      notifyListeners();
+    });
   }
 
   /// Update configuration at runtime (e.g. when user changes settings).
-  void configure({String? apiUrl, String? apiKey, String? modelName}) {
-    bool changed = false;
+  /// Returns true when URL / key / model actually changed.
+  bool configure({String? apiUrl, String? apiKey, String? modelName}) {
+    var changed = false;
+    var endpointChanged = false;
     if (apiUrl != null && apiUrl != _apiUrl) {
       _apiUrl = apiUrl;
       changed = true;
+      endpointChanged = true;
     }
     if (apiKey != null && apiKey != _apiKey) {
       _apiKey = apiKey;
       changed = true;
+      endpointChanged = true;
     }
     if (modelName != null && modelName != _modelName) {
       _modelName = modelName;
       changed = true;
     }
-    // Allow local backends without API key
-    final newReady =
-        (_apiKey.isNotEmpty || _isLocalUrl) && _modelName.isNotEmpty;
-    if (newReady != _isReady) {
-      _isReady = newReady;
-      changed = true;
+    if (endpointChanged || !isConfigured) {
+      _health.reset();
     }
-    if (changed) {
-      // Defer notification to after the current frame to avoid calling
-      // notifyListeners() during the widget build phase, which crashes
-      // release builds (setState called during build).
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        notifyListeners();
-      });
-    }
+    if (changed) _emit();
+    return changed;
   }
+
+  /// Live `GET /models` against the configured endpoint. Stamps
+  /// [reachability] (and therefore [isReady] / [isReachable]).
+  Future<void> refreshReachability() =>
+      _health.ping(apiUrl: _apiUrl, apiKey: _apiKey, configured: isConfigured);
 
   /// Test whether the API connection is working.
   /// Returns a human-readable status message.
@@ -146,37 +169,14 @@ class OpenRouterService extends LLMService {
   /// Same override contract as [fetchAvailableModels]: pass the target
   /// explicitly from UI so a connection test never re-routes the active
   /// backend's live configuration.
-  Future<String> testConnection({String? apiUrl, String? apiKey}) async {
-    final url = apiUrl ?? _apiUrl;
-    final key = apiKey ?? _apiKey;
-    if (url.isEmpty) return 'API URL is empty.';
-    // Allow empty API key for local backends (localhost / 127.0.0.1)
-    final isLocal = url.contains('localhost') || url.contains('127.0.0.1');
-    if (key.isEmpty && !isLocal) return 'API key is empty.';
-
-    final client = http.Client();
-    try {
-      final uri = Uri.parse('$url/models');
-      final response = await client
-          .get(uri, headers: {'Authorization': 'Bearer $key'})
-          .timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        return 'Connection successful!';
-      } else {
-        String msg = 'HTTP ${response.statusCode}';
-        try {
-          final body = jsonDecode(response.body);
-          msg = body['error']?['message'] ?? msg;
-        } catch (_) {}
-        return 'Connection failed: $msg';
-      }
-    } catch (e) {
-      return 'Connection failed: $e';
-    } finally {
-      client.close();
-    }
-  }
+  Future<String> testConnection({String? apiUrl, String? apiKey}) =>
+      _health.testConnection(
+        liveUrl: _apiUrl,
+        liveKey: _apiKey,
+        configured: isConfigured,
+        apiUrl: apiUrl,
+        apiKey: apiKey,
+      );
 
   /// Fetch the list of available models with pricing info from the API.
   /// Lists models from [apiUrl] (else this service's live URL). Pass the
@@ -196,7 +196,11 @@ class OpenRouterService extends LLMService {
     final isLocal = url.contains('localhost') || url.contains('127.0.0.1');
     if (key.isEmpty && !isLocal) return [];
 
-    final client = http.Client();
+    // Same seam as [refreshReachability]: tests inject a MockClient so
+    // this never hits the network (flutter test HttpOverrides is a
+    // bodiless 400, which used to empty the picker and flip isReady).
+    final client = httpClientFactory?.call() ?? http.Client();
+    final owned = httpClientFactory == null;
     var batched = false;
     try {
       final uri = Uri.parse('$url/models');
@@ -204,9 +208,7 @@ class OpenRouterService extends LLMService {
       final response = await client
           .get(
             uri,
-            headers: {
-              if (key.isNotEmpty) 'Authorization': 'Bearer $key',
-            },
+            headers: {if (key.isNotEmpty) 'Authorization': 'Bearer $key'},
           )
           .timeout(const Duration(seconds: 15));
 
@@ -295,7 +297,7 @@ class OpenRouterService extends LLMService {
       return [];
     } finally {
       if (batched) endReasoningEffortCatalogBatch();
-      client.close();
+      if (owned) client.close();
     }
   }
 
@@ -354,14 +356,14 @@ class OpenRouterService extends LLMService {
     // for models like Kimi K2.6:thinking, DeepSeek hybrids, etc.
     // We always include the 'enabled' key so the disable is explicit.
     if (params.reasoningEnabled || params.reasoningMaxTokens != null) {
-      final reasoning = <String, dynamic>{
-        'enabled': params.reasoningEnabled,
-      };
+      final reasoning = <String, dynamic>{'enabled': params.reasoningEnabled};
       if (params.reasoningEnabled) {
         // User setting stays in prefs; wire value may adapt (learned 400 or
         // :thinking suffix hint — see wireReasoningEffort).
-        reasoning['effort'] =
-            wireReasoningEffort(modelName, params.reasoningEffort);
+        reasoning['effort'] = wireReasoningEffort(
+          modelName,
+          params.reasoningEffort,
+        );
       }
       if (params.reasoningMaxTokens != null) {
         reasoning['max_tokens'] = params.reasoningMaxTokens;
@@ -486,7 +488,7 @@ class OpenRouterService extends LLMService {
             '[RemoteAPI] $modelName cannot disable reasoning — retrying '
             'tool call with reasoning.exclude only',
           );
-          return generateWithTools(params, tools);
+          return await generateWithTools(params, tools);
         }
         debugPrint(
           '[RemoteAPI] Tool call rejected (HTTP ${response.statusCode}) — '
@@ -524,6 +526,11 @@ class OpenRouterService extends LLMService {
       );
     }
 
+    if (isRememberedCompletionsOnlyModel(_modelName)) {
+      yield* _generateCompletionsStream(params);
+      return;
+    }
+
     final request = http.Request(
       'POST',
       Uri.parse('$_apiUrl/chat/completions'),
@@ -547,7 +554,7 @@ class OpenRouterService extends LLMService {
     // payload builder), so the provider returns no reasoning to wrap. Every
     // suppress path (Continue, evals) sets reasoningEnabled=false anyway, so the
     // two predicates are equivalent in practice.
-    final wrapper = ReasoningTagWrapper(
+    final wrapper = ReasoningIngest(
       wrap: params.reasoningEnabled,
       salvage: params.salvageReasoning,
     );
@@ -586,7 +593,8 @@ class OpenRouterService extends LLMService {
         // containsKey guard makes a second rejection for the same model
         // throw instead of loop. Parse message AND raw body — some providers
         // put the listing only in one of the two.
-        final supportedEfforts = supportedReasoningEffortsFromError(errorMsg) ??
+        final supportedEfforts =
+            supportedReasoningEffortsFromError(errorMsg) ??
             supportedReasoningEffortsFromError(body);
         if (supportedEfforts != null &&
             !kLearnedReasoningEffortsByModel.containsKey(modelName)) {
@@ -605,7 +613,8 @@ class OpenRouterService extends LLMService {
         // when the provider's new listing differs (re-tier mid-session).
         if (supportedEfforts != null) {
           final prev = kLearnedReasoningEffortsByModel[modelName];
-          final same = prev != null &&
+          final same =
+              prev != null &&
               prev.length == supportedEfforts.length &&
               prev.containsAll(supportedEfforts);
           if (!same) {
@@ -617,6 +626,15 @@ class OpenRouterService extends LLMService {
             yield* generateStream(params);
             return;
           }
+        }
+        if (isChatCompletionsUnsupportedError(errorMsg)) {
+          rememberCompletionsOnlyModel(_modelName);
+          debugPrint(
+            '[RemoteAPI] $_modelName is completions-only on this '
+            'server — retrying /v1/completions',
+          );
+          yield* _generateCompletionsStream(params);
+          return;
         }
         throw Exception('API error: $errorMsg');
       }
@@ -716,6 +734,35 @@ class OpenRouterService extends LLMService {
       // Close reasoning block if stream ended without [DONE]
       final tail = wrapper.finish();
       if (tail.isNotEmpty) yield tail;
+    } finally {
+      _activeClients.remove(client);
+      client.close();
+    }
+  }
+
+  /// oMLX VLM / completions-only models. Same abort set as [generateStream].
+  Stream<String> _generateCompletionsStream(GenerationParams params) async* {
+    final payload = openAiCompletionsPayload(
+      params,
+      modelName: _modelName,
+      stream: true,
+    );
+    final client = http.Client();
+    _activeClients.add(client);
+    try {
+      final response = await postOpenAiCompletions(
+        apiUrl: _apiUrl,
+        headers: _chatHeaders,
+        payload: payload,
+        client: client,
+      );
+      if (response.statusCode != 200) {
+        final body = await response.stream.bytesToString();
+        throw Exception(
+          'API error: ${_remoteApiErrorMessage(body, response.statusCode)}',
+        );
+      }
+      yield* parseCompletionsSse(response.stream);
     } finally {
       _activeClients.remove(client);
       client.close();

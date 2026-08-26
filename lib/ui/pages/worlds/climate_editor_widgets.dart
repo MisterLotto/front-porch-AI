@@ -23,6 +23,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:front_porch_ai/services/chat/chat.dart';
+import 'package:front_porch_ai/ui/pages/worlds/climate_season_start.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Artifact palette notes: the amber/ink/surface/text roles map to
@@ -82,8 +83,7 @@ String stanceLabel(WeatherStance s) => switch (s) {
 Color stanceColor(BuildContext context, WeatherStance? s) => switch (s) {
   null => AppColors.textTertiary(context),
   WeatherStance.pleasant ||
-  WeatherStance.ordinary =>
-    AppColors.textSecondary(context),
+  WeatherStance.ordinary => AppColors.textSecondary(context),
   WeatherStance.harsh => kClimateWarn,
   WeatherStance.dangerous || WeatherStance.deadly => kClimateDanger,
 };
@@ -138,6 +138,13 @@ class SeasonCard extends StatelessWidget {
     required this.unit,
     required this.onBand,
     required this.onAnchorChanged,
+    required this.labelController,
+    required this.onLabelChanged,
+    required this.startMonth,
+    required this.startDay,
+    required this.onStart,
+    this.clash = false,
+    this.onRemove,
   });
 
   final String season;
@@ -147,6 +154,13 @@ class SeasonCard extends StatelessWidget {
   final String unit;
   final ValueChanged<TempBand> onBand;
   final VoidCallback onAnchorChanged;
+  final TextEditingController labelController;
+  final VoidCallback onLabelChanged;
+  final int startMonth;
+  final int startDay;
+  final void Function(int month, int day) onStart;
+  final bool clash;
+  final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -156,24 +170,69 @@ class SeasonCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerOf(context),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.borderOf(context)),
+        border: Border.all(
+          color: clash ? kClimateDanger : AppColors.borderOf(context),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            season[0].toUpperCase() + season.substring(1),
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: labelController,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: kSeasons.contains(season)
+                        ? season[0].toUpperCase() + season.substring(1)
+                        : 'New season',
+                    hintStyle: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textTertiary(context),
+                    ),
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  onChanged: (_) => onLabelChanged(),
+                ),
+              ),
+              if (onRemove != null)
+                IconButton(
+                  tooltip: 'Remove season',
+                  visualDensity: VisualDensity.compact,
+                  iconSize: 16,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 24,
+                    minHeight: 24,
+                  ),
+                  onPressed: onRemove,
+                  icon: Icon(
+                    Icons.close,
+                    size: 16,
+                    color: AppColors.textTertiary(context),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          SeasonStartRow(
+            month: startMonth,
+            day: startDay,
+            onStart: onStart,
+            clash: clash,
           ),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             decoration: BoxDecoration(
-              color: AppColors.resolve(
-                context,
-                Colors.black26,
-                Colors.white54,
-              ),
+              color: AppColors.resolve(context, Colors.black26, Colors.white54),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: AppColors.borderOf(context)),
             ),
@@ -282,10 +341,17 @@ class SeasonCard extends StatelessWidget {
 /// The 4-season × 7-condition weights grid, artifact-styled: mono numerals,
 /// dimmed zeros, and an amber-edged cell on each season's dominant weight.
 class WeightsGrid extends StatelessWidget {
-  const WeightsGrid({super.key, required this.controllers});
+  const WeightsGrid({
+    super.key,
+    required this.controllers,
+    required this.seasons,
+    this.labels = const {},
+  });
 
   /// season → 7 controllers in [kWeatherConditions] order.
   final Map<String, List<TextEditingController>> controllers;
+  final List<String> seasons;
+  final Map<String, String> labels;
 
   @override
   Widget build(BuildContext context) {
@@ -312,11 +378,11 @@ class WeightsGrid extends StatelessWidget {
                 ),
             ],
           ),
-          for (final season in kSeasons)
+          for (final season in seasons)
             TableRow(
               children: [
                 Text(
-                  season[0].toUpperCase() + season.substring(1),
+                  seasonDisplayName(season, labels),
                   style: TextStyle(
                     fontSize: 12.5,
                     color: AppColors.textSecondary(context),
@@ -347,8 +413,9 @@ class WeightsGrid extends StatelessWidget {
                           ),
                           decoration: InputDecoration(
                             isDense: true,
-                            contentPadding:
-                                const EdgeInsets.symmetric(vertical: 7),
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 7,
+                            ),
                             filled: true,
                             fillColor: AppColors.surfaceContainerOf(context),
                             enabledBorder: OutlineInputBorder(

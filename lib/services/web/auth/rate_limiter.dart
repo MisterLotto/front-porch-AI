@@ -16,6 +16,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'dart:io' show InternetAddress;
+
 /// In-memory login throttling for the web secure-login.
 ///
 /// Two layers:
@@ -28,13 +30,14 @@
 /// simple. Inject [now] in tests for deterministic time.
 ///
 /// The maps are BOUNDED. Both tracked keys are attacker-chosen — the submitted
-/// username, and a client IP that is read from `X-Forwarded-For` and so can be
-/// a fresh value per request — and a login attempt for an unknown username
-/// short-circuits before Argon2, so an unauthenticated loop against a
-/// LAN/tunnel-exposed server used to mint one permanent map entry per request
-/// until the process died. Every mutator therefore sweeps entries that can no
-/// longer affect a decision (empty windows, streaks nobody is riding), and a
-/// hard [_maxKeys] ceiling drops the least-relevant remainder.
+/// username, and a client IP (real TCP peer, or `X-Forwarded-For` only when
+/// the immediate peer is loopback; see `requestClientIp`) — and a login
+/// attempt for an unknown username short-circuits before Argon2, so an
+/// unauthenticated loop against a LAN/tunnel-exposed server used to mint one
+/// permanent map entry per request until the process died. Every mutator
+/// therefore sweeps entries that can no longer affect a decision (empty
+/// windows, streaks nobody is riding), and a hard [_maxKeys] ceiling drops
+/// the least-relevant remainder.
 class RateLimiter {
   RateLimiter({DateTime Function()? now}) : _now = now ?? DateTime.now;
 
@@ -80,13 +83,16 @@ class RateLimiter {
 
   /// Whether [ip] is within the sliding-window attempt cap. A read never mints
   /// an entry — otherwise merely *asking* about a spoofed IP would grow the map.
+  ///
+  /// Empty / whitespace / null is not unlimited: those share one `_unknown`
+  /// bucket so a missing IP cannot skip the cap.
   bool ipAllowed(String? ip) {
-    if (ip == null || ip.isEmpty) return true;
-    final hits = _byIp[ip];
+    final key = _ipKey(ip);
+    final hits = _byIp[key];
     if (hits == null) return true;
     final cutoff = _now().subtract(_ipWindow);
     hits.removeWhere((t) => t.isBefore(cutoff));
-    if (hits.isEmpty) _byIp.remove(ip);
+    if (hits.isEmpty) _byIp.remove(key);
     return hits.length < _ipWindowMax;
   }
 
@@ -104,7 +110,7 @@ class RateLimiter {
 
   /// Whether [ip] may attempt first-run setup (stricter sliding window).
   bool setupIpAllowed(String? ip) {
-    final key = (ip == null || ip.isEmpty) ? '_unknown' : ip;
+    final key = _ipKey(ip);
     final hits = _setupByIp[key];
     if (hits == null) return true;
     final cutoff = _now().subtract(setupWindow);
@@ -115,7 +121,7 @@ class RateLimiter {
 
   /// Count a setup attempt (success or fail) toward the setup IP window.
   void recordSetupAttempt(String? ip) {
-    final key = (ip == null || ip.isEmpty) ? '_unknown' : ip;
+    final key = _ipKey(ip);
     if (_setupByIp.length >= _maxKeys) _sweep();
     (_setupByIp[key] ??= []).add(_now());
   }
@@ -125,9 +131,19 @@ class RateLimiter {
   int get trackedKeys => _byUser.length + _byIp.length + _setupByIp.length;
 
   void _touchIp(String? ip) {
-    if (ip == null || ip.isEmpty) return;
+    final key = _ipKey(ip);
     if (_byIp.length >= _maxKeys) _sweep();
-    (_byIp[ip] ??= []).add(_now());
+    (_byIp[key] ??= []).add(_now());
+  }
+
+  /// Empty / whitespace / unparsed / loopback is not a valid IP — one
+  /// shared fail-closed bucket. A client-chosen token must not mint a key.
+  String _ipKey(String? ip) {
+    final trimmed = ip?.trim() ?? '';
+    if (trimmed.isEmpty) return '_unknown';
+    final parsed = InternetAddress.tryParse(trimmed);
+    if (parsed == null || parsed.isLoopback) return '_unknown';
+    return trimmed;
   }
 
   /// Drop everything that can no longer change an answer: IP windows whose

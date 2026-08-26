@@ -16,6 +16,8 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'package:front_porch_ai/utils/reasoning_markers.dart';
+
 /// Strips reasoning-model think tags from user-visible prose (TTS input,
 /// emotion classification, etc.).
 ///
@@ -32,6 +34,7 @@
 /// Close a dangling `<think>` so later Continue text cannot be swallowed
 /// into the thought block. No-op when tags already balance.
 String closeOpenThink(String text) {
+  text = canonicalizeReasoning(text);
   final lower = text.toLowerCase();
   if (lower.lastIndexOf('<think>') > lower.lastIndexOf('</think>')) {
     return '$text\n</think>\n';
@@ -40,7 +43,8 @@ String closeOpenThink(String text) {
 }
 
 String stripThinkTags(String text) {
-  return text
+  final source = canonicalizeReasoning(text);
+  return source
       .replaceAll(
         RegExp(r'<think>.*?</think>', caseSensitive: false, dotAll: true),
         '',
@@ -60,6 +64,7 @@ typedef MessageEditParts = ({String thinking, String body});
 
 /// Pulls thinking and body out of a stored message string for the editor.
 MessageEditParts splitMessageForEdit(String text) {
+  text = canonicalizeReasoning(text);
   final closed = RegExp(
     r'<think>([\s\S]*?)</think>\s*',
     caseSensitive: false,

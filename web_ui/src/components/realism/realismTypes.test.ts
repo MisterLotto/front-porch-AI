@@ -19,6 +19,7 @@ import { describe, expect, it } from 'vitest';
 import {
   REALISM_DEFAULTS,
   chipsToInventory,
+  compactGreetingPairs,
   inventoryToChips,
   realismFromDetail,
 } from './realismTypes';
@@ -53,6 +54,18 @@ describe('inventory survives detail -> form -> save body', () => {
     expect((body as typeof rv).inventory).toEqual(stored);
   });
 
+  it('carries greetingSeeds off the detail block so a phone save cannot drop them', () => {
+    const seeds = [{ characterEmotion: 'furious', shortTermBond: -40 }];
+    const rv = realismFromDetail({ greetingSeeds: seeds });
+    const body = { name: 'Nemu', ...rv };
+    expect(body.greetingSeeds).toEqual(seeds);
+  });
+
+  it('defaults greetingSeeds to an empty list, never undefined', () => {
+    expect(REALISM_DEFAULTS.greetingSeeds).toEqual([]);
+    expect(realismFromDetail(null).greetingSeeds).toEqual([]);
+  });
+
   it('defaults to an empty record, never undefined', () => {
     // Undefined would reach the Dart side as a missing key. That is survivable
     // there (it falls back to the stored value) but it would mean the web could
@@ -84,7 +97,6 @@ describe('wardrobe chip text mirrors the Dart implementation', () => {
     'iron sword (notched, needs sharpening)',
     'pepper spray (small)',
     'a candy bar (half-eaten)',
-    '(nothing)',
     'keys ()',
     'a (b) c',
   ];
@@ -104,8 +116,14 @@ describe('wardrobe chip text mirrors the Dart implementation', () => {
   });
 
   it('an empty half on either side stays part of the name', () => {
-    expect(chipsToInventory(['(nothing)'], []).worn).toEqual([{ name: '(nothing)' }]);
     expect(chipsToInventory(['keys ()'], []).worn).toEqual([{ name: 'keys ()' }]);
+  });
+
+  it('does not save a wearing chip named nothing', () => {
+    expect(chipsToInventory(['nothing', 'red sundress'], []).worn).toEqual([
+      { name: 'red sundress' },
+    ]);
+    expect(chipsToInventory(['nude'], []).worn).toBeUndefined();
   });
 
   it('only the last bracket group is considered', () => {
@@ -165,5 +183,22 @@ describe('wardrobe chip text mirrors the Dart implementation', () => {
     expect(chipsToInventory(reopened.worn, reopened.carrying)).toEqual(first);
     expect(reopened.worn).toEqual(worn);
     expect(reopened.carrying).toEqual(carrying);
+  });
+});
+
+describe('compactGreetingPairs keeps seed on the surviving greet', () => {
+  it('drops the blank row and keeps furious on Get out.', () => {
+    const paired = compactGreetingPairs(['', 'Get out.'], [null, { characterEmotion: 'furious' }]);
+    expect(paired.greetings).toEqual(['Get out.']);
+    expect(paired.seeds).toEqual([{ characterEmotion: 'furious' }]);
+  });
+
+  it('a blank middle row does not steal furious off Get out.', () => {
+    const paired = compactGreetingPairs(
+      ['Come in.', '', 'Get out.'],
+      [null, { characterEmotion: 'stolen' }, { characterEmotion: 'furious' }],
+    );
+    expect(paired.greetings).toEqual(['Come in.', 'Get out.']);
+    expect(paired.seeds).toEqual([null, { characterEmotion: 'furious' }]);
   });
 });

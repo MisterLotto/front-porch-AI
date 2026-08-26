@@ -16,9 +16,8 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 //
 // "Confirm your email" banner for The Stoop — desktop twin of the hub's
-// `verifyBanner`. Sharing is the ONLY thing an unconfirmed address blocks;
-// browsing and downloading stay open, so the copy says so rather than reading
-// like a lockout.
+// `verifyBanner`. Sharing, reporting, and a profile photo stay locked until
+// they confirm; browsing and downloading stay open.
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -55,7 +54,9 @@ class _StoopVerifyBannerState extends State<StoopVerifyBanner> {
     }
     if (!mounted) return;
     setState(() => _sending = false);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -90,7 +91,7 @@ class _StoopVerifyBannerState extends State<StoopVerifyBanner> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Confirm your email to share your own cards.',
+                  'Confirm your email to share cards, report characters, and set a profile photo.',
                   style: TextStyle(
                     color: amber,
                     fontWeight: FontWeight.w600,
@@ -100,7 +101,8 @@ class _StoopVerifyBannerState extends State<StoopVerifyBanner> {
                 const SizedBox(height: 3),
                 Text(
                   'We sent a link to ${user.email}. Browsing and downloading '
-                  'work without it — confirming is only needed to upload.',
+                  'work without it — confirming unlocks sharing, reporting, '
+                  'and a profile photo.',
                   style: TextStyle(
                     color: stoopCream(context).withValues(alpha: 0.85),
                     fontSize: 12.5,

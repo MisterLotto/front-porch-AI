@@ -23,10 +23,9 @@ dart run build_runner build --delete-conflicting-outputs
 # Development
 flutter run                          # Debug run
 flutter analyze                      # Lint (0 warnings on active rules; CI runs on changed .dart files for PRs + full scheduled job)
-dart format --set-exit-if-changed .  # Format check. NOT `flutter format` — that
-                                     #   subcommand was removed; it errors with
-                                     #   "Could not find a command named format".
-                                     #   Do NOT bulk-run this: see "Verification".
+dart format path/to/file.dart        # Tall-style nibble: ONLY files you already
+                                     #   edited. NEVER `dart format .` — see
+                                     #   "Verification". NOT `flutter format`.
 
 # Tests
 flutter test --concurrency=4 --exclude-tags golden
@@ -219,7 +218,7 @@ Key tables (REAL SQL names — verify against `database.g.dart`, not memory): `c
 A multi-component system spanning `chat_service.dart` (orchestration, `_groupRealism`, post-gen hooks, message metadata), the `chat/` domain services, and the LLM provider:
 - Emotion tracking with inertia between turns (ExpressionClassifier)
 - Bond/trust relationship scoring (bond clamped to ±300, arousal ±100) (RelationshipService)
-- Time progression — `lib/services/chat/time_service.dart` (`TimeService`) + `story_clock.dart`. Advancement is CONTINUOUS AND PER-TURN: the scene-time eval reports `minutes_elapsed` for the exchange, clamped by `StoryClock.maxMinutesPerTurn`, with `StoryClock.failureDriftMinutes` as the deterministic floor when the eval fails and a `stallBackstopTurns` backstop so time can never freeze. **The old 6-turn gate and its `hold_time` veto are GONE** — do not reason about a turn counter.
+- Time progression — `lib/services/chat/time_service.dart` (`TimeService`) + `story_clock.dart`. Announce-then-decide (2026-08-18): OOC skip lands first, the prompt says "It is currently …", they write at that time, then a post-reply `minutes_elapsed` decide sets the clock the NEXT speaker is told (group bucket brigade, Scene Guests included). Continue does not tick. Clamped by `StoryClock.maxMinutesPerTurn`, with `StoryClock.failureDriftMinutes` as the deterministic floor when the eval fails and a `stallBackstopTurns` backstop so time can never freeze. Chevrons are ±30 minutes; specific time is the Story Calendar's existing **Set date & time** analog picker. **The old 6-turn gate and its `hold_time` veto are GONE** — do not reason about a turn counter.
 
   **PASSAGE OF TIME IS DECOUPLED FROM THE ENGINE (2026-08-06).** This AMENDS
   the 2026-08-02 "cannot be decoupled" ruling, which rested on reading the
@@ -238,18 +237,18 @@ A multi-component system spanning `chat_service.dart` (orchestration, `_groupRea
   swipe/regen rewind snapshot.
   How it works now: `standaloneClockEnabled` (default OFF, opt-in — Passage of
   Time already defaults on and could not be treated as consent for a per-turn
-  call) makes `evaluatePhysicalStateCall(timeOnly: true)` fire once per turn
-  from `sendMessage`, chat-scoped so a group costs one call. Everything after
-  the call is SHARED with the engine path (clamp, failure floor, `new_day`
-  corroboration, OOC-skip ownership) — that sharing is the parity guarantee,
-  pinned by `test/services/chat/standalone_clock_test.dart`. Weather and Dreams
-  now gate on `_clockRunning` (either driver), not the engine.
-  COROLLARY, unchanged in spirit: the time PROMPT FRAGMENT gates on
-  `_clockRunning`, never on `passageOfTimeEnabled` alone — that flag defaults on
-  and is inert without a driver, so gating on it would inject the same frozen
-  timestamp every turn. Do NOT add a swipe/regen rewind for the standalone
-  clock: it fires once per user turn and never re-fires on regenerate, so it is
-  already at exactly one advance.
+  call) makes `evaluatePhysicalStateCall(timeOnly: true)` fire AFTER each
+  spoken reply from `_maybeAdvanceStoryClockAfterReply` (same helper as the
+  engine path — group follow-ups, `/speak`, auto-play, and Scene Guests
+  included). Everything after the call is SHARED (clamp, failure floor,
+  `new_day` corroboration, OOC-skip ownership) — that sharing is the parity
+  guarantee, pinned by `test/services/chat/standalone_clock_test.dart`. Weather
+  and Dreams now gate on `_clockRunning` (either driver), not the engine.
+  COROLLARY: the time PROMPT FRAGMENT gates on `_clockRunning`, never on
+  `passageOfTimeEnabled` alone — that flag defaults on and is inert without a
+  driver. Regen/swipe rewind from the rejected reply's `story_clock_before`
+  stamp, then the post-reply decide runs again — engine, standalone, and
+  guests share that receipt. One-shot must NOT apply minutes (would double).
 - Spatial stance / posture — **POST-generation since 2026-08-08.** It is NOT
   part of the pre-generation judges and is not fused with the scene-time eval
   any more. `_evaluatePhysicalStateCall(postureOnly: true)` fires from
@@ -294,7 +293,7 @@ A multi-component system spanning `chat_service.dart` (orchestration, `_groupRea
   `test/ui/settings/chaos_global_toggle_test.dart` reads all three call sites.
 - **DECAY OWNS DEPLETION, BUT AN EVENT MUST BEAT A TURN (maintainer, 2026-08-08).**
   A need falling is slow and ambient and `tickDecay` models it; the scene eval
-  may take an extra bite only for something explicitly described as costing her.
+  may take an extra bite only for something explicitly described as costing them.
   BUT that bite has to READ as an event — "drinking a soda would cause bladder
   to drop… more than on a standard turn" — so every entry in
   `NeedsSimulation.sceneDepletionAt1x` is at least 2x (usually 3x) that need's
@@ -353,7 +352,7 @@ Because core simulation lives in the `chat/` leaves while orchestration, the `_g
 - **Orchestration + group state + chip attachment** — `chat_service.dart`:
   - Pre-turn capture (in `sendMessage`): `preTurnVector` (`chat_service.dart:~3699`) before `tickDecay`. (There is no `groupSpeakerPreDecayNeeds` — that symbol was removed.)
   - Group per-speaker pre-gen: **`_evaluateRealismForUpcomingSpeaker`** (no "Group" in the name; `chat_service.dart:2782` + the `chat/chat_service_realism_dance.dart` part) — `_loadGroupRealismIntoScalars` → run evals under impersonation → `_saveScalarsIntoGroupRealism` → stamp `realism_state` metadata on the new message.
-  - Post-gen finalization — `chat/chat_service_generation_postgen.dart` (`_finalizeGenerationTurn`, the last of `_generateResponse`'s six phases; see `chat/chat_service_generation.dart` for the phase pipeline + the `_GenTurn` per-turn carrier): temporarily re-set `_activeCharacter` + `_loadGroupRealismIntoScalars` so checks see the right character, then (2026-08-10 shape) `Future.wait([_runPostGenNeedsChecks(scoredReply), staggered _prefetchReplyFacts(scoredReply)])` — the needs eval and the fused reply-facts fetch are independent and run CONCURRENTLY — then the three consumers in order: `_runClimaxPass` → `_runPocketsPass` → posture (each reads its slice of the `_replyFactsRaw` carrier when fused, fires its own standalone call when not), then the carrier is cleared. **Continue scores the NEW text only (2026-08-12, maintainer-directed):** `scoredReply` is the full reply on a normal turn and the continuation's `newPart` on `continue_` — the family used to be skipped outright on Continue (the old full-reply re-read double-applied the first half's deltas), which left "she sets the keys down" arriving via Continue permanently unbookkept since every pass only ever reads the newest reply. Incremental scoring makes a double-apply impossible by construction; the evals keep context via `recentExchange()` (the full continued reply is already written back). Consequences kept in sync: chips re-attach on continue (the helper measures live-vector minus `needs_pre_turn_vector`, so the recomputed chip IS the merged whole-turn delta), the phase persist runs on continue when the pass ran, `_runPocketsPass(asContinuation: true)` preserves the message's original `pockets_before` (unions new transfer recipients, appends receipts) so regen/tail-delete rewind to the turn base, and the climax metadata guard keeps the FIRST reading's `pre_climax_arousal`. Inter-character feelings, promise/debt, and periodic evals stay new-turn-only (delta heuristics with no stamp). Guards: `test/services/chat/continue_postgen_test.dart` + the reversed Continue pin in `posture_after_reply_test.dart` — then **`_saveScalarsIntoGroupRealism`** (the critical persist — without it scene deltas never reach `_groupRealism`).
+  - Post-gen finalization — `chat/chat_service_generation_postgen.dart` (`_finalizeGenerationTurn`, the last of `_generateResponse`'s six phases; see `chat/chat_service_generation.dart` for the phase pipeline + the `_GenTurn` per-turn carrier): temporarily re-set `_activeCharacter` + `_loadGroupRealismIntoScalars` so checks see the right character, then (2026-08-10 shape) `Future.wait([_runPostGenNeedsChecks(scoredReply), staggered _prefetchReplyFacts(scoredReply)])` — the needs eval and the fused reply-facts fetch are independent and run CONCURRENTLY — then the three consumers in order: `_runClimaxPass` → `_runPocketsPass` → posture (each reads its slice of the `_replyFactsRaw` carrier when fused, fires its own standalone call when not), then the carrier is cleared. **Continue scores the NEW text only (2026-08-12, maintainer-directed):** `scoredReply` is the full reply on a normal turn and the continuation's `newPart` on `continue_` — the family used to be skipped outright on Continue (the old full-reply re-read double-applied the first half's deltas), which left "they set the keys down" arriving via Continue permanently unbookkept since every pass only ever reads the newest reply. Incremental scoring makes a double-apply impossible by construction; the evals keep context via `recentExchange()` (the full continued reply is already written back). Consequences kept in sync: chips re-attach on continue (the helper measures live-vector minus `needs_pre_turn_vector`, so the recomputed chip IS the merged whole-turn delta), the phase persist runs on continue when the pass ran, `_runPocketsPass(asContinuation: true)` preserves the message's original `pockets_before` (unions new transfer recipients, appends receipts) so regen/tail-delete rewind to the turn base, and the climax metadata guard keeps the FIRST reading's `pre_climax_arousal`. Inter-character feelings, promise/debt, and periodic evals stay new-turn-only (delta heuristics with no stamp). Guards: `test/services/chat/continue_postgen_test.dart` + the reversed Continue pin in `posture_after_reply_test.dart` — then **`_saveScalarsIntoGroupRealism`** (the critical persist — without it scene deltas never reach `_groupRealism`).
   - Chip delta computation/attach (after `_generateResponse` in the `sendMessage` caller): the `if (_needsSimEnabled && _messages.isNotEmpty)` block; 1:1 uses `preTurnVector`, group uses the pre-decay snapshot. Sets `metadata['needs_deltas']`.
   - Group helpers: `_getGroupNeeds`/`_setGroupNeeds`, `_loadGroupRealismIntoScalars`/`_saveScalarsIntoGroupRealism`, `getNeedsForGroupCharacter`, `_getCurrentSpeakerIdForRealism`, `nextCharacter`.
 - **Domain simulation** — `chat/needs_simulation.dart`: `applyNeedsDeltas`, `applySceneImpact`, `computeNeedsDeltasWithReasons` (feeds the chips), `tickDecay` (has the explicit group vs 1:1 branch), buffer state (afterglow, postClimaxCrash, arousalSuppression, pendingCatastrophe), `initializeFresh`.
@@ -509,10 +508,12 @@ The user has **no ability to read or evaluate Dart code**. The following rules a
 - Methods deleted (list them)
 - Whether `flutter analyze` is clean
 - Any duplication or dead code you chose not to remove and why
-- **Barrels + boilerplate on every file touched**: confirm each edited file was
-  left on barrel imports (or that its remaining direct imports are all on the
-  exemption list, naming which), and what repetition you collapsed while you
-  were in there. "None found" is a valid answer; silence is not.
+- **Barrels + boilerplate + tall style on every file touched**: confirm each
+  edited Dart file was left on barrel imports (or that its remaining direct
+  imports are all on the exemption list, naming which), that you ran
+  `dart format` on *those paths only* (or "already tall / generated / existing
+  test I must not touch"), and what repetition you collapsed while you were in
+  there. "None found" is a valid answer; silence is not.
 - **Hostile self-review done?** Point at the `### Hostile self-review` section
   in the same response (or "N/A: docs only"). Silence here means the work is
   incomplete — green tests are not a substitute.
@@ -537,7 +538,7 @@ To prevent "God files" (historically some `.dart` files exceeded 9,000 lines):
 
 ### Verification
 - **ALWAYS run `flutter analyze` after making code changes** — the project is at 0 warnings on the active rule set. New code must not introduce warnings. Never claim changes are "verified" without running it. Variables declared inside `try` blocks are not accessible outside — declare them before the `try` with defaults.
-- **Do NOT bulk-run `dart format` / `flutter format` on whole files.** The codebase is mid-migration to the Dart 3.11 "tall style" formatter, so running the new formatter on a not-yet-migrated file rewraps **hundreds of unrelated lines** (and can even introduce lint errors — e.g. splitting a one-line `if (x) return;` trips `curly_braces_in_flow_control_structures`), burying your real change in churn. Match the surrounding style **by hand** in the regions you edit; the Edit tool already preserves it. A whole-file reformat is its own intentional, isolated commit — never a side effect of a feature change.
+- **Tall style is nibble-as-you-go (same law as barrels / Riverpod).** If you already edited a Dart file, leave it on the current SDK's `dart format` output: `dart format path/to/that_file.dart` (one path, or the handful you touched). New files get formatted before you call them done. **NEVER** `dart format .`, never a directory, never "and these siblings while I'm here." A tree-wide format is still a dedicated, intentional commit — and `test/` in that commit needs `approved-test-change`. Do **not** format an existing test you did not otherwise have to change (test-integrity). After a per-file format, fix any lint the wrap just created (`if (x) return;` split → `curly_braces_in_flow_control_structures`). Do not format generated `*.g.dart`. Language version is still 3.10 (`sdk: ^3.10.8`); do not "upgrade" format rules or install the primary-constructors skill as part of touching a file.
 - **Cross-platform verification is mandatory.** Front Porch AI is a Windows + macOS + Linux desktop app. Every non-trivial change must be checked (or have an explicit plan) so it does not regress on any platform — especially file paths, process spawning, native libraries (sherpa-onnx, onnxruntime, libfpzip), and anything touching `dart:io` or native binaries.
 - **Realism & Needs parity is mandatory** (see the dedicated section). Any change to the Realism Engine or Needs simulation must keep 1:1 and group behavior consistent unless explicitly approved otherwise.
 - **Because the user cannot review code**, treat every change as if it will be accepted without scrutiny. Leave the codebase strictly cleaner (or at minimum no worse) than you found it.
@@ -648,6 +649,13 @@ is no longer "opportunistic" and it is not optional. The codebase accumulated
 hundreds of hand-written import lines precisely because "convert it if you
 happen to be in there" had no teeth. **A diff that edits a file and leaves a
 convertible import block behind is incomplete work.**
+
+**Every Dart file you touch, you leave on tall style (mandatory).** Same visit,
+same teeth: `dart format path/to/file.dart` on the files you already edited.
+Not the directory. Not the tree. Not a test you were not already changing.
+Fix lints the wrap introduces in the same change. A heroic `dart format .`
+is still forbidden — this nibble is how the 856-file backlog dies without
+one.
 
 **Same visit, same rule for boilerplate (mandatory).** While you are in that
 file, collapse the repetition you find: an identical widget / `ListTile` /

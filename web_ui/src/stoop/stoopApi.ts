@@ -15,6 +15,7 @@ import type {
   StoopBrowseQuery,
   StoopCard,
   StoopCardDetail,
+  StoopComment,
   StoopCreator,
   StoopFollowedCreator,
   StoopMessage,
@@ -339,8 +340,11 @@ export const stoop = {
     if (query.following) params.set('following', 'true');
     return call<StoopBrowsePage>('GET', `/api/stoop/browse?${params}`);
   },
-  cardDetail: (id: string) =>
-    call<StoopCardDetail>('GET', `/api/stoop/cards/${encodeURIComponent(id)}`),
+  cardDetail: (id: string, type?: 'SOLO' | 'GROUP' | 'WORLD') =>
+    call<StoopCardDetail>(
+      'GET',
+      `/api/stoop/cards/${encodeURIComponent(id)}${type ? `?type=${encodeURIComponent(type)}` : ''}`,
+    ),
   vote: (id: string, value: number) =>
     call<{ score: number; myVote: number }>(
       'POST',
@@ -359,6 +363,54 @@ export const stoop = {
       category,
       reason,
     }),
+
+  comments: (id: string) =>
+    call<{ items?: StoopComment[]; comments?: StoopComment[] }>(
+      'GET',
+      `/api/stoop/cards/${encodeURIComponent(id)}/comments`,
+    ),
+  postComment: (id: string, body: string) =>
+    call<StoopComment>(
+      'POST',
+      `/api/stoop/cards/${encodeURIComponent(id)}/comments`,
+      { body },
+    ),
+  deleteComment: (id: string, commentId: string) =>
+    call<StoopComment>(
+      'DELETE',
+      `/api/stoop/cards/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`,
+    ),
+  reportComment: (
+    id: string,
+    commentId: string,
+    category: string,
+    reason: string,
+  ) =>
+    call<void>(
+      'POST',
+      `/api/stoop/cards/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}/report`,
+      { category, reason },
+    ),
+  replyComment: (id: string, commentId: string, body: string) =>
+    call<StoopComment>(
+      'POST',
+      `/api/stoop/cards/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}/reply`,
+      { body },
+    ),
+  deleteReply: (id: string, commentId: string) =>
+    call<StoopComment>(
+      'DELETE',
+      `/api/stoop/cards/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}/reply`,
+    ),
+  setCommentFlags: (
+    id: string,
+    flags: { commentsEnabled?: boolean; commentsLocked?: boolean },
+  ) =>
+    call<{ commentsEnabled?: boolean; commentsLocked?: boolean }>(
+      'POST',
+      `/api/stoop/cards/${encodeURIComponent(id)}/comment-flags`,
+      flags,
+    ),
 
   creator: (id: string) =>
     call<StoopCreator>(
@@ -437,7 +489,9 @@ export function stoopErrorText(e: unknown): string {
     case 'display_name_taken':
       return 'That display name is already taken — pick another.';
     case 'email_not_verified':
-      return 'Confirm your email first — profile photos need a verified address.';
+      return 'Confirm your email first — check your inbox, or resend from Account.';
+    case 'reason_required':
+      return 'Please add a reason.';
     case 'avatar_locked':
       return 'A moderator has disabled profile pictures for this account.';
     case 'unsupported_image_type':

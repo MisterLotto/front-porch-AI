@@ -19,10 +19,10 @@
 // text eval path (the fallback is itself production code worth exercising).
 // A text request is classified by the JSON keys its prompt asks the model to
 // produce: realism eval prompts name their keys (relationship_delta,
-// emotion_intensity, fixation_topic, ...), so the fake answers with a valid
-// canned payload for exactly the keys requested. Anything else is the user
-// chat turn and streams [replyPieces] as multiple SSE chunks (proving the
-// incremental decode path).
+// emotion_intensity, fixation_topic, with_user, ...), so the fake answers
+// with a valid canned payload for exactly the keys requested. Anything else
+// is the user chat turn and streams [replyPieces] as multiple SSE chunks
+// (proving the incremental decode path).
 
 import 'dart:convert';
 import 'dart:io';
@@ -487,6 +487,12 @@ class FakeBackendServer {
       eval['posture'] = 'standing';
       eval['minutes_elapsed'] = 5;
       eval['new_day'] = false;
+    }
+    // Glance pass (21bfd8c3). Same trap as climax above: unmatched key
+    // falls through to CHAT, bumps chatRequests, clobbers lastChatBody —
+    // group_smoke, group_realism_wiring, and lorebook_chat all red that way.
+    if (lastContent.contains('"with_user"')) {
+      eval['with_user'] = true;
     }
 
     // One line per completion so a misclassification is visible in the suite

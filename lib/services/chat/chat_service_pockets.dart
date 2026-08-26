@@ -74,31 +74,41 @@ extension ChatServicePockets on ChatService {
   /// Put one item INTO a character's kit by hand — the other half of the ✕
   /// eraser, from the same sidebar panel (and the web tools panel).
   ///
-  /// [gift] is the in-fiction path: the user hands the thing over, it lands
-  /// in her CARRYING list regardless of which section the panel had open
-  /// (you hand someone a sweater; you don't dress them in it), and the next
-  /// reply has her accept it knowing who it came from. Without [gift] the
-  /// item is added out-of-band to [section], and the next reply has her
-  /// SURPRISED by something she cannot explain — see [_PendingItemIntro].
+  /// Three fictions, opposite prompt notes:
   ///
-  /// The eval recognizes either immediately because the record IS its ground
-  /// truth: the very next bookkeeping prompt lists the item in her kit.
+  ///  * [gift] — the user hands it over in-scene. Lands in CARRYING
+  ///    regardless of which section the panel had open (you hand someone a
+  ///    sweater; you don't dress them in it), and the next reply has them
+  ///    accept it knowing who it came from.
+  ///  * neither gift nor [correction] — conjured out-of-band (the Easter
+  ///    egg): added to [section], and the next reply has them SURPRISED by
+  ///    something they cannot explain — see [_PendingItemIntro].
+  ///  * [correction] — the user is fixing the record (the model stripped
+  ///    them; they should be wearing a coat). [gift] is ignored, the item
+  ///    lands in [section] (the dress UI sends [PocketSection.worn]), and
+  ///    no intro is queued: the inventory fragment already states wearing
+  ///    as fact next turn. A magic-coat surprise is the wrong fiction.
+  ///
+  /// The eval recognizes any of them immediately because the record IS its
+  /// ground truth: the very next bookkeeping prompt lists the item.
   Future<void> addPocketItem(
     String characterId, {
     required PocketSection section,
     required String name,
     bool gift = false,
+    bool correction = false,
   }) async {
     // Same single switch every pockets surface answers to.
     if (!_storageService.realismSettings.pocketsEnabled) return;
     // Same "name (state)" chip convention the character editor teaches.
     final item = PocketItem.parseDisplay(name);
-    if (item.isEmpty) return;
+    if (item.isEmpty || isEmptyWardrobeRef(item.name)) return;
     final p = pocketsFor(characterId) ?? Pockets();
     // Expire first, exactly like the eraser: the stored list must match the
     // day-filtered view the user was looking at.
     p.expireSetAside(storyDayCount);
-    final target = gift ? PocketSection.carrying : section;
+    // Gift forces carrying only when this is NOT a record correction.
+    final target = (!correction && gift) ? PocketSection.carrying : section;
     switch (target) {
       case PocketSection.worn:
         p.worn.add(item);
@@ -115,27 +125,27 @@ extension ChatServicePockets on ChatService {
         // evaporate at the next story morning the way set-aside CLOTHING
         // does — the user put it there; only the user (or the story) moves
         // it.
-        p.setAside.add(
-          SetAsideItem(item, clothing: false, day: storyDayCount),
-        );
+        p.setAside.add(SetAsideItem(item, clothing: false, day: storyDayCount));
         while (p.setAside.length > kMaxSetAside) {
           p.setAside.removeAt(0);
         }
     }
     setPocketsFor(characterId, p);
-    final queue = _pendingItemIntros[characterId] ??= [];
-    queue.add(
-      _PendingItemIntro(
-        item.display,
-        gift: gift,
-        section: target,
-        session: _currentSessionId,
-      ),
-    );
-    // Bounded so a pile of rapid edits cannot flood the prompt: the newest
-    // three reactions are plenty of theatre for one reply.
-    while (queue.length > 3) {
-      queue.removeAt(0);
+    if (!correction) {
+      final queue = _pendingItemIntros[characterId] ??= [];
+      queue.add(
+        _PendingItemIntro(
+          item.display,
+          gift: gift,
+          section: target,
+          session: _currentSessionId,
+        ),
+      );
+      // Bounded so a pile of rapid edits cannot flood the prompt: the newest
+      // three reactions are plenty of theatre for one reply.
+      while (queue.length > 3) {
+        queue.removeAt(0);
+      }
     }
     await _saveChat();
     notifyListeners();
@@ -149,6 +159,7 @@ extension ChatServicePockets on ChatService {
       list.removeWhere((n) => n.included);
     }
   }
+
   /// Strike one item off by hand. The detection eval is a model doing
   /// bookkeeping; when it misses, this is what stops a wrong entry becoming
   /// permanent. Routed through the same setter the pass uses, so there is no
@@ -278,7 +289,6 @@ extension ChatServicePockets on ChatService {
       setPocketsFor(id, seed);
     }
   }
-
 
   /// Runs the detection pass for the speaker who just replied.
   ///
@@ -529,9 +539,7 @@ extension ChatServicePockets on ChatService {
           ? (msg.activeMetadata?['pockets_after_others'] as List?)
           : null;
       if (othersAfter.isNotEmpty || (priorAfterOthers?.isNotEmpty ?? false)) {
-        final newChars = <Object?>{
-          for (final oa in othersAfter) oa['char'],
-        };
+        final newChars = <Object?>{for (final oa in othersAfter) oa['char']};
         afterMeta['pockets_after_others'] = [
           ...?priorAfterOthers?.where(
             (o) => o is Map && !newChars.contains(o['char']),
@@ -559,7 +567,9 @@ extension ChatServicePockets on ChatService {
     // so its retires stand. Runs above the pockets gate deliberately: the
     // cards were written while pockets was on and must come back even if the
     // switch is off today (same rule as the RAG invalidator).
-    if (!after) unawaited(_replantRetiredItemCards(msg));
+    if (!after) {
+      unawaited(_replantItemCards(msg, key: 'item_cards_retired'));
+    }
     if (!_storageService.realismSettings.pocketsEnabled) return;
     final before = msg.metadata?['pockets_before'];
     if (before is! Map) return;
@@ -595,143 +605,6 @@ extension ChatServicePockets on ChatService {
         oRec = afterByChar[oid];
       }
       setPocketsFor(oid, Pockets.fromJson(oRec));
-    }
-  }
-
-  /// Retire every live item-memory card about [itemName] for [ownerId].
-  /// Shared by the post-gen feed (one live placement per item) and the
-  /// eraser ([removePocketItem]) so neither path leaves a phantom diary.
-  Future<void> _retireItemCardsFor(String ownerId, String itemName) async {
-    final sid = _currentSessionId;
-    if (sid == null || itemName.isEmpty) return;
-    final existing = await _journalStore.cardsFor(sid, ownerId);
-    for (final old in existing) {
-      if (JournalPhysics.isItemCard(old) &&
-          sameItem(JournalPhysics.itemOf(old) ?? '', itemName)) {
-        await _journalStore.retireCard(old.id);
-      }
-    }
-  }
-
-  /// Write this turn's item-memory cards ([itemCardsFrom] decides which
-  /// events are diary-worthy). One live placement memory per item: a new
-  /// card about the same thing retires the old one first, so "where are my
-  /// keys" always has exactly one answer in the diary. Cards carry the
-  /// canonical item name in the metadata pouch (the keyword re-warm key),
-  /// the story stamp, and the reply's position as their receipt — which also
-  /// enrolls them in the existing timeline-integrity invalidation: a
-  /// regenerated or deleted reply takes its phantom placement cards with it.
-  Future<void> _writeItemCards(
-    String ownerId,
-    List<PocketEvent> events, {
-    required bool asContinuation,
-  }) async {
-    // A retire is a hard DB delete — right while this turn stands, wrong the
-    // moment it is regenerated or tail-deleted. Stamp every card this turn is
-    // about to retire onto the message (same contract as pockets_before:
-    // replace on a normal turn, append on Continue) so the rewind can
-    // re-plant them (1.3 sweep, item_card_stamps.dart).
-    final stamps = <ItemCardStamp>[];
-    // Pickup writes no diary line but must retire the old placement card
-    // ("I set my keys down") or "where are my keys?" stays wrong.
-    for (final e in events) {
-      if (e.kind == PocketOpKind.pickup) {
-        final sid = _currentSessionId;
-        if (sid != null) {
-          stamps.addAll(
-            itemCardStampsFrom(
-              await _db.getJournalCardsForSession(sid),
-              e.item,
-            ),
-          );
-          await _journalStore.retireItemCardsInSession(sid, e.item);
-        } else {
-          await _retireItemCardsFor(ownerId, e.item);
-        }
-      }
-    }
-    final drafts = itemCardsFrom(events);
-    if (drafts.isEmpty) {
-      _stampRetiredItemCards(stamps, asContinuation: asContinuation);
-      return;
-    }
-    final sid = _currentSessionId!;
-    for (final draft in drafts) {
-      stamps.addAll(
-        itemCardStampsFrom(
-          await _journalStore.cardsFor(sid, ownerId),
-          draft.item,
-        ),
-      );
-      await _retireItemCardsFor(ownerId, draft.item);
-      await _journalStore.addCard(
-        sessionId: sid,
-        characterId: ownerId,
-        content: draft.content,
-        category: 'item',
-        kind: 'item',
-        extraMetadata: {'item': draft.item},
-        sourcePositions: [if (_messages.isNotEmpty) _messages.length - 1],
-        storyDay: _timeService.dayCount,
-        storyClock: _timeService.storyClockIso,
-        maxCards: _storageService.memorySettings.journalMaxCards,
-      );
-    }
-    _stampRetiredItemCards(stamps, asContinuation: asContinuation);
-    debugPrint(
-      '[Journal] 📦 ${drafts.length} item card(s) for ${_activeCharacter?.name}',
-    );
-  }
-
-  /// Ride the retired-card stamps on THIS turn's message. Replace on a
-  /// normal turn; append on Continue (the first half's retires belong to the
-  /// same turn and must survive the extension) — the pockets_before contract.
-  void _stampRetiredItemCards(
-    List<ItemCardStamp> stamps, {
-    required bool asContinuation,
-  }) {
-    if (_messages.isEmpty || _messages.last.isUser) return;
-    final msg = _messages.last;
-    final prior = asContinuation
-        ? ItemCardStamp.listFrom(msg.metadata?['item_cards_retired'])
-        : const <ItemCardStamp>[];
-    final all = [...prior, ...stamps];
-    if (all.isEmpty) return;
-    msg.metadata = {
-      ...?msg.metadata,
-      'item_cards_retired': [for (final s in all) s.toJson()],
-    };
-  }
-
-  /// Re-plant the item cards this turn's retire deleted — the rewind half.
-  /// Regenerate and tail-delete only (`after: false`); a swipe leaves the
-  /// turn standing, so its retires stand too. Retire-first so a double
-  /// regenerate cannot duplicate a card.
-  Future<void> _replantRetiredItemCards(ChatMessage msg) async {
-    final sid = _currentSessionId;
-    if (sid == null) return;
-    final stamps = ItemCardStamp.listFrom(msg.metadata?['item_cards_retired']);
-    for (final s in stamps) {
-      try {
-        await _retireItemCardsFor(s.owner, s.item);
-        await _journalStore.addCard(
-          sessionId: sid,
-          characterId: s.owner,
-          content: s.content,
-          category: 'item',
-          kind: 'item',
-          extraMetadata: {'item': s.item},
-          sourcePositions: s.positions,
-          storyDay: s.storyDay,
-          storyClock: s.storyClock,
-          // Same memory, not a fresh one: keep its cooled heat + pin.
-          heat: s.heat,
-          pinned: s.pinned,
-          maxCards: _storageService.memorySettings.journalMaxCards,
-        );
-      } catch (e) {
-        debugPrint('[Journal] item card re-plant skipped (${s.item}): $e');
-      }
     }
   }
 }

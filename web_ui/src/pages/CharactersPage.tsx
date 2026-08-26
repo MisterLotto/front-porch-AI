@@ -17,6 +17,13 @@ import { useProgressiveList } from '../hooks/useProgressiveList';
 import { CardMenu, type CardMenuItem, type MenuState } from '../components/library/CardMenu';
 import { CharacterCard, FolderCard, GroupCard } from '../components/library/LibraryCards';
 import { LibraryToolbar, SelectionBar } from '../components/library/LibraryToolbar';
+import { ChatHistoryModal } from '../components/library/ChatHistoryModal';
+import {
+  characterCardMenu,
+  folderCardMenu,
+  groupCardMenu,
+  importCardMenu,
+} from '../components/library/cardMenus';
 import {
   ConfirmDialog,
   ImportNameCollisionDialog,
@@ -47,6 +54,7 @@ type Dialog =
   // old-vs-new review once the proposal arrives over the socket.
   | { kind: 'aiEnhance'; char: LibChar }
   | { kind: 'enhanceReview'; char: LibChar; proposal: EnhanceProposal; selection: EnhanceSelection }
+  | { kind: 'chatHistory'; characterId?: string; groupId?: string }
   | null;
 
 export function CharactersPage() {
@@ -88,87 +96,48 @@ export function CharactersPage() {
   }, [dialog?.kind, loadPersonas]);
 
   // ── Menu item builders (one CardMenu serves every surface) ───────────────
-  const charMenu = (c: LibChar): CardMenuItem[] => [
-    {
-      label: 'Start new chat',
-      icon: '💬',
-      onClick: () =>
+  const charMenu = (c: LibChar) =>
+    characterCardMenu(c, {
+      inFolder: Boolean(lib.folderId),
+      onNewChat: () =>
         setDialog({ kind: 'newChat', subject: c.name, target: { characterId: c.id } }),
-    },
-    { label: 'Edit', icon: '✏️', onClick: () => lib.editCharacter(c.id) },
-    { label: 'AI Enhance', icon: '✨', onClick: () => setDialog({ kind: 'aiEnhance', char: c }) },
-    { label: 'Duplicate', icon: '⧉', onClick: () => lib.duplicateCharacter(c.id) },
-    { label: 'Export PNG', icon: '🖼', onClick: () => lib.exportPng(c.id) },
-    { label: 'Export JSON', icon: '📄', onClick: () => lib.exportJson(c.id) },
-    { label: 'Move to folder…', icon: '📁', onClick: () => setDialog({ kind: 'move', ids: [c.id] }) },
-    ...(lib.folderId
-      ? [
-          {
-            label: 'Remove from folder',
-            icon: '📤',
-            onClick: () => lib.moveToFolder([c.id], null),
-          },
-        ]
-      : []),
-    { label: 'Delete', icon: '🗑', danger: true, onClick: () => setDialog({ kind: 'deleteChar', char: c }) },
-  ];
+      onHistory: () => setDialog({ kind: 'chatHistory', characterId: c.id }),
+      onEdit: () => lib.editCharacter(c.id),
+      onEnhance: () => setDialog({ kind: 'aiEnhance', char: c }),
+      onDuplicate: () => lib.duplicateCharacter(c.id),
+      onExportPng: () => lib.exportPng(c.id),
+      onExportJson: () => lib.exportJson(c.id),
+      onMove: () => setDialog({ kind: 'move', ids: [c.id] }),
+      onRemoveFolder: () => lib.moveToFolder([c.id], null),
+      onDelete: () => setDialog({ kind: 'deleteChar', char: c }),
+    });
 
-  const folderMenu = (f: LibFolder): CardMenuItem[] => [
-    { label: 'Rename', icon: '✏️', onClick: () => setDialog({ kind: 'renameFolder', folder: f }) },
-    {
-      label: 'New subfolder',
-      icon: '📂',
-      onClick: () => setDialog({ kind: 'newSubfolder', folder: f }),
-    },
-    {
-      label: 'Delete folder only',
-      icon: '🗑',
-      onClick: () => setDialog({ kind: 'deleteFolder', folder: f }),
-    },
-    {
-      label: 'Delete folder + characters',
-      icon: '💥',
-      danger: true,
-      onClick: () => setDialog({ kind: 'deleteFolderDeep', folder: f }),
-    },
-  ];
+  const folderMenu = (f: LibFolder) =>
+    folderCardMenu(f, {
+      onRename: () => setDialog({ kind: 'renameFolder', folder: f }),
+      onNewSubfolder: () => setDialog({ kind: 'newSubfolder', folder: f }),
+      onDeleteFolder: () => setDialog({ kind: 'deleteFolder', folder: f }),
+      onDeleteDeep: () => setDialog({ kind: 'deleteFolderDeep', folder: f }),
+    });
 
-  const groupMenu = (g: LibGroup): CardMenuItem[] => [
-    {
-      label: 'Start new chat',
-      icon: '💬',
-      onClick: () =>
+  const groupMenu = (g: LibGroup) =>
+    groupCardMenu(g, {
+      inFolder: Boolean(lib.folderId),
+      onNewChat: () =>
         setDialog({ kind: 'newChat', subject: g.name, target: { groupId: g.id } }),
-    },
-    { label: 'Export Group PNG', icon: '🖼', onClick: () => lib.exportGroupPng(g) },
-    { label: 'Extract characters', icon: '👥', onClick: () => setDialog({ kind: 'extractGroup', group: g }) },
-    { label: 'Move to folder…', icon: '📁', onClick: () => setDialog({ kind: 'move', ids: [g.id] }) },
-    ...(lib.folderId
-      ? [
-          {
-            label: 'Remove from folder',
-            icon: '📤',
-            onClick: () => lib.moveToFolder([g.id], null),
-          },
-        ]
-      : []),
-    { label: 'Delete', icon: '🗑', danger: true, onClick: () => setDialog({ kind: 'deleteGroup', group: g }) },
-  ];
+      onHistory: () => setDialog({ kind: 'chatHistory', groupId: g.id }),
+      onExportPng: () => lib.exportGroupPng(g),
+      onExtract: () => setDialog({ kind: 'extractGroup', group: g }),
+      onMove: () => setDialog({ kind: 'move', ids: [g.id] }),
+      onRemoveFolder: () => lib.moveToFolder([g.id], null),
+      onDelete: () => setDialog({ kind: 'deleteGroup', group: g }),
+    });
 
-  const importMenu = (): CardMenuItem[] => [
-    { label: 'Import cards…', icon: '🖼', onClick: () => fileRef.current?.click() },
-    { label: 'Import a folder…', icon: '📁', onClick: () => folderInputRef.current?.click() },
-    {
-      label: 'Browse AI Character Cards ↗',
-      icon: '🌐',
-      onClick: () => window.open('https://aicharactercards.com/', '_blank', 'noopener'),
-    },
-    {
-      label: 'Browse Chub.ai ↗',
-      icon: '🌐',
-      onClick: () => window.open('https://chub.ai/', '_blank', 'noopener'),
-    },
-  ];
+  const importMenu = () =>
+    importCardMenu({
+      onImportCards: () => fileRef.current?.click(),
+      onImportFolder: () => folderInputRef.current?.click(),
+    });
 
   // ── Drag-and-drop (desktop/tablet only; phone uses the menu's Move action) ─
   const dropOnFolder = (folderId: string | null) => {
@@ -501,6 +470,13 @@ export function CharactersPage() {
             lib.moveToFolder(dialog.ids, folderId);
             setDialog(null);
           }}
+          onClose={() => setDialog(null)}
+        />
+      )}
+      {dialog?.kind === 'chatHistory' && (
+        <ChatHistoryModal
+          characterId={dialog.characterId}
+          groupId={dialog.groupId}
           onClose={() => setDialog(null)}
         />
       )}

@@ -61,8 +61,9 @@ export function CreateGroupChatPage() {
         memberIds: selected,
         turnOrder,
       });
+      navigate('/chat?opening=1');
       await api.post('/api/chat/select-group', { groupId: r.id });
-      navigate('/chat');
+      navigate('/chat', { replace: true });
     } catch (e) {
       setBusy(false);
       setError(e instanceof ApiError ? e.message : 'Could not create the group');

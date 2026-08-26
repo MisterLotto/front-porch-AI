@@ -25,6 +25,7 @@ import 'package:uuid/uuid.dart';
 import 'package:front_porch_ai/database/database.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/storage_service.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 /// Persists group chat definitions to the database.
 class GroupChatRepository extends ChangeNotifier {
@@ -90,6 +91,10 @@ class GroupChatRepository extends ChangeNotifier {
             autoAdvance: g.autoAdvance,
             directorMode: g.directorMode,
             firstMessage: g.firstMessage,
+            alternateGreetings: parseGroupAlternateGreetings(
+              g.defaultMemberRealismState,
+            ),
+            greetingSeeds: parseGroupGreetingSeeds(g.defaultMemberRealismState),
             scenario: g.scenario,
             systemPrompt: g.systemPrompt,
             defaultMemberRealismState: g.defaultMemberRealismState,
@@ -124,6 +129,15 @@ class GroupChatRepository extends ChangeNotifier {
     // Full removal of the previous Path B transitional blob logic that merged it
     // into defaultMemberRealismState. defaultMemberRealismState is written as-is.
     // characterIds is legacy dead weight (always '[]' — membership is in group_members).
+    final patchedBlob = withGroupOpeningAlts(
+      group.defaultMemberRealismState,
+      alternateGreetings: group.alternateGreetings,
+      greetingSeeds: group.greetingSeeds,
+    );
+    // Same-session export / cache reads must see the patched alts/seeds.
+    group.defaultMemberRealismState = patchedBlob;
+    group.alternateGreetings = parseGroupAlternateGreetings(patchedBlob);
+    group.greetingSeeds = parseGroupGreetingSeeds(patchedBlob);
     final companion = GroupsCompanion(
       id: Value(group.id),
       stableId: Value(group.stableId),
@@ -135,7 +149,7 @@ class GroupChatRepository extends ChangeNotifier {
       firstMessage: Value(group.firstMessage),
       scenario: Value(group.scenario),
       systemPrompt: Value(group.systemPrompt),
-      defaultMemberRealismState: Value(group.defaultMemberRealismState),
+      defaultMemberRealismState: Value(patchedBlob),
       characterSystemPrompts: Value(jsonEncode(group.characterSystemPrompts)),
       chaosModeEnabled: Value(group.chaosModeEnabled),
       chaosNsfwEnabled: Value(group.chaosNsfwEnabled),
@@ -165,7 +179,7 @@ class GroupChatRepository extends ChangeNotifier {
           firstMessage: Value(group.firstMessage),
           scenario: Value(group.scenario),
           systemPrompt: Value(group.systemPrompt),
-          defaultMemberRealismState: Value(group.defaultMemberRealismState),
+          defaultMemberRealismState: Value(patchedBlob),
           characterSystemPrompts: Value(
             jsonEncode(group.characterSystemPrompts),
           ),
@@ -205,16 +219,11 @@ class GroupChatRepository extends ChangeNotifier {
   }
 
   Future<void> delete(String groupId) async {
-    // Delete from database
+    // deleteGroupById cascades each session (journal, growth, embeddings,
+    // objectives, worlds). Asking for sessions AFTER that is a no-op — the
+    // leftover loop used to skip the real cascade entirely.
     await _db.deleteGroupById(groupId);
     _groups.removeWhere((g) => g.id == groupId);
-
-    // Delete associated chat sessions from database
-    final sessions = await _db.getSessionsForGroup(groupId);
-    for (final session in sessions) {
-      await _db.deleteMessagesForSession(session.id);
-      await _db.deleteSessionById(session.id);
-    }
 
     // Best-effort recursive delete of private group avatar tree (groups/<id>/).
     // DB rows (including group_members) already cascaded in _db.deleteGroupById.

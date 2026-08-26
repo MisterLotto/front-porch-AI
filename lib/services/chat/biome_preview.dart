@@ -8,6 +8,7 @@
 // every draw demoted to rain"). Pure math over the real engine — no state,
 // no I/O — so the editor can call it freely off a debounce.
 
+import 'package:front_porch_ai/services/chat/season_calendar.dart';
 import 'package:front_porch_ai/services/chat/weather_biomes.dart';
 import 'package:front_porch_ai/services/chat/weather_engine.dart';
 import 'package:front_porch_ai/services/chat/weather_segments.dart';
@@ -57,8 +58,8 @@ class BiomePreview {
   });
 }
 
-/// Season → a fixture date inside it (northern-hemisphere months, same
-/// mapping as [WeatherEngine.seasonOf]).
+/// Season → a fixture date inside it. Custom starts use the midpoint of
+/// that slice so a moved summer is not still sampled on July 15.
 const Map<String, (int, int)> _seasonDates = {
   'winter': (1, 15),
   'spring': (4, 15),
@@ -78,9 +79,11 @@ BiomePreview previewBiome(
   final warnings = <String>[];
   final seasons = <SeasonDistribution>[];
 
-  for (final season in kSeasons) {
-    final (month, dayOfMonth) = _seasonDates[season]!;
-    final date = DateTime(2026, month, dayOfMonth);
+  for (final season in biome.seasonIds) {
+    final date =
+        biome.seasonStarts.isNotEmpty || !_seasonDates.containsKey(season)
+        ? previewDateForSeason(season, biome.seasonStarts)
+        : DateTime(2026, _seasonDates[season]!.$1, _seasonDates[season]!.$2);
     final condCounts = <String, int>{};
     final bandCounts = <String, int>{};
     var total = 0;
@@ -115,19 +118,19 @@ BiomePreview previewBiome(
       (b) => b.name == dominantBand,
       orElse: () => TempBand.mild,
     );
-    final typicalTempC = biome.displayAnchorsC[season] ??
-        WeatherSegments.typicalBaseC(domBand);
+    final typicalTempC =
+        biome.displayAnchorsC[season] ?? WeatherSegments.typicalBaseC(domBand);
 
-    seasons.add(SeasonDistribution(
-      season: season,
-      conditionShare: {
-        for (final e in condCounts.entries) e.key: e.value / total,
-      },
-      bandShare: {
-        for (final e in bandCounts.entries) e.key: e.value / total,
-      },
-      typicalTempC: typicalTempC,
-    ));
+    seasons.add(
+      SeasonDistribution(
+        season: season,
+        conditionShare: {
+          for (final e in condCounts.entries) e.key: e.value / total,
+        },
+        bandShare: {for (final e in bandCounts.entries) e.key: e.value / total},
+        typicalTempC: typicalTempC,
+      ),
+    );
 
     // Demotion visibility, SHARE-based so intentional rain+snow mixes don't
     // false-alarm: compare each outcome's observed share against what its
@@ -137,8 +140,7 @@ BiomePreview previewBiome(
       final wTotal = weights.fold<int>(0, (a, b) => a + b);
       if (wTotal > 0) {
         final snowWeight = weights[WeatherCondition.snow.index];
-        final intendedRain =
-            weights[WeatherCondition.rain.index] / wTotal;
+        final intendedRain = weights[WeatherCondition.rain.index] / wTotal;
         final observedRain = (condCounts['rain'] ?? 0) / total;
         if (snowWeight > 0 && (condCounts['snow'] ?? 0) == 0) {
           warnings.add(
@@ -164,7 +166,7 @@ BiomePreview previewBiome(
   // Dead columns: a condition weighted zero in EVERY season could simply be
   // removed from the author's mental model.
   for (final cond in WeatherCondition.values) {
-    final everUsed = kSeasons.any(
+    final everUsed = biome.seasonIds.any(
       (s) => (biome.weights[s]?[cond.index] ?? 0) > 0,
     );
     if (!everUsed && cond == WeatherCondition.rain) {
@@ -180,7 +182,10 @@ BiomePreview previewBiome(
       WeatherSegments.segmentWeatherFor(
         sessionSeed: 'preview-week',
         dayCount: d,
-        date: DateTime(2026, 1, 15),
+        date: previewDateForSeason(
+          biome.seasonIds.contains('winter') ? 'winter' : biome.seasonIds.first,
+          biome.seasonStarts,
+        ),
         hour: 13, // midday — the number the chip would lead with
         biome: biome,
       ),

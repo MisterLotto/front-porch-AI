@@ -1,15 +1,19 @@
 // Copyright (C) 2026 Front Porch AI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-
 import 'package:flutter/material.dart';
+import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/models/models.dart';
 
 class GroupMemoryRAGTab extends StatefulWidget {
   final ChatService chatService;
   final GroupChatRepository? groupRepo;
-  const GroupMemoryRAGTab({super.key, required this.chatService, this.groupRepo});
+  const GroupMemoryRAGTab({
+    super.key,
+    required this.chatService,
+    this.groupRepo,
+  });
 
   @override
   State<GroupMemoryRAGTab> createState() => _GroupMemoryRAGTabState();
@@ -102,10 +106,10 @@ class _GroupMemoryRAGTabState extends State<GroupMemoryRAGTab> {
     final group = widget.chatService.activeGroup;
 
     if (group == null) {
-      return const Center(
+      return Center(
         child: Text(
           'No active group chat selected.',
-          style: TextStyle(color: Colors.white54),
+          style: TextStyle(color: AppColors.textSecondary(context)),
         ),
       );
     }
@@ -119,11 +123,7 @@ class _GroupMemoryRAGTabState extends State<GroupMemoryRAGTab> {
             // Header
             Row(
               children: [
-                const Icon(
-                  Icons.psychology,
-                  color: Colors.purpleAccent,
-                  size: 20,
-                ),
+                Icon(Icons.psychology, color: Colors.purpleAccent, size: 20),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -137,9 +137,12 @@ class _GroupMemoryRAGTabState extends State<GroupMemoryRAGTab> {
               ],
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'Per-group RAG controls. Memories are embedded from this group\'s conversation history and retrieved when context is dropped.',
-              style: TextStyle(fontSize: 12, color: Colors.white70),
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary(context),
+              ),
             ),
             const SizedBox(height: 16),
 
@@ -147,9 +150,9 @@ class _GroupMemoryRAGTabState extends State<GroupMemoryRAGTab> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFF111827),
+                color: AppColors.surfaceContainerOf(context),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white12),
+                border: Border.all(color: AppColors.borderOf(context)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -162,7 +165,7 @@ class _GroupMemoryRAGTabState extends State<GroupMemoryRAGTab> {
                         color: Colors.purpleAccent,
                       ),
                       const SizedBox(width: 8),
-                      const Text(
+                      Text(
                         'Enable RAG for this group',
                         style: TextStyle(
                           fontWeight: FontWeight.w600,
@@ -178,11 +181,14 @@ class _GroupMemoryRAGTabState extends State<GroupMemoryRAGTab> {
                     ],
                   ),
                   if (!_groupRagEnabled)
-                    const Padding(
+                    Padding(
                       padding: EdgeInsets.only(left: 26, top: 2, bottom: 8),
                       child: Text(
                         'Retrieval skipped for this group even if global RAG is on.',
-                        style: TextStyle(fontSize: 11, color: Colors.white38),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textTertiary(context),
+                        ),
                       ),
                     ),
                   const SizedBox(height: 8),
@@ -190,9 +196,12 @@ class _GroupMemoryRAGTabState extends State<GroupMemoryRAGTab> {
                   // Retrieval count
                   Row(
                     children: [
-                      const Text(
+                      Text(
                         'Memories per turn (retrieval limit)',
-                        style: TextStyle(color: Colors.white54, fontSize: 12),
+                        style: TextStyle(
+                          color: AppColors.textSecondary(context),
+                          fontSize: 12,
+                        ),
                       ),
                       const Spacer(),
                       Text(
@@ -218,7 +227,7 @@ class _GroupMemoryRAGTabState extends State<GroupMemoryRAGTab> {
                       max: 30,
                       divisions: 30,
                       activeColor: Colors.purpleAccent,
-                      inactiveColor: Colors.white12,
+                      inactiveColor: AppColors.borderOf(context),
                       onChanged: (v) => _updateRetrievalCount(v.round()),
                     ),
                   ),
@@ -228,9 +237,12 @@ class _GroupMemoryRAGTabState extends State<GroupMemoryRAGTab> {
                   // Memory budget (context length feel)
                   Row(
                     children: [
-                      const Text(
+                      Text(
                         'RAG memory budget (% of context)',
-                        style: TextStyle(color: Colors.white54, fontSize: 12),
+                        style: TextStyle(
+                          color: AppColors.textSecondary(context),
+                          fontSize: 12,
+                        ),
                       ),
                       const Spacer(),
                       Text(
@@ -256,17 +268,17 @@ class _GroupMemoryRAGTabState extends State<GroupMemoryRAGTab> {
                       max: 25,
                       divisions: 20,
                       activeColor: Colors.purpleAccent,
-                      inactiveColor: Colors.white12,
+                      inactiveColor: AppColors.borderOf(context),
                       onChanged: _updateMemoryBudget,
                     ),
                   ),
 
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     'Note: Global embedding window size (messages per chunk) lives in main Settings → Memory (RAG). Per-group override would be a future extension.',
                     style: TextStyle(
                       fontSize: 10,
-                      color: Colors.white30,
+                      color: AppColors.textTertiary(context),
                       fontStyle: FontStyle.italic,
                     ),
                   ),
@@ -279,13 +291,9 @@ class _GroupMemoryRAGTabState extends State<GroupMemoryRAGTab> {
             // Per-character priorities
             Row(
               children: [
-                const Icon(
-                  Icons.people_alt,
-                  size: 18,
-                  color: Colors.purpleAccent,
-                ),
+                Icon(Icons.people_alt, size: 18, color: Colors.purpleAccent),
                 const SizedBox(width: 8),
-                const Text(
+                Text(
                   'Per-Character Memory Importance',
                   style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                 ),
@@ -300,26 +308,35 @@ class _GroupMemoryRAGTabState extends State<GroupMemoryRAGTab> {
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                  child: const Text(
+                  child: Text(
                     'Reset to defaults',
-                    style: TextStyle(fontSize: 11, color: Colors.white54),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary(context),
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               'Boost or suppress how heavily each character\'s past messages influence RAG results (0.0–2.0). 1.0 = normal relevance scoring.',
-              style: TextStyle(fontSize: 11, color: Colors.white54),
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary(context),
+              ),
             ),
             const SizedBox(height: 8),
 
             if (_chars.isEmpty)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Text(
                   'No characters loaded for this group.',
-                  style: TextStyle(color: Colors.white38, fontSize: 12),
+                  style: TextStyle(
+                    color: AppColors.textTertiary(context),
+                    fontSize: 12,
+                  ),
                 ),
               )
             else
@@ -368,7 +385,7 @@ class _GroupMemoryRAGTabState extends State<GroupMemoryRAGTab> {
                             max: 2.0,
                             divisions: 20,
                             activeColor: Colors.purpleAccent,
-                            inactiveColor: Colors.white12,
+                            inactiveColor: AppColors.borderOf(context),
                             onChanged: (v) => _updateCharPriority(char, v),
                           ),
                         ),

@@ -26,6 +26,7 @@ const FIELD_ROWS: { key: keyof EnhanceSelection; label: string; hint: string }[]
   { key: 'scenario', label: 'Scenario', hint: 'Re-anchor the opening to where the story went' },
   { key: 'greetings', label: 'First message + alternates', hint: 'Fresh openings in the voice from the chat' },
   { key: 'lorebook', label: 'Lorebook', hint: 'World entries from places the story revealed' },
+  { key: 'porchLife', label: 'Porch Life (wardrobe, ambitions, likes)', hint: 'Propose what they wear and carry, long-term goals, and tastes — keep or accept on the next step' },
 ];
 
 export function EnhanceDialog({
@@ -54,8 +55,29 @@ export function EnhanceDialog({
   const [remoteModels, setRemoteModels] = useState<{ id: string; name: string }[] | null>(null);
   const [currentModel, setCurrentModel] = useState('');
   const [modelId, setModelId] = useState('');
+  // Create's voice — fetched from detail so the enhance payload can carry it.
+  // Missing fields stay omitted; the server then uses the card stamp.
+  const [voice, setVoice] = useState<{
+    narrativePerspective?: string;
+    narrativeTense?: string;
+    sex?: string;
+  }>({});
 
   useEffect(() => {
+    api
+      .get<{
+        narrativePerspective?: string;
+        narrativeTense?: string;
+        sex?: string;
+      }>(`/api/characters/${encodeURIComponent(characterId)}/detail`)
+      .then((d) =>
+        setVoice({
+          narrativePerspective: d.narrativePerspective,
+          narrativeTense: d.narrativeTense,
+          sex: d.sex,
+        }),
+      )
+      .catch(() => {});
     api
       .get<{ sessions: SessionSummary[] }>(
         `/api/chat/sessions?characterId=${encodeURIComponent(characterId)}`,
@@ -115,7 +137,7 @@ export function EnhanceDialog({
     try {
       await api.post(
         '/api/chargen/enhance',
-        buildEnhancePayload(characterId, sessionId, selection, nsfw, modelId),
+        buildEnhancePayload(characterId, sessionId, selection, nsfw, modelId, voice),
       );
     } catch (e) {
       setRunning(false);

@@ -89,23 +89,16 @@ extension _BubbleHeader on _MessageBubbleState {
               if (chatService.isGroupMode) {
                 return GestureDetector(
                   onTap: () {
-                    final ch = chatService.groupCharacters
-                        .where(
-                          (c) => c.name == message.sender,
-                        )
-                        .firstOrNull;
+                    final ch = resolveGroupSpeakerForMessage(
+                      chatService.groupCharacters,
+                      message,
+                    );
                     if (ch != null) {
                       chatService.setNextCharacter(ch);
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(
+                      ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text(
-                            '${message.sender} will respond next',
-                          ),
-                          duration: const Duration(
-                            seconds: 1,
-                          ),
+                          content: Text('${message.sender} will respond next'),
+                          duration: const Duration(seconds: 1),
                           backgroundColor:
                               widget.senderColor ??
                               AppColors.porchAmberOf(context),
@@ -125,9 +118,7 @@ extension _BubbleHeader on _MessageBubbleState {
           const Spacer(),
         ],
         // TTS speaker button
-        if (!message.isUser &&
-            message.sender != 'System' &&
-            !isDirectorNote)
+        if (!message.isUser && message.sender != 'System' && !isDirectorNote)
           Consumer2<TtsService, StorageService>(
             builder: (context, tts, storage, _) {
               if (!storage.ttsEnabled) {
@@ -135,12 +126,9 @@ extension _BubbleHeader on _MessageBubbleState {
               }
               final msgId = 'msg_${widget.index}';
               final isThisMsg = tts.currentMessageId == msgId;
-              final isGeneratingThis =
-                  isThisMsg && tts.isGenerating;
+              final isGeneratingThis = isThisMsg && tts.isGenerating;
               final isSpeakingThis =
-                  isThisMsg &&
-                  tts.isSpeaking &&
-                  !tts.isGenerating;
+                  isThisMsg && tts.isSpeaking && !tts.isGenerating;
 
               return Padding(
                 padding: const EdgeInsets.only(right: 4),
@@ -150,8 +138,7 @@ extension _BubbleHeader on _MessageBubbleState {
                         children: [
                           InkWell(
                             onTap: () => tts.stop(),
-                            borderRadius:
-                                BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(10),
                             child: const Padding(
                               padding: EdgeInsets.all(2),
                               child: Icon(
@@ -172,27 +159,18 @@ extension _BubbleHeader on _MessageBubbleState {
                                   width: 18,
                                   height: 18,
                                   child: CircularProgressIndicator(
-                                    value:
-                                        tts.generationProgress >
-                                            0
+                                    value: tts.generationProgress > 0
                                         ? tts.generationProgress
                                         : null,
                                     strokeWidth: 2,
-                                    color:
-                                        AppColors.porchAmberOf(
-                                          context,
-                                        ),
+                                    color: AppColors.porchAmberOf(context),
                                   ),
                                 ),
-                                if (tts.generationProgress >
-                                    0)
+                                if (tts.generationProgress > 0)
                                   Text(
                                     '${(tts.generationProgress * 100).toInt()}',
                                     style: TextStyle(
-                                      color:
-                                          AppColors.textSecondary(
-                                            context,
-                                          ),
+                                      color: AppColors.textSecondary(context),
                                       fontSize: 7,
                                     ),
                                   ),
@@ -203,15 +181,11 @@ extension _BubbleHeader on _MessageBubbleState {
                       )
                     : IconButton(
                         icon: Icon(
-                          isSpeakingThis
-                              ? Icons.stop_circle
-                              : Icons.volume_up,
+                          isSpeakingThis ? Icons.stop_circle : Icons.volume_up,
                           size: 16,
                           color: isSpeakingThis
                               ? Colors.orangeAccent
-                              : AppColors.textTertiary(
-                                  context,
-                                ),
+                              : AppColors.textTertiary(context),
                         ),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
@@ -222,27 +196,19 @@ extension _BubbleHeader on _MessageBubbleState {
                           if (isSpeakingThis) {
                             tts.stop();
                           } else {
-                            final chatService =
-                                Provider.of<ChatService>(
-                                  context,
-                                  listen: false,
-                                );
+                            final chatService = Provider.of<ChatService>(
+                              context,
+                              listen: false,
+                            );
                             String? voiceKey;
-                            if (chatService.activeGroup !=
-                                null) {
-                              final charMatch = chatService
-                                  .groupCharacters
-                                  .where(
-                                    (c) =>
-                                        c.name ==
-                                        message.sender,
-                                  )
-                                  .firstOrNull;
+                            if (chatService.activeGroup != null) {
+                              final charMatch = resolveGroupSpeakerForMessage(
+                                chatService.groupCharacters,
+                                message,
+                              );
                               voiceKey = charMatch?.ttsVoice;
                             } else {
-                              voiceKey = chatService
-                                  .activeCharacter
-                                  ?.ttsVoice;
+                              voiceKey = chatService.activeCharacter?.ttsVoice;
                             }
                             tts.speak(
                               message.displayText,
@@ -260,46 +226,36 @@ extension _BubbleHeader on _MessageBubbleState {
             icon: Icon(
               Icons.edit_outlined,
               size: 16,
-              color:
-                  theme.accent ??
-                  AppColors.textTertiary(context),
+              color: theme.accent ?? AppColors.textTertiary(context),
             ),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
             tooltip: 'Edit message',
             onPressed: () => _showEditDialog(context, index),
           ),
-        if (message.sender != 'System')
-          const SizedBox(width: 8),
+        if (message.sender != 'System') const SizedBox(width: 8),
         if (message.sender != 'System')
           IconButton(
             icon: Icon(
               Icons.call_split,
               size: 16,
-              color:
-                  theme.accent ??
-                  AppColors.textTertiary(context),
+              color: theme.accent ?? AppColors.textTertiary(context),
             ),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
             tooltip: 'Fork from here',
-            onPressed: () =>
-                _showForkConfirmation(context, index),
+            onPressed: () => _showForkConfirmation(context, index),
           ),
-        if (message.sender != 'System')
-          const SizedBox(width: 8),
+        if (message.sender != 'System') const SizedBox(width: 8),
         IconButton(
           icon: Icon(
             Icons.delete_outline,
             size: 16,
-            color:
-                theme.accent ??
-                AppColors.textTertiary(context),
+            color: theme.accent ?? AppColors.textTertiary(context),
           ),
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(),
-          onPressed: () =>
-              _showDeleteConfirmation(context, index),
+          onPressed: () => _showDeleteConfirmation(context, index),
         ),
       ],
     );

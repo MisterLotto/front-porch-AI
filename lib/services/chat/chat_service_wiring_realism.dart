@@ -40,6 +40,29 @@ extension ChatServiceWiringRealism on ChatService {
         _pendingRealismMetadata ??= {};
         _pendingRealismMetadata![key] = value;
       },
+      onStoryDayChanged: () {
+        final held = todaySentence;
+        setTodaySentence(null);
+        return () async {
+          await _journalResolvedToday(held, fate: PlannerTodayFate.dayAte);
+          await _deactivateTodayObjective();
+        }();
+      },
+      getPlannerEnabled: () => _storageService.realismSettings.plannerEnabled,
+      onTodayEval: (line) {
+        if (line.isEmpty) {
+          abandonToday();
+          return Future<void>.value();
+        }
+        final prev = todaySentence;
+        setTodaySentence(line);
+        return () async {
+          if (prev != null && prev != line) {
+            await _journalResolvedToday(prev, fate: PlannerTodayFate.done);
+          }
+          await _upsertTodayObjective(line);
+        }();
+      },
       onPatchLastMessageRealismState: (tod, dc, clockIso) {
         // Patch the newest REAL message — never a narration banner. Dream /
         // chance-time messages carry only their banner flag; stamping a full
@@ -170,7 +193,8 @@ extension ChatServiceWiringRealism on ChatService {
       getIsGroupRealismActive: () => isGroupRealismActive,
       getGroupAffectionScore: (charId, {int defaultValue = 0}) =>
           _groupRealism[charId]?.affection ?? defaultValue,
-      setGroupAffectionScore: (charId, v) => _memberForWrite(charId).affection = v,
+      setGroupAffectionScore: (charId, v) =>
+          _memberForWrite(charId).affection = v,
       getGroupLongTermScore: (charId, {int defaultValue = 0}) =>
           _groupRealism[charId]?.longTermScore ?? defaultValue,
       setGroupLongTermScore: (charId, v) =>
@@ -197,6 +221,8 @@ extension ChatServiceWiringRealism on ChatService {
           _groupRealism[charId]?.spatialStance ?? defaultValue,
       setGroupSpatialStance: (charId, v) =>
           _memberForWrite(charId).spatialStance = v,
+      getGroupWithUser: (charId) => _groupRealism[charId]?.withUser,
+      setGroupWithUser: (charId, v) => _memberForWrite(charId).withUser = v,
       getGroupInterCharacterRelationships: (charId) =>
           _groupRealism[charId]?.relationships ?? const <String, int>{},
       setGroupInterCharacterRelationships: (charId, rels) =>
@@ -206,8 +232,7 @@ extension ChatServiceWiringRealism on ChatService {
       setGroupCounter: (charId, key, v) =>
           _memberForWrite(charId).setValue(key, v),
       // Living Time §7 v1.5: bond/trust tier crossings → "Our Story" cards.
-      // Fire-and-forget; plant never throws into the eval path. Diary owner is
-      // the current speaker (1:1 host or group speaker whose scalars just moved).
+      // Fire-and-forget; plant never throws. Owner is the current speaker.
       onTierCrossing: (crossing) {
         final sessionId = _currentSessionId;
         if (sessionId == null) return;
@@ -219,9 +244,10 @@ extension ChatServiceWiringRealism on ChatService {
             sessionId: sessionId,
             characterId: charId,
             crossing: crossing,
-            sourcePositions: _messages.isEmpty
-                ? const <int>[]
-                : <int>[_messages.length - 1],
+            sourcePositions: persistTipCite(
+              base: _history.basePosition,
+              length: _messages.length,
+            ),
             storyDay: _timeService.dayCount,
             storyClock: _timeService.storyClockIso,
             maxCards: _storageService.memorySettings.journalMaxCards,

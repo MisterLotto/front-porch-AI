@@ -6,6 +6,7 @@
 export 'background_settings_dialog.dart';
 export 'byaf_import_dialog.dart';
 export 'chat_settings_dialog.dart';
+export '../pages/home/dialogs/chat_history_dialog.dart';
 export 'chat_settings_generation_section.dart';
 export 'chat_to_story_dialog.dart';
 export 'context_viewer_dialog.dart';
@@ -45,5 +46,6 @@ export 'type_delete_dialog.dart';
 export 'ui_settings_dialog.dart';
 export 'update_dialog.dart';
 export 'user_persona_dialog.dart';
+export 'variant_picker_dialog.dart';
 export 'voice_browser_dialog.dart';
 export 'web_access_setup_dialog.dart';

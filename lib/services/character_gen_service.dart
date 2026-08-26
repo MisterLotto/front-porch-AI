@@ -17,12 +17,14 @@
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:front_porch_ai/utils/utils.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/kobold_service.dart';
 import 'package:front_porch_ai/services/chargen/chargen.dart';
+import 'package:front_porch_ai/services/chat/chat.dart' show Pockets;
 
 part 'chargen/character_gen_llm.dart';
 part 'chargen/character_gen_prompts.dart';
@@ -30,6 +32,7 @@ part 'chargen/character_gen_steps.dart';
 part 'chargen/character_gen_steps2.dart';
 part 'chargen/character_gen_parsing.dart';
 part 'chargen/character_gen_enhance.dart';
+part 'chargen/character_gen_porch_life.dart';
 
 /// Per-category descriptions for lorebook generation prompts.
 const _loreCategoryDescriptions = {
@@ -80,8 +83,9 @@ const _qPressure =
 const _qJoy =
     'What brings you genuine joy or peace — the thing that lets your guard down?';
 const _qAppearance =
-    'Now describe your physical appearance in your own words — what you look like '
-    'and how you carry yourself. Be specific.';
+    'Now describe your physical appearance in your own words — what you look like, '
+    'how you carry yourself, and what you are wearing and carrying in this opening '
+    'scene. Be specific.';
 
 /// Only asked when a relationship to {{user}} is set — voices the bond so the
 /// greeting and example dialogue carry real history. Skipped for strangers /
@@ -129,6 +133,11 @@ class CharacterGenService {
   /// capable models use them well, weaker ones place them awkwardly.
   bool _includeDynamicMacros = false;
 
+  /// Greeting + example-dialog voice. Default first-person present matches
+  /// the historical baked-in prompts. Set at the start of each generate run.
+  NarrativeVoice _narrativeVoice = NarrativeVoice.defaults;
+  String _narrativeSex = '';
+
   bool get isAborted => _aborted;
 
   /// Abort the current generation. Signals the LLM service to close its
@@ -171,11 +180,21 @@ class CharacterGenService {
     bool nsfwEnabled = false,
     bool reasoningEnabled = false,
     bool includeDynamicMacros = false,
+    String narrativePerspective = 'first',
+    String narrativeTense = 'present',
     bool abortInFlight = true,
     void Function(String accumulated)? onProgress,
     void Function(String error)? onError,
     void Function(String status)? onStatus,
   }) async {
+    // Voice must be set BEFORE the base-card prompt so description /
+    // personality pick up tense and third-person pronouns.
+    _narrativeVoice = NarrativeVoice.parse(
+      perspective: narrativePerspective,
+      tense: narrativeTense,
+    );
+    _narrativeSex = sex;
+
     // ── Step 1: Generate base card ──────────────────────────────
     onStatus?.call('Generating character profile...');
     final basePrompt = _buildBasePrompt(
@@ -478,8 +497,24 @@ class CharacterGenService {
           alts.add(_cleanGreeting(altOutput));
         }
       }
-      card.alternateGreetings = alts;
+      // Seeds are not authored with these rewritten alts — compact against
+      // empty so leftover source furious cannot land on Get out.
+      card.assignRewrittenAlternateGreetings(alts);
     }
+    if (_aborted || _generationEpoch != currentEpoch) return null;
+
+    // ── Step 4b: Porch Life identity (ambitions / wardrobe / tastes) ──
+    // After the greeting exists so worn/carrying match the opening beat.
+    // Tools first when the backend speaks them; text JSON is the floor.
+    onStatus?.call('Seeding wardrobe and ambitions...');
+    onProgress?.call('');
+    await _seedPorchLifeIdentity(
+      card: card,
+      name: name,
+      interviewTranscript: interviewTranscript,
+      nsfwEnabled: nsfwEnabled,
+      onProgress: onProgress,
+    );
     if (_aborted || _generationEpoch != currentEpoch) return null;
 
     // ── Step 5: Generate Tailored Image Prompt ────────────────
@@ -499,6 +534,7 @@ class CharacterGenService {
     // mid-chat. Normalize every generated text field to the portable macro.
     // (Logic lives in chargen/char_macro.dart so it stays unit-testable.)
     applyCharMacroToCard(card, name);
+    stampNarrativeVoice(card, voice: _narrativeVoice, sex: _narrativeSex);
 
     onStatus?.call('Character generated!');
     return card;

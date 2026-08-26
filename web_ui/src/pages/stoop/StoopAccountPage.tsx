@@ -441,7 +441,10 @@ export function StoopAccountPage() {
             {mine.map((m) => (
               <div className="lib-card stoop-tile stoop-mine-tile" key={m.id}>
                 {m.status === 'APPROVED' ? (
-                  <Link to={`/stoop/card/${encodeURIComponent(m.id)}`} className="stoop-mine-art">
+                  <Link
+                    to={`/stoop/card/${encodeURIComponent(m.id)}?type=${encodeURIComponent(m.type)}`}
+                    className="stoop-mine-art"
+                  >
                     <StoopCardArt assetId={m.primaryAssetId} name={m.name} />
                   </Link>
                 ) : (

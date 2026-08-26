@@ -77,4 +77,28 @@ class MemberOriginResolver {
     }
     return match;
   }
+
+  /// Library home of a live card (1:1 host, group member shim, or guest).
+  ///
+  /// dbId first (the 1:1 host IS a library row), then [resolve] with the
+  /// card's own [CharacterCard.stableGroupId] as the stamp. Two library
+  /// cards named "Rachel" therefore keep their own faces — the old
+  /// first-name-wins walk in [ChatService.originLibraryCardFor] was how
+  /// the AppBar avatar swapped to the other Rachel.
+  static CharacterCard? resolveForCard(
+    CharacterCard member,
+    Iterable<CharacterCard> libraryCharacters,
+  ) {
+    final dbId = member.dbId;
+    if (dbId != null && dbId.isNotEmpty) {
+      for (final c in libraryCharacters) {
+        if (c.dbId == dbId) return c;
+      }
+    }
+    return resolve(
+      stampedOriginStableId: member.stableGroupId,
+      memberName: member.name,
+      libraryCharacters: libraryCharacters,
+    );
+  }
 }

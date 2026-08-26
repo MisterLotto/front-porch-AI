@@ -73,6 +73,7 @@ class _EnhanceWizardPageState extends State<EnhanceWizardPage> {
   bool _selScenario = false;
   bool _selGreetings = false;
   bool _selLorebook = false;
+  bool _selPorchLife = true;
   late bool _nsfw =
       widget.character.frontPorchExtensions?.nsfwCooldownEnabled ?? false;
   EnhanceContext? _chatContext;
@@ -104,6 +105,7 @@ class _EnhanceWizardPageState extends State<EnhanceWizardPage> {
     scenario: _selScenario,
     greetings: _selGreetings,
     lorebook: _selLorebook,
+    porchLife: _selPorchLife,
   );
 
   bool get _navLocked => _running || _saving || _copying;
@@ -223,11 +225,15 @@ class _EnhanceWizardPageState extends State<EnhanceWizardPage> {
       _previewText = '';
       _gen = gen;
     });
+    final voice = readNarrativeVoice(widget.character);
     final enhanced = await gen.enhanceCharacter(
       source: widget.character,
       selection: selection,
       chatGrounding: grounding,
       nsfwEnabled: _nsfw,
+      narrativePerspective: voice.perspective,
+      narrativeTense: voice.tense,
+      sex: voice.sex,
       // A home-screen action must not kill evals a background chat may have
       // in flight on the shared backend (Scene Guest precedent).
       abortInFlight: false,
@@ -390,6 +396,7 @@ class _EnhanceWizardPageState extends State<EnhanceWizardPage> {
                     original: widget.character,
                     enhanced: _enhanced!,
                     selection: _ranSelection!,
+                    showIntimate: _nsfw,
                   ),
                   _ => _buildChatsStep(context),
                 },

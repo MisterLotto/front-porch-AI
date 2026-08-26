@@ -12,6 +12,7 @@ import { ChipsRow } from './ChipsRow';
 import { MessageActions } from './MessageActions';
 import { type CastMember } from './CastBar';
 import { type Message } from './chatTypes';
+import { canonicalizeReasoning } from '../utils/reasoningMarkers';
 
 /// Truthful generation status (desktop status-bar parity): live prompt-reading
 /// counts from the managed local backend + which background pass holds the
@@ -100,9 +101,13 @@ type TranscriptProps = {
   onSwipe: (index: number, direction: number) => void;
   onRegenerate: () => void;
   onContinue: () => void;
+  onFork: (index: number) => void;
   onDelete: (index: number) => void;
   onReprocess: (index: number) => void;
   onRevert: (index: number) => void;
+  greetCount?: number;
+  greetingIndex?: number;
+  onVariantPicked?: () => void;
 };
 
 // Memoized separately from the live streaming tail: token/processing WS
@@ -121,10 +126,15 @@ const TranscriptRows = memo(function TranscriptRows({
   onSwipe,
   onRegenerate,
   onContinue,
+  onFork,
   onDelete,
   onReprocess,
   onRevert,
+  greetCount,
+  greetingIndex,
+  onVariantPicked,
 }: TranscriptProps) {
+  const userHasReplied = messages.some((m) => m.isUser);
   return (
     <>
       {messages.map((m) => {
@@ -186,11 +196,16 @@ const TranscriptRows = memo(function TranscriptRows({
               isLast={m.index === lastIndex}
               busy={busy}
               canSpeak={canSpeak}
+              greetCount={greetCount}
+              greetingIndex={greetingIndex}
+              userHasReplied={userHasReplied}
               onSwipe={onSwipe}
               onRegenerate={onRegenerate}
               onContinue={onContinue}
+              onFork={() => onFork(m.index)}
               onEdit={() => onBeginEdit(m)}
               onDelete={() => onDelete(m.index)}
+              onVariantPicked={onVariantPicked}
             />
           </div>
         );
@@ -203,14 +218,16 @@ export function ChatMessageList({
   streaming,
   genStatus,
   scrollRef,
+  onScroll,
   ...transcript
 }: TranscriptProps & {
   streaming: string;
   genStatus: GenStatus | null;
   scrollRef: RefObject<HTMLDivElement>;
+  onScroll?: () => void;
 }) {
   return (
-    <div className="chat-messages" ref={scrollRef}>
+    <div className="chat-messages" ref={scrollRef} onScroll={onScroll}>
       <TranscriptRows {...transcript} />
       {streaming && (() => {
         // Separate a (possibly still-open) <think> block so reasoning streams
@@ -219,15 +236,16 @@ export function ChatMessageList({
         // Case-INSENSITIVE like the Dart strip (<THINK> is valid there too);
         // the old case-sensitive match streamed an uppercase think block as
         // normal reply text that then vanished into an empty bubble at done.
-        const lower = streaming.toLowerCase();
+        const canonical = canonicalizeReasoning(streaming)
+        const lower = canonical.toLowerCase();
         const open = lower.indexOf('<think>');
         let thinking = '';
-        let rest = streaming;
+        let rest = canonical;
         if (open !== -1) {
-          const after = streaming.slice(open + 7);
+          const after = canonical.slice(open + 7);
           const close = after.toLowerCase().indexOf('</think>');
           thinking = close === -1 ? after : after.slice(0, close);
-          rest = streaming.slice(0, open) + (close === -1 ? '' : after.slice(close + 8));
+          rest = canonical.slice(0, open) + (close === -1 ? '' : after.slice(close + 8));
         }
         return (
           <div className="bubble ai streaming" aria-live="polite">

@@ -35,6 +35,10 @@ extension ChatServiceSend on ChatService {
         (text.trim().isEmpty && imageBytes == null)) {
       return;
     }
+    // Overlay / picker hydrate is still in flight. A send here would
+    // persist the pre-hydrate realism reset onto whichever session is
+    // currently live (often the last-active chat, not the one opening).
+    if (_isLoadingSession) return;
     // Don't let a user turn start while forked-in entrances are still playing —
     // it would race the one-shot entrance directive / turn positioning.
     if (_entrancesInFlight) return;
@@ -278,7 +282,14 @@ extension ChatServiceSend on ChatService {
     // that ignore it today. Additive only — every case that worked still
     // works, plus the one the user asked for.
     if (_realismActiveThisMode || _standaloneClockActive) {
-      _timeService.detectOocTimeSkip(text);
+      final before = _timeService.clock;
+      await _timeService.detectOocTimeSkip(text);
+      final after = _timeService.clock;
+      if (after != before &&
+          isNightSkip(stripQuotedSpeech(text).toLowerCase())) {
+        _applyNightSkipRestore();
+      }
+      await _maybeMintEpisodeCrumbs(before, after);
     }
 
     // ── Direct-address turn routing (both cast surfaces) ─────────────────
@@ -390,24 +401,10 @@ extension ChatServiceSend on ChatService {
         await _evaluateRealismForUpcomingSpeaker(_activeCharacter!);
       }
     } else if (_standaloneClockActive && addressedGuest == null) {
-      // ── The standalone story clock (engine off, user opted in) ──────────
-      // Deliberately an `else` on the realism branch: exactly one driver
-      // advances the clock per turn, so the two can never double-advance.
-      //
-      // Fired here, once, rather than inside the per-speaker realism dance
-      // because story time is CHAT-scoped, not per-speaker — a group of four
-      // must cost one call per turn, not four. Same position in the turn as
-      // the engine's scene-time eval (before generation, scoring the exchange
-      // so far), so both drivers see the same input and the clock the model is
-      // shown is already this turn's.
-      //
-      // Guests are excluded for the same reason they are above: a direct
-      // address routes the turn away from the host, who never took one.
-      await _realismEvals.evaluatePhysicalStateCall(timeOnly: true);
-      // Stamp the current story day on the latest user turn so RAG's
-      // storyDayAt can ground retrieved lines when the Realism Engine is
-      // off (standalone clock has no realism_state dance). Additive only —
-      // never invents a day when the clock is not running.
+      // Standalone clock: announce the current time in the prompt; the
+      // post-reply decide lives in _finalizeGenerationTurn with the engine
+      // path (bucket brigade, Scene Guests included). Only stamp the user
+      // turn's story day here so RAG can ground retrieved lines.
       if (_messages.isNotEmpty) {
         final last = _messages.last;
         if (last.isUser) {
@@ -539,9 +536,9 @@ extension ChatServiceSend on ChatService {
     await _generateResponse(GenerationMode.normal);
   }
 
-  /// The dream PRODUCER — fired from the post-generation phase, because the
-  /// clock crosses a night during a turn's pre-generation advance, which
-  /// makes the rollover visible one whole phase before the dream is shown.
+  /// The dream PRODUCER — fired from the post-generation phase, after the
+  /// post-reply clock decide, so a night crossed in this beat is visible
+  /// before the next send shows the dream.
   /// Same detection (checkRollover/pending/clear untouched — the dedicated
   /// unit suite drives those APIs directly), same owner rule (the last
   /// assistant speaker ended the day; ONE rule for 1:1 and group), same
@@ -591,7 +588,10 @@ extension ChatServiceSend on ChatService {
     final recap = _summary.length > 300 ? _summary.substring(0, 300) : _summary;
     final weatherLine = switch (currentWeather) {
       null => null,
-      final w => WeatherEngine.prose(w),
+      final w => WeatherEngine.prose(
+        w,
+        seasonLabels: activeChatBiome.seasonLabels,
+      ),
     };
     Future<String?> generate() async {
       try {

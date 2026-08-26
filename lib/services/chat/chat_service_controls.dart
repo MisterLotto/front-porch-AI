@@ -170,7 +170,10 @@ extension ChatServiceControls on ChatService {
   /// + realism guard kept in god wrapper (UI coordination).
   Future<void> nudgeTimePeriod(int delta) async {
     if (!_realismEnabled) return;
-    _timeService.nudgeTimePeriod(delta);
+    final before = _timeService.clock;
+    await _timeService.nudgeTimePeriod(delta);
+    // Day-ate journal rides TimeService.onStoryDayChanged.
+    await _maybeMintEpisodeCrumbs(before, _timeService.clock);
     await _saveChat();
     notifyListeners();
   }
@@ -179,7 +182,10 @@ extension ChatServiceControls on ChatService {
   /// Same guard/save/notify shape as the nudge (it IS a precise nudge).
   Future<void> setStoryClock(DateTime clock) async {
     if (!_realismEnabled) return;
-    _timeService.setClockDirect(clock);
+    final before = _timeService.clock;
+    await _timeService.setClockDirect(clock);
+    // Day-ate journal rides TimeService.onStoryDayChanged.
+    await _maybeMintEpisodeCrumbs(before, _timeService.clock);
     await _saveChat();
     notifyListeners();
   }

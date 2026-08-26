@@ -102,6 +102,38 @@ void main() {
       );
     });
 
+    test('addMinutes and nextNamedClock wrap midnight', () {
+      expect(
+        StoryClock.addMinutes(DateTime.utc(2026, 3, 3, 23, 50), 30),
+        DateTime.utc(2026, 3, 4, 0, 20),
+      );
+      expect(
+        StoryClock.nextNamedClock(DateTime.utc(2026, 3, 3, 9, 0), 14, 0),
+        DateTime.utc(2026, 3, 3, 14, 0),
+      );
+      expect(
+        StoryClock.nextNamedClock(DateTime.utc(2026, 3, 3, 15, 0), 14, 0),
+        DateTime.utc(2026, 3, 4, 14, 0),
+      );
+    });
+
+    test('resolveSkipTarget lands on named clocks and periods', () {
+      final morning = DateTime.utc(2026, 3, 3, 9, 0);
+      expect(
+        StoryClock.resolveSkipTarget(morning, '(ooc: skip to 2pm)'),
+        DateTime.utc(2026, 3, 3, 14, 0),
+      );
+      expect(
+        StoryClock.resolveSkipTarget(morning, 'the next afternoon they meet'),
+        DateTime.utc(2026, 3, 3, 14, 30),
+      );
+      // 09:00 → next morning is tomorrow 08:00
+      expect(
+        StoryClock.resolveSkipTarget(morning, 'the next morning, sunlight'),
+        DateTime.utc(2026, 3, 4, 8, 0),
+      );
+    });
+
     test('snaps are inverse-ish across a month boundary', () {
       final endOfMonth = DateTime.utc(2026, 3, 31, 22, 30);
       final next = StoryClock.snapToNextPeriod(endOfMonth);

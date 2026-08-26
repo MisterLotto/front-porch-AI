@@ -56,9 +56,8 @@ extension ChatServiceTurnFlow on ChatService {
     // so this is clear by the time they fire; no re-arm machinery is needed.
     if (_isTurnBusy) return; // wait for the current turn to finish settling
 
-    if (_clockRunning) {
-      await _realismEvals.evaluatePhysicalStateCall(timeOnly: true);
-    }
+    // Each spoken reply post-decides the clock; the next speaker is
+    // announced at that time (bucket brigade). No pre-tick.
     await _generateResponse(GenerationMode.normal);
   }
 
@@ -67,11 +66,9 @@ extension ChatServiceTurnFlow on ChatService {
     if (_activeGroup == null || _groupCharacters.isEmpty || _isTurnBusy) {
       return;
     }
-    // Story time is chat-scoped: Send already advanced it for this user
-    // turn. A follow-up speaker (Next Character and /speak) must not tick
-    // again. Explicit flag — not a TimeService latch — so regen / unit
-    // tests / Director auto-play keep their own advance.
-    await _generateResponse(GenerationMode.normal, skipClockAdvance: true);
+    // Bucket brigade: this speaker announces the time the last reply
+    // decided, then post-decides for whoever speaks next.
+    await _generateResponse(GenerationMode.normal);
   }
 
   /// Manually select which character speaks next in group mode.
@@ -95,6 +92,99 @@ extension ChatServiceTurnFlow on ChatService {
       throw StateError('No active group');
     }
     return _groupManager!.pickNextSpeaker();
+  }
+
+  /// At work (and Away when we know they are not in scene). 1:1 never skips.
+  bool _groupSpeakerSkips(CharacterCard card) {
+    if (_activeGroup == null) return false;
+    final work = _workFieldsFor(card);
+    final where = derivePresence(
+      occupation: work.occupation,
+      hours: work.hours,
+      clockMinutes: _timeService.clockMinutes,
+      weekday: _timeService.clock.weekday,
+      workDays: work.workDays,
+      inScene: _memberInScene(card),
+    );
+    return groupTurnSkips(where);
+  }
+
+  /// Next member who is With you. A forced @name is not swapped. Random
+  /// turn order must not re-roll the same At-work member and miss the
+  /// only free one — walk the roster once.
+  CharacterCard _pickPresentGroupSpeaker() {
+    final forced = _groupManager?.hasForcedSpeaker ?? false;
+    final first = _pickNextGroupCharacter();
+    if (!_groupSpeakerSkips(first) || forced) return first;
+    for (final card in _groupCharacters) {
+      if (_getCharacterIdFromCard(card) == _getCharacterIdFromCard(first)) {
+        continue;
+      }
+      if (!_groupSpeakerSkips(card)) {
+        _groupManager?.advanceAfterRegeneration(card);
+        return card;
+      }
+    }
+    return first;
+  }
+
+  String _presenceSkipBanner(CharacterCard card) {
+    final work = _workFieldsFor(card);
+    final where = derivePresence(
+      occupation: work.occupation,
+      hours: work.hours,
+      clockMinutes: _timeService.clockMinutes,
+      weekday: _timeService.clock.weekday,
+      workDays: work.workDays,
+      inScene: _memberInScene(card),
+    );
+    if (where == PresenceWhere.atWork) {
+      final range = parseWorkHoursRange(work.hours);
+      final until = range == null
+          ? ''
+          : ' until ${StoryClock.formatClock(DateTime.utc(2000, 1, 1, range.$2 ~/ 60, range.$2 % 60))}';
+      final job = work.occupation.trim();
+      return '${card.name} is at work${job.isEmpty ? '' : ' as a $job'}$until.';
+    }
+    return '${card.name} is away.';
+  }
+
+  ({
+    String occupation,
+    String hours,
+    String occupationBrief,
+    List<int>? workDays,
+  })
+  _workFieldsFor(CharacterCard card) {
+    final ext = card.frontPorchExtensions;
+    final library = originLibraryCardFor(card);
+    return workFieldsForGroupMember(
+      copyOccupation: ext?.occupation ?? '',
+      copyHours: ext?.hours ?? '',
+      copyOccupationBrief: ext?.occupationBrief ?? '',
+      copyWorkDays: ext?.workDays,
+      libraryOccupation: library?.frontPorchExtensions?.occupation,
+      libraryHours: library?.frontPorchExtensions?.hours,
+      libraryOccupationBrief: library?.frontPorchExtensions?.occupationBrief,
+      libraryWorkDays: library?.frontPorchExtensions?.workDays,
+    );
+  }
+
+  /// Skip path only. 1:1 never skips (caller returns false first).
+  /// Group: judge bit, else recent line, or stance that does not say they left.
+  bool _memberInScene(CharacterCard card) {
+    if (_activeGroup == null) return true;
+    final id = _getCharacterIdFromCard(card);
+    final judged = _groupRealism[id]?.withUser;
+    if (judged != null) return judged;
+    var seen = 0;
+    for (final m in _messages.reversed) {
+      if (m.isUser) continue;
+      if (m.sender == card.name) return true;
+      if (++seen >= 8) break;
+    }
+    final stance = _groupRealism[id]?.spatialStance ?? '';
+    return !stanceSaysAway(stance);
   }
 
   /// Wait for TTS to finish speaking, then apply the configured delay before auto-play.
@@ -191,6 +281,7 @@ extension ChatServiceTurnFlow on ChatService {
   /// the existing public surface).
   Future<void> forceSummaryUpdate() async {
     if (_isSummaryGenerating) return;
+    await _awaitHistoryHydrated();
     await _journalMaintenance.runMaintenancePass(force: true);
   }
 
@@ -211,25 +302,28 @@ extension ChatServiceTurnFlow on ChatService {
     if (_isSummaryGenerating) return;
     if (_llmProvider == null) return;
 
-    final windowStart = _summaryLastIndex.clamp(0, _messages.length);
-    int userMessagesSincePass = 0;
-    for (int i = windowStart; i < _messages.length; i++) {
-      if (_messages[i].isUser) userMessagesSincePass++;
-    }
-    if (userMessagesSincePass == 0) return;
-
-    final due =
-        userMessagesSincePass >= _storageService.memorySettings.journalInterval;
-    final eventKick =
-        _journalMaintenance.eventKickPending ||
-        JournalPhysics.hasSalientEvent(_messages.sublist(windowStart));
-
-    if (due || eventKick) {
-      // Fire and forget — don't await. The pass consumes eventKickPending
-      // itself once it actually starts, so a parked review batch (or an
-      // already-running pass) can't silently eat the kick.
-      _journalMaintenance.runMaintenancePass();
-    }
+    // Cursor is an index into the FULL transcript. Wait for the
+    // background backfill so we don't clamp 11200 down to 24.
+    unawaited(() async {
+      await _awaitHistoryHydrated();
+      if (!_storageService.memorySettings.journalEnabled) return;
+      if (_summaryPaused || _isSummaryGenerating) return;
+      final windowStart = _summaryLastIndex.clamp(0, _messages.length);
+      var userMessagesSincePass = 0;
+      for (var i = windowStart; i < _messages.length; i++) {
+        if (_messages[i].isUser) userMessagesSincePass++;
+      }
+      if (userMessagesSincePass == 0) return;
+      final due =
+          userMessagesSincePass >=
+          _storageService.memorySettings.journalInterval;
+      final eventKick =
+          _journalMaintenance.eventKickPending ||
+          JournalPhysics.hasSalientEvent(_messages.sublist(windowStart));
+      if (due || eventKick) {
+        _journalMaintenance.runMaintenancePass();
+      }
+    }());
   }
 
   /// Embed message windows for RAG memory retrieval (fire-and-forget).

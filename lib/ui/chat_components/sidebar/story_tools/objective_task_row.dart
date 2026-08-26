@@ -206,7 +206,7 @@ class EditableTaskRowState extends State<EditableTaskRow> {
   }
 }
 
-/// "→ open her own bakery" — the ambition a quest is a step toward, from
+/// "→ open their own bakery" — the ambition a quest is a step toward, from
 /// `objectives.served_ambition` (schema v46).
 ///
 /// Since v46 the proposal eval is shown the character's ambitions and asked

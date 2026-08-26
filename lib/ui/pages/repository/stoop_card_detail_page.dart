@@ -23,11 +23,13 @@ import 'package:front_porch_ai/services/backporch/backporch.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/group_card_importer.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_avatar.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_card_comments.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_card_sections.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_collapsible.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_group_sections.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_creator_page.dart';
 import 'package:front_porch_ai/ui/pages/repository/stoop_glass.dart';
+import 'package:front_porch_ai/ui/pages/repository/stoop_report.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// Open a character as a frosted glass panel that slides in from the right while
@@ -49,7 +51,10 @@ Future<void> showStoopDetail(BuildContext context, String cardId) {
     transitionDuration: const Duration(milliseconds: 280),
     pageBuilder: (ctx, _, _) {
       // Roughly half the window, but never narrower than the old fixed panel.
-      final panelWidth = (MediaQuery.sizeOf(ctx).width * 0.5).clamp(460.0, 1200.0);
+      final panelWidth = (MediaQuery.sizeOf(ctx).width * 0.5).clamp(
+        460.0,
+        1200.0,
+      );
       return MediaQuery(
         data: MediaQuery.of(ctx).copyWith(textScaler: appScaler),
         child: Align(
@@ -85,6 +90,10 @@ class _StoopDetailPanel extends StatefulWidget {
 
 class _StoopDetailPanelState extends State<_StoopDetailPanel> {
   final _api = BackporchApi();
+  late final HttpStoopCommentsClient _commentsClient = HttpStoopCommentsClient(
+    _api,
+    () => _token,
+  );
   StoopCardDetail? _detail;
   bool _loading = true;
   String? _error;
@@ -258,10 +267,11 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
   }
 
   Future<void> _report() async {
+    if (!stoopCanReport(context.read<AuthState>().user)) return;
     final messenger = ScaffoldMessenger.of(context);
     final result = await showDialog<({String category, String reason})>(
       context: context,
-      builder: (_) => const _ReportDialog(),
+      builder: (_) => const StoopReportDialog(),
     );
     if (result == null) return;
     try {
@@ -276,9 +286,9 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
           content: Text('Reported. Thanks — a moderator will review it.'),
         ),
       );
-    } catch (_) {
+    } catch (e) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Couldn’t file that report. Try again.')),
+        SnackBar(content: Text(stoopReportFailureMessage(e))),
       );
     }
   }
@@ -309,11 +319,7 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
           child: _loading
               ? const StoopLamp()
               : _error != null || _detail == null
-              ? stoopEmpty(
-                  context,
-                  glyph: '🌙',
-                  title: _error ?? 'Not found',
-                )
+              ? stoopEmpty(context, glyph: '🌙', title: _error ?? 'Not found')
               : _content(_detail!),
         ),
       ),
@@ -398,6 +404,23 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
                   _chatName(d),
                   firstMessage: _firstMessage(d),
                 ),
+              const SizedBox(height: 28),
+              StoopCardDiscussionSection(
+                cardId: d.id,
+                cardOwnerId: d.creator?.id,
+                user: context.watch<AuthState>().user,
+                client: _commentsClient,
+                commentsEnabled: d.commentsEnabled,
+                commentsLocked: d.commentsLocked,
+                persistFlags: ({commentsEnabled, commentsLocked}) {
+                  return _api.patchCardComments(
+                    _token,
+                    d.id,
+                    commentsEnabled: commentsEnabled,
+                    commentsLocked: commentsLocked,
+                  );
+                },
+              ),
             ]),
           ),
         ),
@@ -432,10 +455,7 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
           // scene in both themes, so overlay text uses the const dusk ramp.
           Container(color: const Color(0x4D0A0805)),
           Center(
-            child: StoopAvatar(
-              assetId: d.primaryAssetId,
-              fit: BoxFit.contain,
-            ),
+            child: StoopAvatar(assetId: d.primaryAssetId, fit: BoxFit.contain),
           ),
           Container(
             decoration: const BoxDecoration(
@@ -588,26 +608,12 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
     );
   }
 
-  // An ember link-button so reporting is obvious and easy to find, under the
-  // vote row (hub .hub-linklike.danger, given a soft pill ground for touch).
+  // Ember report control. Unverified accounts never get the dialog — they
+  // see “Confirm email to report” (hub parity, 2026-08).
   Widget _reportButton() {
-    final ember = stoopEmberText(context);
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: TextButton.icon(
-        onPressed: _report,
-        icon: const Icon(Icons.flag_rounded, size: 18),
-        label: const Text('Report Character'),
-        style: TextButton.styleFrom(
-          foregroundColor: ember,
-          backgroundColor: AppColors.stoopEmber.withValues(alpha: 0.1),
-          side: BorderSide(
-            color: AppColors.stoopEmber.withValues(alpha: 0.45),
-          ),
-          shape: const StadiumBorder(),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        ),
-      ),
+    return StoopReportControl(
+      user: context.watch<AuthState>().user,
+      onReport: _report,
     );
   }
 
@@ -839,94 +845,6 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
           ...stoopStandardSections(context, m, name),
         ],
       ),
-    );
-  }
-}
-
-/// Report dialog — category + optional reason.
-class _ReportDialog extends StatefulWidget {
-  const _ReportDialog();
-
-  @override
-  State<_ReportDialog> createState() => _ReportDialogState();
-}
-
-class _ReportDialogState extends State<_ReportDialog> {
-  static const _categories = {
-    'ILLEGAL': 'Illegal / involves minors',
-    'PROHIBITED_IMAGE': 'Nude / explicit image (not allowed)',
-    'MISLABELED': 'Wrong or missing NSFW label',
-    'STOLEN': 'Stolen / reuploaded',
-    'LOW_EFFORT': 'Low-effort / slop',
-    'SPAM': 'Spam or broken',
-    'OTHER': 'Something else',
-  };
-  String _category = 'ILLEGAL';
-  final _reason = TextEditingController();
-
-  @override
-  void dispose() {
-    _reason.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: stoopCard2(context),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: stoopBorderHi(context)),
-      ),
-      title: Text('Report this card', style: stoopDisplay(context, size: 19)),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          RadioGroup<String>(
-            groupValue: _category,
-            onChanged: (v) => setState(() => _category = v ?? _category),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final e in _categories.entries)
-                  RadioListTile<String>(
-                    value: e.key,
-                    contentPadding: EdgeInsets.zero,
-                    dense: true,
-                    activeColor: AppColors.stoopAmber,
-                    title: Text(
-                      e.value,
-                      style: TextStyle(color: stoopCream2(context)),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _reason,
-            maxLines: 2,
-            style: TextStyle(color: stoopCream(context)),
-            decoration: stoopInput(context, 'Anything else? (optional)'),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          style: TextButton.styleFrom(foregroundColor: stoopMute(context)),
-          child: const Text('Cancel'),
-        ),
-        StoopAmberButton(
-          label: 'Submit report',
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          onPressed: () => Navigator.pop(context, (
-            category: _category,
-            reason: _reason.text.trim(),
-          )),
-        ),
-      ],
     );
   }
 }

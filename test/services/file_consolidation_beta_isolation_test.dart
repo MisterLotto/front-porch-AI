@@ -65,93 +65,148 @@ void main() {
       );
       // A beta root must be recognised as already nested, or every beta launch
       // would bury it one level deeper.
-      expect(FileConsolidationService.isAlreadyNested('FrontPorchAI-Beta'),
-          isTrue);
+      expect(
+        FileConsolidationService.isAlreadyNested('FrontPorchAI-Beta'),
+        isTrue,
+      );
       expect(FileConsolidationService.isAlreadyNested('FrontPorchAI'), isTrue);
       expect(FileConsolidationService.isAlreadyNested('Documents'), isFalse);
     });
   });
 
   group('consolidate()', () {
-    test('a pre-release build never touches the stable root or its data',
-        () async {
-      final stableRoot = Directory(p.join(docs.path, 'FPAI'))
-        ..createSync(recursive: true);
-      final db = Directory(p.join(stableRoot.path, 'KoboldManager'))
-        ..createSync(recursive: true);
-      File(p.join(db.path, 'front_porch.db')).writeAsStringSync('stable db');
-      Directory(p.join(stableRoot.path, 'chats')).createSync(recursive: true);
+    test(
+      'a pre-release build never touches the stable root or its data',
+      () async {
+        final stableRoot = Directory(p.join(docs.path, 'FPAI'))
+          ..createSync(recursive: true);
+        final db = Directory(p.join(stableRoot.path, 'KoboldManager'))
+          ..createSync(recursive: true);
+        File(p.join(db.path, 'front_porch.db')).writeAsStringSync('stable db');
+        Directory(p.join(stableRoot.path, 'chats')).createSync(recursive: true);
 
-      SharedPreferences.setMockInitialValues({'root_path': stableRoot.path});
+        SharedPreferences.setMockInitialValues({'root_path': stableRoot.path});
 
-      await FileConsolidationService.consolidate(preRelease: true);
+        await FileConsolidationService.consolidate(preRelease: true);
 
-      final prefs = await SharedPreferences.getInstance();
-      expect(
-        prefs.getString('root_path'),
-        stableRoot.path,
-        reason: 'the beta build must not rewrite the stable root pref',
-      );
-      expect(
-        File(p.join(db.path, 'front_porch.db')).existsSync(),
-        isTrue,
-        reason: 'the stable database must stay exactly where stable left it',
-      );
-      expect(
-        Directory(p.join(stableRoot.path, 'chats')).existsSync(),
-        isTrue,
-      );
-      expect(
-        Directory(p.join(stableRoot.path, 'FrontPorchAI')).existsSync(),
-        isFalse,
-        reason: 'nothing may be aggregated under the stable root by a beta run',
-      );
-    });
+        final prefs = await SharedPreferences.getInstance();
+        expect(
+          prefs.getString('root_path'),
+          stableRoot.path,
+          reason: 'the beta build must not rewrite the stable root pref',
+        );
+        expect(
+          File(p.join(db.path, 'front_porch.db')).existsSync(),
+          isTrue,
+          reason: 'the stable database must stay exactly where stable left it',
+        );
+        expect(
+          Directory(p.join(stableRoot.path, 'chats')).existsSync(),
+          isTrue,
+        );
+        expect(
+          Directory(p.join(stableRoot.path, 'FrontPorchAI')).existsSync(),
+          isFalse,
+          reason:
+              'nothing may be aggregated under the stable root by a beta run',
+        );
+      },
+    );
 
-    test('a stable build still consolidates its own scattered folders',
-        () async {
-      final root = Directory(p.join(docs.path, 'FPAI'))
-        ..createSync(recursive: true);
-      Directory(p.join(root.path, 'chats')).createSync(recursive: true);
-      SharedPreferences.setMockInitialValues({'root_path': root.path});
+    test(
+      'a stable build still consolidates its own scattered folders',
+      () async {
+        // The wrap exists for files dumped in the OS Documents folder, not
+        // for a folder the user already picked as the data directory.
+        Directory(p.join(docs.path, 'chats')).createSync(recursive: true);
+        SharedPreferences.setMockInitialValues({'root_path': docs.path});
 
-      await FileConsolidationService.consolidate(preRelease: false);
+        await FileConsolidationService.consolidate(preRelease: false);
 
-      final prefs = await SharedPreferences.getInstance();
-      expect(prefs.getString('root_path'), p.join(root.path, 'FrontPorchAI'));
-      expect(
-        Directory(p.join(root.path, 'FrontPorchAI', 'chats')).existsSync(),
-        isTrue,
-      );
-    });
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getString('root_path'), p.join(docs.path, 'FrontPorchAI'));
+        expect(
+          Directory(p.join(docs.path, 'FrontPorchAI', 'chats')).existsSync(),
+          isTrue,
+        );
+      },
+    );
 
-    test('a pre-release build consolidates under its OWN root and key',
-        () async {
-      final betaRoot = Directory(p.join(docs.path, 'BetaData'))
-        ..createSync(recursive: true);
-      Directory(p.join(betaRoot.path, 'chats')).createSync(recursive: true);
-      SharedPreferences.setMockInitialValues({
-        'root_path': p.join(docs.path, 'StableData'),
-        'root_path_beta': betaRoot.path,
-      });
+    test(
+      'a user-chosen data directory is not wrapped in FrontPorchAI (#206)',
+      () async {
+        // Settings → Data Directory writes the picked folder as the root.
+        // The consolidator used to treat any basename other than FrontPorchAI
+        // as "scattered Documents" and nest FrontPorchAI under it on the next
+        // launch, leaving groups/ and custom_backgrounds behind.
+        final custom = Directory(p.join(docs.path, '.frontporchai'))
+          ..createSync(recursive: true);
+        Directory(
+          p.join(custom.path, 'KoboldManager'),
+        ).createSync(recursive: true);
+        Directory(p.join(custom.path, 'chats')).createSync(recursive: true);
+        Directory(p.join(custom.path, 'groups')).createSync(recursive: true);
+        Directory(
+          p.join(custom.path, 'custom_backgrounds'),
+        ).createSync(recursive: true);
+        File(
+          p.join(custom.path, 'groups', 'portrait.png'),
+        ).writeAsStringSync('mine');
+        SharedPreferences.setMockInitialValues({'root_path': custom.path});
 
-      await FileConsolidationService.consolidate(preRelease: true);
+        await FileConsolidationService.consolidate(preRelease: false);
 
-      final prefs = await SharedPreferences.getInstance();
-      expect(
-        prefs.getString('root_path_beta'),
-        p.join(betaRoot.path, 'FrontPorchAI-Beta'),
-      );
-      expect(
-        prefs.getString('root_path'),
-        p.join(docs.path, 'StableData'),
-        reason: 'the stable key must be left alone',
-      );
-      expect(
-        Directory(p.join(betaRoot.path, 'FrontPorchAI-Beta', 'chats'))
-            .existsSync(),
-        isTrue,
-      );
-    });
+        final prefs = await SharedPreferences.getInstance();
+        expect(
+          prefs.getString('root_path'),
+          custom.path,
+          reason: 'the folder the user picked is the root — do not nest',
+        );
+        expect(
+          Directory(p.join(custom.path, 'FrontPorchAI')).existsSync(),
+          isFalse,
+          reason: 'nothing may be aggregated under a user-chosen root',
+        );
+        expect(
+          File(
+            p.join(custom.path, 'groups', 'portrait.png'),
+          ).readAsStringSync(),
+          'mine',
+          reason: 'group portraits stay where the move put them',
+        );
+        expect(Directory(p.join(custom.path, 'chats')).existsSync(), isTrue);
+      },
+    );
+
+    test(
+      'a pre-release build consolidates under its OWN root and key',
+      () async {
+        // Scatter in Documents (the only place the wrap still runs). A
+        // user-chosen beta folder is left alone — same rule as #206.
+        Directory(p.join(docs.path, 'chats')).createSync(recursive: true);
+        SharedPreferences.setMockInitialValues({
+          'root_path': p.join(docs.path, 'StableData'),
+        });
+
+        await FileConsolidationService.consolidate(preRelease: true);
+
+        final prefs = await SharedPreferences.getInstance();
+        expect(
+          prefs.getString('root_path_beta'),
+          p.join(docs.path, 'FrontPorchAI-Beta'),
+        );
+        expect(
+          prefs.getString('root_path'),
+          p.join(docs.path, 'StableData'),
+          reason: 'the stable key must be left alone',
+        );
+        expect(
+          Directory(
+            p.join(docs.path, 'FrontPorchAI-Beta', 'chats'),
+          ).existsSync(),
+          isTrue,
+        );
+      },
+    );
   });
 }

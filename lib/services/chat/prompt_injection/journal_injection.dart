@@ -81,17 +81,28 @@ class JournalInjection {
   /// memoriesBlock budget uses).
   static const int kHotSetTokenBudget = 600;
 
-  /// [queryText] is the recent-turn text used to resurface cold cards
-  /// semantically (same last-3-messages recipe as RAG retrieval); empty
+  /// [queryText] is the cued query used to resurface cold cards
+  /// semantically (same composeRagQuery as RAG retrieval); empty
   /// skips cold retrieval entirely.
-  Future<({String text, Set<int> expandedPositions})> buildJournalBlock({
+  /// [lastWords] is the live beat (same string RAG uses). Expand
+  /// gates on this — never on [queryText], which can contain a diary
+  /// "I remember when…" that is not an ask.
+  Future<
+    ({String text, Set<int> expandedPositions, List<String> injectedContents})
+  >
+  buildJournalBlock({
     required String characterId,
     required String characterName,
     required String userName,
     String queryText = '',
+    String lastWords = '',
     int messageCount = 0,
   }) async {
-    const empty = (text: '', expandedPositions: <int>{});
+    const empty = (
+      text: '',
+      expandedPositions: <int>{},
+      injectedContents: <String>[],
+    );
     final sessionId = getSessionId();
     if (sessionId == null || characterId.isEmpty) return empty;
 
@@ -135,7 +146,8 @@ class JournalInjection {
     if (queryTokens.isNotEmpty) {
       for (final card in coldCards) {
         if (lexical.length >= JournalPhysics.kColdRetrievalLimit) break;
-        if (JournalPhysics.itemCardMentioned(card, queryTokens)) {
+        if (JournalPhysics.itemCardMentioned(card, queryTokens) ||
+            JournalPhysics.episodeCardMentioned(card, queryTokens)) {
           lexical.add(card);
         }
       }
@@ -159,6 +171,7 @@ class JournalInjection {
     // cosine ones.
     final injected = [...pinned, ...hot, ...lexical, ...resurfaced];
     final lines = <String>[];
+    final injectedContents = <String>[];
     var usedChars = 0;
     const budgetChars = kHotSetTokenBudget * 4;
     for (final card in injected) {
@@ -167,20 +180,20 @@ class JournalInjection {
       if (usedChars + line.length > budgetChars && lines.isNotEmpty) break;
       usedChars += line.length;
       lines.add(line);
+      injectedContents.add(card.content);
     }
     if (lines.isEmpty) return empty;
 
     // Expand-memory (two-tier memory, living-time-features.md §8): when the
     // conversation clearly reaches for ONE remembered moment ("remember our
     // wedding vows?"), the card supplies the feeling and its receipts supply
-    // the exact words. Strictly gated: needs embeddings (same floor as cold
-    // resurfacing), a similarity above the expand threshold, and receipts
-    // old enough to be out of the visible transcript.
-    final (excerpt, expandedPositions) = _expandBestCard(
-      injected,
-      queryVector,
-      messageCount,
-    );
+    // the exact words. Strictly gated: quote-reach (isReachingForQuote),
+    // embeddings, cosine ≥ 0.45, and receipts old enough to be out of the
+    // visible transcript. A plain sit-down stays gist — the cued query
+    // contains the top hot line, so cosine alone would always expand it.
+    final (excerpt, expandedPositions) = isReachingForQuote(lastWords)
+        ? _expandBestCard(injected, queryVector, messageCount)
+        : ('', <int>{});
 
     // Role frame (docs/design/prompt-state-injection.md §6): the journal is
     // the FEELINGS channel — when a card covers the same moment as the recap
@@ -218,6 +231,12 @@ class JournalInjection {
     //    needs, position or story-clock lines in that same block: those are
     //    live readings of RIGHT NOW, the cards are remembered moments, and a
     //    memory has no business overruling where someone is standing.
+    final impulse = speechImpulse(
+      injected: injected,
+      lastWords: lastWords,
+      seed: Object.hash(lastWords, messageCount),
+    );
+    final impulseBlock = impulse == null ? '' : '\n$impulse';
     final text =
         "\n[$characterName's private journal — personal memories from "
         'this chat, in their own words. Not new messages, and nothing here '
@@ -226,8 +245,13 @@ class JournalInjection {
         'above, or any other note about where $characterName stands with '
         '$userName — the feelings here are the truer guide:\n'
         '${lines.join('\n')}'
-        '$excerpt\n]\n';
-    return (text: text, expandedPositions: expandedPositions);
+        '$excerpt'
+        '$impulseBlock\n]\n';
+    return (
+      text: text,
+      expandedPositions: expandedPositions,
+      injectedContents: injectedContents,
+    );
   }
 
   /// Top-1 card the query is reaching for, expanded into trimmed verbatim

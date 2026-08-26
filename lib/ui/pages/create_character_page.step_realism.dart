@@ -35,7 +35,7 @@ extension _CreateCharacterRealismStep on _CreateCharacterPageState {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Realism Engine',
+                'Porch Life',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
@@ -44,8 +44,9 @@ extension _CreateCharacterRealismStep on _CreateCharacterPageState {
               ),
               const SizedBox(height: 8),
               Text(
-                'Set the initial state for the Realism Engine when a new conversation starts. '
-                'These values will seed the relationship, emotion, and time-of-day systems.',
+                'Wardrobe, likes, the story clock and Chaos work with or without '
+                'the Realism Engine. Turn the engine on only if you want bond, '
+                'trust, mood and Needs to seed the first chat.',
                 style: TextStyle(
                   fontSize: 14,
                   color: AppColors.textSecondary(context),
@@ -94,6 +95,20 @@ extension _CreateCharacterRealismStep on _CreateCharacterPageState {
                 ambitions: _realismAmbitions,
                 onAmbitionsChanged: (v) =>
                     rebuildState(() => _realismAmbitions = v),
+                planLines: _realismPlanLines,
+                onPlanLinesChanged: (v) =>
+                    rebuildState(() => _realismPlanLines = v),
+                occupation: _realismOccupation,
+                onOccupationChanged: (v) =>
+                    rebuildState(() => _realismOccupation = v),
+                occupationBrief: _realismOccupationBrief,
+                onOccupationBriefChanged: (v) =>
+                    rebuildState(() => _realismOccupationBrief = v),
+                hours: _realismHours,
+                onHoursChanged: (v) => rebuildState(() => _realismHours = v),
+                workDays: _realismWorkDays,
+                onWorkDaysChanged: (v) =>
+                    rebuildState(() => _realismWorkDays = v),
                 likes: _realismLikes,
                 onLikesChanged: (v) => rebuildState(() => _realismLikes = v),
                 dislikes: _realismDislikes,

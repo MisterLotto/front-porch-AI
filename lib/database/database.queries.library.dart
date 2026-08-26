@@ -160,6 +160,18 @@ extension AppDatabaseLibraryQueries on AppDatabase {
     // deleted from disk by CharacterRepository, so these rows are dead weight
     // pointing at images that no longer exist.
     await (delete(avatarImages)..where((a) => a.characterId.equals(id))).go();
+
+    // Data Bank and chat-less objectives key by filename-id, not UUID.
+    final row = await (select(
+      characters,
+    )..where((c) => c.id.equals(id))).getSingleOrNull();
+    if (row != null) {
+      final bankId = stableGroupIdFrom(row.imagePath, row.name);
+      if (bankId.isNotEmpty) {
+        await deleteDataBankEntriesForCharacter(bankId);
+        await deleteObjectivesForCharacter(bankId);
+      }
+    }
   }
 
   Future<int> deleteCharacterById(String id) async {
@@ -217,13 +229,14 @@ extension AppDatabaseLibraryQueries on AppDatabase {
   /// isolate (`NativeDatabase.createInBackground`), so the cost is per-call
   /// overhead more than SQL. One grouped query measured ~4x faster and, more
   /// importantly, stops scaling with the size of the library.
-  Future<Map<String, List<AvatarImage>>> getAvatarImagesGroupedByCharacter()
-  async {
+  Future<Map<String, List<AvatarImage>>>
+  getAvatarImagesGroupedByCharacter() async {
     final rows =
         await (select(avatarImages)..orderBy([
-          (a) => OrderingTerm.asc(a.characterId),
-          (a) => OrderingTerm.asc(a.displayOrder),
-        ])).get();
+              (a) => OrderingTerm.asc(a.characterId),
+              (a) => OrderingTerm.asc(a.displayOrder),
+            ]))
+            .get();
     final grouped = <String, List<AvatarImage>>{};
     for (final row in rows) {
       (grouped[row.characterId] ??= <AvatarImage>[]).add(row);

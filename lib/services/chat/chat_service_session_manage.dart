@@ -63,7 +63,7 @@ extension ChatServiceSessionManage on ChatService {
     final session = await _db.getSessionById(sessionId);
     if (session == null) return;
 
-    await _db.updateSession(
+    await _db.patchSession(
       SessionsCompanion(
         id: drift.Value(sessionId),
         name: drift.Value(name.isEmpty ? null : name),
@@ -86,7 +86,7 @@ extension ChatServiceSessionManage on ChatService {
     final session = await _db.getSessionById(sessionId);
     if (session == null) return;
 
-    await _db.updateSession(
+    await _db.patchSession(
       SessionsCompanion(
         id: drift.Value(sessionId),
         description: drift.Value(description.isEmpty ? null : description),
@@ -108,11 +108,18 @@ extension ChatServiceSessionManage on ChatService {
         _currentSessionId == null) {
       return;
     }
-    if (messageIndex < 0 || messageIndex >= _messages.length) return;
+    final tip = await _resolveHydratedIndex(messageIndex);
+    if (tip == null) return;
+
+    // Near-miss: fork copies the live greeting so eval would land on the
+    // same alt, but this is a new session opening. Bump gen before the
+    // forked transcript is live.
+    await _invalidateGreetingEval();
 
     final oldSessionId = _currentSessionId!;
+    _clearTodayPointer();
     final forkedMessages = _messages
-        .sublist(0, messageIndex + 1)
+        .sublist(0, tip + 1)
         .map(
           (m) => ChatMessage(
             text: m.text,
@@ -139,14 +146,17 @@ extension ChatServiceSessionManage on ChatService {
     );
     _messages.clear();
     _messages.addAll(forkedMessages);
+    _history.reset();
     _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
-    _computeAbsenceGap(const []); // fresh session — no real-world gap (Living Time §2)
+    _computeAbsenceGap(
+      const [],
+    ); // fresh session — no real-world gap (Living Time §2)
     // Forks stay in the parent chat's place: carry the world attachments so
     // the climate/setting follow (mid-chat climate spans reset to the world
     // default, like every other new session).
     await _seedChatWorldsForNewSession(carryRefs: _chatWorldIds);
     _parentSessionId = oldSessionId;
-    _forkIndex = messageIndex;
+    _forkIndex = tip;
     _sessionGenSettings = _sessionGenSettings
         .copy(); // inherit parent's overrides
     _summary = '';
@@ -205,14 +215,20 @@ extension ChatServiceSessionManage on ChatService {
     GroupChatRepository? groupRepo,
     required String personaId,
   }) async {
-    if (character != null) {
-      await setActiveCharacter(character);
-    } else if (group != null && groupRepo != null) {
-      await setActiveGroup(group, groupRepo: groupRepo);
-    } else {
-      return;
+    if (character == null && (group == null || groupRepo == null)) return;
+    // Hold the overlay across enter + startNewChat so ChatPage never paints
+    // the previous session's last transcript in between the two awaits.
+    beginSessionLoad();
+    try {
+      if (character != null) {
+        await setActiveCharacter(character);
+      } else {
+        await setActiveGroup(group!, groupRepo: groupRepo!);
+      }
+      await startNewChat(personaId: personaId.isEmpty ? null : personaId);
+    } finally {
+      endSessionLoad();
     }
-    await startNewChat(personaId: personaId.isEmpty ? null : personaId);
   }
 
   /// Write the currently-active persona onto the open session right now.
@@ -234,7 +250,12 @@ extension ChatServiceSessionManage on ChatService {
   /// it used to leak in through here whenever the picker was skipped.
   Future<void> startNewChat({String? personaId}) async {
     if (_activeCharacter == null && _activeGroup == null) return;
+    _clearTodayPointer();
 
+    // Persist the departing chat as whoever we still are. Switching to
+    // the default first let flushPendingSaves stamp Nightowl onto the
+    // open row (persona_default_test / history last-session reopen).
+    await flushPendingSaves();
     await _userPersonaService.setActivePersona(
       personaId ?? _userPersonaService.defaultPersonaId,
     );
@@ -326,9 +347,10 @@ extension ChatServiceSessionManage on ChatService {
     debugPrint(
       '[ChatService] 🟡 startNewChat: clearing messages (had ${_messages.length})',
     );
-    // The open session's last exchange may still be memory-only.
-    await flushPendingSaves();
+    // Departing row was flushed above, before the default persona switch.
+    await _invalidateGreetingEval();
     _messages.clear();
+    _history.reset();
     _greetingIndex = 0;
     // A fresh chat starts with no Scene Guests (they don't carry across sessions).
     _sceneGuest.ids.clear();
@@ -382,7 +404,9 @@ extension ChatServiceSessionManage on ChatService {
 
     // Create new session ID for the new chat
     _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
-    _computeAbsenceGap(const []); // fresh session — no real-world gap (Living Time §2)
+    _computeAbsenceGap(
+      const [],
+    ); // fresh session — no real-world gap (Living Time §2)
 
     // Clear memory sources to prevent old memories from being retrieved
     // Cross-character memory can still be re-selected by user after new chat starts
@@ -668,12 +692,12 @@ extension ChatServiceSessionManage on ChatService {
     if (_activeGroup != null && _groupCharacters.isNotEmpty) {
       // Group mode: respect explicit group.firstMessage (custom group greeting set
       // by creator or Group Card) when present. Only fall back to the first
-      // participating character's firstMessage when the group has no custom opening.
+      // participating character's allGreetings when the group has no custom opening.
       String greetingText;
       String greetingSender;
       String? greetingCharId;
 
-      if (_activeGroup!.firstMessage.isNotEmpty) {
+      if (!greetingFirstMesEmpty(_activeGroup!.firstMessage)) {
         greetingText = _macroResolver.resolve(
           _activeGroup!.firstMessage,
           MacroContext(userName: _userPersonaService.persona.name),
@@ -683,9 +707,7 @@ extension ChatServiceSessionManage on ChatService {
         greetingCharId = null;
       } else {
         final first = _groupCharacters.first;
-        greetingText = first.firstMessage.isNotEmpty
-            ? _buildFirstMessage(first)
-            : '';
+        greetingText = _memberOpeningGreetingText(first);
         greetingSender = first.name;
         greetingCharId = _getCharacterIdFromCard(first);
       }
@@ -700,24 +722,44 @@ extension ChatServiceSessionManage on ChatService {
           ),
         );
         _lorebookScanner.scanLatest();
+        // Overlay 0 / inherit baseline into live emotion and slots.
+        // Previously only the empty-empty path applied seed, so leftover
+        // swipe fury survived New Chat on a custom opener or member-greet.
+        if (!greetingFirstMesEmpty(_activeGroup!.firstMessage)) {
+          await _applyGroupCustomGreetingSeed(0);
+        } else {
+          await _applyGreetingOpeningSeed(
+            card: _groupCharacters.first,
+            index: 0,
+          );
+        }
       }
       _groupManager?.resetTurnState();
     } else if (_activeCharacter != null) {
       // 1:1 mode
-      if (_activeCharacter!.firstMessage.isNotEmpty) {
+      final opening = _activeCharacter!.allGreetings;
+      if (opening.isNotEmpty) {
         _messages.add(
           ChatMessage(
-            text: _buildFirstMessage(_activeCharacter!),
+            text: _buildFirstMessage(
+              _activeCharacter!,
+              greetingText: opening.first,
+            ),
             sender: _activeCharacter!.name,
             isUser: false,
           ),
         );
         _lorebookScanner.scanLatest();
+        if (_activeCharacter!.firstMessage.trim().isEmpty) {
+          await _applyGreetingOpeningSeed(card: _activeCharacter!, index: 0);
+        }
       }
     }
 
     _currentSessionId = DateTime.now().millisecondsSinceEpoch.toString();
-    _computeAbsenceGap(const []); // fresh session — no real-world gap (Living Time §2)
+    _computeAbsenceGap(
+      const [],
+    ); // fresh session — no real-world gap (Living Time §2)
     // Seed chat worlds for the fresh session (group template or the
     // character's attached worlds — Living Worlds).
     await _seedChatWorldsForNewSession();
@@ -730,8 +772,9 @@ extension ChatServiceSessionManage on ChatService {
         groupId: _activeGroup?.id,
       );
       if (lastThemeJson != null) {
-        _sessionThemeOverrides =
-            ChatThemeOverrides.fromJsonString(lastThemeJson);
+        _sessionThemeOverrides = ChatThemeOverrides.fromJsonString(
+          lastThemeJson,
+        );
       }
     } catch (_) {
       _sessionThemeOverrides = ChatThemeOverrides();

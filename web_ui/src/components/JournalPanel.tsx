@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client';
 import { JournalReviewModal } from './JournalReviewModal';
+import { ExpandableText } from './ExpandableText';
 
 export interface JournalCard {
   id: string;
@@ -63,7 +64,7 @@ function CardEditor({
           rows={3}
           autoFocus
           maxLength={400}
-          placeholder='One memory in their words — "She left her keys on the hall table."'
+          placeholder='One memory in their words — "I left my keys on the hall table."'
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
@@ -174,7 +175,7 @@ export function JournalPanel({
           🗑️
         </button>
       </div>
-      <div className="growth-ring-text">{c.content}</div>
+      <ExpandableText text={c.content} lines={4} className="growth-ring-text" />
       <div className="growth-ring-meta">
         {c.storyDay != null && (
           <span className="muted small">Day {c.storyDay}</span>

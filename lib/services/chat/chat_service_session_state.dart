@@ -16,8 +16,11 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-
 part of '../chat_service.dart';
+
+/// While [_loadLastSession] hydrates, [_doSaveChat] must not stamp the
+/// still-live previous chat's persona onto the row being loaded.
+final Expando<bool> _preserveSessionPersonaOf = Expando();
 
 /// Session-state load/save — scene-guest + group-realism hydration and _saveChat/_doSaveChat. Extracted verbatim (zero behaviour change) to shrink the god file.
 extension ChatServiceSessionState on ChatService {
@@ -91,10 +94,8 @@ extension ChatServiceSessionState on ChatService {
               map; // support both wrapped and direct formats during transition
           if (perChar is Map) {
             _groupRealism = perChar.map(
-              (k, v) => MapEntry(
-                k.toString(),
-                GroupMemberRealism.fromJson(v as Map),
-              ),
+              (k, v) =>
+                  MapEntry(k.toString(), GroupMemberRealism.fromJson(v as Map)),
             );
           }
 
@@ -187,6 +188,7 @@ extension ChatServiceSessionState on ChatService {
         _currentSessionId == null) {
       return;
     }
+    if (replaceAll) await _awaitHistoryHydrated();
     if (_messages.isEmpty) {
       debugPrint(
         '[ChatService] ⚠ _saveChat called with empty messages for '
@@ -196,10 +198,16 @@ extension ChatServiceSessionState on ChatService {
     }
     final sessionId = _currentSessionId!;
     final snapshot = List<ChatMessage>.from(_messages);
+    final positionBase = _history.basePosition;
     _saveChain = _saveChain.then((_) async {
       for (var i = 0; i < 3; i++) {
         try {
-          await _doSaveChat(sessionId, snapshot, replaceAll: replaceAll);
+          await _doSaveChat(
+            sessionId,
+            snapshot,
+            replaceAll: replaceAll,
+            positionBase: positionBase,
+          );
           return;
         } catch (e) {
           debugPrint('[ChatService] ⚠ persist ${i + 1}/3 failed: $e');
@@ -218,6 +226,7 @@ extension ChatServiceSessionState on ChatService {
     String sessionId,
     List<ChatMessage> snapshot, {
     bool replaceAll = false,
+    int positionBase = 0,
   }) async {
     if (snapshot.isEmpty) return;
 
@@ -226,7 +235,11 @@ extension ChatServiceSessionState on ChatService {
     // scalars onto that row (that is the inverse of the cross-chat wipe
     // this method's sessionId local was introduced to stop).
     if (_currentSessionId != sessionId) {
-      await _replaceSessionMessages(sessionId, snapshot);
+      await _replaceSessionMessages(
+        sessionId,
+        snapshot,
+        positionBase: positionBase,
+      );
       return;
     }
 
@@ -299,6 +312,28 @@ extension ChatServiceSessionState on ChatService {
       characterDbId = _activeCharacter!.dbId;
     }
 
+    // Hydrate must not overwrite the row's binding with the previous chat's
+    // still-live persona. A partial omit is not possible on insertOnConflict
+    // update (absent → default null), so keep the existing id when set.
+    // Same for character/group: a save after `_activeCharacter =` but
+    // before session detach used to rebind chat A onto the incoming card.
+    var personaId = _userPersonaService.persona.id;
+    final existing = await _db.getSessionById(sessionId);
+    if (_preserveSessionPersonaOf[this] == true) {
+      final kept = existing?.userPersonaId;
+      if (kept != null && kept.isNotEmpty) {
+        personaId = kept;
+      }
+    }
+    final keptChar = existing?.characterId;
+    if (keptChar != null && keptChar.isNotEmpty) {
+      characterDbId = keptChar;
+    }
+    final keptGroup = existing?.groupId;
+    if (keptGroup != null && keptGroup.isNotEmpty) {
+      groupDbId = keptGroup;
+    }
+
     // Upsert session (INSERT OR REPLACE to avoid UNIQUE constraint errors)
     final timestamp = int.tryParse(sessionId) ?? 0;
     final createdAt = timestamp > 0
@@ -311,7 +346,7 @@ extension ChatServiceSessionState on ChatService {
         groupId: drift.Value(groupDbId),
         name: drift.Value(_sessionName),
         description: drift.Value(_sessionDescription),
-        userPersonaId: drift.Value(_userPersonaService.persona.id),
+        userPersonaId: drift.Value(personaId),
         authorNote: drift.Value(_authorNote),
         authorNoteDepth: drift.Value(_authorNoteStrength),
         summary: drift.Value(_summary.isEmpty ? null : _summary),
@@ -371,6 +406,7 @@ extension ChatServiceSessionState on ChatService {
         activeFixation: drift.Value(_relationshipService.activeFixation),
         fixationLifespan: drift.Value(_relationshipService.fixationLifespan),
         spatialStance: drift.Value(_relationshipService.spatialStance),
+        withUser: drift.Value(_relationshipService.withUser),
         chaosModeEnabled: drift.Value(_chaosModeService.chaosModeEnabled),
         chaosPressure: drift.Value(_chaosModeService.chaosPressure),
         trustRepairPending: drift.Value(
@@ -385,10 +421,7 @@ extension ChatServiceSessionState on ChatService {
     // works even before build_runner regenerates database.g.dart.
     await _db.customUpdate(
       'UPDATE sessions SET generation_settings = ? WHERE id = ?',
-      variables: [
-        drift.Variable(genSettingsJson),
-        drift.Variable(sessionId),
-      ],
+      variables: [drift.Variable(genSettingsJson), drift.Variable(sessionId)],
       updates: {_db.sessions},
     );
 
@@ -405,6 +438,7 @@ extension ChatServiceSessionState on ChatService {
       sessionId,
       snapshot,
       replaceAll: replaceAll,
+      positionBase: positionBase,
     );
   }
 
@@ -414,6 +448,7 @@ extension ChatServiceSessionState on ChatService {
     String sessionId,
     List<ChatMessage> snapshot, {
     bool replaceAll = false,
+    int positionBase = 0,
   }) async {
     final messageBatch = <MessagesCompanion>[];
     for (int i = 0; i < snapshot.length; i++) {
@@ -421,7 +456,9 @@ extension ChatServiceSessionState on ChatService {
       messageBatch.add(
         MessagesCompanion(
           sessionId: drift.Value(sessionId),
-          position: drift.Value(i),
+          position: drift.Value(
+            persistMessagePosition(base: positionBase, index: i),
+          ),
           sender: drift.Value(m.sender),
           isUser: drift.Value(m.isUser),
           characterId: drift.Value(m.characterId),

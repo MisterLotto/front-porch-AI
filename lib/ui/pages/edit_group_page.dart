@@ -29,8 +29,10 @@ import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/pages/edit_character_page.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
+import 'package:front_porch_ai/ui/widgets/group_alternate_greetings_editor.dart';
 import 'package:front_porch_ai/ui/widgets/group_realism_dynamics_editor.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 // The Details, Dialogue, and Lore & Worlds tab builders live in these
 // `part of` files (extensions on _EditGroupPageState) to keep every file
@@ -49,7 +51,7 @@ part 'edit_group_page.lore_worlds.dart';
 /// Pruned per spec:
 /// - Personality & World: no Description/Personality fields; includes explanatory note,
 ///   Group System Prompt, Scenario, and Per-Character Overrides.
-/// - Dialogue: First Message kept; Alternate Greetings is a disabled "Coming soon" stub;
+/// - Dialogue: First Message + alternate greetings with opening seeds;
 ///   Example Dialogue / mes_example completely omitted (GroupChat has no such field).
 class EditGroupPage extends StatefulWidget {
   final GroupChat group;
@@ -78,6 +80,19 @@ class _EditGroupPageState extends State<EditGroupPage>
 
   late final TextEditingController _nameController;
   late final TextEditingController _firstMessageController;
+  List<String> _altGreetings = [];
+  List<GreetingRealismSeed?> _altGreetingSeeds = [];
+
+  void _setAltGreetings(
+    List<String> greetings,
+    List<GreetingRealismSeed?> seeds,
+  ) {
+    setState(() {
+      _altGreetings = greetings;
+      _altGreetingSeeds = seeds;
+    });
+  }
+
   late final TextEditingController _scenarioController;
   late final TextEditingController _systemPromptController;
 
@@ -112,6 +127,8 @@ class _EditGroupPageState extends State<EditGroupPage>
     final g = widget.group;
     _nameController = TextEditingController(text: g.name);
     _firstMessageController = TextEditingController(text: g.firstMessage);
+    _altGreetings = List.from(g.alternateGreetings);
+    _altGreetingSeeds = List.from(g.greetingSeeds);
     _scenarioController = TextEditingController(text: g.scenario);
     _systemPromptController = TextEditingController(text: g.systemPrompt);
 
@@ -245,9 +262,15 @@ class _EditGroupPageState extends State<EditGroupPage>
       autoAdvance: _autoAdvance,
       directorMode: _directorMode,
       firstMessage: _firstMessageController.text.trim(),
+      alternateGreetings: List.from(_altGreetings),
+      greetingSeeds: List.from(_altGreetingSeeds),
       scenario: _scenarioController.text.trim(),
       systemPrompt: _systemPromptController.text.trim(),
-      defaultMemberRealismState: _defaultMemberRealismState,
+      defaultMemberRealismState: withGroupOpeningAlts(
+        _defaultMemberRealismState,
+        alternateGreetings: _altGreetings,
+        greetingSeeds: _altGreetingSeeds,
+      ),
       baselineRealismState: _baselineRealismState,
       characterSystemPrompts: charPrompts,
       worldIds: List.from(_worldIds),

@@ -21,6 +21,7 @@ import 'package:provider/provider.dart';
 
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/settings/widgets/widgets.dart';
+import 'package:front_porch_ai/ui/widgets/planner_feature_row.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 
 /// **Porch Life** — every "what makes characters feel alive" switch in one
@@ -253,8 +254,8 @@ class PorchLifeTab extends StatelessWidget {
               need: FeatureNeed.alone,
               blurb:
                   'What they are wearing and carrying is remembered instead of '
-                  'scrolling out of the conversation — so the keys she picked '
-                  'up an hour ago are still in her pocket, and the coat she '
+                  'scrolling out of the conversation — so the keys they picked '
+                  'up an hour ago are still in their pocket, and the coat they '
                   'took off is still off. Items can change: a candy bar becomes '
                   'a wrapper, a sword gets notched. Uses one extra AI request '
                   'per reply to notice what changed, so it is slower and costs '
@@ -270,10 +271,10 @@ class PorchLifeTab extends StatelessWidget {
               satisfied: realism.pocketsEnabled,
               blurb:
                   'In a group chat, when one character hands something to '
-                  'another it actually moves — out of her pocket and into '
-                  'theirs, keeping whatever condition it was in. Without this, '
-                  'a handed-over item simply leaves the giver and reaches no '
-                  'one. Costs nothing extra; it rides the check Pockets is '
+                  'another it actually moves — out of their pocket and into '
+                  'the other\'s, keeping whatever condition it was in. Without '
+                  'this, a handed-over item simply leaves the giver and reaches '
+                  'no one. Costs nothing extra; it rides the check Pockets is '
                   'already doing. Best with a frontier model (Claude, GPT, '
                   'Gemini): it has to name WHO received the thing, which is '
                   'harder than noticing what changed, and smaller local models '
@@ -349,6 +350,13 @@ class PorchLifeTab extends StatelessWidget {
                   'moves them, so they need Objectives running.',
               value: realism.ambitionsEnabled,
               onChanged: realism.setAmbitionsEnabled,
+            ),
+            PlannerFeatureRow(
+              value: realism.plannerEnabled,
+              timeOn: timeOn,
+              objectivesOn: objectivesOn,
+              journalOn: journalOn,
+              onChanged: realism.setPlannerEnabled,
             ),
             FeatureRow(
               icon: Icons.person_search_outlined,
@@ -444,15 +452,15 @@ class PorchLifeTab extends StatelessWidget {
                 dependsOn: 'the Realism Engine',
                 satisfied: engineOn,
                 blurb:
-                    'A character with intimate preferences on her card acts on '
-                    'them instead of only reacting: she asks for what she '
-                    'wants, in her own voice — a dominant character presses '
-                    'where a soft-spoken one hints — and turns down what she '
-                    'is not interested in rather than going along with it. '
-                    'Being refused something she wanted shows in her mood '
-                    'afterwards, sharper or quieter as fits who she is. Needs '
-                    'the engine because that is what scores the answer she '
-                    'gets; without it she would ask and nothing would ever '
+                    'A character with intimate preferences on their card acts '
+                    'on them instead of only reacting: they ask for what they '
+                    'want, in their own voice — a dominant character presses '
+                    'where a soft-spoken one hints — and turns down what they '
+                    'are not interested in rather than going along with it. '
+                    'Being refused something they wanted shows in their mood '
+                    'afterwards, sharper or quieter as fits who they are. Needs '
+                    'the engine because that is what scores the answer they '
+                    'get; without it they would ask and nothing would ever '
                     'come of it. Costs nothing extra — no AI request, just '
                     'two more lines in the prompt.',
                 value: realism.intimateAgencyEnabled,

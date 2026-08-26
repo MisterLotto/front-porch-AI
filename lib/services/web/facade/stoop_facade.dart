@@ -28,6 +28,7 @@ import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/backporch/backporch_api.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/group_card_importer.dart';
+import 'package:front_porch_ai/services/web/facade/stoop_import_kind.dart';
 
 /// A raw upstream response, passed through to the web client verbatim so the
 /// browser sees exactly the status codes and machine-readable `error` fields
@@ -188,8 +189,9 @@ class StoopFacade {
   /// [BackporchApiException] so the route can pass the status through.
   Future<Map<String, dynamic>> downloadAndImport(
     String token,
-    String cardId,
-  ) async {
+    String cardId, {
+    String? clientType,
+  }) async {
     _assetToken = token;
     final characters = _characters;
     final groups = _groups;
@@ -201,9 +203,15 @@ class StoopFacade {
     final cardJson = payload['card'] as Map<String, dynamic>?;
     if (cardJson == null) return {'ok': false, 'error': 'no_card_data'};
 
+    final kind = stoopImportKind(
+      clientType: clientType,
+      payloadType: payload['type'] as String?,
+      card: cardJson,
+    );
+
     // World cards carry the .fpworld envelope — import as a new place (lore +
     // climate + traits + cover), same as the desktop detail page.
-    if ((payload['type'] as String?) == 'WORLD') {
+    if (kind == 'WORLD') {
       final worlds = _worlds;
       if (worlds == null) return {'ok': false, 'error': 'library_unavailable'};
       final imported = await worlds.importWorldJson(cardJson);
@@ -211,9 +219,7 @@ class StoopFacade {
     }
 
     // Group cards carry a members list; solo cards are V2 character JSON.
-    final isGroup =
-        (payload['type'] as String?) == 'GROUP' ||
-        cardJson.containsKey('members');
+    final isGroup = kind == 'GROUP';
     if (isGroup) {
       final importer = GroupCardImporter(groups, _storage, _db);
       final result = await importer.importCard(GroupCard.fromJson(cardJson));

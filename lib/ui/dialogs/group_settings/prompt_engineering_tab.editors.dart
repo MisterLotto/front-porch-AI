@@ -101,9 +101,12 @@ extension _GroupPromptEditors on _GroupPromptEngineeringTabState {
           // Compact strength slider (1-10)
           Row(
             children: [
-              const Text(
+              Text(
                 'Strength',
-                style: TextStyle(color: Colors.white54, fontSize: 11),
+                style: TextStyle(
+                  color: AppColors.textSecondary(context),
+                  fontSize: 11,
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -117,7 +120,7 @@ extension _GroupPromptEditors on _GroupPromptEngineeringTabState {
                       overlayRadius: 10,
                     ),
                     activeTrackColor: _charColor(index),
-                    inactiveTrackColor: Colors.white12,
+                    inactiveTrackColor: AppColors.borderOf(context),
                     thumbColor: _charColor(index),
                   ),
                   child: Slider(
@@ -215,7 +218,7 @@ extension _GroupPromptEditors on _GroupPromptEngineeringTabState {
                   // kept being injected every turn (and came back on reopen).
                   widget.chatService.setSystemPromptForGroupCharacter(c, '');
                 },
-                child: const Text('Clear', style: TextStyle(fontSize: 11)),
+                child: Text('Clear', style: TextStyle(fontSize: 11)),
               ),
             ],
           ),

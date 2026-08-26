@@ -45,11 +45,12 @@ class FileConsolidationService {
     final docsDir = await getApplicationDocumentsDirectory();
     final currentRootPath = prefs.getString(rootPathKey) ?? docsDir.path;
 
-    // Determine target consolidated path.
-    // Ensure we don't nest if the basename is already FrontPorchAI or something similar.
+    // Wrap-in-FrontPorchAI is only for the historical scatter in the OS
+    // Documents folder. A path the user already chose in Settings is the
+    // root — nesting FrontPorchAI under it on the next launch splits the
+    // library (issue #206: groups/ and custom_backgrounds left behind).
     final basename = p.basename(currentRootPath);
-    if (isAlreadyNested(basename)) {
-      // It's already cleanly nested. We just need to ensure the system files are moved there.
+    if (isAlreadyNested(basename) || !p.equals(currentRootPath, docsDir.path)) {
       await _migrateSystemDependencies(currentRootPath);
       return;
     }

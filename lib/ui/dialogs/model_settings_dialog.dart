@@ -29,6 +29,7 @@ import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'package:front_porch_ai/services/model_file_check.dart';
 import 'package:front_porch_ai/services/optimization_service.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
+import 'package:front_porch_ai/utils/utils.dart';
 
 // The local-backend actions/settings, remote-settings, and model-picker
 // builders live in these `part of` files (extensions on
@@ -72,6 +73,8 @@ class _ModelSettingsDialogState extends State<ModelSettingsDialog> {
 
   // Preset fields
   List<File> _localPresets = [];
+  final _kcppsModelExists = PathExistsMemo();
+  final _presetFileExists = PathExistsMemo();
 
   @override
   void initState() {

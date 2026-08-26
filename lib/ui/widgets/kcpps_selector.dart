@@ -77,6 +77,7 @@ class KcppsSelector extends StatefulWidget {
 class _KcppsSelectorState extends State<KcppsSelector> {
   bool _lastValidModel = false;
   String? _previousActivePath;
+  final _modelExists = PathExistsMemo();
 
   @override
   void initState() {
@@ -100,7 +101,8 @@ class _KcppsSelectorState extends State<KcppsSelector> {
   /// if the value changed since last report.
   void _reportStatus() {
     final valid =
-        widget.storage.kcppsHasModel && widget.storage.kcppsModelFileExists;
+        widget.storage.kcppsHasModel &&
+        _modelExists.of(widget.storage.kcppsModelPath);
     if (valid != _lastValidModel) {
       _lastValidModel = valid;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -149,7 +151,11 @@ class _KcppsSelectorState extends State<KcppsSelector> {
             widget.storage.activeKcppsPath!.isEmpty)) {
       return Row(
         children: [
-          Icon(Icons.remove_circle_outline, size: 14, color: Colors.red.shade300),
+          Icon(
+            Icons.remove_circle_outline,
+            size: 14,
+            color: Colors.red.shade300,
+          ),
           const SizedBox(width: 6),
           Text(
             'Required',
@@ -160,14 +166,10 @@ class _KcppsSelectorState extends State<KcppsSelector> {
     }
 
     final hasModel = widget.storage.kcppsHasModel;
-    // ONE parse per build. Reading `kcppsModelPath` is a synchronous read +
-    // jsonDecode of the preset file, and `kcppsModelFileExists` parses it
-    // again internally — asking for both, then re-parsing here for the
-    // basename, put three blocking disk trips in a settings-tab build().
+    // ONE parse per build for the path; existsSync is memoized so Kobold
+    // log-line rebuilds do not re-stat a multi-GB GGUF.
     final modelPath = widget.storage.kcppsModelPath;
-    final fileExists =
-        modelPath != null &&
-        File(modelPath).existsSync(); // io-ok: one stat, settings row only
+    final fileExists = _modelExists.of(modelPath);
 
     IconData icon;
     Color color;
@@ -176,7 +178,7 @@ class _KcppsSelectorState extends State<KcppsSelector> {
     if (hasModel && fileExists) {
       icon = Icons.check_circle;
       color = Colors.greenAccent;
-      text = 'Model: ${p.basename(modelPath)}';
+      text = 'Model: ${p.basename(modelPath!)}';
     } else if (hasModel) {
       icon = Icons.warning_amber_rounded;
       color = Colors.orangeAccent;

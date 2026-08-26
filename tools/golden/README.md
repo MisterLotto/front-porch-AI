@@ -3,7 +3,7 @@
 The Flutter **widget pixel goldens** (`test/golden/widget/**`, tag `golden`) are
 `@TestOn('linux')` — they **cannot run on macOS at all** and are byte-sensitive
 to the OS, FreeType version, and CPU architecture. CI runs them on
-`ubuntu-latest` (amd64) with Flutter `3.41.1`.
+`ubuntu-latest` (amd64) with Flutter `3.47.0`.
 
 This folder lets you run/refresh those goldens locally in a container that
 mirrors that CI image, so you don't need a CI round-trip for every UI tweak.

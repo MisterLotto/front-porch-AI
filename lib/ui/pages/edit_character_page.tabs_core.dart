@@ -294,8 +294,19 @@ extension _EditCharacterCoreTabs on _EditCharacterPageState {
               if (widget.showRealismTab)
                 IdentityChipLists(
                   ambitions: _ambitions,
-                  onAmbitionsChanged: (v) =>
-                      rebuildState(() => _ambitions = v),
+                  onAmbitionsChanged: (v) => rebuildState(() => _ambitions = v),
+                  planLines: _planLines,
+                  onPlanLinesChanged: (v) => rebuildState(() => _planLines = v),
+                  occupation: _occupation,
+                  onOccupationChanged: (v) =>
+                      rebuildState(() => _occupation = v),
+                  occupationBrief: _occupationBrief,
+                  onOccupationBriefChanged: (v) =>
+                      rebuildState(() => _occupationBrief = v),
+                  hours: _hours,
+                  onHoursChanged: (v) => rebuildState(() => _hours = v),
+                  workDays: _workDays,
+                  onWorkDaysChanged: (v) => rebuildState(() => _workDays = v),
                   likes: _likes,
                   onLikesChanged: (v) => rebuildState(() => _likes = v),
                   dislikes: _dislikes,
@@ -371,6 +382,7 @@ extension _EditCharacterCoreTabs on _EditCharacterPageState {
                       );
                       c.addListener(_updateTokenCount);
                       _altGreetingControllers.add(c);
+                      _altGreetingSeeds.add(null);
                     });
                   },
                   icon: const Icon(Icons.add, size: 16),
@@ -407,34 +419,59 @@ extension _EditCharacterCoreTabs on _EditCharacterPageState {
                               ? 12
                               : 0,
                         ),
-                        child: Row(
+                        child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(
-                              child: _styledField(
-                                controller: ctrl,
-                                label: 'Greeting ${idx + 2}',
-                                maxLines: 4,
-                                expandable: true,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Padding(
-                              padding: const EdgeInsets.only(top: 26),
-                              child: IconButton(
-                                onPressed: () {
-                                  rebuildState(() {
-                                    _altGreetingControllers[idx].dispose();
-                                    _altGreetingControllers.removeAt(idx);
-                                  });
-                                },
-                                icon: Icon(
-                                  Icons.remove_circle_outline,
-                                  color: AppColors.negativeAccentOf(context),
-                                  size: 20,
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: _styledField(
+                                    controller: ctrl,
+                                    label: 'Greeting ${idx + 2}',
+                                    maxLines: 4,
+                                    expandable: true,
+                                  ),
                                 ),
-                                tooltip: 'Remove greeting',
-                              ),
+                                const SizedBox(width: 8),
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 26),
+                                  child: IconButton(
+                                    onPressed: () {
+                                      rebuildState(() {
+                                        _altGreetingControllers[idx].dispose();
+                                        _altGreetingControllers.removeAt(idx);
+                                        if (idx < _altGreetingSeeds.length) {
+                                          _altGreetingSeeds.removeAt(idx);
+                                        }
+                                      });
+                                    },
+                                    icon: Icon(
+                                      Icons.remove_circle_outline,
+                                      color: AppColors.negativeAccentOf(
+                                        context,
+                                      ),
+                                      size: 20,
+                                    ),
+                                    tooltip: 'Remove greeting',
+                                  ),
+                                ),
+                              ],
+                            ),
+                            GreetingSeedForm(
+                              seed: idx < _altGreetingSeeds.length
+                                  ? _altGreetingSeeds[idx]
+                                  : null,
+                              showNeeds: true,
+                              showInventory: true,
+                              onChanged: (next) {
+                                rebuildState(() {
+                                  while (_altGreetingSeeds.length <= idx) {
+                                    _altGreetingSeeds.add(null);
+                                  }
+                                  _altGreetingSeeds[idx] = next;
+                                });
+                              },
                             ),
                           ],
                         ),

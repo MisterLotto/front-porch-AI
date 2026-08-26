@@ -85,6 +85,11 @@ extension CreatorEngine on CreatorState {
       card.firstMessage = firstMessageController.text;
       card.mesExample = exampleDialogueController.text;
       card.systemPrompt = systemPromptController.text;
+      final greetingPairs = compactGreetingPairs(
+        [for (final c in altGreetingControllers) c.text],
+        greetingSeeds,
+      );
+      card.alternateGreetings = greetingPairs.greetings;
 
       // Always build the V2.5 extensions — even when realism is disabled — so
       // configured realism/needs values AND the stable tracking id survive the
@@ -106,6 +111,11 @@ extension CreatorEngine on CreatorState {
         needsSimEnabled: realismNeedsSim,
         enjoysLowHygiene: realismEnjoysLowHygiene,
         ambitions: realismAmbitions,
+        planLines: realismPlanLines,
+        occupation: realismOccupation,
+        occupationBrief: realismOccupationBrief,
+        hours: realismHours,
+        workDays: realismWorkDays,
         likes: realismLikes,
         dislikes: realismDislikes,
         intimateInto: realismIntimateInto,
@@ -133,6 +143,7 @@ extension CreatorEngine on CreatorState {
         needsDecayFun: needsDecayFun,
         needsDecayHygiene: needsDecayHygiene,
         needsDecayComfort: needsDecayComfort,
+        greetingSeeds: greetingPairs.seeds,
       );
       // Save is MULTI-SHOT now (the Portrait & Avatars panel persists before
       // it generates; Save & Finish updates the same card), so identity
@@ -209,10 +220,7 @@ extension CreatorEngine on CreatorState {
           if (part.length > 2) {
             clean = clean
                 .replaceAll(
-                  RegExp(
-                    '\\b${RegExp.escape(part)}\\b',
-                    caseSensitive: false,
-                  ),
+                  RegExp('\\b${RegExp.escape(part)}\\b', caseSensitive: false),
                   '',
                 )
                 .trim();

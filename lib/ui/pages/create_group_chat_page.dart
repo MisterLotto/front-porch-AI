@@ -27,6 +27,7 @@ import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/dialogs/lorebook_entry_dialog.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
+import 'package:front_porch_ai/ui/widgets/group_alternate_greetings_editor.dart';
 import 'package:front_porch_ai/ui/widgets/needs_form_section.dart';
 import 'package:front_porch_ai/ui/widgets/story_begins_row.dart';
 import 'package:front_porch_ai/utils/utils.dart';
@@ -89,14 +90,23 @@ class _CreateGroupChatPageState extends State<CreateGroupChatPage> {
   bool _directorMode = false;
 
   // Opening
-  final _scenarioController = StyledTextController(preset: StyledTextPreset.prose);
-  final _firstMessageController = StyledTextController(preset: StyledTextPreset.prose);
+  final _scenarioController = StyledTextController(
+    preset: StyledTextPreset.prose,
+  );
+  final _firstMessageController = StyledTextController(
+    preset: StyledTextPreset.prose,
+  );
+  List<String> _altGreetings = [];
+  List<GreetingRealismSeed?> _altGreetingSeeds = [];
   bool _isGeneratingScenario = false;
   bool _isGeneratingFirst = false;
 
   // Prompts
-  final _groupSystemController = StyledTextController(preset: StyledTextPreset.prose);
-  final Map<String, TextEditingController> _characterSystemPrompts = {}; // charId -> prompt
+  final _groupSystemController = StyledTextController(
+    preset: StyledTextPreset.prose,
+  );
+  final Map<String, TextEditingController> _characterSystemPrompts =
+      {}; // charId -> prompt
 
   // Voices (charId -> voiceId or '')
   final Map<String, String> _characterVoices = {};
@@ -835,6 +845,8 @@ class _CreateGroupChatPageState extends State<CreateGroupChatPage> {
         dayCount: _globalDayCount,
         storyStartDate: _globalStoryStartDate,
         storyStartTime: _globalStoryStartTime,
+        alternateGreetings: _altGreetings,
+        greetingSeeds: _altGreetingSeeds,
       );
       defaultMemberJson = blobs.defaultMemberJson;
       baselineJson = blobs.baselineJson;
@@ -848,6 +860,8 @@ class _CreateGroupChatPageState extends State<CreateGroupChatPage> {
       autoAdvance: _autoAdvance,
       directorMode: _directorMode,
       firstMessage: _firstMessageController.text.trim(),
+      alternateGreetings: List.from(_altGreetings),
+      greetingSeeds: List.from(_altGreetingSeeds),
       scenario: _scenarioController.text.trim(),
       systemPrompt: _groupSystemController.text.trim(),
       characterSystemPrompts: charPrompts,
@@ -965,5 +979,4 @@ class _CreateGroupChatPageState extends State<CreateGroupChatPage> {
       ),
     );
   }
-
 }

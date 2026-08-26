@@ -130,7 +130,7 @@ extension _ModelSettingsLocalActions on _ModelSettingsDialogState {
     // Case A — preset owns a valid model file: skip model-path checks.
     // Case B — no preset / preset has no model / model file missing: user must pick one.
     final presetOwnsModel =
-        storage.kcppsHasModel && storage.kcppsModelFileExists;
+        storage.kcppsHasModel && _kcppsModelExists.of(storage.kcppsModelPath);
 
     if (!presetOwnsModel) {
       if (_selectedModelPath == null) {
@@ -157,7 +157,7 @@ extension _ModelSettingsLocalActions on _ModelSettingsDialogState {
     // Validate preset file exists if one is active
     if (storage.activeKcppsPath != null &&
         storage.activeKcppsPath!.isNotEmpty) {
-      if (!File(storage.activeKcppsPath!).existsSync()) {
+      if (!_presetFileExists.of(storage.activeKcppsPath)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(

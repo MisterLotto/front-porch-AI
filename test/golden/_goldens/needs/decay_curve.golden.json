@@ -9,47 +9,47 @@
     "social": 65
   },
   "turn1": {
-    "bladder": 74,
+    "bladder": 77,
     "comfort": 68,
     "energy": 77,
     "fun": 63,
-    "hunger": 71,
+    "hunger": 73,
     "hygiene": 74,
     "social": 63
   },
   "turn2": {
-    "bladder": 68,
+    "bladder": 74,
     "comfort": 66,
     "energy": 74,
     "fun": 61,
-    "hunger": 67,
+    "hunger": 71,
     "hygiene": 73,
     "social": 61
   },
   "turn3": {
-    "bladder": 62,
+    "bladder": 71,
     "comfort": 64,
     "energy": 71,
     "fun": 59,
-    "hunger": 63,
+    "hunger": 69,
     "hygiene": 72,
     "social": 59
   },
   "turn4": {
-    "bladder": 56,
+    "bladder": 68,
     "comfort": 62,
     "energy": 68,
     "fun": 57,
-    "hunger": 59,
+    "hunger": 67,
     "hygiene": 71,
     "social": 57
   },
   "turn5": {
-    "bladder": 50,
+    "bladder": 65,
     "comfort": 60,
     "energy": 65,
     "fun": 55,
-    "hunger": 55,
+    "hunger": 65,
     "hygiene": 70,
     "social": 55
   }

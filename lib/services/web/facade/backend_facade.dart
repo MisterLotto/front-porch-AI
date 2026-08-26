@@ -62,6 +62,12 @@ class BackendFacade {
       'engineProgress': engine.downloadProgress,
       'engineStatusMessage': engine.isDownloading ? engine.statusMessage : '',
       'engineError': engine.error ?? '',
+      // Remote live ping (additive). Green "Ready" on the web strip is
+      // isReachable, not "a key is saved".
+      'isReady': _llm.activeService.isReady,
+      'remoteConfigured': _llm.openRouterService.isConfigured,
+      'remoteReachable': _llm.openRouterService.isReachable,
+      'remoteReachability': _llm.openRouterService.reachability.name,
     };
   }
 
@@ -84,14 +90,16 @@ class BackendFacade {
     await _models.refreshModels();
     final current = _storage.lastUsedModelPath;
     return _models.localModels
-        .map((m) => {
-              'name': m.filename,
-              'path': m.path,
-              'sizeBytes': m.sizeBytes,
-              'quant': m.quantType.name,
-              'paramCountB': m.paramCountB,
-              'loaded': m.path == current,
-            })
+        .map(
+          (m) => {
+            'name': m.filename,
+            'path': m.path,
+            'sizeBytes': m.sizeBytes,
+            'quant': m.quantType.name,
+            'paramCountB': m.paramCountB,
+            'loaded': m.path == current,
+          },
+        )
         .toList();
   }
 
@@ -121,34 +129,38 @@ class BackendFacade {
   /// safely point an internet-exposable server at an arbitrary host directory;
   /// changing the folder stays a host-only action in the desktop app).
   Map<String, dynamic> modelsFolder() => {
-        'path': _models.modelsPath,
-        'custom': _storage.customModelsPath != null,
-      };
+    'path': _models.modelsPath,
+    'custom': _storage.customModelsPath != null,
+  };
 
   // ── HuggingFace browser + downloader ─────────────────────────────────────
   Future<List<Map<String, dynamic>>> searchHf(String query) async {
     final results = await _models.searchHFModels(query);
     return results
-        .map((m) => {
-              'id': m.id,
-              'name': m.name,
-              'author': m.author,
-              'likes': m.likes,
-              'downloads': m.downloads,
-              'description': m.description,
-            })
+        .map(
+          (m) => {
+            'id': m.id,
+            'name': m.name,
+            'author': m.author,
+            'likes': m.likes,
+            'downloads': m.downloads,
+            'description': m.description,
+          },
+        )
         .toList();
   }
 
   Future<List<Map<String, dynamic>>> modelFiles(String repoId) async {
     final files = await _models.getModelFiles(repoId);
     return files
-        .map((f) => {
-              'filename': f.filename,
-              'sizeBytes': f.sizeBytes,
-              'repoId': f.repoId,
-              'quant': f.quantType.name,
-            })
+        .map(
+          (f) => {
+            'filename': f.filename,
+            'sizeBytes': f.sizeBytes,
+            'repoId': f.repoId,
+            'quant': f.quantType.name,
+          },
+        )
         .toList();
   }
 
@@ -211,12 +223,14 @@ class BackendFacade {
     final svc = OpenRouterService(apiUrl: c.url, apiKey: c.key);
     final models = await svc.fetchAvailableModels();
     return models
-        .map((m) => {
-              'id': m.id,
-              'name': m.name,
-              'pricing': m.pricingLabel,
-              'free': m.isFree,
-            })
+        .map(
+          (m) => {
+            'id': m.id,
+            'name': m.name,
+            'pricing': m.pricingLabel,
+            'free': m.isFree,
+          },
+        )
         .toList();
   }
 
@@ -265,11 +279,7 @@ class BackendFacade {
         'mandatory': reasoningEffortIsMandatory(model),
       };
     }
-    await probeReasoningEfforts(
-      model: model,
-      apiUrl: c.url,
-      apiKey: c.key,
-    );
+    await probeReasoningEfforts(model: model, apiUrl: c.url, apiKey: c.key);
     return {
       'efforts': reasoningEffortChipsFor(model),
       'mandatory': reasoningEffortIsMandatory(model),
@@ -302,19 +312,21 @@ class BackendFacade {
     final dm = _models.downloadManager;
     return {
       'downloads': dm.queue
-          .map((t) => {
-                'id': t.id,
-                'filename': t.filename,
-                'repoId': t.repoId,
-                'state': t.state.name,
-                'progress': t.progress,
-                'bytesDownloaded': t.bytesDownloaded,
-                'totalBytes': t.totalBytes,
-                'speedBytesPerSec': t.speedBytesPerSec,
-                'etaSeconds': t.etaSeconds,
-                'status': t.statusString,
-                'errorMessage': t.errorMessage,
-              })
+          .map(
+            (t) => {
+              'id': t.id,
+              'filename': t.filename,
+              'repoId': t.repoId,
+              'state': t.state.name,
+              'progress': t.progress,
+              'bytesDownloaded': t.bytesDownloaded,
+              'totalBytes': t.totalBytes,
+              'speedBytesPerSec': t.speedBytesPerSec,
+              'etaSeconds': t.etaSeconds,
+              'status': t.statusString,
+              'errorMessage': t.errorMessage,
+            },
+          )
           .toList(),
       'overallProgress': dm.overallProgress,
       'overallSpeed': dm.overallSpeed,

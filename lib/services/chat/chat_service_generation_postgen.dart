@@ -119,6 +119,12 @@ extension ChatServiceGenerationPostGen on ChatService {
         }
       }
 
+      // Leftover [today: …] — strip so it never shows in the bubble.
+      // Do not write todaySentence / abandonToday from the tag; the
+      // scene-time eval owns that via TimeService.onTodayEval.
+      final todayParsed = TodayLineTag.parse(finalResponse);
+      finalResponse = todayParsed.visible;
+
       // Always persist the finalized body. Continue + strip without sanitizer
       // used to leave streamTarget alone after mutating only finalResponse —
       // and when sanitizer DID run it wrote new-tokens-only. One write-back.
@@ -154,9 +160,11 @@ extension ChatServiceGenerationPostGen on ChatService {
 
       // ── Scene Guest (Lite NPC) parity guard ──────────────────────────
       // A guest turn must NOT touch the active character's Realism Engine,
-      // Needs simulation, inter-character feelings, time, chips, or the
+      // Needs simulation, inter-character feelings, chips, or the
       // periodic (facts/evolution/summary/RAG) evaluators. The guest carries
-      // no such state. Everything from here through the periodic evals is
+      // no such state. The chat clock is the exception — it is chat-scoped
+      // and ticks after this guard so the next speaker is told an honest
+      // time. Everything from here through the periodic evals is
       // gated so guest presence/turns leave the primary's state untouched.
       // (Lorebook scan + _saveChat above still ran for the guest.)
       if (t.guestSpeaker == null) {
@@ -176,8 +184,9 @@ extension ChatServiceGenerationPostGen on ChatService {
           // route this member's inter-character feelings to the wrong card.
           final speakerId = _getCharacterIdFromCard(t.speakingCharacter);
           if (speakerId.isNotEmpty) {
-            _relationshipService
-                .updateInterCharacterFeelingsFromRecentExchange(speakerId);
+            _relationshipService.updateInterCharacterFeelingsFromRecentExchange(
+              speakerId,
+            );
             // (old checkpoint call removed in v30) // persist the hidden relationship changes
           }
         }
@@ -222,16 +231,12 @@ extension ChatServiceGenerationPostGen on ChatService {
           // live-minus-stamp, so the merge is free), and pockets keeps the
           // ORIGINAL pre-turn stamp so regen/tail-delete rewind to the true
           // base (see _runPocketsPass's asContinuation).
-          // Guest-authored tail: a Continue of a Scene Guest's message must
-          // score NOTHING — the speaker resolution falls back to the host in
-          // 1:1, so the guest's words would mutate the host's pockets, needs
-          // and stance. (Guest TURNS never reach here — guestSpeaker != null
-          // skips this whole block — but continueGeneration re-enters with
-          // guestSpeaker null.) Pre-change the blanket skip masked this.
+          // Present-guest Continue sets guestSpeaker before _GenTurn, so
+          // this whole block is skipped. Departed-guest Continue refuses
+          // before generating. The empty scoredReply is leftover belt if
+          // a guest-authored tail ever reaches here with guestSpeaker null.
           final scoredReply = t.mode == GenerationMode.continue_
-              ? (_isGuestAuthoredMessage(t.streamTarget)
-                    ? ''
-                    : newPart.trim())
+              ? (_isGuestAuthoredMessage(t.streamTarget) ? '' : newPart.trim())
               : finalResponse;
           if (scoredReply.isNotEmpty) {
             // The needs-impact eval and the fused reply-facts fetch run
@@ -315,16 +320,24 @@ extension ChatServiceGenerationPostGen on ChatService {
                 await _evaluatePhysicalStateCall(postureOnly: true);
               }
             }
+            // Glance only. After posture so the judge can read where they
+            // already are. Not fused with posture — that mix is the teleport.
+            await _runWithUserPass(scoredReply);
             // Consumed — the carrier must never outlive the passes that read
             // it, or a stale answer could feed the next turn's bookkeeping.
             _replyFactsRaw = null;
           }
 
+          // Clock decide BEFORE restamp so the snapshot carries the time
+          // the NEXT speaker will be told (bucket brigade). Named-clock
+          // reconcile still runs inside the restamp.
+          await _maybeAdvanceStoryClockAfterReply(t);
+
           // Keep this message's realism_state snapshot TRUTHFUL now that the
           // post-gen checks have run — needs vector AND the NSFW scalars a
           // climax just changed. See the helper for the two bugs this
           // prevents (hygiene snap-back; climax erased by the regen merge).
-          _restampRealismSnapshotPostGen(t.streamTarget);
+          await _restampRealismSnapshotPostGen(t.streamTarget);
 
           if (prePostActiveChar != null) {
             _activeCharacter = prePostActiveChar;
@@ -358,8 +371,7 @@ extension ChatServiceGenerationPostGen on ChatService {
           // the merged whole-turn delta — stale first-half chips would
           // misreport the turn the moment the continuation moved a need.
           if (t.mode == GenerationMode.normal ||
-              (t.mode == GenerationMode.continue_ &&
-                  scoredReply.isNotEmpty)) {
+              (t.mode == GenerationMode.continue_ && scoredReply.isNotEmpty)) {
             _attachNeedsDeltaChipToLastMessage();
           }
 
@@ -430,7 +442,7 @@ extension ChatServiceGenerationPostGen on ChatService {
         }
 
         // Dream prefetch: the clock crossed a night during this turn's
-        // pre-generation advance, so the dream can be generated NOW and
+        // post-reply decide, so the dream can be generated NOW and
         // merely inserted at the next send — see the producer in
         // chat_service_send.dart. The kick itself is synchronous (the park
         // exists before this line returns); only the model call runs in the
@@ -448,6 +460,16 @@ extension ChatServiceGenerationPostGen on ChatService {
           _maybeRunPeriodicEvals();
         }
       } // end Scene Guest parity guard (guestSpeaker == null)
+
+      // Scene Guest: no Realism/Needs, but the chat clock still hands off
+      // to whoever speaks next (host or another guest). The early
+      // `_saveChat` above ran BEFORE this tick — persist the new clock
+      // and the rewind stamp or a reload / guest-regen loses them.
+      if (t.guestSpeaker != null) {
+        await _maybeAdvanceStoryClockAfterReply(t);
+        _maybeKickDreamPrefetch();
+        await _saveChat();
+      }
 
       // (Task completion check now runs pre-generation in sendMessage)
 
@@ -494,9 +516,7 @@ extension ChatServiceGenerationPostGen on ChatService {
 
     // Restore original model if swapped for call mode
     if (t.originalModelName != null && _llmProvider != null) {
-      _llmProvider!.openRouterService.configure(
-        modelName: t.originalModelName,
-      );
+      _llmProvider!.openRouterService.configure(modelName: t.originalModelName);
     }
   }
 }

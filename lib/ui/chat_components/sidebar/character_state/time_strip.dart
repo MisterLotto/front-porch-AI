@@ -69,20 +69,22 @@ class TimeStrip extends StatelessWidget {
               ),
             ),
             if (canNudge)
-              GestureDetector(
-                onTap: () => chat.nudgeTimePeriod(-1),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Icon(
-                    Icons.chevron_left,
-                    size: 16,
-                    color: AppColors.iconSecondary(context),
+              Tooltip(
+                message: 'Back 30 minutes',
+                child: GestureDetector(
+                  onTap: () => chat.nudgeTimePeriod(-1),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Icon(
+                      Icons.chevron_left,
+                      size: 16,
+                      color: AppColors.iconSecondary(context),
+                    ),
                   ),
                 ),
               ),
             GestureDetector(
-              onTap: () =>
-                  StoryCalendarDialog.show(context, chatService: chat),
+              onTap: () => StoryCalendarDialog.show(context, chatService: chat),
               child: Text(
                 '${chat.timeService.displayShortDate} · Day $day',
                 style: TextStyle(
@@ -95,14 +97,17 @@ class TimeStrip extends StatelessWidget {
               ),
             ),
             if (canNudge)
-              GestureDetector(
-                onTap: () => chat.nudgeTimePeriod(1),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Icon(
-                    Icons.chevron_right,
-                    size: 16,
-                    color: AppColors.iconSecondary(context),
+              Tooltip(
+                message: 'Forward 30 minutes',
+                child: GestureDetector(
+                  onTap: () => chat.nudgeTimePeriod(1),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Icon(
+                      Icons.chevron_right,
+                      size: 16,
+                      color: AppColors.iconSecondary(context),
+                    ),
                   ),
                 ),
               ),
@@ -114,8 +119,7 @@ class TimeStrip extends StatelessWidget {
           const SizedBox(height: 4),
           WeatherChip(
             chat: chat,
-            fahrenheit:
-                Provider.of<StorageService>(context).weatherFahrenheit,
+            fahrenheit: Provider.of<StorageService>(context).weatherFahrenheit,
           ),
         ],
         const SizedBox(height: 4),

@@ -19,6 +19,11 @@ import { BelongingsPanel } from './BelongingsPanel';
 import { PromisesPanel } from './PromisesPanel';
 import { StoryCalendarModal } from './StoryCalendarModal';
 import { ContextBudgetModal } from './ContextBudgetModal';
+import { PocketAddRow } from './PocketAddRow';
+import { ExpandableText } from './ExpandableText';
+import { SummaryRecapField } from './SummaryRecapField';
+
+export { TextField } from './SummaryRecapField';
 
 interface ObjectiveTask {
   description: string;
@@ -138,6 +143,8 @@ interface ToolsState {
     dateLong?: string;
     storyClock?: string;
     storyStartDate?: string;
+    presence?: string | null;
+    todaySentence?: string | null;
   };
   objectives: {
     primary: ObjectiveView | null;
@@ -190,86 +197,6 @@ function NumField({
   );
 }
 
-/** Free-text field that commits on blur, keeping the half-typed draft alive
- *  across a refetch. The tools sidebar reloads its WHOLE snapshot on every
- *  chat refresh (a finished journal pass, a message from another device, a
- *  socket reconnect), so binding a textarea straight to that object threw away
- *  everything typed since the last blur. Syncing on the primitive text — the
- *  NumField rule — means an identical refetch is a no-op. */
-export function TextField({
-  value,
-  rows,
-  placeholder,
-  onCommit,
-}: {
-  value: string;
-  rows: number;
-  placeholder?: string;
-  onCommit: (v: string) => void;
-}) {
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
-  return (
-    <textarea
-      className="note-input"
-      rows={rows}
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={() => draft !== value && onCommit(draft)}
-      placeholder={placeholder}
-    />
-  );
-}
-
-/** Hand-add row for Pockets & Wardrobe (desktop dialog parity, 2026-08-13).
- *  "Give" hands the item over in-scene — it lands in her hands and she knows
- *  it came from you. "Add" is the quiet drop (the Easter egg): it lands in
- *  the chosen section and her next reply is surprised to find it. Item text
- *  follows the same "name (state)" convention as everywhere else. */
-function PocketAddRow({
-  onAdd,
-}: {
-  onAdd: (section: string, name: string, gift: boolean) => void;
-}) {
-  const [name, setName] = useState('');
-  const [section, setSection] = useState('carrying');
-  const submit = (gift: boolean) => {
-    const n = name.trim();
-    if (!n) return;
-    // A gift lands in her hands regardless of the selected section — you
-    // hand someone a sweater, you don't dress them in it (desktop rule).
-    onAdd(gift ? 'carrying' : section, n, gift);
-    setName('');
-  };
-  return (
-    <div className="pocket-add">
-      <input
-        value={name}
-        placeholder="brass key (scuffed)"
-        onChange={(e) => setName(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && submit(false)}
-      />
-      <select value={section} onChange={(e) => setSection(e.target.value)}>
-        <option value="worn">Wearing</option>
-        <option value="carrying">Carrying</option>
-        <option value="set_aside">Set aside</option>
-      </select>
-      <button
-        title="Slip it in quietly — she'll be surprised to find it"
-        onClick={() => submit(false)}
-      >
-        Add
-      </button>
-      <button
-        title="Hand it over in-scene — she'll know it came from you"
-        onClick={() => submit(true)}
-      >
-        Give
-      </button>
-    </div>
-  );
-}
-
 /** Scene-time periods + their single-letter dot labels (mirror the desktop
  *  realism_section _timeDotLabel exactly: D / M / LM / A / E / N). */
 const TIME_DOTS: [string, string][] = [
@@ -298,6 +225,7 @@ export function ChatTools({
   const [goal, setGoal] = useState('');
   const [showCalendar, setShowCalendar] = useState(false);
   const [showBudget, setShowBudget] = useState(false);
+  const [editingRecap, setEditingRecap] = useState(false);
 
   // Scope every tools call to the focused cast participant so objectives/arousal
   // (and the snapshot returned by mutations) follow the focus.
@@ -313,6 +241,7 @@ export function ChatTools({
 
   useEffect(() => {
     void load();
+    setEditingRecap(false);
   }, [load, reloadKey]);
 
   // While the host is downloading the embedding model, poll tools state so the
@@ -340,10 +269,11 @@ export function ChatTools({
   const pocketRemove = (section: string, index: number) =>
     apply(api.post<ToolsState>(`/api/chat/tools/pocket-remove${q}`, { section, index }));
   // The other half of the eraser: hand-add an item (desktop dialog parity,
-  // 2026-08-13). gift=true is handed over in-scene (she knows it came from
-  // you); gift=false is the Easter egg (she's surprised to find it).
-  const pocketAdd = (section: string, name: string, gift: boolean) =>
-    apply(api.post<ToolsState>(`/api/chat/tools/pocket-add${q}`, { section, name, gift }));
+  // 2026-08-13). gift=true is handed over in-scene (they know it came from
+  // you); correction=true is a wardrobe record fix (worn, no intro);
+  // otherwise the Easter egg (they're surprised to find it).
+  const pocketAdd = (section: string, name: string, gift: boolean, correction = false) =>
+    apply(api.post<ToolsState>(`/api/chat/tools/pocket-add${q}`, { section, name, gift, correction }));
   // Same endpoint, string value — the one tri-state control (see the route's
   // oneShotMode case). Falls back to the legacy bool on an older facade.
   const oneShotMode = t?.realismOneShotMode ?? (t?.realismOneShotEval ? 'on' : 'auto');
@@ -489,10 +419,10 @@ export function ChatTools({
                   <div className="rag-receipt">
                     <p className="muted small">{summary}</p>
                     {status === 'ok' && r?.injected.map((line, i) => (
-                      <p key={i} className="muted small rag-receipt-line">
+                      <div key={i} className="rag-receipt-line">
                         <strong>{line.other_chat ? 'another chat' : line.day != null ? `Day ${line.day}` : ''}</strong>{' '}
-                        {line.preview}
-                      </p>
+                        <ExpandableText text={line.preview} lines={4} className="muted small" />
+                      </div>
                     ))}
                   </div>
                 );
@@ -553,7 +483,7 @@ export function ChatTools({
         </div>
       </details>
 
-      {/* What she walked in carrying, before you said anything. Reads
+      {/* What they walked in carrying, before you said anything. Reads
           "Came in …" so it can never be mistaken for a reaction to something
           the user did — which is the entire point of the feature. */}
       {!!t.standingMood && (
@@ -591,7 +521,7 @@ export function ChatTools({
         if (!t.pockets) return null;
         const worn = t.pockets.worn ?? [];
         const carrying = t.pockets.carrying ?? [];
-        // Parked in the scene, still theirs — greyed so "not on her" reads
+        // Parked in the scene, still theirs — greyed so "not on them" reads
         // at a glance (the desktop sidebar's Set aside group, same rules;
         // the server already filtered out clothing that expired overnight).
         const setAside = t.pockets.set_aside ?? [];
@@ -601,25 +531,25 @@ export function ChatTools({
           <details className="tool-section" open>
             <summary>Pockets &amp; Wardrobe</summary>
             <div className="tool-body">
-              {worn.length > 0 && (
-                <>
-                  <div className="muted small side-quest-label">Wearing</div>
-                  <div className="pocket-items">
-                    {worn.map((i, n) => (
-                      <span className="pocket-item" key={`w${n}`}>
-                        {label(i)}
-                        <button
-                          className="pocket-x"
-                          title="Remove from the record"
-                          onClick={() => pocketRemove('worn', n)}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                </>
-              )}
+              <div className="muted small side-quest-label">Wearing</div>
+              <div className="pocket-items">
+                {worn.length === 0 ? (
+                  <span className="pocket-empty">Put clothes on</span>
+                ) : (
+                  worn.map((i, n) => (
+                    <span className="pocket-item" key={`w${n}`}>
+                      {label(i)}
+                      <button
+                        className="pocket-x"
+                        title="Remove from the record"
+                        onClick={() => pocketRemove('worn', n)}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))
+                )}
+              </div>
               {carrying.length > 0 && (
                 <>
                   <div className="muted small side-quest-label">Carrying</div>
@@ -829,13 +759,22 @@ export function ChatTools({
       <details className="tool-section">
         <summary>Where we are</summary>
         <div className="tool-body">
-          <TextField
+          <SummaryRecapField
             value={t.summary.text}
-            rows={4}
-            placeholder="The character's recap of where things stand…"
+            editing={editingRecap}
             onCommit={(text) => apply(api.post<ToolsState>(`/api/chat/tools/summary${q}`, { text }))}
+            onStartEditing={() => setEditingRecap(true)}
+            onStopEditing={() => setEditingRecap(false)}
           />
           <div className="tool-row">
+            {t.summary.text.trim() !== '' && (
+              <button
+                type="button"
+                onClick={() => setEditingRecap((v) => !v)}
+              >
+                {editingRecap ? 'Done' : 'Edit'}
+              </button>
+            )}
             <button
               className="primary"
               disabled={t.summary.isGenerating}
@@ -858,6 +797,22 @@ export function ChatTools({
               {t.time.clock ? ` · ${t.time.clock}` : ''}
             </span>
           </div>
+          {t.time.presence && (
+            <div className="stat-line">
+              <span>{t.time.presence}</span>
+            </div>
+          )}
+          {t.time.todaySentence && (
+            <div className="stat-line">
+              <span className="muted" style={{ fontStyle: 'italic' }}>{t.time.todaySentence}</span>
+              <button
+                className="link-btn"
+                onClick={() => apply(api.post<ToolsState>(`/api/chat/tools/time${q}`, { abandonToday: true }))}
+              >
+                Clear today
+              </button>
+            </div>
+          )}
           {t.time.weather && (
             <div className="stat-line">
               <span
@@ -903,12 +858,12 @@ export function ChatTools({
           <div className="tool-row">
             <button
               disabled={!t.realismEnabled}
-              title={t.realismEnabled ? undefined : 'Realism Mode is off, so the story clock is paused'}
+              title={t.realismEnabled ? 'Back 30 minutes' : 'Realism Mode is off, so the story clock is paused'}
               onClick={() => apply(api.post<ToolsState>(`/api/chat/tools/time${q}`, { delta: -1 }))}
             >◀ Earlier</button>
             <button
               disabled={!t.realismEnabled}
-              title={t.realismEnabled ? undefined : 'Realism Mode is off, so the story clock is paused'}
+              title={t.realismEnabled ? 'Forward 30 minutes' : 'Realism Mode is off, so the story clock is paused'}
               onClick={() => apply(api.post<ToolsState>(`/api/chat/tools/time${q}`, { delta: 1 }))}
             >Later ▶</button>
           </div>

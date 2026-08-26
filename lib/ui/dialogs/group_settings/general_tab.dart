@@ -1,11 +1,11 @@
 // Copyright (C) 2026 Front Porch AI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-
 import 'package:flutter/material.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/models/models.dart';
+import 'package:front_porch_ai/ui/widgets/group_alternate_greetings_editor.dart';
 import 'package:front_porch_ai/ui/widgets/widgets.dart';
 import 'package:front_porch_ai/ui/dialogs/group_settings/group_settings_support.dart';
 
@@ -28,6 +28,8 @@ class GroupGeneralTabState extends State<GroupGeneralTab>
   late final StyledTextController _nameController;
   late final StyledTextController _scenarioController;
   late final StyledTextController _firstMessageController;
+  List<String> _altGreetings = [];
+  List<GreetingRealismSeed?> _altGreetingSeeds = [];
 
   TurnOrder _turnOrder = TurnOrder.roundRobin;
   bool _autoAdvance = false;
@@ -57,13 +59,24 @@ class GroupGeneralTabState extends State<GroupGeneralTab>
         preset: StyledTextPreset.prose,
         text: g.firstMessage,
       );
+      _altGreetings = List.from(g.alternateGreetings);
+      _altGreetingSeeds = List.from(g.greetingSeeds);
       _turnOrder = g.turnOrder;
       _autoAdvance = g.autoAdvance;
       _directorModeDefault = g.directorMode;
     } else {
-      _nameController = StyledTextController(preset: StyledTextPreset.prose, text: '');
-      _scenarioController = StyledTextController(preset: StyledTextPreset.prose, text: '');
-      _firstMessageController = StyledTextController(preset: StyledTextPreset.prose, text: '');
+      _nameController = StyledTextController(
+        preset: StyledTextPreset.prose,
+        text: '',
+      );
+      _scenarioController = StyledTextController(
+        preset: StyledTextPreset.prose,
+        text: '',
+      );
+      _firstMessageController = StyledTextController(
+        preset: StyledTextPreset.prose,
+        text: '',
+      );
       _turnOrder = TurnOrder.roundRobin;
       _autoAdvance = false;
       _directorModeDefault = false;
@@ -120,6 +133,9 @@ class GroupGeneralTabState extends State<GroupGeneralTab>
     g.name = _nameController.text;
     g.scenario = _scenarioController.text;
     g.firstMessage = _firstMessageController.text;
+    final paired = compactGreetingPairs(_altGreetings, _altGreetingSeeds);
+    g.alternateGreetings = paired.greetings;
+    g.greetingSeeds = paired.seeds;
     g.turnOrder = _turnOrder;
     g.autoAdvance = _autoAdvance;
     g.directorMode = _directorModeDefault;
@@ -354,6 +370,19 @@ class GroupGeneralTabState extends State<GroupGeneralTab>
                   ),
                   onChanged: (_) => _markDirty(),
                 ),
+                const SizedBox(height: 12),
+                GroupAlternateGreetingsEditor(
+                  greetings: _altGreetings,
+                  seeds: _altGreetingSeeds,
+                  showNeeds: true,
+                  onChanged: (g, s) {
+                    setState(() {
+                      _altGreetings = g;
+                      _altGreetingSeeds = s;
+                      _hasUnsavedChanges = true;
+                    });
+                  },
+                ),
                 const SizedBox(height: 20),
 
                 // ── Turn Management ────────────────────────────────────────
@@ -457,5 +486,4 @@ class GroupGeneralTabState extends State<GroupGeneralTab>
       ],
     );
   }
-
 }

@@ -27,6 +27,8 @@ export 'bubbles/external_image_widget.dart';
 export 'sidebar/porch_accordion.dart';
 export 'sidebar/sidebar_body.dart';
 export 'sidebar/sidebar_tokens.dart';
+export 'sidebar/expandable_sidebar_text.dart';
+export 'chat_composer_hint.dart';
 export 'sidebar/emoji_burst.dart';
 export 'sidebar/journal_memory/summary_section.dart';
 export 'sidebar/story_tools/author_note_section.dart';

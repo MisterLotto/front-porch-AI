@@ -71,6 +71,12 @@ List<PopupMenuItem<String>> characterCardMenuItems(
     ),
     homeCardMenuItem(
       context,
+      value: 'chat_history',
+      icon: Icons.history,
+      label: 'Chat History',
+    ),
+    homeCardMenuItem(
+      context,
       value: 'edit',
       icon: Icons.edit,
       label: 'Edit Character',
@@ -117,6 +123,77 @@ List<PopupMenuItem<String>> characterCardMenuItems(
       value: 'move_folder',
       icon: Icons.drive_file_move,
       label: 'Move to Folder…',
+      iconColor: AppColors.porchAmberOf(context),
+    ),
+    if (inFolder)
+      homeCardMenuItem(
+        context,
+        value: 'remove_folder',
+        icon: Icons.folder_off,
+        label: 'Remove from Folder',
+        iconColor: AppColors.porchAmberOf(context),
+        labelColor: AppColors.porchAmberOf(context),
+      ),
+    homeCardMenuItem(
+      context,
+      value: 'delete',
+      icon: Icons.delete,
+      label: 'Delete',
+      iconColor: AppColors.negativeAccentOf(context),
+      labelColor: AppColors.negativeAccentOf(context),
+    ),
+  ];
+}
+
+/// Group card right-click menu (same ordering rule as character cards).
+List<PopupMenuItem<String>> groupCardMenuItems(
+  BuildContext context, {
+  required bool inFolder,
+}) {
+  return [
+    homeCardMenuItem(
+      context,
+      value: 'new_chat',
+      icon: Icons.add_comment_outlined,
+      label: 'Start New Chat',
+      iconColor: AppColors.porchAmberOf(context),
+    ),
+    homeCardMenuItem(
+      context,
+      value: 'chat_history',
+      icon: Icons.history,
+      label: 'Chat History',
+    ),
+    homeCardMenuItem(
+      context,
+      value: 'edit',
+      icon: Icons.edit,
+      label: 'Edit Group',
+    ),
+    homeCardMenuItem(
+      context,
+      value: 'duplicate',
+      icon: Icons.copy,
+      label: 'Duplicate Group',
+    ),
+    homeCardMenuItem(
+      context,
+      value: 'export',
+      icon: Icons.upload,
+      label: 'Export PNG',
+    ),
+    homeCardMenuItem(
+      context,
+      value: 'extract',
+      icon: Icons.call_split,
+      label: 'Extract Characters',
+      iconColor: AppColors.journalAccentOf(context),
+    ),
+    homeCardMenuItem(
+      context,
+      value: 'move_folder',
+      icon: Icons.drive_file_move,
+      label: 'Move to Folder',
       iconColor: AppColors.porchAmberOf(context),
     ),
     if (inFolder)

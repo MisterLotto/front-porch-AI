@@ -149,11 +149,41 @@ const _kEvalDispatchStagger = Duration(milliseconds: 50);
 /// contract for the two other post-generation writes.
 const String kSpatialStancePreTurn = 'spatial_stance_pre_turn';
 
+/// Pre-turn glance bit. `_runWithUserPass` is post-gen like posture, so
+/// restamp overwrites `realism_state.withUser` with the reply's verdict.
+/// Regen/swipe must put the turn's START back (audit P1.7).
+const String kWithUserPreTurn = 'with_user_pre_turn';
+
 // Internal flag to signal a cancellation request for realism evaluation.
 // This is a file-scope flag to avoid needing to thread state through the
 // entire class in this patch, and is reset once the interruption is surfaced
 // to the UI.
 bool _realismEvalCancelled = false;
+
+/// Bumped by [_invalidateGreetingEval] (selectGreeting, startNewChat,
+/// setActiveCharacter, setActiveGroup, loadSession, _loadLastSession,
+/// importChatPackage, forkFromMessage) so a
+/// late unawaited [_runPostGreetingEval] cannot stomp a later opening.
+int _greetingEvalGen = 0;
+
+const Object _kGreetingEvalToken = #_greetingEvalToken;
+const Object _kGreetingEvalIndex = #_greetingEvalIndex;
+
+/// Stale when THIS eval's captured token is no longer the live gen.
+/// [_invalidateGreetingEval] always bumps [_greetingEvalGen], so a later
+/// opening stale-gates the earlier apply without a shared nullable slot.
+/// A missing Zone token is not a greeting apply (normal turn evals).
+bool _isStaleGreetingEval() {
+  final token = Zone.current[_kGreetingEvalToken] as int?;
+  if (token == null) return false;
+  return token != _greetingEvalGen;
+}
+
+/// Set when [_runPostGreetingEval] passes its guards (not skipped solely
+/// because [_activeCharacter] is null). Tests prove group unauthored alts
+/// reach the eval path.
+@visibleForTesting
+bool testPostGreetingEvalEntered = false;
 
 // GBNF grammar support for Realism Engine evals (incl. Needs simulation) removed
 // in the 0.9.8 clean port. All JSON outputs now rely on regex extraction + stop

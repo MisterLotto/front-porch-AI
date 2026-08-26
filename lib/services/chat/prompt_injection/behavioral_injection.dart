@@ -16,6 +16,7 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
+import 'package:front_porch_ai/services/chat/presence_derive.dart';
 import 'package:front_porch_ai/services/chat/relationship_service.dart';
 
 /// Fixation + spatial-stance fragments for the words-only state block
@@ -40,10 +41,24 @@ import 'package:front_porch_ai/services/chat/relationship_service.dart';
 class BehavioralInjection {
   final RelationshipService relationshipService;
   final bool Function() getRealismEnabled;
+  final String Function()? getOccupation;
+  final String Function()? getHours;
+  final String Function()? getOccupationBrief;
+  final List<int>? Function()? getWorkDays;
+  final int Function()? getClockMinutes;
+  final int Function()? getWeekday;
+  final bool Function()? getIsGroup;
 
   BehavioralInjection({
     required this.relationshipService,
     required this.getRealismEnabled,
+    this.getOccupation,
+    this.getHours,
+    this.getOccupationBrief,
+    this.getWorkDays,
+    this.getClockMinutes,
+    this.getWeekday,
+    this.getIsGroup,
   });
 
   /// The background thought — MENTAL state, and it says so itself: "colors
@@ -67,9 +82,45 @@ class BehavioralInjection {
   /// happens, not after it has already written the scene.
   String buildPositionInjection() {
     if (!getRealismEnabled()) return '';
-    if (relationshipService.spatialStance.isEmpty) return '';
-    return 'Position: ${relationshipService.spatialStance} — ground actions in '
+    final stance = relationshipService.spatialStance.trim();
+    final group = getIsGroup?.call() ?? false;
+    final occ = getOccupation?.call() ?? '';
+    final hours = getHours?.call() ?? '';
+    final brief = getOccupationBrief?.call() ?? '';
+    final where = derivePresence(
+      occupation: occ,
+      hours: hours,
+      clockMinutes: getClockMinutes?.call() ?? 0,
+      weekday: getWeekday?.call() ?? DateTime.tuesday,
+      workDays: getWorkDays?.call(),
+      inScene: inSceneForPresence(
+        stance: stance,
+        withUser: relationshipService.withUser,
+      ),
+    );
+    if (where == PresenceWhere.atWork) {
+      return atWorkPromptLine(occupation: occ, occupationBrief: brief);
+    }
+    if (!group && where == PresenceWhere.away) {
+      final here = stance.isEmpty ? '' : ' ($stance)';
+      return 'Away from {{user}}$here. Write from there.';
+    }
+    final identity = where == PresenceWhere.withYou
+        ? offShiftWorkIdentityLine(
+            occupation: occ,
+            occupationBrief: brief,
+            hours: hours,
+            weekday: getWeekday?.call() ?? DateTime.tuesday,
+            workDays: getWorkDays?.call(),
+            clockMinutes: getClockMinutes?.call() ?? 0,
+          )
+        : '';
+    if (stance.isEmpty) return identity;
+    final position =
+        'Position: $stance — ground actions in '
         'this, but moving and changing position is fine as the scene demands.';
+    if (identity.isEmpty) return position;
+    return '$identity\n$position';
   }
 
   /// Both mechanics as one fragment — the original shape.

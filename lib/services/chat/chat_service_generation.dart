@@ -41,7 +41,11 @@ const _kBackendDownNotice =
 /// `LateInitializationError` — deliberate, not silent corruption, because the
 /// skeleton's phase-call order is fixed.
 class _GenTurn {
-  _GenTurn({required this.mode, required this.guestSpeaker, required this.epoch});
+  _GenTurn({
+    required this.mode,
+    required this.guestSpeaker,
+    required this.epoch,
+  });
 
   final GenerationMode mode;
   final CharacterCard? guestSpeaker;
@@ -76,6 +80,16 @@ class _GenTurn {
   String summaryBlock = '';
   String journalBlock = '';
   Set<int> expandedJournalPositions = const {};
+
+  /// Cued RAG / journal-cold query for this turn (emotion + fixation +
+  /// top hot journal line + last words). Empty until the blocks phase.
+  String ragQuery = '';
+
+  /// Top hot journal line baked into [ragQuery] (re-composed after Continue pops).
+  String ragHotJournalLine = '';
+
+  /// Journal card contents used to drop RAG windows the diary already covers.
+  List<String> journalCoverLines = const [];
 
   // ── plan phase → rag/request phases ──
   String history = '';
@@ -157,7 +171,7 @@ extension ChatServiceGeneration on ChatService {
   Future<void> _generateResponse(
     GenerationMode mode, {
     CharacterCard? guestSpeaker,
-    bool skipClockAdvance = false,
+    CharacterCard? forceSpeaker,
   }) async {
     if (await _abortIfBackendDown()) {
       // No turn will run — terminate BOTH live streams. The sentence stream
@@ -168,6 +182,31 @@ extension ChatServiceGeneration on ChatService {
       _tokenBroadcast.add('__ERROR__');
       _sentenceBroadcast.add('__DONE__');
       return;
+    }
+    // Continue is regen's sibling for WHO is speaking. Infer guest / group
+    // member from the bubble; refuse rather than guess.
+    if (mode == GenerationMode.continue_ && _messages.isNotEmpty) {
+      final last = _messages.last;
+      guestSpeaker ??= _sceneGuestForMessage(last);
+      if (guestSpeaker == null && _isGuestAuthoredMessage(last)) {
+        _setGuestStatus(
+          'Can’t continue "${last.sender}" — they have left the scene.',
+          isError: true,
+        );
+        notifyListeners();
+        return;
+      }
+      if (guestSpeaker == null && _activeGroup != null) {
+        forceSpeaker ??= _resolveGroupSpeakerForMessage(last);
+        if (forceSpeaker == null) {
+          _setGuestStatus(
+            'Can’t continue "${last.sender}" — who said it is ambiguous.',
+            isError: true,
+          );
+          notifyListeners();
+          return;
+        }
+      }
     }
     // regenerateLastMessage holds the settling flag; the finally restores it.
     final callerHeldSettling = _isPostGenerating;
@@ -197,19 +236,42 @@ extension ChatServiceGeneration on ChatService {
         // (see the guestSpeaker == null guards in the post-gen block below).
         speakingCharacter = guestSpeaker;
       } else if (_activeGroup != null) {
-        speakingCharacter =
-            (mode == GenerationMode.continue_ &&
-                _messages.isNotEmpty &&
-                !_messages.last.isUser)
-            ? _groupCharacters.firstWhere(
-                (c) => c.name == _messages.last.sender,
-                orElse: () => _pickNextGroupCharacter(),
-              )
-            : _pickNextGroupCharacter();
+        // Continue resolved forceSpeaker above (id-first, refuse on
+        // duplicates). Regen already passes it. Fresh turns pick present.
+        speakingCharacter = forceSpeaker ?? _pickPresentGroupSpeaker();
       } else {
         speakingCharacter = _activeCharacter!;
       }
       t.speakingCharacter = speakingCharacter;
+
+      if (guestSpeaker == null &&
+          _activeGroup != null &&
+          mode != GenerationMode.continue_ &&
+          forceSpeaker == null &&
+          _groupSpeakerSkips(speakingCharacter)) {
+        // Whole roster (or a forced @name) is Away / At work. Do not eat
+        // the send: write a glance line. No reply to score, so the clock
+        // takes the failure-drift step (bucket brigade still moves) and
+        // Today is not rewritten.
+        if (_clockRunning) {
+          await _timeService.applyFailureDrift();
+        }
+        _messages.add(
+          ChatMessage(
+            text: _presenceSkipBanner(speakingCharacter),
+            sender: 'System',
+            isUser: false,
+          ),
+        );
+        debugPrint(
+          '[Presence] skip-turn ${speakingCharacter.name} — banner, no reply',
+        );
+        _isGenerating = false;
+        _generationPhase = GenerationPhase.idle;
+        await _saveChat();
+        notifyListeners();
+        return;
+      }
 
       // Pin the realism speaker for the whole turn so prompt injection + decay
       // key on the character actually generating — not nextCharacter (the
@@ -248,10 +310,7 @@ extension ChatServiceGeneration on ChatService {
       } else if (guestSpeaker == null &&
           _activeGroup != null &&
           _realismActiveThisMode) {
-        await _evaluateRealismForUpcomingSpeaker(
-          speakingCharacter,
-          skipClockAdvance: skipClockAdvance,
-        );
+        await _evaluateRealismForUpcomingSpeaker(speakingCharacter);
         // Cancel-aborts-generation, group edition: the dance leaves the
         // cancel flag set for its caller (1:1's sendMessage has the twin
         // check). Consume it and abort the turn before any prompt is built.
@@ -276,7 +335,9 @@ extension ChatServiceGeneration on ChatService {
       await _buildGenerationPlan(t);
       await _retrieveGenerationMemories(t);
       await _dispatchGeneration(t);
-      if (await _consumeGenerationStream(t)) return; // user cancel: turn halted (H2)
+      if (await _consumeGenerationStream(t)) {
+        return; // user cancel: turn halted (H2)
+      }
       await _finalizeGenerationTurn(t);
     } catch (e) {
       final wasCancelled = _cancelRequested;
@@ -357,5 +418,39 @@ extension ChatServiceGeneration on ChatService {
       // it raised across its swipe-merge); a latched flag would wedge input.
       _isPostGenerating = callerHeldSettling;
     }
+  }
+
+  /// Post-reply clock decide. Announced time was already in the prompt;
+  /// this sets what the NEXT speaker is told. Continue is the same beat.
+  /// Scene Guests carry no Realism/Needs but the clock is chat-scoped, so
+  /// they tick time-only (no Today rewrite).
+  Future<void> _maybeAdvanceStoryClockAfterReply(_GenTurn t) async {
+    if (t.mode == GenerationMode.continue_) return;
+    if (!_clockRunning) return;
+    final before = _timeService.clock;
+    final msg = t.streamTarget;
+    if (!msg.isUser) {
+      // Stamp the LIVE swipe map. Writing `metadata` is a no-op for
+      // regen when swipeMetadata[i] is already set — activeMetadata
+      // returns that slot, not the legacy field.
+      final existing = msg.activeMetadata;
+      if (existing != null) {
+        existing.putIfAbsent(
+          'story_clock_before',
+          () => _timeService.storyClockIso,
+        );
+      } else {
+        msg.activeMetadata = {'story_clock_before': _timeService.storyClockIso};
+      }
+    }
+    await _realismEvals.evaluatePhysicalStateCall(
+      timeOnly: true,
+      skipTodayEval: t.guestSpeaker != null,
+    );
+    if (t.guestSpeaker != null) {
+      final named = clockNamedInReply(msg.text, _timeService.clock);
+      if (named != null) await _timeService.applyReconciledClock(named);
+    }
+    await _maybeMintEpisodeCrumbs(before, _timeService.clock);
   }
 }

@@ -10,6 +10,8 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
+import { AltGreetingsEditor } from './AltGreetingsEditor';
+import { type GreetingSeed, compactGreetingPairs } from './realism/realismTypes';
 
 export interface GroupBlock {
   name: string;
@@ -18,6 +20,8 @@ export interface GroupBlock {
   systemPrompt: string;
   scenario: string;
   firstMessage: string;
+  alternateGreetings?: string[];
+  greetingSeeds?: (GreetingSeed | null)[];
   members: { id: string; name: string; prompt: string }[];
 }
 
@@ -35,6 +39,8 @@ export function GroupSettings({
   const [systemPrompt, setSystemPrompt] = useState(group.systemPrompt);
   const [scenario, setScenario] = useState(group.scenario);
   const [firstMessage, setFirstMessage] = useState(group.firstMessage);
+  const [alts, setAlts] = useState<string[]>(group.alternateGreetings ?? []);
+  const [seeds, setSeeds] = useState<(GreetingSeed | null)[]>(group.greetingSeeds ?? []);
   const [prompts, setPrompts] = useState<Record<string, string>>(
     Object.fromEntries(group.members.map((m) => [m.id, m.prompt])),
   );
@@ -42,6 +48,8 @@ export function GroupSettings({
     setSystemPrompt(group.systemPrompt);
     setScenario(group.scenario);
     setFirstMessage(group.firstMessage);
+    setAlts(group.alternateGreetings ?? []);
+    setSeeds(group.greetingSeeds ?? []);
     setPrompts(Object.fromEntries(group.members.map((m) => [m.id, m.prompt])));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupId]);
@@ -88,6 +96,21 @@ export function GroupSettings({
           Group first message
           <textarea rows={2} value={firstMessage} onChange={(e) => setFirstMessage(e.target.value)} onBlur={() => save({ firstMessage })} />
         </label>
+        <AltGreetingsEditor
+          greetings={alts}
+          onChange={(g) => {
+            setAlts(g);
+            const paired = compactGreetingPairs(g, seeds);
+            save({ alternateGreetings: paired.greetings, greetingSeeds: paired.seeds });
+          }}
+          seeds={seeds}
+          showNeeds
+          onSeedsChange={(s) => {
+            setSeeds(s);
+            const paired = compactGreetingPairs(alts, s);
+            save({ alternateGreetings: paired.greetings, greetingSeeds: paired.seeds });
+          }}
+        />
         <h4 className="section-label">Per-member prompt overrides</h4>
         {group.members.map((m) => (
           <label key={m.id}>

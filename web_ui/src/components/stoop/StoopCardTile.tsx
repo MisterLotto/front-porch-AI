@@ -57,7 +57,11 @@ export function StoopCardTile({ card }: { card: StoopCard }) {
     <div className="lib-card stoop-tile">
       <button
         className="lib-open"
-        onClick={() => navigate(`/stoop/card/${encodeURIComponent(card.id)}`)}
+        onClick={() =>
+          navigate(
+            `/stoop/card/${encodeURIComponent(card.id)}?type=${encodeURIComponent(card.type)}`,
+          )
+        }
       >
         <StoopCardArt assetId={card.primaryAssetId} name={card.name} />
         <div className="lib-info">

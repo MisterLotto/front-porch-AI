@@ -19,6 +19,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/services/chat/chat.dart';
@@ -84,7 +85,10 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
   @override
   Widget build(BuildContext context) {
     final chat = widget.chatService;
-    final isRealism = chat.isGroupRealismActive;
+    // Public getters — isGroupRealismActive reads a library-private field
+    // and cannot be faked. Same formula.
+    final isRealism =
+        chat.realismEnabled && chat.isGroupMode && !chat.observerMode;
 
     // Resolve per-character state (only meaningful when realism is on)
     final emotion = isRealism
@@ -140,7 +144,7 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
 
     // Lust visibility follows the stable per-member group flag (the live
     // nsfwService scalar is per-speaker-volatile in groups).
-    final lustOn = chat.isGroupNsfwEnabled;
+    final lustOn = isRealism && chat.isGroupNsfwEnabled;
     // Arousal has its own ±100 ladder (level ÷ 10) and its own vocabulary, and
     // both must be read for THIS member. The tier came from the bond ladder,
     // and the name came from nsfwService.arousalTierName — the LIVE SPEAKER's
@@ -153,8 +157,45 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
         ? AppColors.frostAccentOf(context)
         : AppColors.lustAccentOf(context);
 
+    final ext = widget.character.frontPorchExtensions;
+    CharacterRepository? repo;
+    try {
+      repo = Provider.of<CharacterRepository>(context, listen: false);
+    } on ProviderNotFoundException {
+      repo = null;
+    }
+    final library = MemberOriginResolver.resolve(
+      stampedOriginStableId: null,
+      memberName: widget.character.name,
+      libraryCharacters: repo?.characters ?? const [],
+    );
+    final work = workFieldsForGroupMember(
+      copyOccupation: ext?.occupation ?? '',
+      copyHours: ext?.hours ?? '',
+      copyOccupationBrief: ext?.occupationBrief ?? '',
+      copyWorkDays: ext?.workDays,
+      libraryOccupation: library?.frontPorchExtensions?.occupation,
+      libraryHours: library?.frontPorchExtensions?.hours,
+      libraryOccupationBrief: library?.frontPorchExtensions?.occupationBrief,
+      libraryWorkDays: library?.frontPorchExtensions?.workDays,
+    );
+    final presence = PresenceWord(
+      where: derivePresence(
+        occupation: work.occupation,
+        hours: work.hours,
+        clockMinutes: chat.timeService.clockMinutes,
+        weekday: chat.timeService.clock.weekday,
+        workDays: work.workDays,
+        inScene: inSceneForPresence(
+          stance: chat.spatialStanceForGroupCharacter(widget.character),
+          withUser: chat.withUserForGroupCharacter(widget.character),
+        ),
+      ),
+      padTop: false,
+    );
     final isDirector = chat.observerMode;
-    final opacity = isDirector ? 0.38 : 1.0;
+    // Away / At work uses the signed 0.45. Director 0.38 is only for With you.
+    final opacity = presence.dimCard ? 0.45 : (isDirector ? 0.38 : 1.0);
 
     final ringColor = (emotion != null && isRealism)
         ? emotionRingColor(emotion)
@@ -281,6 +322,8 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      presence,
+                      const SizedBox(width: 6),
                       if (widget.isNextSpeaker)
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -501,10 +544,11 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                                 section: section,
                                 index: index,
                               ),
-                          onAdd: () async {
+                          onAdd: ({section}) async {
                             final add = await showPocketItemDialog(
                               context,
                               characterName: widget.character.name,
+                              initialSection: section ?? PocketSection.carrying,
                             );
                             if (add == null) return;
                             await chat.addPocketItem(
@@ -512,6 +556,7 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                               section: add.section,
                               name: add.name,
                               gift: add.gift,
+                              correction: add.correction,
                             );
                           },
                         ),
@@ -524,7 +569,11 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        const Icon(Icons.flag, size: 13, color: AppColors.taskAccent),
+                        const Icon(
+                          Icons.flag,
+                          size: 13,
+                          color: AppColors.taskAccent,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           '${memberObjectives.where((o) => o.active).length} active objectives',
@@ -586,11 +635,26 @@ class _GroupMemberCardState extends State<GroupMemberCard> {
                       spacing: 8,
                       runSpacing: 2,
                       children: [
-                        MiniTierChip(label: 'B', value: affection, color: bondColor),
-                        MiniTierChip(label: 'T', value: trust, color: trustColor),
-                        if (lustOn) MiniTierChip(label: 'L', value: arousal, color: arousalColor),
+                        MiniTierChip(
+                          label: 'B',
+                          value: affection,
+                          color: bondColor,
+                        ),
+                        MiniTierChip(
+                          label: 'T',
+                          value: trust,
+                          color: trustColor,
+                        ),
+                        if (lustOn)
+                          MiniTierChip(
+                            label: 'L',
+                            value: arousal,
+                            color: arousalColor,
+                          ),
                         if (topNeeds.isNotEmpty)
-                          ...topNeeds.map((n) => MiniNeedChip(name: n.$1, value: n.$2)),
+                          ...topNeeds.map(
+                            (n) => MiniNeedChip(name: n.$1, value: n.$2),
+                          ),
                       ],
                     ),
                   ],

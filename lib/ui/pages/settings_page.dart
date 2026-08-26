@@ -133,6 +133,7 @@ class _SettingsPageState extends State<SettingsPage> {
   // Windows). Resolved once per model path instead.
   bool _launchModelExistsCache = false;
   String? _launchModelExistsForPath;
+  final _kcppsModelExists = PathExistsMemo();
 
   // Local Preset state
   List<File> _localPresets = [];
@@ -376,10 +377,12 @@ class _SettingsPageState extends State<SettingsPage> {
 
     // Auto-select first model if none selected and models exist. Skip when a
     // kcpps preset with a valid model is active (use "Managed by kcpps").
+    final kcppsModelExists = _kcppsModelExists.of(
+      storageService.kcppsModelPath,
+    );
     if (_selectedModelPath == null &&
         modelManager.models.isNotEmpty &&
-        !(storageService.kcppsHasModel &&
-            storageService.kcppsModelFileExists)) {
+        !(storageService.kcppsHasModel && kcppsModelExists)) {
       _selectedModelPath = modelManager.models.first.path;
     }
     // Warm architecture info for the (possibly just auto-selected) model so
@@ -441,7 +444,7 @@ class _SettingsPageState extends State<SettingsPage> {
         }
         if (val != null &&
             storageService.kcppsHasModel &&
-            storageService.kcppsModelFileExists) {
+            _kcppsModelExists.of(storageService.kcppsModelPath)) {
           setState(() {
             _selectedModelPath = null;
           });
@@ -459,7 +462,7 @@ class _SettingsPageState extends State<SettingsPage> {
         }
         _scanLocalPresets();
         if (storageService.kcppsHasModel &&
-            storageService.kcppsModelFileExists) {
+            _kcppsModelExists.of(storageService.kcppsModelPath)) {
           setState(() {
             _selectedModelPath = null;
           });
@@ -473,6 +476,7 @@ class _SettingsPageState extends State<SettingsPage> {
         setState(() {});
       },
       onToggleBackend: () => _toggleManagedBackend(context),
+      kcppsModelExists: kcppsModelExists,
     );
   }
 

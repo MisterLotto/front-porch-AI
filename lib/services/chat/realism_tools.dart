@@ -53,6 +53,7 @@ const String kCastDetectTool = 'report_detected_character';
 const String kClimaxToolName = 'report_climax';
 const String kPocketsToolName = 'report_inventory';
 const String kReplyFactsToolName = 'report_reply_facts';
+const String kWithUserToolName = 'report_with_user';
 
 Map<String, dynamic> _intField(String description) => {
   'type': 'integer',
@@ -114,19 +115,8 @@ final Map<String, Map<String, dynamic>> _oneShotFields = {
   // No `posture`: it moved to its own POST-generation pass on 2026-08-08
   // (see kSceneTimeEvalTools below). One-shot fuses the PRE-generation
   // judges, and posture stopped being one of those.
-  // Scene-time fields ride the fused call so one-shot mode needs no separate
-  // per-turn time eval (strict one-shot vs normal parity — same fields, same
-  // clamp/floor/backstop applied by TimeService).
-  'minutes_elapsed': _intField(
-    'In-story minutes the latest exchange took (0-180; 0 only mid-action).',
-  ),
-  'new_day': {
-    'type': 'boolean',
-    'description':
-        'True ONLY if the conversation explicitly transitioned to the next '
-        'day (slept, woke up, scene break). Merely mentioning yesterday or '
-        'tomorrow does NOT count.',
-  },
+  // No scene-time fields: the clock decide is post-generation now (same
+  // time-only call as the multi-call path). Asking here would double-count.
   ..._narrativeFields,
   'reason': _strField(
     'One brief sentence naming the key relationship change, or "none".',
@@ -183,20 +173,7 @@ final List<Map<String, dynamic>> kOneShotEvalTools = [
     kOneShotTool,
     'Report the full realism evaluation for this exchange in one call.',
     _oneShotFields,
-    // `minutes_elapsed` is required for the same reason `is_climax` is: a
-    // model fills in what the schema demands and skips what it does not. When
-    // one-shot fuses, this call is the story clock's ONLY driver — an omitted
-    // minutes_elapsed makes TimeService fall back to failureDriftMinutes, so
-    // every turn advanced a flat 5 minutes while the multi-call path (whose
-    // twin kSceneTimeOnlyEvalTools demands it) got a real estimate. `new_day`
-    // stays optional exactly as it is on that twin.
-    const [
-      'relationship_delta',
-      'trust_delta',
-      'emotion',
-      'emotion_intensity',
-      'minutes_elapsed',
-    ],
+    const ['relationship_delta', 'trust_delta', 'emotion', 'emotion_intensity'],
   ),
 ];
 
@@ -318,6 +295,29 @@ final List<Map<String, dynamic>> kSceneTimeOnlyEvalTools = [
   ),
 ];
 
+final Map<String, dynamic> _todaySentenceField = _strField(
+  'One sentence of what they are doing or planning today, or "none".',
+);
+
+/// Scene-time schema when the planner is on. `today_sentence` is REQUIRED so
+/// small locals fill it (empty / "none" abandons; omit is the text-path keep).
+final List<Map<String, dynamic>> kSceneTimeOnlyEvalToolsWithToday = [
+  _tool(
+    kSceneTimeTool,
+    'Report how much in-story time the latest exchange took, and today\'s plan.',
+    {
+      'minutes_elapsed': _sceneTimeFields['minutes_elapsed']!,
+      'new_day': _sceneTimeFields['new_day']!,
+      'today_sentence': _todaySentenceField,
+    },
+    const ['minutes_elapsed', 'today_sentence'],
+  ),
+];
+
+/// Planner-on one-shot is the same schema as planner-off: Today is written
+/// by the post-generation time-only call, not the fused pre-gen judges.
+final List<Map<String, dynamic>> kOneShotEvalToolsWithToday = kOneShotEvalTools;
+
 final Map<String, Map<String, dynamic>> _expressionFields = {
   'label': {
     'type': 'string',
@@ -367,6 +367,25 @@ final Map<String, Map<String, dynamic>> kClimaxFields = {
     'Cooldown turns (3-7) when is_climax is true, else 0.',
   ),
 };
+
+/// Own pass — not fused with posture. See [WithUserEval].
+final Map<String, Map<String, dynamic>> kWithUserFields = {
+  'with_user': {
+    'type': 'boolean',
+    'description':
+        'True ONLY when the character and the user are physically in the '
+        'same place right now. Phone / their own home / another room = false.',
+  },
+};
+
+final List<Map<String, dynamic>> kWithUserEvalTools = [
+  _tool(
+    kWithUserToolName,
+    'Report whether the character is physically with the user.',
+    kWithUserFields,
+    const ['with_user'],
+  ),
+];
 
 final List<Map<String, dynamic>> kClimaxEvalTools = [
   _tool(
@@ -436,14 +455,15 @@ final Map<String, Map<String, Map<String, dynamic>>> _fieldsByTool = {
   kRelationshipTool: _relationshipFields,
   kEmotionalTool: _emotionalFields,
   kNarrativeTool: _narrativeFields,
-  kOneShotTool: _oneShotFields,
+  kOneShotTool: {..._oneShotFields, 'today_sentence': _todaySentenceField},
   kNeedsImpactTool: _needsImpactFields,
-  kSceneTimeTool: _sceneTimeFields,
+  kSceneTimeTool: {..._sceneTimeFields, 'today_sentence': _todaySentenceField},
   kExpressionTool: _expressionFields,
   kCastDetectTool: _castDetectFields,
   kClimaxToolName: kClimaxFields,
   kPocketsToolName: kPocketsFields,
   kReplyFactsToolName: kReplyFactsFields,
+  kWithUserToolName: kWithUserFields,
 };
 
 /// Is [toolName] known to the converter?
@@ -517,7 +537,11 @@ String? realismToolCallToJson(String toolName, List<LlmToolCall> calls) {
           break;
         default:
           final s = v.toString().trim();
-          if (s.isNotEmpty) out[entry.key] = s;
+          // Empty today_sentence is abandon (same clamp as the JSON path).
+          // Other string fields still treat empty as omit.
+          if (s.isNotEmpty || entry.key == 'today_sentence') {
+            out[entry.key] = s;
+          }
       }
     }
     if (toolName == kCastDetectTool && (out['name'] as String? ?? '').isEmpty) {

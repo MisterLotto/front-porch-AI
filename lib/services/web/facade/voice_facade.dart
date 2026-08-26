@@ -39,24 +39,36 @@ class VoiceFacade {
 
   /// Capability snapshot for the web client to decide which controls to show.
   Map<String, dynamic> status() => {
-        'ttsEnabled': _storage.ttsEnabled,
-        'ttsEngine': _storage.ttsEngine,
-        'sttEnabled': _storage.sttEnabled,
-        'sttAvailable': _stt.isAvailable,
-        // Additive (2026-08-14) for the web character editor's per-character
-        // voice picker — an assigned voice overrides the global one, so the
-        // browser needs both the choices and the global's name to label
-        // "use the global voice". Older clients ignore the extra keys.
-        'globalVoice': _storage.ttsVoiceModel,
-        'voices': _tts.activeVoices
-            .map((v) => {
-                  'id': v.id,
-                  'name': v.name,
-                  'gender': v.gender,
-                  'language': v.language,
-                })
-            .toList(),
-      };
+    'ttsEnabled': _storage.ttsEnabled,
+    'ttsEngine': _storage.ttsEngine,
+    'sttEnabled': _storage.sttEnabled,
+    'sttAvailable': _stt.isAvailable,
+    // Additive (2026-08-14) for the web character editor's per-character
+    // voice picker — an assigned voice overrides the global one, so the
+    // browser needs both the choices and the global's name to label
+    // "use the global voice". Older clients ignore the extra keys.
+    'globalVoice': _storage.ttsVoiceModel,
+    'voices': _tts.activeVoices
+        .map(
+          (v) => {
+            'id': v.id,
+            'name': v.name,
+            'gender': v.gender,
+            'language': v.language,
+          },
+        )
+        .toList(),
+  };
+
+  /// Persist the Voice & Media enable flags from the web Settings page so a
+  /// remote/phone user can turn TTS/STT on without opening the desktop tab.
+  Future<Map<String, dynamic>> apply(Map<String, dynamic> body) async {
+    final tts = body['ttsEnabled'];
+    if (tts is bool) await _storage.setTtsEnabled(tts);
+    final stt = body['sttEnabled'];
+    if (stt is bool) await _storage.setSttEnabled(stt);
+    return status();
+  }
 
   /// Synthesize [text] to audio bytes (no host playback). Returns the bytes plus
   /// their MIME type, or null when TTS is off / produced nothing.
@@ -66,8 +78,9 @@ class VoiceFacade {
     if (file == null || !file.existsSync()) return null;
     final bytes = await file.readAsBytes();
     // ElevenLabs returns mp3; every other engine returns a (merged) WAV.
-    final contentType =
-        p.extension(file.path).toLowerCase() == '.mp3' ? 'audio/mpeg' : 'audio/wav';
+    final contentType = p.extension(file.path).toLowerCase() == '.mp3'
+        ? 'audio/mpeg'
+        : 'audio/wav';
     return (bytes: bytes, contentType: contentType);
   }
 
@@ -79,10 +92,12 @@ class VoiceFacade {
     final safeExt = (ext == null || ext.isEmpty)
         ? 'webm'
         : ext.replaceAll(RegExp(r'[^a-z0-9]'), '').toLowerCase();
-    final tmp = File(p.join(
-      Directory.systemTemp.path,
-      'fpai_web_stt_${bytes.length}_${bytes.hashCode}.$safeExt',
-    ));
+    final tmp = File(
+      p.join(
+        Directory.systemTemp.path,
+        'fpai_web_stt_${bytes.length}_${bytes.hashCode}.$safeExt',
+      ),
+    );
     try {
       await tmp.writeAsBytes(bytes, flush: true);
       return await _stt.transcribeAudioFile(tmp.path);

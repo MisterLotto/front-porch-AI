@@ -130,37 +130,38 @@ class RagReceiptView extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(top: 6),
-      child: InkWell(
-        onTap: canJump ? () => onJumpToMessage!(pos) : null,
-        borderRadius: BorderRadius.circular(4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (stamp != null)
-              Padding(
-                padding: const EdgeInsets.only(right: 6, top: 1),
-                child: Text(
-                  stamp,
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                    color: accent,
-                  ),
-                ),
-              ),
-            Expanded(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (stamp != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 6, top: 1),
               child: Text(
-                preview,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+                stamp,
                 style: TextStyle(
-                  fontSize: 10,
-                  color: AppColors.textSecondary(context),
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  color: accent,
                 ),
               ),
             ),
-            if (canJump)
-              Padding(
+          Expanded(
+            child: ExpandableSidebarText(
+              text: preview,
+              maxLines: 4,
+              style: TextStyle(
+                fontSize: 10,
+                color: AppColors.textSecondary(context),
+              ),
+            ),
+          ),
+          // Jump lives on the icon so a tap on the preview can expand
+          // instead of seeking the transcript.
+          if (canJump)
+            InkWell(
+              onTap: () => onJumpToMessage!(pos),
+              borderRadius: BorderRadius.circular(4),
+              child: Padding(
                 padding: const EdgeInsets.only(left: 4),
                 child: Icon(
                   Icons.north_east,
@@ -168,8 +169,8 @@ class RagReceiptView extends StatelessWidget {
                   color: AppColors.iconSecondary(context),
                 ),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }

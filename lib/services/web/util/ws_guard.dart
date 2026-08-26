@@ -18,15 +18,18 @@
 
 import 'package:shelf/shelf.dart' as shelf;
 
+import 'package:front_porch_ai/services/web/util/dev_origin.dart';
+
 /// Origin allowlist for WebSocket upgrades, shared by every WS endpoint.
 ///
 /// Because the session cookie is sent automatically, a missing check would let
 /// a malicious page open a cross-site socket (WS-CSRF/hijack). Allow
-/// same-origin (origin host == request host) and the localhost dev origins
-/// used by the Vite dev server.
+/// same-origin (origin host == request host) and the Vite loopback origins
+/// in [kViteDevPorts]. Arbitrary localhost ports are refused.
 bool wsOriginAllowed(shelf.Request request, String origin) {
   final o = Uri.tryParse(origin);
   if (o == null) return false;
-  if (o.host == 'localhost' || o.host == '127.0.0.1') return true;
-  return o.host == request.requestedUri.host;
+  final req = request.requestedUri;
+  if (o.host == req.host && o.port == req.port) return true;
+  return isAllowedViteDevOrigin(origin);
 }

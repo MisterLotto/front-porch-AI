@@ -1,7 +1,807 @@
+# Changelog
+
+## 2026-08-26 — docs: v1.3.1 Clock In on the long-form release notes
+- **Why:** Promoting Rawhide to main as v1.3.1. release-notes.md still
+  called 1.2 the current stable.
+- **What:** Clock In headlines + 1.3 Pockets section. Current stable is
+  1.3.1. Flutter 3.47 called out.
+- **Files:** docs/release-notes.md
+
+## 2026-08-26 — fix(settings): don't stat a GGUF when no preset owns one
+- **Why:** P2 memoized the model-exists check but always read
+  kcppsModelPath on Model Settings paint. That broke the old
+  kcppsHasModel short-circuit, so CI unit tests that fake a local
+  panel with no preset crashed (kcppsModelPath missing).
+- **What:** Gate the memo on kcppsHasModel again. FakeStorageService
+  now stubs kcppsHasModel/kcppsModelPath as the documented build-time
+  getters.
+- **Files:** model_settings_dialog.local.dart, fakes_storage.dart
+
+## 2026-08-26 — test(golden): refresh Linux dialog goldens for light + alt-greeting
+- **Why:** Widget Golden Tests went red on the last three Rawhide runs.
+  P1.6–10 light-mode paint on Group Settings / Kobold log, then
+  alt-greeting Edit Character, never re-captured the Linux PNGs.
+- **What:** Regenerated the six dialogs_remaining goldens in
+  fpai-golden:3.47.0 (linux/amd64). Pixels match the already-shipped UI.
+- **Files:** edit_character.{dark,light}.png, group_settings.{dark,light}.png,
+  kobold_log.{dark,light}.png
+
+## 2026-08-26 — fix(stoop): comments talk to the hub, not a notepad
+- **Why:** Discussion on a card used an in-memory fake, so comments vanished
+  on quit. The phone hid the block for that reason. Users expected a real
+  thread.
+- **What:** HttpStoopCommentsClient hits /characters/:id/comments. Desktop
+  uses it. Web relay + Discussion UI. Owner can turn discussion on from the
+  listing. Memory client stays for tests.
+- **Files:** http_stoop_comments_client, stoop_card_detail_page,
+  stoop_card_comments, stoop_routes, StoopDiscussion, tests
+
+## 2026-08-26 — fix: audit P2.11–15 (web fork, settings, Stoop, CORS, GGUF memo)
+- **Why:** Phone/web could not fork a chat, could not set Top-P/K / DRY /
+  dynatemp / stops / bans / sanitise-history / system prompt or enable
+  Voice, showed only solo Stoop fields, reflected any localhost Origin
+  with cookies, and re-stat'd GGUFs on every Kobold log line.
+- **What:** POST /api/chat/fork + Fork button. Generation extras + Voice
+  enable. Group carousel + world climate/lore; relay forwards type query;
+  payload type wins, SOLO is upgraded by world/group shape (the PWA always
+  sends type, so a naive client-wins order never reached the fallback).
+  Sanitise-history cannot re-arm after sanitizer-off. Discussion stays
+  hidden (desktop comments are still an in-memory mock). CORS/WS only Vite
+  5173/5174/4173. PathExistsMemo on Managed Backend + model dialog +
+  projector.
+- **Files:** chat_session_facade/routes, MessageActions/ChatPage,
+  settings_facade, GenerationSettingsFields, VoiceMediaSettings,
+  stoop_import_kind, stoop_routes, StoopCardSections, cors/ws/dev_origin,
+  PathExistsMemo, tests, assets/web_app
+
+## 2026-08-26 — fix(needs): hygiene catastrophe does not rebound the meter
+- **Why:** Hitting 0 hygiene fired a canon scene event AND bounced the
+  meter to 55, so they dropped the pan and magically smelled better.
+  They should notice they reek and feel awful, then stay filthy until
+  they actually wash. Enjoys-low-hygiene still likes it.
+- **What:** Hygiene still arms the "I reek" beat (once per bottom-out).
+  No post-catastrophe floor. Second tick at 0 does not re-fire.
+- **Files:** needs_simulation.dart, hygiene_no_catastrophe_test.dart
+
+## 2026-08-26 — fix(ui): alt-greeting seeds match Realism + Needs editor
+- **Why:** Alternate-greeting opening state was a cramped SwitchListTile
+  stack that did not look like the Realism tab, hid Needs unless the
+  distant needs toggle was on, and sat inside a painted section card so
+  Flutter asserted "ListTile ink may be invisible" once per alt.
+- **What:** Same section cards/headers as RealismFormSection. Needs
+  baselines always on. Switch not ListTile. Section cards use Material.
+  Web uses the same realism-section layout.
+- **Files:** greeting_seed_form + sections, edit_character_page.realism_section,
+  alt greeting call sites, GreetingSeedForm.tsx, styles.css, test
+
+## 2026-08-26 — fix: audit P1.6–10 (Tailscale login, with-user, RAG, light)
+- **Why:** Remaining P1. Stolen web session could bind Tailscale. With-you
+  glance was restamped like posture with no pre-turn receipt, so regen
+  drifted. ChatService/StoryPipeline each minted an EmbeddingService, so
+  a RAG download never woke chat. Failed RAG search looked like "nothing
+  relevant". Group Settings / Chat History / Cleanup / Kobold log still
+  painted white-on-paper in light mode.
+- **What:** login step-up (web + route). kWithUserPreTurn twin of posture.
+  Shared EmbeddingService; MemoryService re-checks while the engine is
+  down; lastRetrieveError → error receipt. AppColors on those dialogs.
+- **Files:** remote_routes, RemoteAccessPage, chat_service_defaults /
+  group_realism_helpers / reprocess, main.providers, memory_service,
+  generation_rag, cleanup / kobold / chat history / group_settings, tests
+
+## 2026-08-26 — fix(db): group delete and character Data Bank cascade
+- **Why:** Audit P1. Group delete wiped sessions+messages then asked for
+  those sessions (already gone), so journal/growth/embeddings/objectives/
+  worlds never cascaded. Character delete missed Data Bank and chat-less
+  objectives keyed by filename-id.
+- **What:** group hard/soft delete routes each session through
+  deleteSessionById. Character child cascade drops Data Bank + objectives
+  by stableGroupId. Dead "then delete sessions" loop removed.
+- **Files:** database.queries.groups, database.queries.library,
+  group_chat_repository, database.dart (identity import), tests
+
+## 2026-08-26 — test(chat): think-stream pins need reasoning wrap on
+- **Why:** f2cf39e7 peels content-side `<think>` when wrap is off. The
+  generation-stream stop-scan / salvage pins and Continue promptText pin
+  never saw tags, so CI unit tests on that commit (and P0 on top) were red.
+- **What:** those harnesses turn reasoning on so ingest keeps the tags the
+  ChatService scan is supposed to see.
+- **Files:** generation_stream_behavior_test, continue_finalize_test
+
+## 2026-08-25 — fix(pockets): invert buried give instead of tail-rewinding
+- **Why:** Review: applying a buried turn's before-kit to giver+recipients
+  clobbered later ops (Sam's sandwich vanished; unique keys could exist
+  twice one hop later). message_ops was over 500. A later no-op swipe
+  keeps shared pockets_before and has no pockets_after; fromJson(null)
+  is empty and invert stole later holdings.
+- **What:** invertDeletedPocketTurn pulls unique moved items off whoever
+  holds them now. Missing pockets_after is unknown, not empty — skip.
+  Tail-delete still uses the full before-stamp. Timeline invalidation
+  extracted so message_ops stays under 500. chat_service.dart kept
+  under 1000. Group Continue refuse banners. Stale post-gen comment
+  and present-guest pockets skip pinned.
+- **Files:** pockets_invert.dart, chat_service_timeline.dart, message_ops,
+  generation, generation_postgen, tests
+
+## 2026-08-25 — fix(chat): P0 silent damage (History Save, Continue speaker, pockets rewind)
+- **Why:** Full-codebase audit. Chat History Save used Drift replace() with only
+  name/description, snapping Realism/Needs/Chaos and group state to defaults.
+  Continue assembled guest/group turns as the host (host-ban) or first-match
+  by display name. Middle-delete of a group give duplicated unique items;
+  swipe of a setdown deleted the live item card; item/episode/milestone
+  receipts cited the on-screen 0..23 index in a long-chat tail window.
+- **What:** updateSession → patchSession/write(); Continue infers guestSpeaker
+  and id-first group forceSpeaker (refuse on duplicates); pockets restore on
+  every character delete not just tail; persistTipCite for receipts; swipe-
+  scoped planted/retired item-card stamps, replant after invalidation.
+- **Files:** database.queries.chat, session_manage, generation, message_ops,
+  session_open_window, item_cards (new part), pockets, episode_crumbs,
+  wiring_realism, objectives, tests, Rawhide.md
+
+## 2026-08-25 — fix(reasoning): canonicalize all think wrappers to <think>
+- **Why:** NanoGPT Gemma 4 dumps `<|channel>thought` (or a leftover
+  `thought` after special tokens are stripped) in content. We only parsed
+  `<think>`, so the essay was the reply and ate max_tokens. oMLX splits
+  reasoning_content so it never hit this. A Gemma-only branch would be
+  whack-a-mole; ST's Auto-Parse is prefix/suffix, not model ids.
+- **What:** kReasoningFences sniffed from bytes (Gemma channel, harmony
+  analysis, Kimi triangles, <reasoning>/<thinking>, DeepSeek begin/end,
+  stripped thought\\n + close). Stream ingest (chat + completions) plus
+  ChatMessage/strip/evals/story/web floor. No model-name branch.
+- **Files:** reasoning_markers.dart (new), ReasoningIngest, openai_chat_stream,
+  open_router_service, completions fallback, chat_message, think_tags,
+  llm_eval_engine, story_json, json_sanitizer, char_macro, web
+  reasoningMarkers.ts + ChatMessageList + messageEdit
+
+## 2026-08-25 — fix(reasoning): host effort enum is not a per-model menu
+- **Why:** The Nano/OpenAI-compat poke treats a 400 "Supported values:
+  none, minimal, low, medium, high, xhigh" as THIS model's ladder. That
+  string is the server parameter enum (same LM Studio 0.4.21 trap we
+  already refused to trust locally). Gemma 4 on NanoGPT showed Minimal…
+  Max; oMLX hid chips because it read the template (toggle). A 200 on
+  bogus effort also fell through to generic Low/Med/High.
+- **What:** isGenericProviderEffortSchema (minimal+xhigh) → remember
+  {none} (toggle-only, empty chips). 200 / listing-less 400 same.
+  DeepSeek/Kimi short listings unchanged. wireReasoningEffort does not
+  rewrite a toggle model to none (would disable thinking). Hydrate
+  collapses a stored host enum. Desktop hides empty chips; web facade
+  reports localSupport=toggle.
+- **Files:** reasoning_effort, reasoning_effort_probe, reasoning_effort_store,
+  thinking_settings_block, settings_facade, tests
+
+## 2026-08-25 — fix(realism): authored tastes own the SIGN of lust/bond/emotion
+- **Why:** Intimate prefs landed after the vanilla eval bands. The lists
+  already reached the judge ("weigh the exchange") but "Rejection or
+  humiliation: −15 to −25" still owned the sign, so a femdom card that
+  warms to struggle scored lust and bond DOWN on a resist (Nemu live chat:
+  8 → 5 through the smother; emotion stayed hurt/disappointment).
+- **What:** PreferenceScoring.block: a matching listed taste owns bond,
+  emotion, and arousal; trust is not inverted as a blob; genuine
+  out-of-play stop stays negative. Agency refusal clause yields when the
+  refusal IS the taste ("fuel, not a wound"). Arousal rubric: authored
+  "drawn to"/"warms to" outrank the Rejection band. Empty prefs still
+  vanilla. Helpers on desktop + web say sign, not only size.
+- **Files:** preference_scoring.dart (new), realism_prompt_builder,
+  preference_phrases, identity_chip_lists, chat.dart barrel,
+  RealismFormSection.tsx, preference_valence_test.dart (new)
+
+## 2026-08-24 — fix(ci): Rawhide unit suite — FakeChatService greets, OpenRouter mock, today/gist isolation
+- **Why:** Push 4ce4aead failed GitHub `Tests (unit + integration)` with
+  7 failures across 4 files. Chip goldens crashed on library-private
+  `_messages`; Enhance wizard hit real OpenRouter `/models` (HttpOverrides
+  400); abandonToday soured mood only after DB deactivate (empty emotion
+  under concurrency); gist leftover-KEEP timed out at 30s then closed the
+  isolate mid-query.
+- **What:** Greet/swipe read paths use public `messages` /
+  `activeCharacter` / `greetingIndex`. `fetchAvailableModels` uses the
+  same `httpClientFactory` seam as ping; enhance wizard injects a
+  MockClient. Abandon journals (nudge) then deactivates, in parallel.
+  Gist leftover-KEEP and today-quest use same-isolate DBs; leftover-KEEP
+  timeout is 2 minutes.
+- **Files:** chat_service_variants, open_router_service,
+  chat_service_accessors, enhance_wizard_test, today_side_quest_test,
+  gist_first_recall_locks_test
+
+## 2026-08-24 — fix(chat): ST-style variant cards + finish 3f780c5c residuals
+- **Why:** The greet/swipe picker shipped as 15-word HTML-comment
+  ListTiles (every greet looked identical). 3f780c5c also left three
+  residuals: remote "Ready" meant "key is saved"; regen swipes on the
+  opening message showed as greets; web "Where we are" was still a raw
+  textarea.
+- **What:** Picker is a card list like SillyTavern's swipe panel: #N
+  [Current], 3-line prose (HTML comments stripped, greets
+  macro-resolved), char/token counts, expand, copy, jump-to-#.
+  OpenRouterService pings GET /models on remote activation; isReady is
+  false after a failed ping; UI shows Configured / Checking / Ready /
+  Configured but unreachable (green only when live). Picker rows carry
+  kind greet|regen; opening-message regen swipes are variants, not card
+  greets. Web recap is a 4-line clamp with Edit.
+- **Files:** variant_snippet, variant_picker_dialog, chat_service_variants,
+  message_bubble.actions, remote_reachability, open_router_service,
+  llm_provider, remote_ready_badge, remote_api_section,
+  ai_engine_status_card, backend_facade, settings_facade, web
+  VariantPickerModal / ChatTools / SummaryRecapField / MessageActions /
+  SettingsPage / AiEngineStrip / styles.css
+
+## 2026-08-23 — feat(chat): API-down placeholder, variant picker, sidebar expand
+- **Why:** Discord (SAMF): (1) unreachable API, send does nothing with no
+  hint; (2) 9 greets / 20 regens only cycled blindly, and greet "regen"
+  is nonsense; (3) Journal / recap / RAG ellipsis-truncated with room left.
+- **What:** Composer placeholder tracks `LLMService.isReady` (connection,
+  not a one-off 500) live in both directions. Shared greet/swipe picker
+  (snippet + char count + Current); greets keep starting emotion on #1
+  and reading-the-room on alts; swipes restore the stored variant (full
+  swipe list was already retained). Sidebar body text is a 4-line clamp
+  with tap-to-expand. Desktop + web_ui.
+- **Files:** chat_composer_hint, chat_page.input_actions, variant_snippet,
+  chat_service_variants, variant_picker_dialog, message_bubble.actions,
+  expandable_sidebar_text, summary_recap_field, journal_panel,
+  rag_receipt_view, chat_facade/routes/host, web ChatComposer /
+  MessageActions / VariantPickerModal / ExpandableText / ChatTools
+
+## 2026-08-22 — fix(work): off-shift prompt names the day off
+- **Why:** A M–F loan officer on Sunday morning still reasoned "she DOES
+  have to work today" then argued with bank hours. Presence was With you
+  (picker + clock were correct). The off-shift line only said the job
+  title, so the model invented a shift.
+- **What:** Off-shift identity now ends with why they are not at work:
+  weekday off ("Today is Sunday — not a work day. Do not send them to
+  work."), before the shift ("not at work yet"), or off the clock.
+- **Files:** presence_derive, behavioral_injection, work_days_injection_test
+
+## 2026-08-22 — feat(time): finished night lands before they write
+- **Why:** "We sleep through the night" left the prompt at 8:31 Saturday
+  and the body tired; Qwen argued with the clock, then wrote exhausted.
+- **What:** Completed-night language is a skip (next morning) like OOC.
+  "Let's go to bed" stays a scene. When that skip moves the clock, energy
+  floors at 90 and comfort bumps before generation. After-reply needs
+  cannot pour a second sleep (large energy/comfort fills dropped).
+- **Files:** skip_language, story_clock, time_service, chat_service_night_skip,
+  chat_service_send, needs_impact_evaluator, night_skip_test
+
+## 2026-08-22 — feat(journal): work can stick, old moments can surface
+- **Why:** After they clock out, nothing from the shift stayed with them.
+  Ordinary days (the food stall) and off-stage life had nowhere to live,
+  and the diary told the model not to mention memories.
+- **What:** No new toggle. Clock-out (skip / chevron / calendar / post-reply
+  tick) may mint one specific episode card (~1 in 4 shifts, one per
+  story-day). Fresh crumbs may be spoken; older ones only when this turn
+  rhymes, rarely. Chance Time untouched. Journal on + a job + a moving
+  clock are the gates.
+- **Files:** episode_crumbs, chat_service_episode_crumbs, journal_physics,
+  journal_injection, generation/send/controls hooks, episode_crumbs_test
+
+## 2026-08-22 — feat(work): pick which weekdays a character works
+- **Why:** Work hours applied every calendar day, so a 9–5 librarian was
+  at work on Saturday and Sunday. There was no day picker.
+- **What:** Card `workDays` (DateTime.weekday ints). Missing field is
+  Mon–Fri; written `[]` is never at work. `onShift` gates hours by
+  weekday, with overnight wrap belonging to yesterday. Desktop WorkRow
+  and web WorkFields gained M–S chips. Group copies fall back like hours.
+- **Files:** presence_derive, character_card, work_row, identity editors,
+  realism_extensions_json, web workHours/RealismFormSection, presence
+  tests, work_days_injection_test
+
+## 2026-08-22 — fix(storage): user-chosen data dir is not nested on next launch (#206)
+- **Why:** Settings → Data Directory wrote the picked folder as the root.
+  On the next launch FileConsolidationService treated any basename other
+  than FrontPorchAI as "scattered Documents" and nested FrontPorchAI
+  under it, leaving groups/ and custom_backgrounds behind. Linux users
+  picking ~/.frontporchai hit this; default Documents/FrontPorchAI is
+  unchanged on every OS.
+- **What:** The wrap-in-FrontPorchAI pass now runs only when the current
+  root IS the OS Documents folder. A path the user already chose is the
+  root. Default data dir is not changed.
+- **Files:** file_consolidation_service, file_consolidation_beta_isolation_test
+
+## 2026-08-22 — fix(journal): model-switch regen no longer blanks "Where we are"
+- **Why:** Changing models mid-chat and regenerating the last reply wiped
+  the Journal recap. Recap clear ran on EVERY timeline rewrite, including
+  a regen of a line the recap had never covered (cursor still behind it).
+- **What:** Recap now clears only when the rewrite sits inside the already-
+  journaled window, or the transcript is empty. Same gate as cursor
+  rollback. Planted Growth Rings with no receipts already survived; they
+  still do. Cards/rings that cite the rewritten line still purge.
+- **Files:** chat_service_message_ops, recap_clear_on_rewrite_test,
+  model_switch_memory_survive_test
+
+## 2026-08-21 — feat(home): Chat History on Home right-click
+- **Why:** Home character/group right-click had no way to list, rename, or
+  delete past chats. The in-chat folder icon already had that list.
+- **What:** Extracted the Chat History dialog and opened it from Home
+  (after Start New Chat) and the web library kebab. Home/library delete
+  does not spawn a replacement chat. Conversations drawer gained trash.
+- **Files:** chat_history_dialog, home_card_menu, home_page_history,
+  chat_service_message_ops, chat_session_facade, ChatHistoryModal,
+  ConversationsDrawer, CharactersPage, cardMenus, user-guide
+
+## 2026-08-21 — test(work): Work brief goldens + real-control widgets
+- **Why:** Occupation brief chrome grew. Mac `flutter test` skips Linux
+  goldens. Need pixels of the real WorkRow, not a twin.
+- **What:** v2 work_row golden includes the brief; new work_identity
+  golden for Ambitions chrome. Manual creator Porch Life step restamped
+  (WORK stub → Work card). Report-gate goldens not restamped.
+- **Files:** v2_presence_golden_test, v2/work_row + v2/work_identity
+  goldens, manual_creator/step_4_realism goldens
+
+## 2026-08-21 — feat(web): Work chrome + What the job is
+- **Why:** Phone create/edit had occupation + hours only. No job-brief box,
+  so a PWA save could not round-trip `occupationBrief`.
+- **What:** Same Work section as desktop. Occupation one-line; **What the
+  job is** textarea binds `occupationBrief` (empty = today). Start/End in
+  the identity chrome. Create + edit. No second key. Guests/report gate
+  untouched.
+- **Files:** realismTypes, RealismFormSection, CreateCharacterPage,
+  workHours.test, RealismFormSection.work.test, styles.css (.work-brief)
+
+## 2026-08-21 — feat(work): editor Work card + What the job is
+- **Why:** Work was a grey leftover form between Ambitions and Likes. No
+  job-brief box. Start/End stayed **Set** after a time was picked.
+- **What:** Same icon + porch accent + `_card` as Ambitions. Title is one
+  line (**Work**). **What the job is** binds `occupationBrief` (empty =
+  today). Hours stay in the card. Desktop editor, create, AI creator.
+- **Files:** work_row, identity_chip_lists, realism_form_section,
+  edit_character_page (+ tabs_core), create_character_page (+ step_realism,
+  save), creator_state (+ engine/core, realism_step), work_row_test,
+  work_identity_card_test
+
+## 2026-08-21 — feat(work): occupationBrief grounds at-work narration
+- **Why:** Occupation was a title only. The model guessed the job. Group
+  turns never saw it at all: wiring read `_activeCharacter`, which
+  `setActiveGroup` nulls, so title, hours, and brief were empty. A leaf
+  test stubbed the brief and lied.
+- **What:** Card + web-bridge key `occupationBrief` (omit if blank).
+  At-work prompt is title, then brief, then write-from-there. Empty brief
+  is today. Off-shift brief is identity only. Group copies fall back to
+  the library card. Group prompt reads the pinned speaker via
+  `_workSpeakerCard` (not a sticky `_activeCharacter`). New ChatService
+  test pins like a real turn.
+- **Files:** character_card, presence_derive, behavioral_injection,
+  chat_service_turn_flow, chat_service_wiring_injection,
+  chat_service_group_realism_helpers, realism_extensions_json,
+  preferences_round_trip_test, prompt_injection_test,
+  presence_derive_test, group_work_prompt_injection_test
+
 
 
 
 # Changelog
+
+## 2026-08-20 — feat(pockets): put clothes back on (record correction)
+- **Why:** Plus → Add an item defaulted to Carrying; Hand to always forced
+  pockets. The only worn write was Wearing + Add quietly, which queued a
+  surprise intro. Empty worn hid Wearing, so a model-stripped character
+  looked like pockets-only. Add quietly on a washed sundress is nonsense.
+- **What:** `addPocketItem(correction: true)` writes worn (gift ignored),
+  skips surprise intro. Dialog: Wearing → only They're wearing this
+  (Add quietly / Hand hidden). Empty Wearing shows Put clothes on. Web
+  Put on + POST `correction`. Carrying / Set aside unchanged.
+- **Files:** chat_service_pockets, pocket_item_dialog, pockets_row,
+  character_state_group, group_member_card, chat_tools_facade/routes,
+  ChatTools, PocketAddRow, tests, assets/web_app
+
+## 2026-08-20 — chore(deps): Riverpod 3.4.2 on Flutter 3.47
+- **Why:** 3.47 pin left generator capped at 4.0.4. flutter run kept
+  offering 4.0.8. Latest Riverpod on this SDK is 3.4.2 / generator 4.0.8.
+- **What:** Lifted the 4.0.6- cap. `flutter pub upgrade` (no majors):
+  flutter_riverpod 3.4.2, generator 4.0.8, drift_dev 2.34.5, analyzer
+  13.3. sqlite3 stayed 3.5.2 + libs 0.6.0+eol. file_picker 11, xml 6.
+- **Files:** pubspec.yaml, pubspec.lock, dependency_floors.json,
+  test/deps/README.md
+
+## 2026-08-20 — fix(clock): [6 hours passed] is six hours
+- **Why:** Skip chip stamped a time, strip barely moved. "6 hours" was
+  never read — "hours passed" missed the "hours pass" bucket and defaulted
+  to +1h. Several hours without a number still +3h.
+- **What:** Counted minutes/hours/days (digit or one..twelve) before
+  the vague buckets. `hours passed` is a skip phrase so brackets
+  without OOC still fire. A bare "I waited 6 hours" is not a skip.
+- **Files:** story_clock, time_service, skip_numeric_duration_test
+
+## 2026-08-20 — docs: generic they/them for characters
+- **Why:** Release notes, Porch Life blurbs, and the user guide treated
+  every character as she/her.
+- **What:** they/them (or "the character") in Rawhide, user-guide,
+  realism-engine, playbook, CLAUDE.md, changelog narration, Porch Life
+  desktop+web, pocket dialogs, ChatTools, and related UI hints. Left
+  he/she/they on the Sex field, and sanitizer sample `she said—hello`.
+- **Files:** docs, porch_life_tab, PorchLifeSettings, ChatTools, others
+
+## 2026-08-20 — fix(pockets): wear "nothing" is undress, not a garment
+- **Why:** Models report undressing as wear of an item named nothing.
+  The applier minted it — sidebar Wearing chip and "put on: nothing".
+  Same class as wear("clothes") minting a garment named clothes.
+- **What:** isEmptyWardrobeRef (nothing/nude/naked/bare…). wear of that
+  bulk-undresses if the character is dressed, no-ops if already nude, never mints.
+  Eval prompt omits empty lists (no "nothing recorded") and says wearing
+  nothing is remove. Editor/web chips drop the name on save. Existing
+  chats keep the chip until the user hits X (maintainer).
+- **Files:** pockets, pockets_eval, chat_service_pockets, identity_chip_lists,
+  realismTypes, tests
+
+## 2026-08-20 — fix(worlds): season calendar is Gregorian, including leaps
+- **Why:** Picker was pinned to 2001 to hide Feb 29. That was the wrong
+  constraint — year LENGTH stays Earth (365/366), leap days are real.
+- **What:** Same calendar as Story begins (any year). Starts encode on a
+  leap year so Feb 29 is ordinal 60; a non-leap story date rolls it to
+  Mar 1. Web date input uses this year, not 2001.
+- **Files:** season_calendar, climate_season_start, ClimateSeasonEditor,
+  weather_engine, tests
+
+## 2026-08-20 — fix(worlds): season start uses the calendar picker
+- **Why:** Month + day dropdowns overflowed the Create World climate
+  dialog (Jan–Dec menu over the sidebar).
+- **What:** Same showDatePicker Story begins uses. Chip shows "Mar 1".
+  Web: native date input over a Mar 1 chip.
+- **Files:** climate_season_start, ClimateSeasonEditor, styles.css, tests
+
+## 2026-08-20 — fix(e2e): classify with_user glance as EVAL, not CHAT
+- **Why:** 21bfd8c3 added a post-reply With-you judge. The E2E fake had no
+  `"with_user"` branch, so it answered with canned chat prose, bumped
+  chatRequests, and overwrote lastChatBody. group_smoke, group wiring, and
+  lorebook timed out / asserted isolation on 8 of 15 CI shards.
+- **What:** Fake answers `{"with_user": true}`. Guard proven red then green.
+- **Files:** fake_backend.dart, fake_backend_with_user_route_test.dart
+
+## 2026-08-19 — fix: CI unit tests after seasons + with-you
+- Restored climate "band range" error copy (extreme-bands test).
+- Stamp `withUser` on kFpchatRealismStateCoreKeys (fpchat keys test).
+
+## 2026-08-19 — feat(web): custom seasons on Places (PWA)
+- **Why:** Desktop could author High Sun / extra seasons; the phone
+  could only pick temperate.
+- **What:** Places climate → Custom climate. Rename, start day,
+  add/remove 2–8. Server Biome.validate blocks overlap on save.
+  Still a 365-day year.
+- **Files:** world_facade, world_routes, WorldsPage, ClimateSeasonEditor,
+  seasonCalendar.ts, tests, Rawhide.md
+
+## 2026-08-19 — feat(worlds): 2–8 seasons on a custom climate
+- **Why:** Slice 3. Alien worlds are not stuck at four buckets.
+- **What:** Add/remove seasons (min 2, max 8). Each has name, start,
+  weights, band. Same overlap check. Engine + preview follow the list.
+  Temperate stays four Earth months. Not a custom year length.
+- **Files:** season_calendar, weather_biomes, biome_preview, climate
+  editor, tests, Rawhide.md
+
+## 2026-08-19 — feat(worlds): custom season start days (slice 2)
+- **Why:** Alien years still used Earth month buckets. Slice 2 is length,
+  not extra seasons.
+- **What:** Optional seasonStarts (day 1–365). Empty = Earth months.
+  Same start / missing season blocks save; preview names the clash.
+  Engine + editor preview use the new ranges. Temperate JSON omits the key.
+- **Files:** season_calendar, weather_biomes, weather_engine, biome_preview,
+  climate editor, tests, Rawhide.md
+
+## 2026-08-19 — feat(worlds): rename seasons on a custom climate
+- **Why:** Alien worlds still said "summer". Slice 1 is display names only.
+- **What:** Optional seasonLabels on biome JSON. Editor name field.
+  Chip, web facade, prompt ("It is High Sun.") use the label. Empty =
+  English id. Temperate JSON omits the key. No calendar change.
+- **Files:** season_labels, weather_biomes, climate editor, weather_chip,
+  weather_injection, facade, tests, Rawhide.md
+
+## 2026-08-19 — feat(presence): With you is a post-reply yes/no
+- **Why:** 1:1 glance said With you whenever they were not on shift —
+  including sitting at their own place. Keyword sniff never saw "at home".
+- **What:** Separate WithUserEval after posture. Never writes spatial
+  stance. At work still from the clock. Fail closed. Schema v49
+  sessions.with_user. Desktop + web facade.
+- **Files:** with_user_eval, presence_derive, postgen, relationship,
+  group_member_realism, session save/load, facade, tests, Rawhide.md
+
+## 2026-08-19 — test(goldens): restamp Work Hours row + Porch Life step 4
+- **Why:** db9624e added Start/End time chips; work_row grew 340×180 → 340×260
+  and Create Character step 4 (Porch Life) includes that row. Widget Golden
+  Tests went red on Linux; macOS never runs those 18 @TestOn(linux) files.
+- **What:** `./scripts/ci-local.sh update-goldens` in fpai-golden:3.47.0.
+- **Files:** work_row.{dark,light}.png, step_4_realism.{dark,light}.png
+
+## 2026-08-18 — fix(avatar): two cards with the same name no longer share a face
+- **Why:** originLibraryCardFor returned the first library card with that
+  name, so a second Rachel stole the AppBar avatar. Bubble speaker lookup
+  was the same first-name-wins walk.
+- **What:** origin uses dbId then unique stableGroupId (MemberOriginResolver).
+  Header/bubbles/TTS resolve by stamped id; name only when unique.
+- **Files:** member_origin_resolver, group_entry, chat_page, message_bubble.header
+
+## 2026-08-18 — feat(clock): announce then decide; 30m chevrons; guest brigade
+- **Why:** At work / Today / skip now read the live clock, so a pre-gen
+  minutes guess jumped the strip before the character wrote. Group follow-ups
+  skipped the clock entirely. Chevrons snapped to period hours. OOC
+  "skip to 2pm" added an hour. Standalone regen did not rewind.
+- **What:** OOC lands first; prompt says "It is currently …"; post-reply
+  time-only decide feeds the next speaker (bucket brigade). Scene Guests
+  tick time-only. Continue does not. Regen restores `story_clock_before`.
+  Chevrons ±30m; specific time stays the calendar Set date & time picker.
+  Named OOC clocks/periods land. Corroborated new_day any hour.
+  Hostile review: stamp on activeMetadata (not legacy metadata), persist
+  guest ticks, story_clock_before wins over older host snapshots, tail
+  delete rewinds from the stamp.
+- **Files:** story_clock, time_service, generation/postgen/send/turn_flow,
+  dance/evals/one_shot, reprocess, message_ops, time_injection, time_strip,
+  ChatTools, tests + CLAUDE.md + Rawhide
+
+## 2026-08-18 — fix(presence): live clock, skip banner, Today pointer, web
+- **Why:** Review of #202–#204: At work used the period's dummy hour, group
+  skip ate the send, Today dropped on speaker switch, promote+day-roll
+  killed a primary, day-roll raced the new sentence, web never shipped
+  Planner/presence/Today.
+- **What:** hoursMatch uses live clock minutes. Group skip tries the next
+  With-you member, then a System banner. Standalone send sets
+  skipClockAdvance. Skip-turn time-only does not write Today. At work
+  drops stale stance and suppresses Today's plan. Rebind keeps the
+  session Today id. Promote detaches. Day-roll is awaited. Web: Planner
+  row, plan lines, presence + Today on tools/calendar.
+- **Files:** presence_derive.dart, generation/turn_flow/send, time_service,
+  accessors/objectives, plan/behavioral injection, chat_tools facade+routes,
+  web PorchLife/ChatTools/calendar/RealismForm
+
+## 2026-08-18 — fix(presence): drop "not from the porch" from At work / Away
+- **Why:** 1:1 injection told the model "Reply from there — not from the
+  porch with {{user}}". The porch is the app, not a place in the character's world.
+- **What:** "Write from there." Same for Away. Tests now fail if "porch"
+  comes back.
+- **Files:** behavioral_injection.dart, prompt_injection_test.dart
+
+## 2026-08-18 — feat(work): hours are a clock range, not free text
+- **Why:** Typing "mornings" / "9-5ish" / "whenever" into Hours was a
+  footgun — At work either never lit or lit for the wrong slice of the
+  day. The story-time dial already exists and cannot misspell a time.
+- **What:** WorkRow Start/End chips open the same `showTimePicker` as
+  "The story opens at…". Stored card `hours` is "9am–5pm". Period words
+  no longer match. Web got the same occupation + `<input type="time">`
+  pair so a phone edit cannot wipe or free-type the shift.
+- **Files:** work_row.dart, presence_derive.dart, RealismFormSection.tsx,
+  realismTypes.ts, workHours.ts, presence_derive_test.dart, work_row_test.dart
+
+## 2026-08-17 — fix(enhance): empty Porch Life lists do not wipe authored chips
+- **Why:** Bug Hunter: tests never called save(). Dropping `_use['porchLife']`
+  from the write gate stayed green, then mute copyWith emptied worn on
+  the duplicate. Ambitions-only is isEmpty false → Use this ON → worn:[]
+  dropped the coat while Before still showed it.
+- **What:** save() still gates on Use this (source-string pin, lorebook
+  class). applyPorchLifeProposal keeps authored lists the proposal left
+  empty. Mute-seed widget fixture uses empty-list extensions, not null.
+  Same merge on the PWA apply body.
+- **Files:** porch_life_identity.dart, enhance_review_body.dart,
+  enhance_porch_review_test.dart, porch_life_identity_test.dart,
+  web enhanceForm + EnhanceReviewModal
+## 2026-08-17 — test(golden): refresh quick_config goldens for voice chips
+- **Why:** TestChampion CI HOLD on #200 — QuickConfigStep's output-settings
+  card grew two Greeting voice chip rows; the committed PNGs still showed
+  the pre-chip layout.
+- **What:** Regenerated only `quick_config.{light,dark}.png` via
+  `--update-goldens --name QuickConfigStep`. `guided_output_settings`
+  was regenerated the same way and is byte-identical (chips sit below
+  that golden's existing clip). No 900px goldens, no tree-wide refresh.
+- **Files:** test/golden/widget/_goldens/creator_steps/quick_config.*.png
+
+## 2026-08-17 — fix(chargen): Enhance keeps Create's narrative voice
+- **Why:** Bug Hunter hold on #200 — `enhanceCharacter` forced
+  `NarrativeVoice.defaults` and empty sex so a prior generate could not
+  leak, which rewrote third/past cards as first-person present. Web
+  `buildEnhancePayload` / `startEnhance` did not forward voice either.
+- **What:** Create stamps perspective/tense/sex on the card. Enhance
+  resolves params → stamp → first-person present. Desktop wizard and
+  `/api/chargen/enhance` carry the same fields. No Enhance Review layout
+  change.
+- **Files:** narrative_voice.dart, character_gen_enhance.dart,
+  character_gen_service.dart, enhance_wizard_page.dart, chargen_facade.dart,
+  character_facade.dart, enhanceForm.ts, EnhanceDialog.tsx
+
+## 2026-08-17 — feat(chargen): perspective + tense for greetings and example dialog
+- **Why:** Issue #194 — first-person present was baked into the greeting and
+  example-dialog prompts, so users who wanted third person or past tense had
+  to rewrite the card or patch source and rebuild.
+- **What:** Output settings gain First/Third and Present/Past chips (default
+  first + present, same wording as before). Third person resolves he/she/they
+  from Sex. Description, personality, example dialogue, and greetings follow
+  the choice. Threaded through desktop (all three modes), the web wizard, and
+  the `/api/chargen/create` facade.
+- **Files:** chargen/narrative_voice.dart, character_gen_prompts.dart,
+  character_gen_steps.dart, character_gen_service.dart, creator_state*,
+  narrative_voice_selector.dart, web OutputSettings + chargenForm
+## 2026-08-17 — fix(web): ignore X-Real-IP; unparsed hops are not limiter keys
+- **Why:** With no usable XFF, `requestClientIp` returned caller-supplied
+  `X-Real-IP` as a raw string — a unique value minted a fresh RateLimiter
+  key. `_rightmostNonLoopbackHop` also returned an unparsed token.
+- **What:** Ignore `X-Real-IP` (cannot prove the proxy set it). XFF hops
+  must parse as a non-loopback IP. Unparsed / empty / loopback tokens
+  map to the shared `_unknown` bucket. LAN-direct and `isSecure` unchanged.
+- **Files:** client_ip.dart, rate_limiter.dart, client_ip_real_ip_test.dart
+
+## 2026-08-17 — fix(web): loopback-proxy XFF uses appended hop; empty IP fail-closed
+- **Why:** `requestClientIp` took the leftmost XFF hop when the peer was
+  loopback. ngrok appends the real client, so a caller-supplied first hop
+  minted a fresh login/step-up rate-limit key. `X-Forwarded-For: ,8.8.8.8`
+  became `""`, and `ipAllowed` treated empty as unlimited.
+- **What:** Rightmost non-empty non-loopback hop behind a loopback peer.
+  LAN-direct still ignores XFF. Empty/whitespace/null IP shares one
+  `_unknown` bucket and is recorded — the cap is not skipped.
+- **Files:** client_ip.dart, rate_limiter.dart,
+  client_ip_proxy_xff_test.dart, rate_limiter_empty_ip_test.dart
+
+## 2026-08-17 — test(creator): pin RealismStep Porch Life vs engine split
+- **Why:** Feature Design lock: engine OFF on the AI creator still shows
+  Time, Chaos, and identity chips. The existing form-level finder
+  (`realism_form_porch_life_ungated_test.dart`) never pumps RealismStep,
+  so a wiring miss (no calendar callbacks, no Needs section, gating
+  Time/Chaos on the step) would stay green.
+- **What:** New finder test pumps public RealismStep with a seeded
+  CreatorState (engine off / 18+ on / engine on). No pixel golden.
+- **Files:** test/ui/character_creator/realism_step_porch_life_ungated_test.dart
+## 2026-08-17 — fix(chat,enhance): picker overlay hold, empty Use this, lorebook append
+- **Why:** Four verified user-hittable bugs. The session picker dropped
+  `isLoadingSession` after the last-24 tail, so a fast send could persist
+  the pre-hydrate realism reset onto the last-active chat. Enhance Review
+  defaulted empty text fields Use this ON, and Save replaced the original
+  lorebook with only the new entries. A failed home-grid load left ChatPage
+  sitting on a half-hydrated transcript.
+- **What:** `_openSessionMessages` no longer calls `endSessionLoad` —
+  the owner drops the overlay after hydrate (`setActiveCharacter` finally
+  / picker finally). Send and the composer gate on `isLoadingSession`.
+  Empty proposed description/personality/dialogue/scenario/greetings
+  default Use this OFF (porchLife path untouched). Save appends accepted
+  lore entries onto the duplicated book (merge by name). Failed
+  `_pushChatWhile` pops ChatPage and snacks. Same empty-text + lore
+  merge on the PWA.
+- **Files:** chat_service_session_window.dart, chat_service_send.dart,
+  chat_page.input*.dart, home_page_chrome.dart, enhance_review_body.dart,
+  enhance_lorebook_merge.dart, web enhanceForm + EnhanceReviewModal
+## 2026-08-17 — test(enhance): pin Before vs After and empty-proposal mute-wipe
+- **Why:** A mute/empty Porch Life proposal must not silently wipe an
+  authored wardrobe. Review must show Before vs After. The default-off
+  and `if (use) write` gate existed; they were not pinned at save().
+- **What:** Extended existing tests. Non-empty Review asserts After
+  heading + authored Before lines + proposal chips. Empty Review keeps
+  authored Before and Use this off. Mute `{}` / `thanks` seed empties
+  the proposal only. isEmpty covers mute JSON. Wizard Interview lists
+  Porch Life. save() was not widget-pinned — a CharacterRepository
+  fake still ran the real duplicateCharacter (`_isLoading`). The
+  `if (use) write` gate plus default-off is the wipe protection.
+  No product UI change. No goldens.
+- **Files:** enhance_porch_review_test.dart, enhance_porch_life_test.dart,
+  porch_life_identity_test.dart, enhance_wizard_test.dart
+## 2026-08-17 — fix(web): gate preview remote-models / test-connection / reasoning-menu
+- **Why:** Persist of remoteApiUrl/apiKey was stepped-up, but the three
+  preview POSTs still accepted a caller-supplied host with only a session.
+  A stolen cookie could fire a live request (with the stored key) at a
+  host the user never saved.
+- **What:** `remoteCredentialPreviewNeedsStepUp` + the same password/TOTP
+  gate as settings persist. Session-only when the body uses the saved
+  URL/key unchanged. PWA Test connection / ModelPicker send the password
+  when the preview host or key differs; they do not auto-fetch without it.
+- **Files:** step_up.dart, backend_routes.dart,
+  backend_preview_step_up_test.dart, SettingsPage.tsx, ModelPicker.tsx,
+  StepUpFields.tsx
+
+## 2026-08-17 — fix(web): harden PWA headers, client IP, settings step-up, Stoop report
+- **Why:** Four web/PWA gaps: no CSP, LAN clients could rotate X-Forwarded-For
+  to bypass the login IP cap, a stolen session cookie could retarget the
+  remote LLM URL/key, and the web Stoop report relay forwarded a blank reason.
+- **What:** CSP header on every response (same-origin PWA; no unsafe-eval).
+  `requestClientIp` honors XFF/X-Real-IP only from a loopback TCP peer.
+  POST /api/settings (and /api/image/config) require password step-up to
+  change remoteApiUrl or apiKey. Report route returns 400 reason_required
+  before relay. Web Settings / Image Gen prompt for the password.
+- **Files:** security_headers.dart, client_ip.dart, step_up.dart,
+  settings_routes.dart, backend_routes.dart, stoop_routes.dart,
+  auth_routes.dart, auth_middleware.dart, remote_routes.dart,
+  SettingsPage.tsx, ImageGen.tsx, StepUpFields.tsx
+
+## 2026-08-16 — feat(enhance): Porch Life is a keep-or-accept proposal
+- **Why:** AI Create now seeds wardrobe/ambitions, but Enhance is a
+  sibling path. Blindly overwriting an authored wardrobe would be
+  worse than leaving it. The existing Review step already lets you
+  keep the original or accept the rewrite per field.
+- **What:** Enhance checklist gains Porch Life (on by default). The
+  pass proposes lists; Review shows Before vs After with Use this.
+  Empty proposal defaults off so a mute model cannot wipe chips.
+  Same on web.
+- **Files:** character_gen_enhance.dart, chat_grounding.dart,
+  enhance_review_*.dart, enhance_wizard_page*, web enhanceForm +
+  EnhanceDialog + EnhanceReviewModal
+
+## 2026-08-16 — feat(chargen): seed Porch Life chips after the greeting
+- **Why:** Manual Create can author wardrobe / ambitions / intimate
+  prefs, but AI Create left those chips empty. Character-forge fills
+  them because it is a SOTA pass; the in-app wizard uses the user's
+  model, so a short structured extract after the greeting is the
+  local-model-safe way.
+- **What:** New post-greeting pass. Tools first when the backend
+  speaks them; text JSON is the floor. Intimate lists only when the
+  wizard's 18+ toggle is on. Failure leaves the chips blank.
+- **Files:** chargen/porch_life_identity.dart,
+  chargen/character_gen_porch_life.dart, character_gen_service.dart,
+  creator_state_engine.core.dart
+
+## 2026-08-16 — docs(rawhide): wipe accumulated What's New
+- **Why:** The nightly notes file had grown into a running history. The
+  maintainer asked to delete the bullets, not keep a "since last nightly"
+  subset that still piles up.
+- **What:** `docs/Rawhide.md` is the header + empty section again.
+- **Files:** docs/Rawhide.md
+
+## 2026-08-16 — fix(creator): Porch Life step matches the settings matrix
+- **Why:** Manual (and AI) creator hid wardrobe, likes, time and Chaos
+  behind Enable Realism Engine. Porch Life split those off — they work
+  alone. Edit-character already showed the chips with the engine off.
+  New cards also baked needsSimEnabled=false, which AND-gates Needs
+  off even after the engine is turned on later.
+- **What:** RealismFormSection always shows time, Chaos, and identity
+  chips. Bond/emotion/needs/afterglow/verifier stay behind the switch.
+  Step retitled Porch Life. Review lists wardrobe/likes/ambitions.
+  New cards default Needs on (AND with the Porch Life global). Same
+  on web; Needs form hides unless the engine is on.
+- **Files:** lib/ui/widgets/realism_form_section.dart,
+  create_character_page.*, character_creator/creator_state.dart,
+  web_ui RealismFormSection.tsx + CreateCharacterPage.tsx +
+  CharacterEditPage.tsx + realismTypes.ts
+
+## 2026-08-16 — fix(chargen): Enhance on oMLX Qwen3.8
+- **Why:** Enhance posted `/v1/chat/completions`. oMLX lists
+  Qwen3.8-27B-MLX-8bit as a VLM and rejects that door ("not supported
+  on /v1/chat/completions") while `/v1/completions` answers. Picking a
+  model other than the active one also built an ad-hoc client against
+  Remote API's URL instead of localhost:8000/v1.
+- **What:** Remember completions-only models and retry `/v1/completions`.
+  serviceForModel on oMLX always uses the oMLX URL.
+- **Files:** lib/services/openai_completions_fallback.dart,
+  open_router_service.dart, llm_provider.dart
+
+## 2026-08-16 — perf(chat): tail-first open, chunked background backfill
+- **Why:** Maintainer: get to the chat screen now; backfill the archive
+  in the background regardless of scroll so RAG and Journal still see
+  the full list. Scroll-only load left Memory/Journal on a 24-row lie.
+- **What:** Overlay drops after the last 24. Older rows page in (200
+  at a time) with a yield between pages so a 28 MB decode cannot freeze
+  the first paint. One notify when the prefix is complete. RAG treats
+  basePosition as already out of context; Journal waits for hydrate.
+- **Files:** lib/services/chat/session_open_window.dart,
+  chat_service_session_window.dart, session_load/state/manage,
+  database.queries.chat.dart, web ChatPage + facade
+
+## 2026-08-16 — fix(ui): tap-to-chat no longer freezes the home grid
+- **Why:** Home awaited the full session load (cancel/settle/flush +
+  messages + realism + RAG) before pushing ChatPage, so a character tap
+  sat on the grid for a noticeable beat. ChatPage already had the overlay.
+- **What:** Raise isLoadingSession before the first await; push ChatPage
+  immediately and drain the load after pop. Opaque porch-amber overlay so
+  the previous transcript cannot ghost. Same for group + Start New Chat.
+  Web library navigates to /chat?opening=1 before the select POST.
+- **Files:** lib/ui/pages/home/home_page_chrome.dart, chat_page.dart,
+  lib/services/chat/chat_service_{chat_entry,group_entry,session_manage}.dart,
+  lib/services/web/facade/chat_facade.dart, web_ui/src/hooks/useLibrary.ts,
+  web_ui/src/pages/{ChatPage,CreateCharacterPage,CreateGroupChatPage}.tsx
+
+## 2026-08-16 — build: pin Flutter 3.47.0 / Dart 3.13 on Rawhide
+- **Why:** 3.47 is current stable. Worktree proved analyze + 4136 units +
+  30/30 mac E2E with riverpod still capped. file_picker 12 still explodes.
+- **What:** CI/nightly/release/update-goldens/beta-release → 3.47.0.
+  macOS deploy target 10.15 → 12. Docs + FAQ. Dep caps stay (separate PR).
+  Goldens regenerated for Impeller MetalSDF.
+- **Files:** .github/workflows/{ci,nightly,release,update-goldens,beta-release}.yml,
+  macos/Runner.xcodeproj/project.pbxproj, macos/Podfile, CONTRIBUTING.md,
+  docs/install.md, docs/faq.md, docs/Rawhide.md, pubspec.yaml, test/deps/README.md
+
+## 2026-08-16 — docs: nibble tall style on files you already touch
+- **Why:** A heroic `dart format .` is 856 files and a second wrap on
+  3.13. Same law as barrels: if you edited it, leave it formatted.
+- **What:** CLAUDE.md / CONTRIBUTING.md / AGENTS.md — per-file
+  `dart format path` required; tree/directory format still forbidden;
+  do not format an existing test you weren't already changing.
+- **Files:** CLAUDE.md, CONTRIBUTING.md, AGENTS.md
+
+## 2026-08-16 — ci: restore AUR publish jobs (freeze lifted)
+- **Why:** AUR writes work again (aurweb v6.5.0). We removed the jobs
+  on 2026-08-03 so every nightly/release would not red-X on a frozen
+  remote. Secret AUR_SSH_KEY was left in place.
+- **What:** `publish-aur` back on release.yml (front-porch-ai-bin).
+  `publish-aur-beta` back on nightly.yml (front-porch-ai-beta-bin —
+  leftover name, nightly contents). beta-release.yml left retired.
+  nightly.yml also landed on main so cron actually fires it.
+- **Files:** .github/workflows/release.yml, nightly.yml
+- **Commit:** ff0d8753
 
 ## 2026-08-16 — docs: only Rawhide and main; no beta series, no dev branch
 - **Why:** Beta releases and a third `dev` line meant three installs and
@@ -100,7 +900,7 @@
   heals selection AND wording; hygiene_inversion.golden.json regenerated
   (UPDATE_GOLDENS=1). (3) set-aside clothing expired at MIDNIGHT
   (dayCountFor flips at 00:00) though every doc promised the story morning
-  — a scene past 00:00 stranded her with no outfit. New
+  — a scene past 00:00 stranded the character with no outfit. New
   StoryClock.morningDayCountFor (08:00 anchor, small hours = previous day);
   ChatService.storyDayCount now forwards to it (every consumer is a
   set-aside surface; story stamps keep calendar dayCount); the injection
@@ -322,7 +1122,7 @@
 
 ## 2026-08-15 — feat(time): reply-named clock wins so sidebar matches the line
 - **Why:** Senjumaru said "six in the morning" while the clock was 8:05.
-  new_day snaps to 08:00; she wrote dawn; the next turn followed her prose.
+  new_day snaps to 08:00; they wrote dawn; the next turn followed their prose.
   The eval on that turn only added 5 minutes. Prompt nagging cannot force
   the model to say 8:05.
 - **What:** After generation, `clockNamedInReply` reads a present-tense
@@ -792,7 +1592,7 @@
   red-proven ×2: intros neutered, consumption unwired),
   `pocket_item_dialog_test.dart` (3, red-proven: gift flag swap).
 - **Why:** maintainer feature — the panel was ✕-only. Give = in-fiction
-  hand-over (she knows); quiet add = the Easter egg (she's surprised:
+  hand-over (they know); quiet add = the Easter egg (they're surprised:
   "how did I end up with $Item?"). Note is one-shot, regen-honest
   (cleared at next user turn, not at prompt build). Eval recognition is
   free: the record is the bookkeeping prompt's ground truth.
@@ -1572,7 +2372,7 @@
 - **The bug:** spatial stance ("Position: X — ground actions in this") exists to stop
   characters teleporting between turns. It was produced by the FUSED pre-generation
   scene-time+posture eval, which fires before the reply exists — so a position the
-  character established in her own words was invisible, and the next turn's
+  character established in their own words was invisible, and the next turn's
   pre-generation judge simply re-derived a guess and overwrote it. The post-reply
   position could therefore never reach a single prompt. The feature was asserting
   stale positions imperatively, which is precisely the teleporting it was built to
@@ -1646,7 +2446,7 @@
   pockets now ride the realism_state snapshot/restore contract like every other per-turn
   scalar, which the design doc had specified and I had missed. (2) An emptied record was
   stored as ABSENT, and the seed path reads absence as "never promoted from the card" — so a
-  character who dropped everything got her whole starting wardrobe back next turn, forever.
+  character who dropped everything got their whole starting wardrobe back next turn, forever.
   (3) Caps ran only in the applier, so a hostile card's `inventory` loaded whole into session
   state. (4) `wear` of an already-worn item silently dropped a new condition.
 - **Dismissed 3 as excerpt artifacts** (default off, injection gated, web shipped — all
@@ -3942,9 +4742,9 @@ Three related fixes to the "enjoys low hygiene" (prefers-being-dirty) feature.
 - **Bug 1 — cross-chat / cross-member leak.** In the reported Seraphine & Iris group, a member's hygiene showed as **CATASTROPHIC / "feels filthy"** at **88/100** (the model's own reasoning flagged the contradiction). The numeric vector was NOT leaking — hunger 54 and fun 45 rendered at their correct steps; ONLY hygiene was wrong, the unique signature of the inversion (`if (enjoysLow && need == 'hygiene')`). The inversion read the chat's single *global* flag (`ChatService.enjoysLowHygiene` → `_activeCharacter?…enjoysLowHygiene ?? _enjoysLowHygiene`). In a pure group `_activeCharacter` is null (or the realism dance's `finally` restored it to the previous speaker), so it fell through to the stale `_enjoysLowHygiene` scalar. A DB check confirmed neither group member has the flag set — the true value carried in from an earlier **1:1 chat with a "enjoys being dirty" character (Jennifer)** and was never cleared on entering the group. Pure parity break: 1:1 was fine (active == host), group applied one leftover preference to everyone.
 - **Bug 2 — backwards text for genuine filthy-lovers.** Even used correctly, the feature only inverted the *step index* while reusing the normal filthy-phrased text, so a freshly-scrubbed character who truly enjoys being dirty was described as "feeling filthy / grime / smell" — the literal opposite of their state — and nothing told the model a high hygiene number is *unwelcome* for them (they'd "panic about being clean" with the wrong words).
 
-- **How fixed:** (1) `getInjectionEffectiveStep` takes an optional per-character override; both per-turn injections resolve the flag from the SPEAKER card they already look up, never the shared pointer. (2) The `enjoysLowHygiene` getter returns `false` in group mode instead of consulting the 1:1 scalar, closing the leak at the source (no reset-site churn). (3) A dedicated `hygieneSteppedTextWhenEnjoysLow` list describes too-clean distress (scrubbed raw, craving her musk back), and the hygiene line is annotated "this character LIKES being unwashed — a HIGH number is unwelcome" so the model reads the inverted polarity correctly. 1:1 behavior for non-filthy characters is byte-identical (passes null → global). Engine-side only, no DB change, so desktop/web parity holds by construction. The autonomous away-cue's `getLowNeedsForInjection` was left as-is (renders raw values, can't produce the contradiction).
+- **How fixed:** (1) `getInjectionEffectiveStep` takes an optional per-character override; both per-turn injections resolve the flag from the SPEAKER card they already look up, never the shared pointer. (2) The `enjoysLowHygiene` getter returns `false` in group mode instead of consulting the 1:1 scalar, closing the leak at the source (no reset-site churn). (3) A dedicated `hygieneSteppedTextWhenEnjoysLow` list describes too-clean distress (scrubbed raw, craving their musk back), and the hygiene line is annotated "this character LIKES being unwashed — a HIGH number is unwelcome" so the model reads the inverted polarity correctly. 1:1 behavior for non-filthy characters is byte-identical (passes null → global). Engine-side only, no DB change, so desktop/web parity holds by construction. The autonomous away-cue's `getLowNeedsForInjection` was left as-is (renders raw values, can't produce the contradiction).
 - **Verification:** flutter analyze (3 lib + 1 test) — No issues. dart fix — nothing. New leak-regression test fails on old code via the CATASTROPHIC assertion; new filthy-lover test asserts inverted wording. Full chat-service suite 495/495; needs_sim goldens pass.
-- **Follow-up (data, not code):** the same group's Iris genuinely has `enjoys_low_hygiene = true` on her own library card (verified in the card PNG's `chara` metadata); `_createGroupMember` copies extensions verbatim, so her group copy inherited it and her hygiene inverting is correct behavior for her card — a user-toggle choice, not a leak.
+- **Follow-up (data, not code):** the same group's Iris genuinely has `enjoys_low_hygiene = true` on Iris's own library card (verified in the card PNG's `chara` metadata); `_createGroupMember` copies extensions verbatim, so Iris's group copy inherited it and hygiene inverting is correct behavior for that card — a user-toggle choice, not a leak.
 - **Commit:** 7822052
 
 ## 2026-07-07 — Growth Rings: reserved injection slots for in-progress growth + pinned rings survive LLM retire ops
@@ -6899,11 +7699,11 @@ CONSOLIDATION: _addGuestWithStatus is now the SINGLE add path for /create, /join
 
 2026-06-22 (UTC) — Scene Guests: manual /scan now re-resolves the scene list (re-detect a deleted guest)
 Files changed: lib/services/chat_service.dart (runCastDetectionNow re-resolves guests before scanning), .claude/changelog.md.
-Brief reason: User deleted Vanessa's card then /scan-ned for her; the detection eval returned a valid {"name":"Vanessa",...} (confirmed in [Realism:RawEval] log) but the result was "no new recurring character" — i.e. the candidate was rejected by CastDetector._accept's "already a scene guest" filter. Deleting a guest's library card does not remove her from the OPEN chat's in-memory scene-guest list (no re-resolve happens until reload), so she was still counted as present and filtered out. Fix: runCastDetectionNow() now awaits _resolveSceneGuestCards() before the scan, which prunes any guest whose card no longer resolves (deleted) from _sceneGuestIds/_sceneGuestCards — so a deleted-and-re-narrated character is no longer treated as present and can be re-offered. Pairs with the existing manual-scan _offeredOrIgnoredGuestNames.clear(). Guests still genuinely in the scene remain excluded. flutter analyze clean; flutter build macos --debug green. Not committed.
+Brief reason: User deleted Vanessa's card then /scan-ned for Vanessa; the detection eval returned a valid {"name":"Vanessa",...} (confirmed in [Realism:RawEval] log) but the result was "no new recurring character" — i.e. the candidate was rejected by CastDetector._accept's "already a scene guest" filter. Deleting a guest's library card does not remove them from the OPEN chat's in-memory scene-guest list (no re-resolve happens until reload), so they were still counted as present and filtered out. Fix: runCastDetectionNow() now awaits _resolveSceneGuestCards() before the scan, which prunes any guest whose card no longer resolves (deleted) from _sceneGuestIds/_sceneGuestCards — so a deleted-and-re-narrated character is no longer treated as present and can be re-offered. Pairs with the existing manual-scan _offeredOrIgnoredGuestNames.clear(). Guests still genuinely in the scene remain excluded. flutter analyze clean; flutter build macos --debug green. Not committed.
 
 2026-06-22 (UTC) — Scene Guests: auto-remove a guest (silently) when its character card is deleted
 Files changed: lib/services/chat_service.dart (setCharacterRepository manages a listener + _onCharacterLibraryChanged + dispose removal), .claude/changelog.md.
-Brief reason: User deleted Vanessa's card mid-chat; she stayed in the open scene (still "present"), so cast detection wouldn't re-offer her until the user manually /exit'd then /scan'd. Deleting a character PNG is 100% a deliberate user action, so a guest whose card is gone should be removed from the scene automatically and SILENTLY (no /exit departure narration). CharacterRepository is a ChangeNotifier and deleteCharacter() notifies, so ChatService now listens: setCharacterRepository (de-dups via identical(), removes any prior listener, adds the new one) wires _onCharacterLibraryChanged, which — when scene guests exist — calls the existing _resolveSceneGuestCards() to drop any guest id that no longer resolves (the silent prune; no message, no narration). dispose() removes the listener. No loop risk (_resolveSceneGuestCards reads the repo + notifies ChatService, never writes the repo). This makes the deleted-guest case self-heal immediately instead of needing a manual /exit. One new private method (_onCharacterLibraryChanged) — justified: a repo-change handler with no existing equivalent; reuses _resolveSceneGuestCards for the actual prune. flutter analyze clean; 1292 tests pass; flutter build macos --debug green. Not committed.
+Brief reason: User deleted Vanessa's card mid-chat; Vanessa stayed in the open scene (still "present"), so cast detection wouldn't re-offer them until the user manually /exit'd then /scan'd. Deleting a character PNG is 100% a deliberate user action, so a guest whose card is gone should be removed from the scene automatically and SILENTLY (no /exit departure narration). CharacterRepository is a ChangeNotifier and deleteCharacter() notifies, so ChatService now listens: setCharacterRepository (de-dups via identical(), removes any prior listener, adds the new one) wires _onCharacterLibraryChanged, which — when scene guests exist — calls the existing _resolveSceneGuestCards() to drop any guest id that no longer resolves (the silent prune; no message, no narration). dispose() removes the listener. No loop risk (_resolveSceneGuestCards reads the repo + notifies ChatService, never writes the repo). This makes the deleted-guest case self-heal immediately instead of needing a manual /exit. One new private method (_onCharacterLibraryChanged) — justified: a repo-change handler with no existing equivalent; reuses _resolveSceneGuestCards for the actual prune. flutter analyze clean; 1292 tests pass; flutter build macos --debug green. Not committed.
 
 2026-06-22 (UTC) — Scene Guests: creation banner now shows live generation sub-steps
 Files changed: lib/services/chat/scene_guest_factory.dart (mint forwards onStatus to generateCharacter), lib/services/chat_service.dart (_mintSceneGuest + _addGuestWithStatus thread an onStatus step reporter into the banner; both mint call sites updated), .claude/changelog.md.
@@ -8173,7 +8973,7 @@ Bug reports from an early backer (Sascha Nemeth). Twelve issues triaged; six fea
 ## 2026-07-13 (UTC) — Revive the Needs catastrophe system + rescope "enjoys low hygiene" (design-approved)
 - **Context:** Maintainer wanted catastrophes back (they'd been silently severed as collateral in the mislabeled `7b4b921` buffer-purge refactor — the trigger scan was deleted from tickDecay while the tables/consumer/docs were left dangling). Design was reviewed by me + Grok, the behavior spec was signed off by the maintainer, and the new prompts got a second Grok pass (verdict: ship-ready, no blockers) before shipping.
 - **Catastrophe revival** (`needs_simulation.dart`, `chat_service_realism_dance.dart`, `chat_service_generation.dart`): new `applyCatastropheIfNeeded()` fires ONE mandatory "this just happened" event when a hard-event need bottoms out (≤0) and lifts it to a class-based recovery floor. Wired into `tickDecay` (1:1) AND the group per-speaker dance (1:1↔group parity). Decisions baked in: only bladder/energy/hunger/comfort/hygiene fire — social & fun are moods, NOT events (the old "fun=0 → dangerous/sexual/chaotic" line was a derailment vector, removed); energy = collapse + brief blackout + wakes groggy (floor 65), NOT fall-asleep; hygiene catastrophe suppressed for enjoys-low-hygiene chars (0 hygiene = comfort for them). Narratives rewritten neutral (they/them), each carrying its own evidence; the class-based floors replace the old magic "+12 if not accident" hack. Injection wrapper rewritten firmer-but-short — no "YOU MUST" wall, and it never puppets {{user}} ("write only {{char}} and the surroundings"). Grok-flagged polish folded in: dropped the forced "humiliation" on bladder, the "grab whoever's nearest" {{user}}-contact steer on hunger/energy, and softened comfort/hygiene so they don't force a full scene-abort / shower quest.
-- **"Enjoys low hygiene" rescoped to odor only** (`needs_simulation.dart`, `needs_injection.dart`): the old inverted texts pushed active filth-seeking ("get grimy", "get properly dirty", "would happily get her hands dirty") — a character literally dumped a mop bucket of dirty water over herself. Reworded to a pure ODOR/MUSK preference (soothed being unwashed/musky, put off by feeling soap-clean, misses their natural scent) with an explicit hard guard in the label: "do NOT seek dirt, mud, mess, or deliberately soil themselves — purely about their own body odor."
+- **"Enjoys low hygiene" rescoped to odor only** (`needs_simulation.dart`, `needs_injection.dart`): the old inverted texts pushed active filth-seeking ("get grimy", "get properly dirty", "would happily get her hands dirty") — a character literally dumped a mop bucket of dirty water over themselves. Reworded to a pure ODOR/MUSK preference (soothed being unwashed/musky, put off by feeling soap-clean, misses their natural scent) with an explicit hard guard in the label: "do NOT seek dirt, mud, mess, or deliberately soil themselves — purely about their own body odor."
 - **Tests:** new coverage — bladder@0 fires + floors to 85; social/fun@0 do NOT fire; hygiene@0 suppressed for enjoys-low. Full suite 2020 green; analyze clean.
 - **Note/follow-up:** the NON-catastrophe stepped distress texts (~35 lines) are still gendered "she" — pre-existing; a full de-gendering pass is a separate cleanup.
 - **Commit hash:** (pending)
@@ -12067,7 +12867,7 @@ swap the framework under it.
   183 memories), and the user's stuck promise needed expunging. The live DB showed the
   REAL defect: no stuck-open promise — 9 promise cards ALL kept, several re-plants of
   the same pledge (4 in one evening) + 8 "kept my word" milestone twins saturating the
-  journal, which is what actually drove the promise-nagging and her confused denials.
+  journal, which is what actually drove the promise-nagging and their confused denials.
 - **Did:**
   1. `PromiseDebtService.resolveManually` — manual kept/broken through the SAME
      `_resolve` applier (deltas, milestone, salience, cache). Guarded by
@@ -12896,8 +13696,8 @@ source check over all six eval files, honestly labelled as structural.
 trust, every need, the verifier and Chance Time all had one. It could not have
 one — the emotional eval returns a label and an intensity, never a cause, and
 adding an `emotion_reason` field would have changed the eval and its cost on
-every path. Standing Mood supplies the honest half for free: not "why she feels
-this", which nothing knows, but what she walked in carrying.
+every path. Standing Mood supplies the honest half for free: not "why they feel
+this", which nothing knows, but what they walked in carrying.
 
 **Design notes:** stamped at the ONE funnel every path attaches through
 (one-shot, multi-call, group, reprocess) rather than beside each of the four
@@ -13098,7 +13898,7 @@ Commit: 4b830fd
 
 ---
 
-## 2026-08-08 — Schema v47: a 1:1 chat forgot her pockets on every reload
+## 2026-08-08 — Schema v47: a 1:1 chat forgot the character's pockets on every reload
 
 **Files:** `lib/database/database.dart` (schemaVersion 46 → 47) ·
 `database.tables.core.dart` (`sessions.pockets`) · `database.migrations.dart`
@@ -13118,19 +13918,19 @@ for the record at all: `ChatService._pockets` lived in memory and was
 snapshotted into each message's `realism_state` — but that snapshot is only
 ever read back by `_restoreRealismStateForSpeaker`, which runs on regen, swipe
 and delete, and never on session load. Closing a 1:1 chat and reopening it
-emptied her pockets and the next pass re-seeded from the card as though the
+emptied their pockets and the next pass re-seeded from the card as though the
 chat were brand new.
 
 That is a straight 1:1-vs-group parity break, and it made the feature's own
 release note false for exactly the users most likely to try it — "the keys stay
-in her pocket", until you closed the tab.
+in their pocket", until you closed the tab.
 
 **The fix** mirrors how Needs solved the identical problem: a nullable
 `sessions.pockets` TEXT column, additive, saved beside `needs_vector` and
 loaded beside it. Written whenever the record is non-empty rather than behind
 the Pockets switch, so toggling the feature off mid-chat does not erase what
-she was already carrying; restored regardless of the switch's current state,
-because opening a chat must not be the thing that empties her hands.
+they were already carrying; restored regardless of the switch's current state,
+because opening a chat must not be the thing that empties their hands.
 
 **Two adjacent leaks fixed in the same change, because persistence promoted
 them from invisible to permanent.** Neither was reachable from the column
@@ -13139,18 +13939,18 @@ a different hat:
 
 1. **Fresh-chat bleed.** `_pockets` was absent from all three fresh-chat reset
    blocks, so a new conversation opened with the *previous* chat's props still
-   in her hands. Harmless while the record was memory-only and re-seeded from
+   in their hands. Harmless while the record was memory-only and re-seeded from
    the card anyway — but with a save wire in place the bleed gets written into
-   the new chat's row, where it is indistinguishable from something she
+   the new chat's row, where it is indistinguishable from something they
    actually picked up.
 2. **Group collapse.** When a group shrinks to one member, `chat_service_cast`
    carries the survivor's realism snapshot, enable-flags, author note and
-   growth rings back to the 1:1 — but dropped her Pockets record on the floor,
-   emptying her hands. Captured now alongside `soleNsfwEnabled`, which is read
+   growth rings back to the 1:1 — but dropped their Pockets record on the floor,
+   emptying their hands. Captured now alongside `soleNsfwEnabled`, which is read
    at the same point and for the same reason: step 4 re-enters as a 1:1, which
    clears `_groupRealism`, so reading it afterwards finds nothing. Carried
    regardless of realism, since the Pockets pass is gated on `pocketsEnabled`
-   alone and a survivor can be holding her keys with the engine off.
+   alone and a survivor can be holding their keys with the engine off.
 
 **On the version-tracker test.** `served_ambition_migration_test.dart` asserted
 `schemaVersion == 46` and went stale the moment v47 landed, turning an
@@ -13192,7 +13992,7 @@ suggested the edit had touched it. The desktop editor was unaffected.
 `CharacterCard.fromJson` uses. Two readers of one field disagreeing about what
 counts as valid is its own bug, and `Pockets.fromJson` (the only consumer)
 already tolerates both entry shapes. Junk falls back to the base; an explicit
-`{}` does clear it, since "she starts with nothing" is a thing an authoring UI
+`{}` does clear it, since "they start with nothing" is a thing an authoring UI
 has to be able to say.
 
 **Why the web side changed too, when it did not have to.** `CharacterEditPage`
@@ -13340,8 +14140,8 @@ turn 0; turn 1 is the character's first real reply.
 **The bug.** The card seed lived only inside `_runPocketsPass`, which runs
 AFTER a reply is generated. So: user sends their first message → the prompt is
 built with no inventory fragment, because no record exists yet → the model
-writes turn 1 knowing nothing about the apron its author put on her → only then
-does the pass seed. She was dressed from turn 2 onward and bare for the turn
+writes turn 1 knowing nothing about the apron its author put on them → only then
+does the pass seed. They were dressed from turn 2 onward and bare for the turn
 that sets the scene. The sidebar was blank for exactly as long, which is when an
 author who just saved a wardrobe goes to check it worked.
 
@@ -13411,8 +14211,8 @@ sidebar needed no change at all, which is the point.
 deliberately bypasses the gate: the v47 save wire writes the `_pockets` field
 directly, the load wire restores it directly, and the swipe/regen rewind writes
 through `setPocketsFor`. Toggle Pockets off for a scene and back on and
-everything she was carrying is still there. Routing any of those through the
-gated read would have turned "turn the feature off" into "delete her things" —
+everything they were carrying is still there. Routing any of those through the
+gated read would have turned "turn the feature off" into "delete their things" —
 which is why there is a guard for each of the three.
 
 **Left alone deliberately:** `_runPocketsPass` keeps its own switch check.
@@ -13441,7 +14241,7 @@ going somewhere etc."
 **The gap.** Both facts already reached the model, in the same block — the needs
 fragment ("thoughts keep returning to when the next meal might come") a few
 lines above the inventory fragment ("carrying a candy bar"). Nothing joined
-them, so whether she ate it was down to the model: frontier models usually
+them, so whether they ate it was down to the model: frontier models usually
 noticed, smaller local ones narrated the hunger and walked past the food in
 their own pocket, or set off to cook something.
 
@@ -13456,16 +14256,16 @@ Pockets eval still asks only for `inventory_ops`, and NO LLM call is added — t
 SETTLED "Pockets runs its own eval" ruling is untouched.
 
 **Gated on both fragments being non-empty**, which is exactly Needs on (hence
-Realism), Pockets on, something actually biting, and something actually in her
-hands. An instruction to use what you have is noise when she has nothing and a
-lie when nothing is wrong with her.
+Realism), Pockets on, something actually biting, and something actually in their
+hands. An instruction to use what you have is noise when they have nothing and a
+lie when nothing is wrong with them.
 
 **Names no need and no item on purpose.** A food-word list would be the wrong
 shape twice — a pantry vocabulary inside a prompt composer, and one that only
 ever serves hunger when the same instinct covers a coat in the cold or a bottle
 when thirsty. "If"/"would" leave the model free to decide nothing helps.
 
-**Adds an option, does not replace the state**: she still shows the hunger, and
+**Adds an option, does not replace the state**: they still show the hunger, and
 the words-only contract still governs the block.
 
 **Gates:** analyze 0 · 3187 unit tests · 94 goldens. 11 new guards, all
@@ -13484,7 +14284,7 @@ reddening its own correct set.
 `docs/design/pockets-and-preferences.md`
 
 **Maintainer question:** "Does the character know what is in their inventory
-before they get told they are hungry though?" No — she did not, and that was the
+before they get told they are hungry though?" No — they did not, and that was the
 wrong way round.
 
 The join line shipped this morning, but the inventory fragment sat FOUR
@@ -13492,14 +14292,14 @@ fragments below the needs line (needs → nsfw → ambitions → preferences →
 inventory → join). So the model met a vivid, directive hunger line
 ("thoughts drifting uncontrollably to food") and only learned about the candy
 bar three lines later, by which point a small local model had usually already
-committed to sending her to the kitchen.
+committed to sending them to the kitchen.
 
 What a character carries is standing knowledge; a need is something that
 arrives. Nobody discovers the contents of their own pocket at the moment they
 get hungry — they already knew, and that prior knowledge is what makes reaching
 for it the obvious move. The fragment now sits directly ABOVE the needs line
-with the join after both, so the block reads: she has this, she needs that, if
-the first eases the second she would reach for it.
+with the join after both, so the block reads: they have this, they need that, if
+the first eases the second they would reach for it.
 
 Matters least for frontier models, which connect them either way, and most for
 small local ones — exactly who this pairing exists for.
@@ -13531,7 +14331,7 @@ months, each appended where it happened to be written, and the emitted result
 had never been read end to end. Four concrete inversions:
 
 1. **Position stated dead last** — "Position: leaning against the counter —
-   ground actions in this" arrived after everything she might do from it. It is
+   ground actions in this" arrived after everything they might do from it. It is
    staging; it belongs with time and weather.
 2. **Fixation stated dead last** — a line that describes itself as "a background
    thought that colors mood and reactions", sitting nine fragments below the
@@ -13549,7 +14349,7 @@ each line and none for the block.
 
 **The contract now:** a fact that explains another fact comes first; a directive
 comes after everything it refers to. Order: the scene (when/where/standing) →
-her people → her word → who she is → how she is right now, with the volatile
+their people → their word → who they are → how they are right now, with the volatile
 state last against the closing "express all of this".
 
 **Structural change:** `behavioral_injection` was emitting two unrelated things
@@ -13787,19 +14587,19 @@ facts apply and never what to do with them.
 The asymmetry is what made it a bug rather than a gap. The SCORING side has
 always been directive — weigh the exchange against these, name the one that
 moved a score — and it reaches the relationship AND emotional-state evals. So
-bond, trust and emotion were already moving on whether a scene hit her
-preferences while she never voiced them: silently rewarding and penalising the
-user over things she would not say out loud.
+bond, trust and emotion were already moving on whether a scene hit their
+preferences while they never voiced them: silently rewarding and penalising the
+user over things they would not say out loud.
 
 Both halves now ship, because the feature is a loop and either alone is dead
-weight: she asks → the user answers → being refused moves her mood → that mood
-is what she carries into the next reply.
-* Wanting: she pursues and may raise it herself, **in her own register** (a
+weight: they ask → the user answers → being refused moves their mood → that mood
+is what they carry into the next reply.
+* Wanting: they pursue and may raise it themselves, **in their own register** (a
   dominant character presses, a soft-spoken one suggests or waits to be
-  noticed), declines what she is not into "rather than going along with it",
-  and being refused "marks her mood — sharper, or hurt, or cooler than before,
-  as fits who she is". The old prohibition "never raise them to start one" is
-  replaced by proportionality, not silence: she can initiate now, which is the
+  noticed), declines what they are not into "rather than going along with it",
+  and being refused "marks their mood — sharper, or hurt, or cooler than before,
+  as fits who they are". The old prohibition "never raise them to start one" is
+  replaced by proportionality, not silence: they can initiate now, which is the
   point, but a model told to pursue with no counterweight steers every scene
   into the same place.
 * Scoring: a refusal is "a real moment, not a neutral exchange", direction
@@ -14149,10 +14949,10 @@ single turn and... obvious results. Sometimes several of them affected."*
 Maintainer: *"It is still very whack a mole."*
 
 **THE LOOP.** The needs eval is handed the character's OWN REPLY and asked what
-the scene did to her needs. That reply was written FROM the needs — the state
+the scene did to their needs. That reply was written FROM the needs — the state
 block gives the model lines like *"Sharp, gnawing hunger cramps; light-headed
 and shaky, thoughts drifting uncontrollably to food"*. The model narrates
-exactly that, and the eval scores the narration as her having BECOME hungrier.
+exactly that, and the eval scores the narration as them having BECOME hungrier.
 Describing a state was counted as changing it, so the lower a need went, the
 more vivid the prose, and the harder the next hit.
 
@@ -14180,9 +14980,9 @@ it is the whack-a-mole, not a symptom of it.
 strength slider):
 * **The prompt breaks the loop directly.** The eval is now told that the scene
   it is reading was WRITTEN FROM the needs listed below it; that a character
-  mentioning her empty stomach is describing the state she was given rather than
+  mentioning their empty stomach is describing the state they were given rather than
   becoming worse; and that a negative is reported only for something the scene
-  explicitly describes costing her. Most needs in most scenes should be 0.
+  explicitly describes costing them. Most needs in most scenes should be 0.
 * **One bound, one place.** A single `_boundDeltas` helper in the evaluator,
   shared by the normal pass and the reprocess pass. It replaced two
   byte-identical `clamp(-30, 100)` call-site lines — a rule enforced by whoever
@@ -14905,7 +15705,7 @@ evaluation this design removed. Both restored, green again.
 
 **Not fixed, reported instead:** `posture_after_reply_test.dart` fails on two `hasLength(1)`
 assertions (lines 239 and 304/310) that count *every* posture prompt globally. Turn one now
-legitimately costs two — one to stage her, one to record where the reply left her — so the
+legitimately costs two — one to stage them, one to record where the reply left them — so the
 arithmetic is stale by maintainer ruling. The prose ("exactly one posture pass per generated
 reply") is still true; only the total is wrong. Left untouched per the no-editing-tests rule.
 
@@ -15110,7 +15910,7 @@ those files. Not edited, reported.
 Both asserted that the PRE-generation prompt asks the model for `posture`. That
 stopped being true when posture moved to its own post-generation pass, so both
 assertions had turned into guards for the bug rather than the behaviour: a check
-that runs before the reply cannot see where the reply moved her, and the next
+that runs before the reply cannot see where the reply moved them, and the next
 turn's pre-generation answer overwrote the post-generation one before it could
 ever reach a prompt.
 
@@ -15233,7 +16033,7 @@ more than what was first written there.
 
 ---
 
-## 2026-08-08 — Spatial stance: rerolling the FIRST reply no longer walks her out of the room
+## 2026-08-08 — Spatial stance: rerolling the FIRST reply no longer walks them out of the room
 
 **Files:** `lib/services/chat_service.dart`,
 `lib/services/chat/chat_service_greeting.dart`,
@@ -15288,8 +16088,8 @@ cannot be thrown at whoever arrived second.
 
 ### 3. `docs/Rawhide.md` promised something untrue
 
-The spatial bullet claimed "rerolling a reply properly puts her back where she
-was before it" while the first reply of every chat did not. Rewritten to state
+The spatial bullet claimed "rerolling a reply properly puts them back where they
+were before it" while the first reply of every chat did not. Rewritten to state
 what now actually ships, including that two rerolls of the same message start
 from the same place in 1:1 and group alike, and that a send landing during the
 opening request waits for it instead of paying for a second one.
@@ -15882,7 +16682,7 @@ set-aside bucket, day-stamped, with asymmetric expiry — clothing expires
 at the next story morning, possessions never do.
 
 **How:** remove parks (not deletes); bulk undress parks outfit AND
-carried things; new `setdown` op for mid-scene "sets her bag by the
+carried things; new `setdown` op for mid-scene "sets their bag by the
 door" (drop remains gone-for-good); wear/pickup search the pile first
 and conditions ride along; give/drop/update/transform reach it; expiry
 is lazy on every record touch, day 0 (no clock) expires nothing, and
@@ -16304,7 +17104,7 @@ hurt:
  * What is group-only is the RECIPIENT side (others roster + give/`to`),
    because a character→character handover needs a second record. A user
    handing the character something needs none of that: it is a plain pickup
-   on her own record, an op that works identically in both modes.
+   on their own record, an op that works identically in both modes.
  * The actual blocker was one clause: "not things they merely mentioned,
    remembered, wanted, or were offered". A user's gift IS an offer, so the
    model was explicitly instructed to score nothing.
@@ -16316,8 +17116,8 @@ opsRubric is the fragment SHARED verbatim with the fused ReplyFactsEval
 prompt, both transports change together by construction.
 
 Pre-generation was declined, with reasons (documented for the record):
- (1) it removes her right to refuse — post-gen, her reply arbitrates whether
-     she took it; pre-gen writes the item in before she has answered, and a
+ (1) it removes their right to refuse — post-gen, their reply arbitrates whether
+     they took it; pre-gen writes the item in before they have answered, and a
      refusal in the reply then leaves the record wrong with nothing to undo
      it. That distinction is the whole reason the sidebar has both "Hand it
      over" and "Add quietly";
@@ -16326,8 +17126,8 @@ Pre-generation was declined, with reasons (documented for the record):
      twice — the Continue double-apply failure class;
  (3) cost in the latency path: another pre-gen call on EVERY user turn to
      catch something rare, right where the voice-call work just cut calls.
- The lag it would fix is not observable: she takes the item in the prose on
- turn N and the record carries it from turn N+1, so no turn shows her
+ The lag it would fix is not observable: they take the item in the prose on
+ turn N and the record carries it from turn N+1, so no turn shows them
  empty-handed after taking it.
 
 Red-proven three ways: restoring the blanket "were offered" fails the

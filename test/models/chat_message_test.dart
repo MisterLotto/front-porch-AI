@@ -210,6 +210,25 @@ void main() {
       expect(msg.activeMetadata, {'per': 2});
     });
 
+    test('writing metadata does not reach a live swipe slot', () {
+      // Clock rewind stamps must mutate activeMetadata. Assigning
+      // metadata after realism has already parked a swipe map is
+      // invisible to regen/delete, which read activeMetadata.
+      final msg = ChatMessage(
+        text: 'm',
+        sender: 'L',
+        isUser: false,
+        metadata: {'legacy': 1},
+        swipeMetadata: [
+          {'realism_state': <String, dynamic>{}},
+        ],
+      );
+      msg.metadata = {'story_clock_before': 'lost'};
+      expect(msg.activeMetadata!.containsKey('story_clock_before'), isFalse);
+      msg.activeMetadata!['story_clock_before'] = 'kept';
+      expect(msg.activeMetadata!['story_clock_before'], 'kept');
+    });
+
     test('activeMetadata setter grows swipeMetadata list', () {
       final msg = ChatMessage(
         text: 'm',

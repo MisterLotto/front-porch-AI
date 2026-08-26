@@ -8,6 +8,8 @@
 // `realism` block with no intermediate mapping. Consumed by RealismFormSection
 // and NeedsFormSection, which are reused by character create + edit.
 
+import { parseWorkDaysField } from './workHours';
+
 /** One thing a character has: a bare name, or a name plus its condition. */
 export type InventoryEntry = string | { name: string; state?: string };
 
@@ -38,6 +40,24 @@ export interface RealismValues {
   currentTask: string;
   /** Long-term goals, one per chip (approved sketch §4). */
   ambitions: string[];
+  /** Short plan-line sentences. Identity like ambitions. */
+  planLines: string[];
+  /** What they do. Blank is omitted from the card, same as desktop. */
+  occupation: string;
+  /**
+   * What the job actually is. Engine key `occupationBrief` — do not invent
+   * a second name. Blank is omitted; missing on /detail keeps the default
+   * empty string (today stays today).
+   */
+  occupationBrief: string;
+  /** Clock range the pickers write ("9am–5pm"). Not "mornings". */
+  hours: string;
+  /**
+   * DateTime.weekday ints (1=Mon…7=Sun). `null` = missing = Mon–Fri at
+   * derive. `[]` = never at work. Do not default this to [] in the form
+   * model or an old card's next save turns every day off.
+   */
+  workDays: number[] | null;
   // Likes & Dislikes, and the 18+ pair. Flat over this bridge (the Dart side's
   // frontPorchFromFields expects camelCase keys); the CARD nests the intimate
   // pair under intimate_preferences, which is the Dart model's business.
@@ -80,6 +100,33 @@ export interface RealismValues {
   needsDecayFun: number;
   needsDecayHygiene: number;
   needsDecayComfort: number;
+  /**
+   * Sparse opening-state overlays, parallel to `alternateGreetings`.
+   * `null` = this alt still reads the room. `{}` = inherit card defaults.
+   */
+  greetingSeeds: (GreetingSeed | null)[];
+}
+
+/** Sparse per-alt overlay. Absent keys inherit the card-level seed. */
+export interface GreetingSeed {
+  characterEmotion?: string;
+  emotionIntensity?: string;
+  shortTermBond?: number;
+  longTermBond?: number;
+  trustLevel?: number;
+  dayCount?: number;
+  timeOfDay?: string;
+  storyStartDate?: string | null;
+  storyStartTime?: string | null;
+  currentTask?: string;
+  needsBaselineHunger?: number;
+  needsBaselineBladder?: number;
+  needsBaselineEnergy?: number;
+  needsBaselineSocial?: number;
+  needsBaselineFun?: number;
+  needsBaselineHygiene?: number;
+  needsBaselineComfort?: number;
+  inventory?: InventoryRecord;
 }
 
 /** Defaults mirror Flutter FrontPorchExtensions() exactly. */
@@ -97,6 +144,11 @@ export const REALISM_DEFAULTS: RealismValues = {
   chaosModeEnabled: false,
   currentTask: '',
   ambitions: [],
+  planLines: [],
+  occupation: '',
+  occupationBrief: '',
+  hours: '',
+  workDays: null,
   likes: [],
   dislikes: [],
   intimateInto: [],
@@ -106,7 +158,9 @@ export const REALISM_DEFAULTS: RealismValues = {
   realismVerificationMaxReprocesses: 1,
   realismVerificationStrictness: 3,
   realismNeedsDirectorAuthority: false,
-  needsSimEnabled: false,
+  // AND-gated with the Porch Life global (default on). A new card that
+  // writes false silently vetoes Needs even after the engine is turned on.
+  needsSimEnabled: true,
   enjoysLowHygiene: false,
   needsSimStrength: 1,
   needsBaselineHunger: 80,
@@ -116,13 +170,14 @@ export const REALISM_DEFAULTS: RealismValues = {
   needsBaselineFun: 80,
   needsBaselineHygiene: 80,
   needsBaselineComfort: 80,
-  needsDecayHunger: 4,
-  needsDecayBladder: 6,
+  needsDecayHunger: 2,
+  needsDecayBladder: 3,
   needsDecayEnergy: 3,
   needsDecaySocial: 2,
   needsDecayFun: 2,
   needsDecayHygiene: 1,
   needsDecayComfort: 2,
+  greetingSeeds: [],
 };
 
 // ── Pockets & Wardrobe chip text ───────────────────────────────────────────
@@ -137,6 +192,19 @@ export const REALISM_DEFAULTS: RealismValues = {
 
 const MAX_ITEM_CHARS = 60;
 const MAX_PER_LIST = 8;
+const FILLER = new Set(['a', 'an', 'the', 'her', 'his', 'their', 'my', 'your', 'of']);
+const EMPTY_WARDROBE = new Set([
+  'nothing', 'none', 'nude', 'naked', 'unclothed', 'undressed', 'bare', 'empty',
+]);
+
+function isEmptyWardrobeRef(name: string): boolean {
+  const toks = name
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, '')
+    .split(' ')
+    .filter((t) => t && !FILLER.has(t));
+  return toks.length > 0 && toks.every((t) => EMPTY_WARDROBE.has(t));
+}
 
 function tidy(s: string): string {
   const t = s.replace(/\s+/g, ' ').trim();
@@ -183,7 +251,7 @@ export function inventoryToChips(rec: InventoryRecord | null | undefined): {
 export function chipsToInventory(worn: string[], carrying: string[]): InventoryRecord {
   const list = (v: string[]) =>
     v.slice(0, MAX_PER_LIST).map(chipToEntry).filter((e): e is { name: string; state?: string } => !!e);
-  const w = list(worn);
+  const w = list(worn).filter((e) => !isEmptyWardrobeRef(e.name));
   const c = list(carrying);
   if (!w.length && !c.length) return {};
   return { worn: w, carrying: c };
@@ -210,7 +278,10 @@ export function titleCase(value: string): string {
 /** Coerce the /detail `realism` block (or null) into a full RealismValues,
  *  filling any missing key with its desktop default. */
 export function realismFromDetail(raw: Partial<RealismValues> | null | undefined): RealismValues {
-  return { ...REALISM_DEFAULTS, ...(raw ?? {}) };
+  const merged: RealismValues = { ...REALISM_DEFAULTS, ...(raw ?? {}) };
+  const present = raw != null && Object.prototype.hasOwnProperty.call(raw, 'workDays');
+  merged.workDays = parseWorkDaysField(raw?.workDays, present);
+  return merged;
 }
 
 // ── Relationship tier names (mirror realism_form_section.dart) ──────────────
@@ -258,4 +329,28 @@ export function decayDescription(v: number): string {
   if (v <= 7) return `Normal (${v})`;
   if (v <= 12) return `Fast (${v})`;
   return `Very Fast (${v})`;
+}
+
+
+/** Drop empty greet rows and their paired seed slots together. */
+export function compactGreetingPairs(
+  greetings: string[],
+  seeds: (GreetingSeed | null)[],
+): { greetings: string[]; seeds: (GreetingSeed | null)[] } {
+  const n = greetings.length;
+  const aligned =
+    seeds.length === n
+      ? seeds
+      : seeds.length > n
+        ? seeds.slice(0, n)
+        : [...seeds, ...Array<GreetingSeed | null>(n - seeds.length).fill(null)];
+  const outG: string[] = [];
+  const outS: (GreetingSeed | null)[] = [];
+  for (let i = 0; i < n; i++) {
+    if (!greetings[i].trim()) continue;
+    outG.push(greetings[i]);
+    outS.push(aligned[i] ?? null);
+  }
+  while (outS.length && outS[outS.length - 1] == null) outS.pop();
+  return { greetings: outG, seeds: outS };
 }

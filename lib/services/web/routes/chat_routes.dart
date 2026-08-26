@@ -47,8 +47,11 @@ class WebChatRoutes {
     router.post('/api/chat/regenerate', _regenerate);
     router.post('/api/chat/cancel-realism', _cancelRealism);
     router.post('/api/chat/continue', _continue);
+    router.post('/api/chat/fork', _fork);
     router.post('/api/chat/impersonate', _impersonate);
     router.post('/api/chat/swipe', _swipe);
+    router.get('/api/chat/variants', _variants);
+    router.post('/api/chat/select-variant', _selectVariant);
     router.post('/api/chat/edit', _edit);
     router.post('/api/chat/delete', _delete);
     router.post('/api/chat/insert-image', _insertImage);
@@ -62,6 +65,7 @@ class WebChatRoutes {
     router.post('/api/chat/lorebook', _setChatLorebook);
     router.post('/api/chat/lore-preview', _lorePreview);
     router.post('/api/chat/session', _session);
+    router.post('/api/chat/history-older', _historyOlder);
   }
 
   final ChatFacade _facade;
@@ -114,6 +118,7 @@ class WebChatRoutes {
       JsonResponse.ok({
         'sessions': await _facade.sessions(
           characterId: request.url.queryParameters['characterId'],
+          groupId: request.url.queryParameters['groupId'],
         ),
       });
 
@@ -223,6 +228,15 @@ class WebChatRoutes {
     });
   }
 
+  Future<shelf.Response> _historyOlder(shelf.Request request) async {
+    final loaded = await _facade.loadOlderHistory();
+    return JsonResponse.ok({
+      'ok': true,
+      'loaded': loaded,
+      'hasOlderHistory': _facade.state()['hasOlderHistory'] == true,
+    });
+  }
+
   Future<shelf.Response> _send(shelf.Request request) async {
     final body = await _json(request);
     final text = body['text']?.toString();
@@ -261,6 +275,17 @@ class WebChatRoutes {
     return JsonResponse.ok({'status': 'ok'});
   }
 
+  Future<shelf.Response> _fork(shelf.Request request) async {
+    final body = await _json(request);
+    final index = body['index'];
+    if (index is! int) return JsonResponse.badRequest('index is required');
+    final sessionId = await _facade.fork(index);
+    if (sessionId == null) {
+      return JsonResponse.error(409, 'Cannot fork at that message');
+    }
+    return JsonResponse.ok({'status': 'ok', 'sessionId': sessionId});
+  }
+
   Future<shelf.Response> _impersonate(shelf.Request request) async {
     final body = await _json(request);
     _facade.impersonate(body['prefix']?.toString() ?? '');
@@ -275,6 +300,28 @@ class WebChatRoutes {
       return JsonResponse.badRequest('messageIndex and direction are required');
     }
     _facade.swipe(index, direction);
+    return JsonResponse.ok({'status': 'ok'});
+  }
+
+  shelf.Response _variants(shelf.Request request) {
+    final raw = request.url.queryParameters['messageIndex'];
+    final index = int.tryParse(raw ?? '');
+    if (index == null) {
+      return JsonResponse.badRequest('messageIndex is required');
+    }
+    return JsonResponse.ok(_facade.variants(index));
+  }
+
+  Future<shelf.Response> _selectVariant(shelf.Request request) async {
+    final body = await _json(request);
+    final index = body['messageIndex'];
+    final variantIndex = body['variantIndex'];
+    if (index is! int || variantIndex is! int) {
+      return JsonResponse.badRequest(
+        'messageIndex and variantIndex are required',
+      );
+    }
+    await _facade.selectVariant(index, variantIndex);
     return JsonResponse.ok({'status': 'ok'});
   }
 
@@ -374,11 +421,13 @@ class WebChatRoutes {
 
   Future<shelf.Response> _session(shelf.Request request) async {
     final body = await _json(request);
+    final action = body['action']?.toString();
     final sessionId = await _facade.session(
-      action: body['action']?.toString(),
+      action: action,
       sessionId: body['sessionId']?.toString(),
+      startReplacement: body['startReplacement'] != false,
     );
-    if (sessionId == null && body['action'] != 'new') {
+    if (sessionId == null && action != 'new' && action != 'delete') {
       return JsonResponse.badRequest('sessionId or action is required');
     }
     return JsonResponse.ok({'status': 'ok', 'sessionId': sessionId});

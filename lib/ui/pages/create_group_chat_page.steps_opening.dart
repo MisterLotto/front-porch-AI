@@ -36,7 +36,7 @@ extension _GroupWizardOpeningSteps on _CreateGroupChatPageState {
           ),
           const SizedBox(height: 12),
 
-          // Dialogue subsection (groups): first message + explicit coming-soon stub for alt greetings.
+          // Dialogue subsection (groups): first message + alternate greetings.
           // Completely omits Example Dialogue (CharacterCard / mes_example concept only; no such field on GroupChat).
           Container(
             padding: const EdgeInsets.all(16),
@@ -141,75 +141,16 @@ extension _GroupWizardOpeningSteps on _CreateGroupChatPageState {
                   ),
 
                 const SizedBox(height: 20),
-
-                // Alternate Greetings stub (non-functional, informative only — groups do not support per-group alt greetings yet).
-                Opacity(
-                  opacity: 0.6,
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceContainerOf(context),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: AppColors.borderOf(
-                          context,
-                        ).withValues(alpha: 0.5),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.swap_horiz,
-                              color: AppColors.iconSecondary(context),
-                              size: 18,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Alternate Greetings',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textSecondary(context),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 1,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.resolve(
-                                  context,
-                                  const Color(0xFF334155),
-                                  const Color(0xFFE5E7EB),
-                                ),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                'Coming soon',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: AppColors.textTertiary(context),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Alternate greetings for groups are coming in a future update. The opening message above is used for new sessions today.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textTertiary(context),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                GroupAlternateGreetingsEditor(
+                  greetings: _altGreetings,
+                  seeds: _altGreetingSeeds,
+                  showNeeds: true,
+                  onChanged: (g, s) {
+                    rebuildState(() {
+                      _altGreetings = g;
+                      _altGreetingSeeds = s;
+                    });
+                  },
                 ),
               ],
             ),
