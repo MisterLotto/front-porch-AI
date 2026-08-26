@@ -94,20 +94,22 @@ export function RemoteAccessPage() {
     }
   };
 
-  const stepUpFields = (
+  const stepUpFields = (reason: string) => (
     <StepUpFields
       password={password}
       onPassword={setPassword}
       totpEnabled={totpEnabled}
       totpCode={totpCode}
       onTotp={setTotpCode}
-      reason={
-        totpEnabled
-          ? 'Turning a tunnel on publishes this app beyond this computer — confirm your web login password and a 2FA code.'
-          : 'Turning a tunnel on publishes this app beyond this computer — confirm your web login password.'
-      }
+      reason={reason}
     />
   );
+  const loginStepUpReason = totpEnabled
+    ? 'Signing this computer into Tailscale binds it to that account — confirm your web login password and a 2FA code.'
+    : 'Signing this computer into Tailscale binds it to that account — confirm your web login password.';
+  const tunnelStepUpReason = totpEnabled
+    ? 'Turning a tunnel on publishes this app beyond this computer — confirm your web login password and a 2FA code.'
+    : 'Turning a tunnel on publishes this app beyond this computer — confirm your web login password.';
 
   if (!status) return <div className="centered"><div className="spinner" /></div>;
   const { tailscale: ts, ngrok } = status;
@@ -163,18 +165,24 @@ export function RemoteAccessPage() {
                 <p className="muted small">Open that link, sign in, then click Re-check.</p>
               </>
             ) : (
-              <button
-                className="primary"
-                disabled={busy === 'tslogin'}
-                onClick={() =>
-                  act('tslogin', async () => {
-                    const r = await api.post<{ url: string }>('/api/remote/tailscale/login');
-                    setLoginUrl(r.url);
-                  })
-                }
-              >
-                {busy === 'tslogin' ? 'Getting link…' : 'Get sign-in link'}
-              </button>
+              <>
+                {stepUpFields(loginStepUpReason)}
+                <button
+                  className="primary"
+                  disabled={busy === 'tslogin' || !password}
+                  onClick={() =>
+                    act('tslogin', async () => {
+                      const r = await api.post<{ url: string }>(
+                        '/api/remote/tailscale/login',
+                        stepUpBody(),
+                      );
+                      setLoginUrl(r.url);
+                    })
+                  }
+                >
+                  {busy === 'tslogin' ? 'Getting link…' : 'Get sign-in link'}
+                </button>
+              </>
             )}
           </>
         ) : ts.url ? (
@@ -190,7 +198,7 @@ export function RemoteAccessPage() {
         ) : (
           <>
             <p className="muted">Signed in and ready. Turn on HTTPS to get your address.</p>
-            {stepUpFields}
+            {stepUpFields(tunnelStepUpReason)}
             <button
               className="primary"
               disabled={busy === 'ts' || !password}
@@ -262,7 +270,7 @@ export function RemoteAccessPage() {
                 )}
               </label>
             )}
-            {stepUpFields}
+            {stepUpFields(tunnelStepUpReason)}
             <button
               className="primary"
               disabled={

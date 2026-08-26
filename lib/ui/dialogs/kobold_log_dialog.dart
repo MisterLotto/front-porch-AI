@@ -41,7 +41,9 @@ class _KoboldLogDialogState extends State<KoboldLogDialog> {
         final isRunning = kobold.isRunning;
         final isReady = kobold.isReady;
 
-        final statusColor = isRunning ? Colors.greenAccent : Colors.white38;
+        final statusColor = isRunning
+            ? Colors.greenAccent
+            : AppColors.textTertiary(context);
         final statusLabel = isRunning
             ? (isReady ? 'Ready' : 'Starting…')
             : 'Stopped';
@@ -65,8 +67,10 @@ class _KoboldLogDialogState extends State<KoboldLogDialog> {
                     horizontal: 20,
                     vertical: 14,
                   ),
-                  decoration: const BoxDecoration(
-                    border: Border(bottom: BorderSide(color: Colors.white12)),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      bottom: BorderSide(color: AppColors.borderOf(context)),
+                    ),
                   ),
                   child: Row(
                     children: [
@@ -76,12 +80,12 @@ class _KoboldLogDialogState extends State<KoboldLogDialog> {
                         size: 22,
                       ),
                       const SizedBox(width: 10),
-                      const Text(
+                      Text(
                         'KoboldCpp Log',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                          color: AppColors.textPrimary(context),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -124,9 +128,9 @@ class _KoboldLogDialogState extends State<KoboldLogDialog> {
                       Tooltip(
                         message: 'Copy all logs',
                         child: IconButton(
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.copy_all,
-                            color: Colors.white38,
+                            color: AppColors.iconSecondary(context),
                             size: 18,
                           ),
                           onPressed: logs.isEmpty
@@ -145,9 +149,9 @@ class _KoboldLogDialogState extends State<KoboldLogDialog> {
                         ),
                       ),
                       IconButton(
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.close,
-                          color: Colors.white54,
+                          color: AppColors.iconSecondary(context),
                           size: 20,
                         ),
                         onPressed: () => Navigator.of(context).pop(),
@@ -166,15 +170,18 @@ class _KoboldLogDialogState extends State<KoboldLogDialog> {
                       children: [
                         Text(
                           '${logs.length} line${logs.length == 1 ? '' : 's'}',
-                          style: const TextStyle(
-                            color: Colors.white24,
+                          style: TextStyle(
+                            color: AppColors.textTertiary(context),
                             fontSize: 11,
                           ),
                         ),
                         const SizedBox(width: 8),
-                        const Text(
+                        Text(
                           '· Text is selectable and copyable',
-                          style: TextStyle(color: Colors.white12, fontSize: 11),
+                          style: TextStyle(
+                            color: AppColors.textTertiary(context),
+                            fontSize: 11,
+                          ),
                         ),
                       ],
                     ),
@@ -187,25 +194,25 @@ class _KoboldLogDialogState extends State<KoboldLogDialog> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.terminal,
-                                color: Colors.white12,
+                                color: AppColors.iconSecondary(context),
                                 size: 36,
                               ),
                               const SizedBox(height: 12),
-                              const Text(
+                              Text(
                                 'No log output yet.',
                                 style: TextStyle(
-                                  color: Colors.white38,
+                                  color: AppColors.textSecondary(context),
                                   fontSize: 14,
                                 ),
                               ),
                               const SizedBox(height: 4),
-                              const Text(
+                              Text(
                                 'Start the backend from Settings → Backend, or from the Model Settings dialog.',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
-                                  color: Colors.white24,
+                                  color: AppColors.textTertiary(context),
                                   fontSize: 12,
                                 ),
                               ),

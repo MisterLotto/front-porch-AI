@@ -149,6 +149,11 @@ const _kEvalDispatchStagger = Duration(milliseconds: 50);
 /// contract for the two other post-generation writes.
 const String kSpatialStancePreTurn = 'spatial_stance_pre_turn';
 
+/// Pre-turn glance bit. `_runWithUserPass` is post-gen like posture, so
+/// restamp overwrites `realism_state.withUser` with the reply's verdict.
+/// Regen/swipe must put the turn's START back (audit P1.7).
+const String kWithUserPreTurn = 'with_user_pre_turn';
+
 // Internal flag to signal a cancellation request for realism evaluation.
 // This is a file-scope flag to avoid needing to thread state through the
 // entire class in this patch, and is reset once the interruption is surfaced

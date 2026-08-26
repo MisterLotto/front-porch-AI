@@ -495,6 +495,11 @@ extension ChatServiceReprocess on ChatService {
             'position: "${_relationshipService.spatialStance}"',
           );
         }
+        final glanceMeta = lastMsg.activeMetadata;
+        if (glanceMeta != null && glanceMeta.containsKey(kWithUserPreTurn)) {
+          final pre = glanceMeta[kWithUserPreTurn];
+          _relationshipService.setWithUser(pre is bool ? pre : null);
+        }
 
         if (isGroupHostRegen) {
           // Persist the reverted baseline into the speaker's _groupRealism

@@ -133,16 +133,19 @@ class _ChatHistoryDialogState extends State<ChatHistoryDialog> {
         children: [
           Text(
             dateStr,
-            style: const TextStyle(fontSize: 12, color: Colors.white54),
+            style: TextStyle(
+              fontSize: 12,
+              color: AppColors.textTertiary(context),
+            ),
           ),
           if (description != null && description.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 2),
               child: Text(
                 description,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 11,
-                  color: Colors.white38,
+                  color: AppColors.textTertiary(context),
                   fontStyle: FontStyle.italic,
                 ),
                 maxLines: 2,
@@ -163,7 +166,11 @@ class _ChatHistoryDialogState extends State<ChatHistoryDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
-            icon: const Icon(Icons.edit, size: 16, color: Colors.white38),
+            icon: Icon(
+              Icons.edit,
+              size: 16,
+              color: AppColors.iconSecondary(context),
+            ),
             tooltip: 'Edit name & description',
             onPressed: () => _showEditSessionDialog(s),
           ),
@@ -245,14 +252,14 @@ class _ChatHistoryDialogState extends State<ChatHistoryDialog> {
             children: [
               AppTextField(
                 controller: nameController,
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(color: AppColors.textPrimary(ctx)),
                 decoration: InputDecoration(
                   labelText: 'Session Name',
-                  labelStyle: const TextStyle(color: Colors.white54),
+                  labelStyle: TextStyle(color: AppColors.textSecondary(ctx)),
                   hintText: 'e.g. "Adventure in the forest"',
-                  hintStyle: const TextStyle(color: Colors.white24),
+                  hintStyle: TextStyle(color: AppColors.textTertiary(ctx)),
                   filled: true,
-                  fillColor: const Color(0xFF374151),
+                  fillColor: AppColors.surfaceContainerOf(ctx),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide.none,
@@ -262,16 +269,16 @@ class _ChatHistoryDialogState extends State<ChatHistoryDialog> {
               const SizedBox(height: 12),
               AppTextField(
                 controller: descController,
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(color: AppColors.textPrimary(ctx)),
                 maxLines: 3,
                 minLines: 2,
                 decoration: InputDecoration(
                   labelText: 'Description',
-                  labelStyle: const TextStyle(color: Colors.white54),
+                  labelStyle: TextStyle(color: AppColors.textSecondary(ctx)),
                   hintText: 'Optional — appears under the timestamp',
-                  hintStyle: const TextStyle(color: Colors.white24),
+                  hintStyle: TextStyle(color: AppColors.textTertiary(ctx)),
                   filled: true,
-                  fillColor: const Color(0xFF374151),
+                  fillColor: AppColors.surfaceContainerOf(ctx),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                     borderSide: BorderSide.none,
@@ -284,9 +291,9 @@ class _ChatHistoryDialogState extends State<ChatHistoryDialog> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text(
+            child: Text(
               'Cancel',
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(color: AppColors.textSecondary(ctx)),
             ),
           ),
           ElevatedButton(

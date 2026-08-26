@@ -11,10 +11,10 @@ extension _GroupRealismNeedsView on _GroupRealismNeedsTabState {
     final isRealismActive = cs.isGroupRealismActive;
 
     if (group == null) {
-      return const Center(
+      return Center(
         child: Text(
           'No active group chat selected.',
-          style: TextStyle(color: Colors.white54),
+          style: TextStyle(color: AppColors.textSecondary(context)),
         ),
       );
     }
@@ -46,7 +46,7 @@ extension _GroupRealismNeedsView on _GroupRealismNeedsTabState {
 
                 // Quick baseline note
                 if (_baselineSeeds.isNotEmpty)
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.only(left: 8),
                     child: Chip(
                       label: Text(
@@ -60,9 +60,12 @@ extension _GroupRealismNeedsView on _GroupRealismNeedsTabState {
               ],
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'Master toggles and per-character baseline management for the Realism Engine, Chaos Mode, and Passage of Time in this group.',
-              style: TextStyle(fontSize: 12, color: Colors.white70),
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary(context),
+              ),
             ),
             const SizedBox(height: 12),
 
@@ -72,7 +75,7 @@ extension _GroupRealismNeedsView on _GroupRealismNeedsTabState {
                 padding: const EdgeInsets.all(10),
                 margin: const EdgeInsets.only(bottom: 14),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1F2937),
+                  color: AppColors.surfaceOf(context),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: Colors.amber.withValues(alpha: 0.4),
@@ -80,7 +83,7 @@ extension _GroupRealismNeedsView on _GroupRealismNeedsTabState {
                 ),
                 child: Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.warning_amber_rounded,
                       size: 18,
                       color: Colors.amber,
@@ -104,9 +107,9 @@ extension _GroupRealismNeedsView on _GroupRealismNeedsTabState {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFF111827),
+                color: AppColors.surfaceContainerOf(context),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white12),
+                border: Border.all(color: AppColors.borderOf(context)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -138,16 +141,19 @@ extension _GroupRealismNeedsView on _GroupRealismNeedsTabState {
                   const SizedBox(height: 4),
                   Text(
                     'Tracks emotions, short/long-term bond, trust, arousal, and fixation per character. Only takes effect when not in Director Mode.',
-                    style: const TextStyle(fontSize: 11, color: Colors.white54),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary(context),
+                    ),
                   ),
                   if (!_realismEnabled)
-                    const Padding(
+                    Padding(
                       padding: EdgeInsets.only(top: 6),
                       child: Text(
                         'Sub-features (Needs, etc.) have no effect while the master toggle is off.',
                         style: TextStyle(
                           fontSize: 10,
-                          color: Colors.white38,
+                          color: AppColors.textTertiary(context),
                           fontStyle: FontStyle.italic,
                         ),
                       ),
@@ -164,16 +170,16 @@ extension _GroupRealismNeedsView on _GroupRealismNeedsTabState {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFF111827),
+                color: AppColors.surfaceContainerOf(context),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white12),
+                border: Border.all(color: AppColors.borderOf(context)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      const Text('🔥', style: TextStyle(fontSize: 16)),
+                      Text('🔥', style: TextStyle(fontSize: 16)),
                       const SizedBox(width: 8),
                       const Expanded(
                         child: Text(
@@ -192,21 +198,24 @@ extension _GroupRealismNeedsView on _GroupRealismNeedsTabState {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     'Tracks arousal (the Lust bar) with post-climax refractory '
                     'cooldowns for every character in this group. Only takes '
                     'effect while the Realism Engine above is on.',
-                    style: TextStyle(fontSize: 11, color: Colors.white54),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary(context),
+                    ),
                   ),
                   if (_nsfwEnhancementsEnabled && !_realismEnabled)
-                    const Padding(
+                    Padding(
                       padding: EdgeInsets.only(top: 6),
                       child: Text(
                         'Turn on the Realism Engine above for this to have any '
                         'effect.',
                         style: TextStyle(
                           fontSize: 10,
-                          color: Colors.white38,
+                          color: AppColors.textTertiary(context),
                           fontStyle: FontStyle.italic,
                         ),
                       ),
@@ -221,9 +230,9 @@ extension _GroupRealismNeedsView on _GroupRealismNeedsTabState {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFF111827),
+                color: AppColors.surfaceContainerOf(context),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white12),
+                border: Border.all(color: AppColors.borderOf(context)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -254,9 +263,12 @@ extension _GroupRealismNeedsView on _GroupRealismNeedsTabState {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     'Automatically advances narrative time between turns. Manual nudge controls remain available in the sidebar.',
-                    style: TextStyle(fontSize: 11, color: Colors.white54),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary(context),
+                    ),
                   ),
 
                   ..._timeAndChaosControls(cs, group),
@@ -291,7 +303,7 @@ extension _GroupRealismNeedsView on _GroupRealismNeedsTabState {
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                  child: const Text(
+                  child: Text(
                     'Reset ALL',
                     style: TextStyle(fontSize: 11, color: Colors.tealAccent),
                   ),
@@ -299,18 +311,24 @@ extension _GroupRealismNeedsView on _GroupRealismNeedsTabState {
               ],
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               'Clear tracked emotion, bond, trust, and fixation for characters in the current group. Use to restart relationship arcs or after major story changes. States re-seed automatically on the next Realism evaluation.',
-              style: TextStyle(fontSize: 11, color: Colors.white54),
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary(context),
+              ),
             ),
             const SizedBox(height: 10),
 
             if (_chars.isEmpty)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Text(
                   'No characters loaded for this group.',
-                  style: TextStyle(color: Colors.white38, fontSize: 12),
+                  style: TextStyle(
+                    color: AppColors.textTertiary(context),
+                    fontSize: 12,
+                  ),
                 ),
               )
             else

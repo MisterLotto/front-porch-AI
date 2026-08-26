@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-08-26 — fix: audit P1.6–10 (Tailscale login, with-user, RAG, light)
+- **Why:** Remaining P1. Stolen web session could bind Tailscale. With-you
+  glance was restamped like posture with no pre-turn receipt, so regen
+  drifted. ChatService/StoryPipeline each minted an EmbeddingService, so
+  a RAG download never woke chat. Failed RAG search looked like "nothing
+  relevant". Group Settings / Chat History / Cleanup / Kobold log still
+  painted white-on-paper in light mode.
+- **What:** login step-up (web + route). kWithUserPreTurn twin of posture.
+  Shared EmbeddingService; MemoryService re-checks while the engine is
+  down; lastRetrieveError → error receipt. AppColors on those dialogs.
+- **Files:** remote_routes, RemoteAccessPage, chat_service_defaults /
+  group_realism_helpers / reprocess, main.providers, memory_service,
+  generation_rag, cleanup / kobold / chat history / group_settings, tests
+
 ## 2026-08-26 — fix(db): group delete and character Data Bank cascade
 - **Why:** Audit P1. Group delete wiped sessions+messages then asked for
   those sessions (already gone), so journal/growth/embeddings/objectives/

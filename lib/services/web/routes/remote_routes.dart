@@ -55,6 +55,15 @@ class WebRemoteRoutes {
   }
 
   Future<shelf.Response> _tailscaleLogin(shelf.Request request) async {
+    // Same step-up as enable-serve: a stolen session must not bind this
+    // machine to an attacker's tailnet (audit P1.6).
+    final body = await _json(request);
+    final denied = await denyUnlessSteppedUp(
+      auth: _deps.auth,
+      body: body,
+      request: request,
+    );
+    if (denied != null) return denied;
     final url = await _tunnels.tailscaleLogin();
     if (url == null) {
       return JsonResponse.error(

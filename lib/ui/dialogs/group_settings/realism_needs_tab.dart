@@ -21,7 +21,11 @@ part 'realism_needs_tab.member.dart';
 class GroupRealismNeedsTab extends StatefulWidget {
   final ChatService chatService;
   final GroupChatRepository? groupRepo;
-  const GroupRealismNeedsTab({super.key, required this.chatService, this.groupRepo});
+  const GroupRealismNeedsTab({
+    super.key,
+    required this.chatService,
+    this.groupRepo,
+  });
 
   @override
   State<GroupRealismNeedsTab> createState() => _GroupRealismNeedsTabState();
@@ -164,7 +168,12 @@ class _GroupRealismNeedsTabState extends State<GroupRealismNeedsTab> {
       char.frontPorchExtensions?.ensureStableId();
     });
 
-    persistGroupMemberPref(widget.chatService, id, 'verificationEnabled', value);
+    persistGroupMemberPref(
+      widget.chatService,
+      id,
+      'verificationEnabled',
+      value,
+    );
     _extPersister.schedule(char);
   }
 
@@ -179,7 +188,12 @@ class _GroupRealismNeedsTabState extends State<GroupRealismNeedsTab> {
       char.frontPorchExtensions?.ensureStableId();
     });
 
-    persistGroupMemberPref(widget.chatService, id, 'verificationMaxReprocesses', value);
+    persistGroupMemberPref(
+      widget.chatService,
+      id,
+      'verificationMaxReprocesses',
+      value,
+    );
     _extPersister.schedule(char);
   }
 
@@ -194,7 +208,12 @@ class _GroupRealismNeedsTabState extends State<GroupRealismNeedsTab> {
       char.frontPorchExtensions?.ensureStableId();
     });
 
-    persistGroupMemberPref(widget.chatService, id, 'verificationStrictness', value);
+    persistGroupMemberPref(
+      widget.chatService,
+      id,
+      'verificationStrictness',
+      value,
+    );
     _extPersister.schedule(char);
   }
 
@@ -209,10 +228,14 @@ class _GroupRealismNeedsTabState extends State<GroupRealismNeedsTab> {
       char.frontPorchExtensions?.ensureStableId();
     });
 
-    persistGroupMemberPref(widget.chatService, id, 'needsDirectorAuthority', value);
+    persistGroupMemberPref(
+      widget.chatService,
+      id,
+      'needsDirectorAuthority',
+      value,
+    );
     _extPersister.schedule(char);
   }
-
 
   /// Public setState bridge for the part-file extensions
   /// (same pattern as settings_page's rebuildState).
@@ -353,7 +376,10 @@ class _GroupRealismNeedsTabState extends State<GroupRealismNeedsTab> {
             width: 80,
             child: Text(
               label,
-              style: const TextStyle(fontSize: 10, color: Colors.white54),
+              style: TextStyle(
+                fontSize: 10,
+                color: AppColors.textSecondary(context),
+              ),
             ),
           ),
           Expanded(
@@ -490,5 +516,4 @@ class _GroupRealismNeedsTabState extends State<GroupRealismNeedsTab> {
     final t = (pressure / 100).clamp(0.0, 1.0);
     return Color.lerp(const Color(0xFF2EC4B6), const Color(0xFFE63946), t)!;
   }
-
 }

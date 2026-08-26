@@ -302,7 +302,13 @@ extension ChatServiceGroupRealismHelpers on ChatService {
       );
       rs['spatialStance'] = _relationshipService.spatialStance;
     }
-    rs['withUser'] = _relationshipService.withUser;
+    // Same shape as posture: only stamp when the snapshot carried the
+    // key. Unconditional putIfAbsent(null) would wipe a previous-message
+    // restore on regen of a pre-glance chat.
+    if (rs.containsKey('withUser')) {
+      meta!.putIfAbsent(kWithUserPreTurn, () => rs['withUser']);
+      rs['withUser'] = _relationshipService.withUser;
+    }
     // Pockets was captured pre-gen in _captureRealismState and never
     // restamped, so swipe/delete restore put the PRE-ops kit back after a
     // successful pass (release audit 2026-08-11). Mirror needs/arousal:

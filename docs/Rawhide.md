@@ -5,6 +5,10 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🔐 **Signing Tailscale in from the phone now asks for your web password** — same confirm as turning HTTPS on, so a stolen session cannot bind this computer to someone else's tailnet.
+
+- 💡 **Light mode on Group Settings, Chat History, Database Cleanup, and the Kobold log** — helper text and empty states are readable on paper, not white-on-white.
+
 - 🧹 **Deleting a group now takes its diary, growth, and memories with it** — leftover knowledge from that chat does not keep showing up elsewhere. Same when you delete a character: their Data Bank goes too.
 
 - 🛟 **Renaming a chat from Chat History no longer resets Porch Life** — Realism, Needs, Chaos, and the relationship numbers stay as they were. Same on the phone.

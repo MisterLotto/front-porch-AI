@@ -142,6 +142,16 @@ extension ChatServiceGenerationRag on ChatService {
         // skipped a cold engine and stamped a fake empty search.
         if (skipCueLess) {
           // Journal gist can still inject. No last-1 search, no receipt.
+        } else if (_memoryService!.lastRetrieveError != null) {
+          t.ragReceipt = buildRagReceipt(
+            found: 0,
+            journalDeduped: 0,
+            budgetTrimmed: 0,
+            injected: const [],
+            days: const {},
+            currentSessionId: _currentSessionId ?? '',
+            status: kRagReceiptError,
+          );
         } else if (rawMemories.isEmpty && !_memoryService!.isOperational) {
           t.ragReceipt = buildRagReceipt(
             found: 0,

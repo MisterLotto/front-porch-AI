@@ -57,9 +57,7 @@ class RetrievedMemory {
     return [
       for (final m in memories)
         if (m.sessionId != currentSessionId ||
-            !positions.any(
-              (p) => p >= m.positionStart && p <= m.positionEnd,
-            ))
+            !positions.any((p) => p >= m.positionStart && p <= m.positionEnd))
           m,
     ];
   }
@@ -118,7 +116,21 @@ class MemoryService extends ChangeNotifier {
 
   bool _isEmbedding = false;
   int _pendingEmbeddings = 0;
-  bool _availabilityChecked = false;
+
+  /// Set when [retrieve] failed (query embed / thrown). Null = last search
+  /// completed or was skipped. Chat stamps `rag_receipt` error from this
+  /// instead of lying "nothing relevant" (audit P1.9).
+  String? lastRetrieveError;
+
+  /// Re-check only while the engine is down so a retrieve/embed during
+  /// download cannot latch "dead" after files land (audit P1.8). Once
+  /// live, skip — [EmbeddingService.isAvailable] is the live flag.
+  Future<void> _ensureEmbeddingsReady() async {
+    if (!_embeddingService.isAvailable) {
+      debugPrint('[RAG:Memory] Checking embedding availability...');
+      await _embeddingService.checkAvailability();
+    }
+  }
 
   /// Per-session chain so import backfill and live post-gen embed cannot both
   /// discover the same missing window and insert duplicate rows (no unique
@@ -239,12 +251,7 @@ class MemoryService extends ChangeNotifier {
     int? maxWindows,
     bool Function()? shouldContinue,
   }) async {
-    // Lazy availability check — run once on first use
-    if (!_availabilityChecked) {
-      _availabilityChecked = true;
-      debugPrint('[RAG:Memory] Checking embedding availability...');
-      await _embeddingService.checkAvailability();
-    }
+    await _ensureEmbeddingsReady();
     if (!isOperational) {
       debugPrint(
         '[RAG:Memory] embedMessageWindow skipped — not operational (enabled=${_storageService.ragEnabled}, available=${_embeddingService.isAvailable})',
@@ -304,8 +311,10 @@ class MemoryService extends ChangeNotifier {
             j <= formattedMessages.length - windowSize;
             j += windowSize
           ) {
-            final jEnd =
-                (j + windowSize - 1).clamp(0, formattedMessages.length - 1);
+            final jEnd = (j + windowSize - 1).clamp(
+              0,
+              formattedMessages.length - 1,
+            );
             if (!existingRanges.contains((j, jEnd))) {
               cappedDiscovery = true;
               break;
@@ -421,12 +430,8 @@ class MemoryService extends ChangeNotifier {
     Map<String, double>? characterPriorities,
     Set<String> sessionScopedCharacterIds = const {},
   }) async {
-    // Lazy availability check — run once on first use
-    if (!_availabilityChecked) {
-      _availabilityChecked = true;
-      debugPrint('[RAG:Memory] Checking embedding availability...');
-      await _embeddingService.checkAvailability();
-    }
+    lastRetrieveError = null;
+    await _ensureEmbeddingsReady();
     if (!isOperational || queryText.trim().isEmpty) {
       debugPrint(
         '[RAG:Memory] retrieve() skipped — not operational or empty query',
@@ -459,6 +464,7 @@ class MemoryService extends ChangeNotifier {
       // Embed the query
       final queryVector = await _embeddingService.embed(cleanedQuery);
       if (queryVector == null) {
+        lastRetrieveError = 'query embed failed';
         debugPrint(
           '[RAG:Memory] ✗ Query embedding failed — aborting retrieval',
         );
@@ -603,6 +609,7 @@ class MemoryService extends ChangeNotifier {
 
       return results;
     } catch (e) {
+      lastRetrieveError = '$e';
       debugPrint('[RAG:Memory] ✗ Retrieval failed: $e');
       return [];
     }
@@ -613,10 +620,7 @@ class MemoryService extends ChangeNotifier {
   /// for other services — the Journal uses it for card vectors and cold-card
   /// query embedding.
   Future<List<double>?> embedText(String text) async {
-    if (!_availabilityChecked) {
-      _availabilityChecked = true;
-      await _embeddingService.checkAvailability();
-    }
+    await _ensureEmbeddingsReady();
     if (!isOperational) return null;
     final cleaned = _cleanForEmbedding(text);
     if (cleaned.isEmpty) return null;

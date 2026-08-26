@@ -128,8 +128,8 @@ class _DatabaseCleanupDialogState extends State<DatabaseCleanupDialog> {
   Widget _buildHeader(ThemeData theme) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: Colors.white12)),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.borderOf(context))),
       ),
       child: Row(
         children: [
@@ -141,10 +141,10 @@ class _DatabaseCleanupDialogState extends State<DatabaseCleanupDialog> {
           const SizedBox(width: 10),
           Text(
             'Database Cleanup',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: AppColors.textPrimary(context),
             ),
           ),
           if (_cleaning) ...[
@@ -157,7 +157,11 @@ class _DatabaseCleanupDialogState extends State<DatabaseCleanupDialog> {
           ],
           const Spacer(),
           IconButton(
-            icon: const Icon(Icons.close, color: Colors.white54, size: 20),
+            icon: Icon(
+              Icons.close,
+              color: AppColors.iconSecondary(context),
+              size: 20,
+            ),
             onPressed: () => Navigator.of(context).pop(),
           ),
         ],
@@ -167,16 +171,16 @@ class _DatabaseCleanupDialogState extends State<DatabaseCleanupDialog> {
 
   Widget _buildBody(ThemeData theme) {
     if (_scanning) {
-      return const Padding(
-        padding: EdgeInsets.all(48),
+      return Padding(
+        padding: const EdgeInsets.all(48),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
             Text(
               'Scanning for orphaned data...',
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(color: AppColors.textSecondary(context)),
             ),
           ],
         ),
@@ -185,11 +189,11 @@ class _DatabaseCleanupDialogState extends State<DatabaseCleanupDialog> {
 
     final report = _report;
     if (report == null) {
-      return const Padding(
-        padding: EdgeInsets.all(48),
+      return Padding(
+        padding: const EdgeInsets.all(48),
         child: Text(
           'Scan failed. Close and try again.',
-          style: TextStyle(color: Colors.white54),
+          style: TextStyle(color: AppColors.textSecondary(context)),
         ),
       );
     }
@@ -215,7 +219,7 @@ class _DatabaseCleanupDialogState extends State<DatabaseCleanupDialog> {
           const SizedBox(height: 12),
           // Orphan rows section
           ..._buildOrphanCategoryList(theme, report),
-          const Divider(color: Colors.white12, height: 16),
+          Divider(color: AppColors.borderOf(context), height: 16),
           // Broken refs section
           ..._buildBrokenRefCategoryList(theme, report),
           const SizedBox(height: 16),
@@ -229,8 +233,8 @@ class _DatabaseCleanupDialogState extends State<DatabaseCleanupDialog> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.formMasterAccent,
                 foregroundColor: AppColors.onChaosAccent,
-                disabledBackgroundColor: Colors.white10,
-                disabledForegroundColor: Colors.white24,
+                disabledBackgroundColor: AppColors.surfaceContainerOf(context),
+                disabledForegroundColor: AppColors.textTertiary(context),
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -313,12 +317,15 @@ class _DatabaseCleanupDialogState extends State<DatabaseCleanupDialog> {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Icon(cat.icon, size: 18, color: Colors.white38),
+          Icon(cat.icon, size: 18, color: AppColors.iconSecondary(context)),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               cat.label,
-              style: const TextStyle(fontSize: 13, color: Colors.white),
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.textPrimary(context),
+              ),
             ),
           ),
           Container(
@@ -326,7 +333,7 @@ class _DatabaseCleanupDialogState extends State<DatabaseCleanupDialog> {
             decoration: BoxDecoration(
               color: count > 0
                   ? Colors.orangeAccent.withValues(alpha: 0.15)
-                  : Colors.white10,
+                  : AppColors.surfaceContainerOf(context),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
@@ -334,7 +341,9 @@ class _DatabaseCleanupDialogState extends State<DatabaseCleanupDialog> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: count > 0 ? Colors.orangeAccent : Colors.white38,
+                color: count > 0
+                    ? Colors.orangeAccent
+                    : AppColors.textTertiary(context),
               ),
             ),
           ),

@@ -4,6 +4,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:front_porch_ai/ui/theme/app_colors.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/utils/utils.dart';
@@ -244,10 +245,10 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
     final isDirectorMode = cs.observerMode;
 
     if (group == null) {
-      return const Center(
+      return Center(
         child: Text(
           'No active group chat selected.',
-          style: TextStyle(color: Colors.white54),
+          style: TextStyle(color: AppColors.textSecondary(context)),
         ),
       );
     }
@@ -261,11 +262,7 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
             // Header
             Row(
               children: [
-                const Icon(
-                  Icons.battery_std,
-                  color: Colors.tealAccent,
-                  size: 20,
-                ),
+                Icon(Icons.battery_std, color: Colors.tealAccent, size: 20),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -279,9 +276,12 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
               ],
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'Configure needs baselines and per-character settings for Needs Simulation in this group.',
-              style: TextStyle(fontSize: 12, color: Colors.white70),
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary(context),
+              ),
             ),
             const SizedBox(height: 12),
 
@@ -291,7 +291,7 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
                 padding: const EdgeInsets.all(10),
                 margin: const EdgeInsets.only(bottom: 14),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1F2937),
+                  color: AppColors.surfaceOf(context),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: Colors.amber.withValues(alpha: 0.4),
@@ -299,7 +299,7 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.warning_amber_rounded,
                       size: 18,
                       color: Colors.amber,
@@ -323,9 +323,9 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFF111827),
+                color: AppColors.surfaceContainerOf(context),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white12),
+                border: Border.all(color: AppColors.borderOf(context)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -355,9 +355,12 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     'Simulates need satisfaction (hunger, bladder, energy, social, fun, hygiene, comfort). Higher = more sated (100=full, 0=critical). Low values influence AI behavior and prompt injections.',
-                    style: TextStyle(fontSize: 11, color: Colors.white54),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary(context),
+                    ),
                   ),
                 ],
               ),
@@ -390,7 +393,7 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
-                  child: const Text(
+                  child: Text(
                     'Reset ALL',
                     style: TextStyle(fontSize: 11, color: Colors.tealAccent),
                   ),
@@ -398,18 +401,24 @@ class _GroupNeedsTabState extends State<GroupNeedsTab> {
               ],
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               'Adjust each character\'s starting needs baselines and their per-turn decay ("tick rate"). Every member decays at its own rate, just like a solo character.',
-              style: TextStyle(fontSize: 11, color: Colors.white54),
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textSecondary(context),
+              ),
             ),
             const SizedBox(height: 10),
 
             if (_chars.isEmpty)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Text(
                   'No characters loaded for this group.',
-                  style: TextStyle(color: Colors.white38, fontSize: 12),
+                  style: TextStyle(
+                    color: AppColors.textTertiary(context),
+                    fontSize: 12,
+                  ),
                 ),
               )
             else
