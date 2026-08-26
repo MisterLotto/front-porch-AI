@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-08-26 — fix(needs): hygiene catastrophe does not rebound the meter
+- **Why:** Hitting 0 hygiene fired a canon scene event AND bounced the
+  meter to 55, so they dropped the pan and magically smelled better.
+  They should notice they reek and feel awful, then stay filthy until
+  they actually wash. Enjoys-low-hygiene still likes it.
+- **What:** Hygiene still arms the "I reek" beat (once per bottom-out).
+  No post-catastrophe floor. Second tick at 0 does not re-fire.
+- **Files:** needs_simulation.dart, hygiene_no_catastrophe_test.dart
+
 ## 2026-08-26 — fix(ui): alt-greeting seeds match Realism + Needs editor
 - **Why:** Alternate-greeting opening state was a cramped SwitchListTile
   stack that did not look like the Realism tab, hid Needs unless the

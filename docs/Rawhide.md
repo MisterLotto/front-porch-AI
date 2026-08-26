@@ -5,6 +5,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🧼 **Filthy means they reek and hate it — not that they magically freshen up** — hitting rock-bottom hygiene, they notice and feel awful, but the meter stays down until they actually wash. Characters who enjoy being musky still like it. Same on the phone.
+
 - 🎭 **Alternate greetings now seed Needs the same way they seed bond and mood** — same section cards as the Realism editor, including hunger and the rest. Blank still inherits the card. Same on the phone.
 
 - 🔐 **Signing Tailscale in from the phone now asks for your web password** — same confirm as turning HTTPS on, so a stolen session cannot bind this computer to someone else's tailnet.
