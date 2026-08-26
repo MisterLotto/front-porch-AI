@@ -5,6 +5,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🧹 **Deleting a group now takes its diary, growth, and memories with it** — leftover knowledge from that chat does not keep showing up elsewhere. Same when you delete a character: their Data Bank goes too.
+
 - 🛟 **Renaming a chat from Chat History no longer resets Porch Life** — Realism, Needs, Chaos, and the relationship numbers stay as they were. Same on the phone.
 
 - ▶️ **Continue keeps speaking as whoever started the line** — a Scene Guest or a group member with a shared name is not hijacked by the host. Same on the phone.

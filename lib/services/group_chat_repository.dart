@@ -219,16 +219,11 @@ class GroupChatRepository extends ChangeNotifier {
   }
 
   Future<void> delete(String groupId) async {
-    // Delete from database
+    // deleteGroupById cascades each session (journal, growth, embeddings,
+    // objectives, worlds). Asking for sessions AFTER that is a no-op — the
+    // leftover loop used to skip the real cascade entirely.
     await _db.deleteGroupById(groupId);
     _groups.removeWhere((g) => g.id == groupId);
-
-    // Delete associated chat sessions from database
-    final sessions = await _db.getSessionsForGroup(groupId);
-    for (final session in sessions) {
-      await _db.deleteMessagesForSession(session.id);
-      await _db.deleteSessionById(session.id);
-    }
 
     // Best-effort recursive delete of private group avatar tree (groups/<id>/).
     // DB rows (including group_members) already cascaded in _db.deleteGroupById.

@@ -29,6 +29,7 @@ import 'package:uuid/uuid.dart';
 import 'package:front_porch_ai/app_version.dart';
 import 'package:front_porch_ai/database/session_gen_overrides_heal.dart';
 import 'package:front_porch_ai/services/db_reunification_service.dart';
+import 'package:front_porch_ai/utils/character_id.dart';
 
 part 'database.g.dart';
 part 'context_budget_db.dart';

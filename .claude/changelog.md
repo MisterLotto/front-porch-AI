@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-08-26 — fix(db): group delete and character Data Bank cascade
+- **Why:** Audit P1. Group delete wiped sessions+messages then asked for
+  those sessions (already gone), so journal/growth/embeddings/objectives/
+  worlds never cascaded. Character delete missed Data Bank and chat-less
+  objectives keyed by filename-id.
+- **What:** group hard/soft delete routes each session through
+  deleteSessionById. Character child cascade drops Data Bank + objectives
+  by stableGroupId. Dead "then delete sessions" loop removed.
+- **Files:** database.queries.groups, database.queries.library,
+  group_chat_repository, database.dart (identity import), tests
+
 ## 2026-08-26 — test(chat): think-stream pins need reasoning wrap on
 - **Why:** f2cf39e7 peels content-side `<think>` when wrap is off. The
   generation-stream stop-scan / salvage pins and Continue promptText pin

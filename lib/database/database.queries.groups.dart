@@ -48,15 +48,20 @@ extension AppDatabaseGroupQueries on AppDatabase {
     await bumpSyncVersion();
   }
 
-  Future<int> deleteGroupById(String id) async {
-    // Hard delete: also cascade to sessions and their messages
+  /// Journal, growth, embeddings, objectives, worlds — same cascade as a
+  /// single-chat delete. A raw messages+sessions wipe left those rows
+  /// behind (audit P1: leftover embeddings still held the transcript).
+  Future<void> _cascadeGroupSessions(String groupId) async {
     final groupSessions = await (select(
       sessions,
-    )..where((s) => s.groupId.equals(id))).get();
+    )..where((s) => s.groupId.equals(groupId))).get();
     for (final s in groupSessions) {
-      await (delete(messages)..where((m) => m.sessionId.equals(s.id))).go();
+      await deleteSessionById(s.id);
     }
-    await (delete(sessions)..where((s) => s.groupId.equals(id))).go();
+  }
+
+  Future<int> deleteGroupById(String id) async {
+    await _cascadeGroupSessions(id);
 
     // Clean group-owned members (decoupled storage). Their private avatar files under
     // groups/<id>/ are cleaned by the repository layer using StorageService.
@@ -72,13 +77,7 @@ extension AppDatabaseGroupQueries on AppDatabase {
   /// sync can propagate the deletion flag and the merge layer can prevent
   /// resurrection on other devices.
   Future<int> softDeleteGroupById(String id) async {
-    final groupSessions = await (select(
-      sessions,
-    )..where((s) => s.groupId.equals(id))).get();
-    for (final s in groupSessions) {
-      await (delete(messages)..where((m) => m.sessionId.equals(s.id))).go();
-    }
-    await (delete(sessions)..where((s) => s.groupId.equals(id))).go();
+    await _cascadeGroupSessions(id);
 
     // Clean group-owned members (decoupled storage). Avatar files cleaned by repo layer.
     await customStatement('DELETE FROM group_members WHERE group_id = ?', [id]);
@@ -104,7 +103,9 @@ extension AppDatabaseGroupQueries on AppDatabase {
   }
 
   Future<void> updateGroupMember(GroupMembersCompanion member) async {
-    await (update(groupMembers)..where((m) => m.id.equals(member.id.value))).write(member);
+    await (update(
+      groupMembers,
+    )..where((m) => m.id.equals(member.id.value))).write(member);
     await bumpSyncVersion();
   }
 
