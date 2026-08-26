@@ -462,7 +462,7 @@ extension _EditCharacterCoreTabs on _EditCharacterPageState {
                               seed: idx < _altGreetingSeeds.length
                                   ? _altGreetingSeeds[idx]
                                   : null,
-                              showNeeds: _realismNeedsSim,
+                              showNeeds: true,
                               showInventory: true,
                               onChanged: (next) {
                                 rebuildState(() {

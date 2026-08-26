@@ -209,7 +209,7 @@ export function CharacterEditPage() {
         greetings={greetings}
         onChange={setGreetings}
         seeds={rv.greetingSeeds}
-        showNeeds={rv.needsSimEnabled}
+        showNeeds
         onSeedsChange={(seeds) => patch({ greetingSeeds: seeds })}
       />
 

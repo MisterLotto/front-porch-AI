@@ -312,18 +312,24 @@ extension _EditCharacterRealismSection on _EditCharacterPageState {
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.cardOf(context),
+    // Same Material surface as the collapsed ExpansionTile path — Alternate
+    // Greetings (and any other section) can host ListTiles/SwitchListTiles,
+    // and a coloured DecoratedBox between them and the scaffold Material
+    // trips Flutter's "ink may be invisible" assert.
+    return Material(
+      color: AppColors.cardOf(context),
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
+        side: BorderSide(
           color: AppColors.borderOf(context).withValues(alpha: 0.45),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [header, const SizedBox(height: 16), ...children],
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [header, const SizedBox(height: 16), ...children],
+        ),
       ),
     );
   }

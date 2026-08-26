@@ -136,7 +136,7 @@ export function CreateCharacterPage() {
               greetings={d.alternateGreetings}
               onChange={(g) => set('alternateGreetings', g)}
               seeds={d.greetingSeeds}
-              showNeeds={d.needsSimEnabled}
+              showNeeds
               onSeedsChange={(seeds) => set('greetingSeeds', seeds)}
             />
             <label>

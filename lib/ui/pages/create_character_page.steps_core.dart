@@ -355,7 +355,7 @@ extension _CreateCharacterCoreSteps on _CreateCharacterPageState {
                         seed: idx < _altGreetingSeeds.length
                             ? _altGreetingSeeds[idx]
                             : null,
-                        showNeeds: _realismNeedsSim,
+                        showNeeds: true,
                         showInventory: true,
                         onChanged: (next) {
                           rebuildState(() {

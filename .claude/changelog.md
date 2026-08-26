@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-08-26 — fix(ui): alt-greeting seeds match Realism + Needs editor
+- **Why:** Alternate-greeting opening state was a cramped SwitchListTile
+  stack that did not look like the Realism tab, hid Needs unless the
+  distant needs toggle was on, and sat inside a painted section card so
+  Flutter asserted "ListTile ink may be invisible" once per alt.
+- **What:** Same section cards/headers as RealismFormSection. Needs
+  baselines always on. Switch not ListTile. Section cards use Material.
+  Web uses the same realism-section layout.
+- **Files:** greeting_seed_form + sections, edit_character_page.realism_section,
+  alt greeting call sites, GreetingSeedForm.tsx, styles.css, test
+
 ## 2026-08-26 — fix: audit P1.6–10 (Tailscale login, with-user, RAG, light)
 - **Why:** Remaining P1. Stolen web session could bind Tailscale. With-you
   glance was restamped like posture with no pre-turn receipt, so regen

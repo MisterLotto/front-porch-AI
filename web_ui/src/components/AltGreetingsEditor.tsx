@@ -14,7 +14,7 @@ export function AltGreetingsEditor({
   onChange,
   seeds = [],
   onSeedsChange,
-  showNeeds = false,
+  showNeeds = true,
 }: {
   greetings: string[];
   onChange: (next: string[]) => void;

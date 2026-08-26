@@ -1707,7 +1707,7 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 /* ── Realism / Needs form sections (character create + edit) ─────────────── */
 .row-actions { display: flex; gap: 8px; align-items: center; }
 .realism-section { display: flex; flex-direction: column; gap: 12px; margin-bottom: 8px; }
-.greeting-seed { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 12px; padding: 8px 10px; border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent); border-radius: 10px; }
+.greeting-seed { margin: 8px 0 4px; padding: 0; border: none; }
 .tool-col { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
 .realism-head {
   margin: 6px 0 0; font-size: 0.82rem; font-weight: 600; letter-spacing: 0.4px;

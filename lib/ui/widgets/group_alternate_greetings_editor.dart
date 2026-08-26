@@ -23,7 +23,7 @@ class GroupAlternateGreetingsEditor extends StatefulWidget {
     required this.greetings,
     required this.seeds,
     required this.onChanged,
-    this.showNeeds = false,
+    this.showNeeds = true,
   });
 
   @override

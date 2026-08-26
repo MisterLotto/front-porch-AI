@@ -216,7 +216,7 @@ class ReviewStep extends StatelessWidget {
                           seed: idx < state.greetingSeeds.length
                               ? state.greetingSeeds[idx]
                               : null,
-                          showNeeds: state.realismNeedsSim,
+                          showNeeds: true,
                           showInventory: true,
                           onChanged: (next) {
                             while (state.greetingSeeds.length <= idx) {

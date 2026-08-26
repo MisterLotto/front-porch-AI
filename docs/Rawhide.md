@@ -5,6 +5,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🎭 **Alternate greetings now seed Needs the same way they seed bond and mood** — same section cards as the Realism editor, including hunger and the rest. Blank still inherits the card. Same on the phone.
+
 - 🔐 **Signing Tailscale in from the phone now asks for your web password** — same confirm as turning HTTPS on, so a stolen session cannot bind this computer to someone else's tailnet.
 
 - 💡 **Light mode on Group Settings, Chat History, Database Cleanup, and the Kobold log** — helper text and empty states are readable on paper, not white-on-white.

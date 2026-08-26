@@ -144,7 +144,7 @@ extension _GroupWizardOpeningSteps on _CreateGroupChatPageState {
                 GroupAlternateGreetingsEditor(
                   greetings: _altGreetings,
                   seeds: _altGreetingSeeds,
-                  showNeeds: _needsSimEnabled,
+                  showNeeds: true,
                   onChanged: (g, s) {
                     rebuildState(() {
                       _altGreetings = g;

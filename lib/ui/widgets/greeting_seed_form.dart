@@ -7,18 +7,24 @@ import 'package:flutter/services.dart';
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/chat/pockets.dart';
 import 'package:front_porch_ai/ui/theme/app_colors.dart';
-import 'package:front_porch_ai/ui/widgets/chip_list_editor.dart';
+import 'package:front_porch_ai/ui/widgets/identity_chip_lists.dart';
 import 'package:front_porch_ai/ui/widgets/slider_with_input.dart';
 import 'package:front_porch_ai/ui/widgets/story_begins_row.dart';
 import 'package:front_porch_ai/ui/widgets/synced_text_field.dart';
 
-/// Compact opening-state editor for one alternate greeting.
+part 'greeting_seed_form.sections.dart';
+
+/// Opening-state editor for one alternate greeting.
 ///
-/// Off (null) = this alt still gets reading-the-room. On = authored seed:
-/// empty fields inherit the card/group defaults at chat start.
+/// Visual twin of [RealismFormSection] + Needs (same section cards and
+/// headers). Off (null) = this alt still gets reading-the-room. On = authored
+/// seed: empty fields inherit the card/group defaults at chat start.
 class GreetingSeedForm extends StatefulWidget {
   final GreetingRealismSeed? seed;
   final ValueChanged<GreetingRealismSeed?> onChanged;
+
+  /// Kept so callers can hide Needs. Default on — alt openings seed hunger
+  /// the same way they seed bond (audit: half-baked without it).
   final bool showNeeds;
   final bool showInventory;
 
@@ -26,7 +32,7 @@ class GreetingSeedForm extends StatefulWidget {
     super.key,
     required this.seed,
     required this.onChanged,
-    this.showNeeds = false,
+    this.showNeeds = true,
     this.showInventory = false,
   });
 
@@ -71,202 +77,112 @@ class _GreetingSeedFormState extends State<GreetingSeedForm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SwitchListTile.adaptive(
-          contentPadding: EdgeInsets.zero,
-          title: Text(
-            'Custom opening state',
-            style: TextStyle(
-              color: AppColors.textPrimary(context),
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          subtitle: Text(
-            enabled
-                ? 'Blank fields inherit the card defaults. This alt will not '
-                      'read the room.'
-                : 'No seed — the engine reads the room from this greeting.',
-            style: TextStyle(
-              color: AppColors.textSecondary(context),
-              fontSize: 12,
-            ),
-          ),
-          value: enabled,
-          onChanged: (on) {
-            if (on) {
-              setState(() => _uiOn = true);
-              // Restore last authored seed (calendar / {}). Fresh enable
-              // persists null — not {} — until a field is set.
-              widget.onChanged(_stash);
-            } else {
-              _stash = widget.seed ?? _stash;
-              setState(() => _uiOn = false);
-              widget.onChanged(null);
-            }
-          },
-        ),
+        _masterToggle(context, enabled),
         if (enabled) ...[
-          const SizedBox(height: 8),
-          _labeledField(
-            context,
-            label: 'Emotion',
-            child: SyncedTextField(
-              value: s.characterEmotion ?? '',
-              onChanged: (v) => widget.onChanged(
-                s.copyWith(
-                  characterEmotion: v.trim().isEmpty ? null : v.trim(),
-                ),
-              ),
-              style: TextStyle(
-                color: AppColors.textPrimary(context),
-                fontSize: 14,
-              ),
-              decoration: _deco(context, 'e.g. furious, warm, guarded'),
-            ),
-          ),
-          const SizedBox(height: 8),
-          _dropdown(
-            context,
-            label: 'Intensity',
-            value: s.emotionIntensity,
-            items: _intensities,
-            hint: 'inherit (mild)',
-            onChanged: (v) => widget.onChanged(s.copyWith(emotionIntensity: v)),
-          ),
-          const SizedBox(height: 8),
-          SliderWithInput(
-            label: 'Short-term bond',
-            value: (s.shortTermBond ?? 0).toDouble(),
-            unset: s.shortTermBond == null,
-            min: -300,
-            max: 300,
-            isInteger: true,
-            divisions: 600,
-            context: context,
-            onChanged: (v) => widget.onChanged(s.copyWith(shortTermBond: v.round())),
-            onCleared: () => widget.onChanged(s.copyWith(shortTermBond: null)),
-          ),
-          SliderWithInput(
-            label: 'Long-term bond',
-            value: (s.longTermBond ?? 0).toDouble(),
-            unset: s.longTermBond == null,
-            min: -300,
-            max: 300,
-            isInteger: true,
-            divisions: 600,
-            context: context,
-            onChanged: (v) => widget.onChanged(s.copyWith(longTermBond: v.round())),
-            onCleared: () => widget.onChanged(s.copyWith(longTermBond: null)),
-          ),
-          SliderWithInput(
-            label: 'Trust',
-            value: (s.trustLevel ?? 0).toDouble(),
-            unset: s.trustLevel == null,
-            min: -100,
-            max: 100,
-            isInteger: true,
-            divisions: 200,
-            context: context,
-            onChanged: (v) => widget.onChanged(s.copyWith(trustLevel: v.round())),
-            onCleared: () => widget.onChanged(s.copyWith(trustLevel: null)),
-          ),
-          const SizedBox(height: 8),
-          _dropdown(
-            context,
-            label: 'Time of day',
-            value: s.timeOfDay,
-            items: _times,
-            hint: 'inherit (morning)',
-            onChanged: (v) => widget.onChanged(s.copyWith(timeOfDay: v)),
-          ),
-          const SizedBox(height: 8),
-          _labeledField(
-            context,
-            label: 'Day number',
-            child: SyncedTextField(
-              value: s.dayCount?.toString() ?? '',
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              onChanged: (v) {
-                final n = int.tryParse(v.trim());
-                if (v.trim().isEmpty || n == 0) {
-                  widget.onChanged(s.copyWith(dayCount: null));
-                } else if (n != null && n >= 1) {
-                  widget.onChanged(s.copyWith(dayCount: n));
-                }
-              },
-              style: TextStyle(
-                color: AppColors.textPrimary(context),
-                fontSize: 14,
-              ),
-              decoration: _deco(context, 'inherit (day 1)'),
-            ),
-          ),
-          const SizedBox(height: 8),
-          StoryBeginsRow(
-            storyStartDate: s.storyStartDate,
-            onStoryStartDateChanged: (v) =>
-                widget.onChanged(s.copyWith(storyStartDate: v)),
-            storyStartTime: s.storyStartTime,
-            onStoryStartTimeChanged: (v) =>
-                widget.onChanged(s.copyWith(storyStartTime: v)),
-          ),
-          const SizedBox(height: 8),
-          _labeledField(
-            context,
-            label: 'Starting task',
-            child: SyncedTextField(
-              value: s.currentTask ?? '',
-              onChanged: (v) => widget.onChanged(
-                s.copyWith(currentTask: v.trim().isEmpty ? null : v.trim()),
-              ),
-              style: TextStyle(
-                color: AppColors.textPrimary(context),
-                fontSize: 14,
-              ),
-              decoration: _deco(context, 'Optional in-voice objective'),
-            ),
-          ),
+          const SizedBox(height: 20),
+          _timeSection(s),
+          const SizedBox(height: 20),
+          _relationshipSection(s),
+          const SizedBox(height: 20),
+          _emotionSection(s),
           if (widget.showNeeds) ...[
-            const SizedBox(height: 12),
-            Text(
-              'Needs baselines (0–100). Blank inherits the card.',
-              style: TextStyle(
-                color: AppColors.textSecondary(context),
-                fontSize: 12,
-              ),
-            ),
-            for (final need in _needs)
-              SliderWithInput(
-                label: need.$1,
-                value: (need.$2(s) ?? 80).toDouble(),
-                unset: need.$2(s) == null,
-                min: 0,
-                max: 100,
-                isInteger: true,
-                divisions: 100,
-                context: context,
-                onChanged: (v) => widget.onChanged(need.$3(s, v.round())),
-                onCleared: () => widget.onChanged(need.$4(s)),
-              ),
+            const SizedBox(height: 20),
+            _needsSection(s),
           ],
           if (widget.showInventory) ...[
-            const SizedBox(height: 8),
-            ChipListEditor(
-              label: 'Wearing (this opening)',
-              values: _wornOf(s),
-              onChanged: (v) => _setWardrobe(s, worn: v),
-              hintText: 'sundress (rain-soaked)',
-            ),
-            ChipListEditor(
-              label: 'Carrying (this opening)',
-              values: _carryingOf(s),
-              onChanged: (v) => _setWardrobe(s, carrying: v),
-              hintText: 'keys',
+            const SizedBox(height: 20),
+            IdentityChipLists(
+              worn: _wornOf(s),
+              onWornChanged: (v) => _setWardrobe(s, worn: v),
+              carrying: _carryingOf(s),
+              onCarryingChanged: (v) => _setWardrobe(s, carrying: v),
             ),
           ],
         ],
       ],
+    );
+  }
+
+  Widget _masterToggle(BuildContext context, bool enabled) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.cardOf(context),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: enabled
+              ? AppColors.formMasterAccent.withValues(alpha: 0.4)
+              : AppColors.borderOf(context),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: enabled
+                  ? AppColors.formMasterAccent.withValues(alpha: 0.2)
+                  : AppColors.surfaceContainerOf(
+                      context,
+                    ).withValues(alpha: 0.6),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              Icons.tune,
+              color: enabled
+                  ? AppColors.formMasterAccent
+                  : AppColors.iconSecondary(context),
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Custom opening state',
+                  style: TextStyle(
+                    color: AppColors.textPrimary(context),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  enabled
+                      ? 'Blank fields inherit the card defaults. This alt '
+                            'will not read the room.'
+                      : 'No seed — the engine reads the room from this '
+                            'greeting.',
+                  style: TextStyle(
+                    color: enabled
+                        ? AppColors.formMasterAccent
+                        : AppColors.textTertiary(context),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: enabled,
+            onChanged: (on) {
+              if (on) {
+                setState(() => _uiOn = true);
+                widget.onChanged(_stash);
+              } else {
+                _stash = widget.seed ?? _stash;
+                setState(() => _uiOn = false);
+                widget.onChanged(null);
+              }
+            },
+            activeTrackColor: AppColors.formMasterAccent.withValues(alpha: 0.5),
+            activeThumbColor: AppColors.formMasterAccent,
+          ),
+        ],
+      ),
     );
   }
 
@@ -345,75 +261,5 @@ class _GreetingSeedFormState extends State<GreetingSeedForm> {
       carrying: carrying ?? _carryingOf(s),
     );
     widget.onChanged(s.copyWith(inventory: next.isEmpty ? null : next));
-  }
-
-  Widget _dropdown(
-    BuildContext context, {
-    required String label,
-    required String? value,
-    required List<String> items,
-    required String hint,
-    required ValueChanged<String?> onChanged,
-  }) {
-    final selected = value != null && items.contains(value) ? value : null;
-    final inheritStyle = TextStyle(
-      color: AppColors.textTertiary(context).withValues(alpha: 0.6),
-      fontSize: 13,
-    );
-    return _labeledField(
-      context,
-      label: label,
-      child: DropdownButtonFormField<String>(
-        key: ValueKey('$label-${selected ?? 'inherit'}'),
-        initialValue: selected,
-        hint: Text(hint, style: inheritStyle),
-        items: [
-          DropdownMenuItem<String>(
-            value: null,
-            child: Text(hint, style: inheritStyle),
-          ),
-          for (final i in items)
-            DropdownMenuItem(value: i, child: Text(i.replaceAll('_', ' '))),
-        ],
-        onChanged: onChanged,
-        decoration: _deco(context, hint),
-        dropdownColor: AppColors.surfaceContainerOf(context),
-        style: TextStyle(color: AppColors.textPrimary(context), fontSize: 14),
-      ),
-    );
-  }
-
-  Widget _labeledField(
-    BuildContext context, {
-    required String label,
-    required Widget child,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            color: AppColors.textSecondary(context),
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 4),
-        child,
-      ],
-    );
-  }
-
-  InputDecoration _deco(BuildContext context, String? hint) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle: TextStyle(
-        color: AppColors.textTertiary(context).withValues(alpha: 0.6),
-        fontSize: 13,
-      ),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-    );
   }
 }
