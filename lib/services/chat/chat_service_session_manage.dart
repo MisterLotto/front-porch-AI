@@ -63,7 +63,7 @@ extension ChatServiceSessionManage on ChatService {
     final session = await _db.getSessionById(sessionId);
     if (session == null) return;
 
-    await _db.updateSession(
+    await _db.patchSession(
       SessionsCompanion(
         id: drift.Value(sessionId),
         name: drift.Value(name.isEmpty ? null : name),
@@ -86,7 +86,7 @@ extension ChatServiceSessionManage on ChatService {
     final session = await _db.getSessionById(sessionId);
     if (session == null) return;
 
-    await _db.updateSession(
+    await _db.patchSession(
       SessionsCompanion(
         id: drift.Value(sessionId),
         description: drift.Value(description.isEmpty ? null : description),

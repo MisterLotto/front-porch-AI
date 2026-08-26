@@ -553,13 +553,12 @@ extension ChatServiceAccessors on ChatService {
   void _editMessageImpl(int index, String newText) async {
     if (index >= 0 && index < _messages.length) {
       final msg = _messages[index];
-      // Use the text setter so we only update the current swipe's text
-      // while preserving all realism metadata, swipes, swipeMetadata, durations, etc.
-      // This prevents chips (needs_deltas, bond/trust deltas, emotion, etc.) from disappearing on edit.
+      // text setter keeps swipe + realism metadata (chips survive edit).
       msg.text = newText;
-      // Timeline integrity: an edit at a journaled position rewrites what
-      // the diary already read (smoke-test bug 2026-07-21).
-      _invalidateJournalFrom(index);
+      // Persist index — on-screen 0..23 is a tail window, not the diary cite.
+      _invalidateJournalFrom(
+        persistMessagePosition(base: _history.basePosition, index: index),
+      );
       await _saveChat();
       notifyListeners();
     }

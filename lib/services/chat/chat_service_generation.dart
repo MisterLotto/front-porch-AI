@@ -183,6 +183,31 @@ extension ChatServiceGeneration on ChatService {
       _sentenceBroadcast.add('__DONE__');
       return;
     }
+    // Continue is regen's sibling for WHO is speaking. Infer guest / group
+    // member from the bubble; refuse rather than guess.
+    if (mode == GenerationMode.continue_ && _messages.isNotEmpty) {
+      final last = _messages.last;
+      guestSpeaker ??= _sceneGuestForMessage(last);
+      if (guestSpeaker == null && _isGuestAuthoredMessage(last)) {
+        _setGuestStatus(
+          'Can’t continue "${last.sender}" — they have left the scene.',
+          isError: true,
+        );
+        notifyListeners();
+        return;
+      }
+      if (guestSpeaker == null && _activeGroup != null) {
+        forceSpeaker ??= _resolveGroupSpeakerForMessage(last);
+        if (forceSpeaker == null) {
+          _setGuestStatus(
+            'Can’t continue "${last.sender}" — who said it is ambiguous.',
+            isError: true,
+          );
+          notifyListeners();
+          return;
+        }
+      }
+    }
     // regenerateLastMessage holds the settling flag; the finally restores it.
     final callerHeldSettling = _isPostGenerating;
     final epoch = ++_generationEpoch;
@@ -211,15 +236,9 @@ extension ChatServiceGeneration on ChatService {
         // (see the guestSpeaker == null guards in the post-gen block below).
         speakingCharacter = guestSpeaker;
       } else if (_activeGroup != null) {
-        speakingCharacter =
-            (mode == GenerationMode.continue_ &&
-                _messages.isNotEmpty &&
-                !_messages.last.isUser)
-            ? _groupCharacters.firstWhere(
-                (c) => c.name == _messages.last.sender,
-                orElse: () => _pickPresentGroupSpeaker(),
-              )
-            : (forceSpeaker ?? _pickPresentGroupSpeaker());
+        // Continue resolved forceSpeaker above (id-first, refuse on
+        // duplicates). Regen already passes it. Fresh turns pick present.
+        speakingCharacter = forceSpeaker ?? _pickPresentGroupSpeaker();
       } else {
         speakingCharacter = _activeCharacter!;
       }

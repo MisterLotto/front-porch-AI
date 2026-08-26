@@ -55,9 +55,7 @@ import 'package:front_porch_ai/services/chat/prompt_injection/prompt_injection.d
 import 'package:front_porch_ai/services/macro_resolver.dart';
 import 'package:drift/drift.dart' as drift;
 
-// Cohesive method groups extracted into part files to keep this file shrinking
-// toward the 500-line cap (see CLAUDE.md). Parts share this library's imports and
-// private members; behaviour is unchanged.
+// Parts share this library's imports and privates. Keep this file under 1000.
 part 'chat/chat_service_group_read.dart';
 part 'chat/chat_service_group_settings.dart';
 part 'chat/chat_service_growth.dart';
@@ -92,6 +90,7 @@ part 'chat/chat_service_generation_request.dart';
 part 'chat/chat_service_generation_stream.dart';
 part 'chat/chat_service_generation_postgen.dart';
 part 'chat/chat_service_pockets.dart';
+part 'chat/chat_service_item_cards.dart';
 part 'chat/chat_service_episode_crumbs.dart';
 part 'chat/chat_service_night_skip.dart';
 part 'chat/chat_service_reply_facts.dart';
@@ -115,13 +114,12 @@ part 'chat/chat_service_wiring_injection.dart';
 part 'chat/chat_service_send.dart';
 part 'chat/chat_service_turn_flow.dart';
 part 'chat/chat_service_message_ops.dart';
+part 'chat/chat_service_timeline.dart';
 part 'chat/chat_service_guest_flow.dart';
 part 'chat/chat_service_accessors.dart';
 part 'chat/chat_service_defaults.dart';
 
-// (_realismEvalCancelled — the file-scope realism-eval cancel flag — and the
-// GBNF grammar-removal historical note both moved to chat_service_defaults.dart;
-// both are library top-level, so every part file's access is unaffected.)
+// Realism-eval cancel flag + GBNF note live in chat_service_defaults.dart.
 
 class ChatService extends ChangeNotifier with ChatServiceTodaySentence {
   final KoboldService _koboldService;

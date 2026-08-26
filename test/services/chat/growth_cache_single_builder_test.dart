@@ -59,7 +59,8 @@ void main() {
     expect(
       callers,
       hasLength(1),
-      reason: 'a second call site is a second roster, and the second roster '
+      reason:
+          'a second call site is a second roster, and the second roster '
           'is how Scene Guests got dropped: $callers',
     );
     expect(callers.single, contains('chat_service_growth.dart'));
@@ -77,16 +78,18 @@ void main() {
     expect(
       body,
       contains('_sceneGuest.cards'),
-      reason: 'guests are cast members with their own rings — leaving them '
+      reason:
+          'guests are cast members with their own rings — leaving them '
           'out of the id list empties their growth from the injection',
     );
   });
 
   test('timeline invalidation rebuilds through that builder', () {
     expect(
-      read('chat_service_message_ops.dart'),
+      read('chat_service_timeline.dart'),
       contains('await _refreshGrowthCache();'),
-      reason: 'after purging rings the cache must be rebuilt by the canonical '
+      reason:
+          'after purging rings the cache must be rebuilt by the canonical '
           'builder, not by a local copy of its id list',
     );
   });

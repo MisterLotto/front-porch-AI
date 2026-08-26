@@ -32,3 +32,12 @@ class SessionHistoryWindow {
 /// DB `position` for in-memory index [index] of a (possibly windowed) list.
 int persistMessagePosition({required int base, required int index}) =>
     base + index;
+
+/// Receipts for the live tip. [length] is `_messages.length`.
+///
+/// A tail window (last ~24 lines of a long chat) must cite [base]+last, not
+/// the on-screen index 0..23.
+List<int> persistTipCite({required int base, required int length}) =>
+    length <= 0
+    ? const []
+    : [persistMessagePosition(base: base, index: length - 1)];

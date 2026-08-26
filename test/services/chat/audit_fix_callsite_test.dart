@@ -56,10 +56,10 @@ void main() {
   });
 
   test('pickup retires item cards for the whole session', () {
-    final pockets = File(
-      'lib/services/chat/chat_service_pockets.dart',
+    final cards = File(
+      'lib/services/chat/chat_service_item_cards.dart',
     ).readAsStringSync();
-    expect(pockets, contains('retireItemCardsInSession'));
+    expect(cards, contains('retireItemCardsInSession'));
   });
 
   test('follow-up speakers stay on the clock bucket brigade', () {

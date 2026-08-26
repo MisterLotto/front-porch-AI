@@ -18,7 +18,10 @@ extension ChatServiceEpisodeCrumbs on ChatService {
         ? _groupCharacters
         : [_activeCharacter].whereType<CharacterCard>();
     final leftDay = StoryClock.dayCountFor(before, _timeService.startDate);
-    final cite = _messages.isEmpty ? const <int>[] : [_messages.length - 1];
+    final cite = persistTipCite(
+      base: _history.basePosition,
+      length: _messages.length,
+    );
 
     for (final card in people) {
       final work = _workFieldsFor(card);

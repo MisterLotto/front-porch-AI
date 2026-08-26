@@ -232,8 +232,7 @@ extension ChatServiceWiringRealism on ChatService {
       setGroupCounter: (charId, key, v) =>
           _memberForWrite(charId).setValue(key, v),
       // Living Time §7 v1.5: bond/trust tier crossings → "Our Story" cards.
-      // Fire-and-forget; plant never throws into the eval path. Diary owner is
-      // the current speaker (1:1 host or group speaker whose scalars just moved).
+      // Fire-and-forget; plant never throws. Owner is the current speaker.
       onTierCrossing: (crossing) {
         final sessionId = _currentSessionId;
         if (sessionId == null) return;
@@ -245,9 +244,10 @@ extension ChatServiceWiringRealism on ChatService {
             sessionId: sessionId,
             characterId: charId,
             crossing: crossing,
-            sourcePositions: _messages.isEmpty
-                ? const <int>[]
-                : <int>[_messages.length - 1],
+            sourcePositions: persistTipCite(
+              base: _history.basePosition,
+              length: _messages.length,
+            ),
             storyDay: _timeService.dayCount,
             storyClock: _timeService.storyClockIso,
             maxCards: _storageService.memorySettings.journalMaxCards,

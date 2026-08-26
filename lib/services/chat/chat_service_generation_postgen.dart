@@ -231,12 +231,10 @@ extension ChatServiceGenerationPostGen on ChatService {
           // live-minus-stamp, so the merge is free), and pockets keeps the
           // ORIGINAL pre-turn stamp so regen/tail-delete rewind to the true
           // base (see _runPocketsPass's asContinuation).
-          // Guest-authored tail: a Continue of a Scene Guest's message must
-          // score NOTHING — the speaker resolution falls back to the host in
-          // 1:1, so the guest's words would mutate the host's pockets, needs
-          // and stance. (Guest TURNS never reach here — guestSpeaker != null
-          // skips this whole block — but continueGeneration re-enters with
-          // guestSpeaker null.) Pre-change the blanket skip masked this.
+          // Present-guest Continue sets guestSpeaker before _GenTurn, so
+          // this whole block is skipped. Departed-guest Continue refuses
+          // before generating. The empty scoredReply is leftover belt if
+          // a guest-authored tail ever reaches here with guestSpeaker null.
           final scoredReply = t.mode == GenerationMode.continue_
               ? (_isGuestAuthoredMessage(t.streamTarget) ? '' : newPart.trim())
               : finalResponse;

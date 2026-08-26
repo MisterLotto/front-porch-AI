@@ -567,7 +567,9 @@ extension ChatServicePockets on ChatService {
     // so its retires stand. Runs above the pockets gate deliberately: the
     // cards were written while pockets was on and must come back even if the
     // switch is off today (same rule as the RAG invalidator).
-    if (!after) unawaited(_replantRetiredItemCards(msg));
+    if (!after) {
+      unawaited(_replantItemCards(msg, key: 'item_cards_retired'));
+    }
     if (!_storageService.realismSettings.pocketsEnabled) return;
     final before = msg.metadata?['pockets_before'];
     if (before is! Map) return;
@@ -603,143 +605,6 @@ extension ChatServicePockets on ChatService {
         oRec = afterByChar[oid];
       }
       setPocketsFor(oid, Pockets.fromJson(oRec));
-    }
-  }
-
-  /// Retire every live item-memory card about [itemName] for [ownerId].
-  /// Shared by the post-gen feed (one live placement per item) and the
-  /// eraser ([removePocketItem]) so neither path leaves a phantom diary.
-  Future<void> _retireItemCardsFor(String ownerId, String itemName) async {
-    final sid = _currentSessionId;
-    if (sid == null || itemName.isEmpty) return;
-    final existing = await _journalStore.cardsFor(sid, ownerId);
-    for (final old in existing) {
-      if (JournalPhysics.isItemCard(old) &&
-          sameItem(JournalPhysics.itemOf(old) ?? '', itemName)) {
-        await _journalStore.retireCard(old.id);
-      }
-    }
-  }
-
-  /// Write this turn's item-memory cards ([itemCardsFrom] decides which
-  /// events are diary-worthy). One live placement memory per item: a new
-  /// card about the same thing retires the old one first, so "where are my
-  /// keys" always has exactly one answer in the diary. Cards carry the
-  /// canonical item name in the metadata pouch (the keyword re-warm key),
-  /// the story stamp, and the reply's position as their receipt — which also
-  /// enrolls them in the existing timeline-integrity invalidation: a
-  /// regenerated or deleted reply takes its phantom placement cards with it.
-  Future<void> _writeItemCards(
-    String ownerId,
-    List<PocketEvent> events, {
-    required bool asContinuation,
-  }) async {
-    // A retire is a hard DB delete — right while this turn stands, wrong the
-    // moment it is regenerated or tail-deleted. Stamp every card this turn is
-    // about to retire onto the message (same contract as pockets_before:
-    // replace on a normal turn, append on Continue) so the rewind can
-    // re-plant them (1.3 sweep, item_card_stamps.dart).
-    final stamps = <ItemCardStamp>[];
-    // Pickup writes no diary line but must retire the old placement card
-    // ("I set my keys down") or "where are my keys?" stays wrong.
-    for (final e in events) {
-      if (e.kind == PocketOpKind.pickup) {
-        final sid = _currentSessionId;
-        if (sid != null) {
-          stamps.addAll(
-            itemCardStampsFrom(
-              await _db.getJournalCardsForSession(sid),
-              e.item,
-            ),
-          );
-          await _journalStore.retireItemCardsInSession(sid, e.item);
-        } else {
-          await _retireItemCardsFor(ownerId, e.item);
-        }
-      }
-    }
-    final drafts = itemCardsFrom(events);
-    if (drafts.isEmpty) {
-      _stampRetiredItemCards(stamps, asContinuation: asContinuation);
-      return;
-    }
-    final sid = _currentSessionId!;
-    for (final draft in drafts) {
-      stamps.addAll(
-        itemCardStampsFrom(
-          await _journalStore.cardsFor(sid, ownerId),
-          draft.item,
-        ),
-      );
-      await _retireItemCardsFor(ownerId, draft.item);
-      await _journalStore.addCard(
-        sessionId: sid,
-        characterId: ownerId,
-        content: draft.content,
-        category: 'item',
-        kind: 'item',
-        extraMetadata: {'item': draft.item},
-        sourcePositions: [if (_messages.isNotEmpty) _messages.length - 1],
-        storyDay: _timeService.dayCount,
-        storyClock: _timeService.storyClockIso,
-        maxCards: _storageService.memorySettings.journalMaxCards,
-      );
-    }
-    _stampRetiredItemCards(stamps, asContinuation: asContinuation);
-    debugPrint(
-      '[Journal] 📦 ${drafts.length} item card(s) for ${_activeCharacter?.name}',
-    );
-  }
-
-  /// Ride the retired-card stamps on THIS turn's message. Replace on a
-  /// normal turn; append on Continue (the first half's retires belong to the
-  /// same turn and must survive the extension) — the pockets_before contract.
-  void _stampRetiredItemCards(
-    List<ItemCardStamp> stamps, {
-    required bool asContinuation,
-  }) {
-    if (_messages.isEmpty || _messages.last.isUser) return;
-    final msg = _messages.last;
-    final prior = asContinuation
-        ? ItemCardStamp.listFrom(msg.metadata?['item_cards_retired'])
-        : const <ItemCardStamp>[];
-    final all = [...prior, ...stamps];
-    if (all.isEmpty) return;
-    msg.metadata = {
-      ...?msg.metadata,
-      'item_cards_retired': [for (final s in all) s.toJson()],
-    };
-  }
-
-  /// Re-plant the item cards this turn's retire deleted — the rewind half.
-  /// Regenerate and tail-delete only (`after: false`); a swipe leaves the
-  /// turn standing, so its retires stand too. Retire-first so a double
-  /// regenerate cannot duplicate a card.
-  Future<void> _replantRetiredItemCards(ChatMessage msg) async {
-    final sid = _currentSessionId;
-    if (sid == null) return;
-    final stamps = ItemCardStamp.listFrom(msg.metadata?['item_cards_retired']);
-    for (final s in stamps) {
-      try {
-        await _retireItemCardsFor(s.owner, s.item);
-        await _journalStore.addCard(
-          sessionId: sid,
-          characterId: s.owner,
-          content: s.content,
-          category: 'item',
-          kind: 'item',
-          extraMetadata: {'item': s.item},
-          sourcePositions: s.positions,
-          storyDay: s.storyDay,
-          storyClock: s.storyClock,
-          // Same memory, not a fresh one: keep its cooled heat + pin.
-          heat: s.heat,
-          pinned: s.pinned,
-          maxCards: _storageService.memorySettings.journalMaxCards,
-        );
-      } catch (e) {
-        debugPrint('[Journal] item card re-plant skipped (${s.item}): $e');
-      }
     }
   }
 }

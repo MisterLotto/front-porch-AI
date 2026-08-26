@@ -690,14 +690,9 @@ extension ChatServiceObjectives on ChatService {
       if (card != null) characterName = card.name;
     }
 
-    // 6, not the judges' 4: a promise often gets fulfilled across a couple
-    // of exchanges, and once the moment scrolls out of this window a missed
-    // KEPT could never be detected again (2026-08-04 report). Through the
-    // ONE window builder since 2026-08-10 — this was the last turn-adjacent
-    // inline window the eval diet missed, and the maintainer's EvalTraffic
-    // line caught it red-handed: 38.3k chars of prompt for a 59-char verdict
-    // on a novella-writing model. recentExchange brings the per-message
-    // clamp, photo markers, and think-stripping in one line.
+    // 6, not the judges' 4: a promise often spans a couple of exchanges
+    // (missed KEPT if it scrolls out — 2026-08-04). recentExchange is the
+    // one window builder (clamp, photo markers, think-strip).
     final recent = recentExchange(_messages, take: 6);
     if (recent.trim().isEmpty) return;
 
@@ -708,7 +703,10 @@ extension ChatServiceObjectives on ChatService {
         characterName: characterName,
         userName: _userPersonaService.persona.name,
         recentExchange: recent,
-        receiptPosition: _messages.isEmpty ? null : _messages.length - 1,
+        receiptPosition: persistTipCite(
+          base: _history.basePosition,
+          length: _messages.length,
+        ).firstOrNull,
         storyDay: _timeService.dayCount,
         storyClock: _timeService.storyClockIso,
       ),

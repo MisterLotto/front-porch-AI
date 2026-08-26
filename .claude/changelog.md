@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-08-25 — fix(pockets): invert buried give instead of tail-rewinding
+- **Why:** Review: applying a buried turn's before-kit to giver+recipients
+  clobbered later ops (Sam's sandwich vanished; unique keys could exist
+  twice one hop later). message_ops was over 500. A later no-op swipe
+  keeps shared pockets_before and has no pockets_after; fromJson(null)
+  is empty and invert stole later holdings.
+- **What:** invertDeletedPocketTurn pulls unique moved items off whoever
+  holds them now. Missing pockets_after is unknown, not empty — skip.
+  Tail-delete still uses the full before-stamp. Timeline invalidation
+  extracted so message_ops stays under 500. chat_service.dart kept
+  under 1000. Group Continue refuse banners. Stale post-gen comment
+  and present-guest pockets skip pinned.
+- **Files:** pockets_invert.dart, chat_service_timeline.dart, message_ops,
+  generation, generation_postgen, tests
+
+## 2026-08-25 — fix(chat): P0 silent damage (History Save, Continue speaker, pockets rewind)
+- **Why:** Full-codebase audit. Chat History Save used Drift replace() with only
+  name/description, snapping Realism/Needs/Chaos and group state to defaults.
+  Continue assembled guest/group turns as the host (host-ban) or first-match
+  by display name. Middle-delete of a group give duplicated unique items;
+  swipe of a setdown deleted the live item card; item/episode/milestone
+  receipts cited the on-screen 0..23 index in a long-chat tail window.
+- **What:** updateSession → patchSession/write(); Continue infers guestSpeaker
+  and id-first group forceSpeaker (refuse on duplicates); pockets restore on
+  every character delete not just tail; persistTipCite for receipts; swipe-
+  scoped planted/retired item-card stamps, replant after invalidation.
+- **Files:** database.queries.chat, session_manage, generation, message_ops,
+  session_open_window, item_cards (new part), pockets, episode_crumbs,
+  wiring_realism, objectives, tests, Rawhide.md
+
 ## 2026-08-25 — fix(reasoning): canonicalize all think wrappers to <think>
 - **Why:** NanoGPT Gemma 4 dumps `<|channel>thought` (or a leftover
   `thought` after special tokens are stripped) in content. We only parsed
