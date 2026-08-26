@@ -160,6 +160,15 @@ const String kWithUserPreTurn = 'with_user_pre_turn';
 // to the UI.
 bool _realismEvalCancelled = false;
 
+/// Set when regenerate/continue abort in-flight post-gen evals (needs,
+/// climax, pockets, posture) so the rejected reply is not scored. Cleared
+/// once settling has exited.
+bool _postGenAbortRequested = false;
+
+/// True while [sendMessage] is holding a typed line behind post-gen evals.
+/// The composer already cleared; the bubble is not in the list yet.
+bool _sendWaitingOnSettle = false;
+
 /// Bumped by [_invalidateGreetingEval] (selectGreeting, startNewChat,
 /// setActiveCharacter, setActiveGroup, loadSession, _loadLastSession,
 /// importChatPackage, forkFromMessage) so a

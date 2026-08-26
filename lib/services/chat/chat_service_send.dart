@@ -90,8 +90,16 @@ extension ChatServiceSend on ChatService {
     // captured callerHeldSettling=true and wedged _isTurnBusy for the
     // session.
     try {
+      if (_isPostGenerating) {
+        _sendWaitingOnSettle = true;
+        notifyListeners();
+      }
       await _waitForTurnToSettle();
     } finally {
+      if (_sendWaitingOnSettle) {
+        _sendWaitingOnSettle = false;
+        notifyListeners();
+      }
       if (!sendGate.isCompleted) sendGate.complete();
     }
     if (_isGenerating) return;

@@ -512,6 +512,10 @@ class LlmEvalEngine {
         // Retry once after a short settle + idle wait. Critical for reliable manual
         // Needs reprocess and other evals on Kobold thinking setups.
         if (response.trim().isEmpty && attempt < 1) {
+          if (getIsCancellingRealismEval() || getRealismEvalCancelled()) {
+            debugPrint('[Realism] eval cancelled on empty stream; no retry');
+            return null;
+          }
           debugPrint(
             '[Realism:Eval] Empty stream response, retrying after settle...',
           );
@@ -536,7 +540,7 @@ class LlmEvalEngine {
       } catch (e) {
         debugPrint('[Realism:Eval] Stream error on attempt ${attempt + 1}: $e');
         // Check if cancellation was requested during the error handling
-        if (getIsCancellingRealismEval()) {
+        if (getIsCancellingRealismEval() || getRealismEvalCancelled()) {
           debugPrint('[Realism] eval cancelled during error handling');
           return null;
         }

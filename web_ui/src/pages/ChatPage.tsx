@@ -32,6 +32,7 @@ interface ChatState {
   messages: Message[];
   isGenerating: boolean;
   isSettlingTurn?: boolean;
+  isSendWaitingOnSettle?: boolean;
   isLoadingSession?: boolean;
   isBackfillingHistory?: boolean;
   hasOlderHistory?: boolean;
@@ -834,6 +835,8 @@ export function ChatPage() {
           onSend={sendMessage}
           onStop={stop}
           isGenerating={state.isGenerating}
+          isSettlingTurn={!!state.isSettlingTurn}
+          isSendWaitingOnSettle={!!state.isSendWaitingOnSettle}
           canMic={canMic}
           onDraftChange={setDraft}
           cast={cast}

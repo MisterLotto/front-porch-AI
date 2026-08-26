@@ -5,6 +5,10 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- ↻ **Regenerate no longer ignores you while needs is still scoring the last reply** — it kills that eval and starts the new swipe on the spot. Same on the phone.
+
+- ⏳ **Sending while the last reply is still being scored no longer looks like the message vanished** — a strip above the box says it is queued. Same on the phone.
+
 - ⑂ **Fork a chat from the phone** — same “new branch from this message” as desktop. The old conversation stays put.
 
 - 🎛️ **Phone Settings now has the rest of the sampler row** — Top-P, Top-K, DRY, dynatemp range, stop sequences, banned phrases, sanitise-history, and the global system prompt. Voice & Media can turn speech on without opening the desktop tab.

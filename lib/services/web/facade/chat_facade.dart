@@ -184,6 +184,7 @@ class ChatFacade {
       // Additive (mixed-fleet safe): older web clients ignore it; newer ones
       // can distinguish "streaming tokens" from "still settling".
       'isSettlingTurn': _chat.isSettlingTurn,
+      'isSendWaitingOnSettle': _chat.isSendWaitingOnSettle,
       // Overlay while setActiveCharacter/Group hydrates (navigate-first open).
       'isLoadingSession': _chat.isLoadingSession,
       'isBackfillingHistory': _chat.isBackfillingHistory,

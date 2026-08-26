@@ -42,8 +42,8 @@ extension ChatServiceMessageOps on ChatService {
     // Swiping right
     if (newIndex < msg.swipes.length) {
       await _commitSwipeIndex(messageIndex, newIndex);
-    } else if (messageIndex == _messages.length - 1 && !_isTurnBusy) {
-      // Past last swipe on last message — regenerate
+    } else if (messageIndex == _messages.length - 1) {
+      // Past last swipe on last message — regenerate (aborts settling evals)
       await regenerateLastMessage();
     }
   }
@@ -87,8 +87,35 @@ extension ChatServiceMessageOps on ChatService {
     _restoreRealismStateForSpeaker(msg);
   }
 
+  /// Abort in-flight post-gen evals so a mutation (regen/continue) can
+  /// start. Streaming (`_isGenerating`) and import still refuse — those
+  /// are not "I already have the reply and I don't want it scored."
+  Future<bool> _yieldSettlingTurn() async {
+    if (_isGenerating || _isImporting) return false;
+    if (!_isPostGenerating) return true;
+    _postGenAbortRequested = true;
+    _isCancellingRealismEval = true;
+    _realismEvalCancelled = true;
+    try {
+      (testLlmServiceOverride ?? _llmProvider?.activeService)
+          ?.abortGeneration();
+    } catch (_) {}
+    final deadline = DateTime.now().add(const Duration(seconds: 5));
+    while (_isPostGenerating && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 16));
+    }
+    // Do not clear abort flags here. If we timed out, post-gen is still
+    // running and must keep skipping applies. The finishing generate
+    // finally clears the flags when settling actually drops.
+    return !_isPostGenerating;
+  }
+
   Future<void> continueGeneration() async {
-    if (_messages.isEmpty || _isTurnBusy || _sceneGuest.busy) return;
+    if (_messages.isEmpty || _sceneGuest.busy) return;
+    // Continue KEEPS the reply. Aborting its scoring would leave the first
+    // half unbookkept and only score the new fragment. Wait like Send.
+    if (_isGenerating || _isImporting) return;
+    if (_isPostGenerating) await _waitForTurnToSettle();
 
     // Only continue if the last message is from a bot (non-user, non-system).
     // Narration banners (dreams, Chance Time) are excluded: continue_ streams

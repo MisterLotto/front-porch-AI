@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-08-26 — fix(chat): show when a send is held behind post-gen evals
+- **Why:** Send during needs/climax/pockets scoring clears the composer
+  immediately and only appends the bubble after settle, so the line looks
+  lost until evals finish.
+- **What:** Flag + bottom banner "Got it — sending when the last reply is
+  fully wrapped up." Desktop input strip and web composer. Does not
+  append the user bubble early (chips attach to last message).
+- **Files:** chat_service_send, generation_stream, chat_page.input,
+  chat_facade, ChatComposer, styles.css, regen_aborts_settling_test
+
+## 2026-08-26 — fix(chat): regen aborts in-flight post-gen evals
+- **Why:** After a reply streamed, needs/climax/pockets still held the
+  turn busy. The regen button stayed visible but returned immediately,
+  so a tap while oMLX was prefilling a needs eval did nothing.
+- **What:** Regen aborts the in-flight eval, skip applying it to the
+  rejected reply, then generate. Continue waits (it keeps the text).
+  Streaming still refuses (Stop first). Web uses the same ChatService
+  methods.
+- **Files:** chat_service_message_ops, generation_postgen, reprocess,
+  defaults, regen_aborts_settling_test
+
 ## 2026-08-26 — docs: v1.3.1 Clock In on the long-form release notes
 - **Why:** Promoting Rawhide to main as v1.3.1. release-notes.md still
   called 1.2 the current stable.

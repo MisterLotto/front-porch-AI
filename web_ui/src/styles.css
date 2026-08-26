@@ -673,6 +673,21 @@ button.ghost.small, .ghost.small { font-size: 0.72rem; padding: 4px 8px; backgro
 .bubble .dlg { color: var(--dialogue); }
 .bubble .act { color: var(--action); font-style: italic; }
 .bubble .act.bold { font-weight: 700; font-style: normal; }
+.chat-composer-wrap { width: 100%; }
+.send-held-banner {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 16px; font-size: 12px; font-weight: 500;
+  color: var(--muted); background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+.send-held-banner::before {
+  content: '';
+  width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid var(--accent); border-top-color: transparent;
+  animation: send-held-spin 0.8s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes send-held-spin { to { transform: rotate(360deg); } }
 .chat-input {
   display: flex; gap: 8px; align-items: flex-end;
   padding: 10px; border-top: 1px solid var(--border); background: var(--surface);
