@@ -15,8 +15,8 @@
 
 **A local-first AI companion for character chat & roleplay — Windows, macOS, and Linux.** Runs fully offline with local LLMs (KoboldCpp, oMLX, LM Studio, …), driven by a living **Realism Engine** (emotion, trust, needs, memory, pockets) with built-in **TTS and image generation** — and supports remote APIs like OpenRouter, Nano-GPT, and OpenAI with no lock-in when you want them. Open-source (**AGPL-3.0**). Built as a home for people who lost theirs when Backyard AI killed its desktop app.
 
-> ### 🎁 New in 1.3 — Check Your Pockets
-> She has **pockets, clothes, and a set-aside pile**. Hand her something and she actually has it. **AI Enhance** grows a card from a real chat. **Porch Life** is one Settings home for every living-character switch, and Journal / Chaos / the story clock / Pockets / Objectives are **à la carte** — the Realism Engine is no longer the master key. Likes, ambitions that steer quests, a mood that isn't about you, and chats you can take with you. Details below, and in the in-app What's New.
+> ### 🕘 New in 1.3.1 — Clock In
+> They have a **job** now — occupation, weekdays, hours. Time is **announced, then they write**. With-you is a real yes or no. Built on **Flutter 3.47** (macOS 12 is the floor). Plus the repairs: renaming a chat no longer wipes Porch Life, Continue keeps the speaker, gifts rewind on both sides. 1.3's pockets and Porch Life are still here. Details in the in-app What's New.
 
 ## 🕯️ Why Does This Exist?
 
@@ -79,6 +79,15 @@ A stoop is where the neighbourhood meets — the front step where people swap st
 - **On the web too** — [hub.frontporchai.app](https://hub.frontporchai.app) works from any browser, including guest browsing with no account at all.
 - **Open porch, not a walled garden** — The Stoop is **open-source (AGPL-3.0)** and local-first. The for-profit hubs tend to drift closed and paywalled; AGPL exists so The Stoop can't be fenced off the same way.
 - **Safe by design** — **opt-in** and **account-gated**; the rest of the app stays 100% local and offline. Strictly **18+**, with adult content **hidden by default**, optional **two-factor authentication**, and an **opt-out** anonymous device-stats ping (platform / app version / GPU tier — never your chats, characters, or raw IP). See the [Privacy Policy](PRIVACY.md).
+
+### 🕘 Work & Time
+
+New in 1.3.1 — Clock In.
+
+- **They have a job** — occupation, which days, clock-accurate hours. Skip a turn and the banner says they're at work.
+- **Night skip lets them rest.** A day off is a day off.
+- **Time is announced, then they write.** After the reply the clock decides how much passed. Continue does not tick.
+- **With you is a yes or a no**, after they speak — not a default.
 
 ### 🎁 Pockets & Wardrobe
 
