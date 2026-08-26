@@ -39,7 +39,7 @@ This page is the long-form history — the headlines of every release, newest fi
 - 👤 **With you is a yes or a no** — scored after they speak, not assumed.
 - 🛠️ **Built on Flutter 3.47** — current stable Flutter. macOS 12 Monterey is the floor.
 
-Fixes and improvements in the same cut: Chat History rename no longer wipes Porch Life; Continue keeps the speaker; group gifts rewind on both sides; deleting a group or character takes diary, growth, and Data Bank with them; custom seasons on Places; gist-first memory; alternate greetings seed Realism and Needs; phone fork, sampler row, and honest Stoop groups/worlds; Tailscale login asks for the web password; light-mode paper is readable; filthy stays filthy until they wash.
+Fixes and improvements in the same cut: Chat History rename no longer wipes Porch Life; Continue keeps the speaker; group gifts rewind on both sides; deleting a group or character takes diary, growth, and Data Bank with them; custom seasons on Places; gist-first memory; alternate greetings seed Realism and Needs; phone fork, sampler row, and honest Stoop groups/worlds; Tailscale login asks for the web password; light-mode paper is readable.
 
 ---
 

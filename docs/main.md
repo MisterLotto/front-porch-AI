@@ -38,8 +38,6 @@ These notes feed the in-app "Update Available" dialog for stable releases on `ma
 
 - 💡 **Light mode is readable** on Group Settings, Chat History, Database Cleanup, and the Kobold log.
 
-- 🧼 **Filthy means they reek** — the meter stays down until they wash. Characters who enjoy being musky still like it.
-
 - 💛 **Intimate preferences can change the direction of a score**, not only how hard it hits.
 
 ## v1.3 — Check Your Pockets
