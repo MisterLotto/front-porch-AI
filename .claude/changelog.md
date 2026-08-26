@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-08-26 — test(golden): refresh Linux dialog goldens for light + alt-greeting
+- **Why:** Widget Golden Tests went red on the last three Rawhide runs.
+  P1.6–10 light-mode paint on Group Settings / Kobold log, then
+  alt-greeting Edit Character, never re-captured the Linux PNGs.
+- **What:** Regenerated the six dialogs_remaining goldens in
+  fpai-golden:3.47.0 (linux/amd64). Pixels match the already-shipped UI.
+- **Files:** edit_character.{dark,light}.png, group_settings.{dark,light}.png,
+  kobold_log.{dark,light}.png
+
 ## 2026-08-26 — fix(stoop): comments talk to the hub, not a notepad
 - **Why:** Discussion on a card used an in-memory fake, so comments vanished
   on quit. The phone hid the block for that reason. Users expected a real
