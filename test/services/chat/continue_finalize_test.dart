@@ -49,23 +49,28 @@ void _setupPathProviderMock() {
       });
 }
 
-Future<({AppDatabase db, ChatService chat, StorageService storage})>
-_buildChat(OpenRouterService llm) async {
+Future<({AppDatabase db, ChatService chat, StorageService storage})> _buildChat(
+  OpenRouterService llm,
+) async {
   SharedPreferences.setMockInitialValues({
     'update_auto_check': false,
     'realism_default': false,
   });
   final db = AppDatabase.forTesting();
   final storage = StorageService();
-  final chat = ChatService(
-    KoboldService(storage),
-    UserPersonaService(db),
-    storage,
-    WorldRepository(storage, db),
-  )
-    ..setDatabase(db)
-    ..testLlmServiceOverride = llm;
+  final chat =
+      ChatService(
+          KoboldService(storage),
+          UserPersonaService(db),
+          storage,
+          WorldRepository(storage, db),
+        )
+        ..setDatabase(db)
+        ..testLlmServiceOverride = llm;
   await storage.initialized;
+  // First send must keep `<think>` on .text so Continue can prove it
+  // uses promptText, not raw think (f2cf39e7 peels think when wrap is off).
+  await storage.setReasoningEnabled(true);
   await chat.setActiveCharacter(
     CharacterCard(
       name: 'Mara',

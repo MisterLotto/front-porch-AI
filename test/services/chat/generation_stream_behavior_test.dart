@@ -99,6 +99,11 @@ _buildRealismOffChat(OpenRouterService llm) async {
   final chat = ChatService(KoboldService(storage), personas, storage, worlds)
     ..setDatabase(db)
     ..testLlmServiceOverride = llm;
+  await storage.initialized;
+  // Content-side `<think>` is peeled unless wrap is on (f2cf39e7). These
+  // pins are the ChatService stop-scan / salvage, which only see tags
+  // that ingest kept.
+  await storage.setReasoningEnabled(true);
   await chat.setActiveCharacter(
     CharacterCard(
       name: 'Jennifer',
@@ -142,230 +147,214 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   _setupPathProviderMock();
 
-  test(
-    'a stop-sequence-looking line inside an open <think> block survives '
-    'the mid-stream trim scan',
-    () async {
-      HttpOverrides.global = null;
-      _resetPrefs();
-      final backend = await FakeBackendServer.start(
-        // Three SSE chunks so the open tag, the stop-sequence-looking line,
-        // and the close all land in SEPARATE token iterations of the stream
-        // loop — the scenario the think-aware guard exists for. The
-        // character's own name ("Jennifer") is in the stop list for every
-        // 1:1 turn (buildPrioritizedStops adds "\n<CharacterName>:"), so
-        // "\nJennifer:" forming across the first two chunks is a genuine
-        // stop-sequence match — it just must not be acted on while inside
-        // an unclosed <think>.
-        replyPieces: [
-          '<think>\n',
-          'Jennifer: quick note - remember to smile.\n',
-          '</think>\nHey there! Glad you stopped by the porch.',
-        ],
-      );
-      final llm = OpenRouterService(
-        apiUrl: '${backend.baseUrl}/v1',
-        modelName: 'smoke-model',
-      );
-      final h = await _buildRealismOffChat(llm);
-      addTearDown(() async {
-        h.chat.dispose();
-        await backend.close();
-        await h.db.close();
-      });
+  test('a stop-sequence-looking line inside an open <think> block survives '
+      'the mid-stream trim scan', () async {
+    HttpOverrides.global = null;
+    _resetPrefs();
+    final backend = await FakeBackendServer.start(
+      // Three SSE chunks so the open tag, the stop-sequence-looking line,
+      // and the close all land in SEPARATE token iterations of the stream
+      // loop — the scenario the think-aware guard exists for. The
+      // character's own name ("Jennifer") is in the stop list for every
+      // 1:1 turn (buildPrioritizedStops adds "\n<CharacterName>:"), so
+      // "\nJennifer:" forming across the first two chunks is a genuine
+      // stop-sequence match — it just must not be acted on while inside
+      // an unclosed <think>.
+      replyPieces: [
+        '<think>\n',
+        'Jennifer: quick note - remember to smile.\n',
+        '</think>\nHey there! Glad you stopped by the porch.',
+      ],
+    );
+    final llm = OpenRouterService(
+      apiUrl: '${backend.baseUrl}/v1',
+      modelName: 'smoke-model',
+    );
+    final h = await _buildRealismOffChat(llm);
+    addTearDown(() async {
+      h.chat.dispose();
+      await backend.close();
+      await h.db.close();
+    });
 
-      await h.chat.sendMessage('Hi Jennifer, how are you tonight?');
+    await h.chat.sendMessage('Hi Jennifer, how are you tonight?');
 
-      final msg = h.chat.messages.last;
-      expect(msg.isUser, isFalse);
-      expect(
-        msg.text,
-        contains('Jennifer: quick note - remember to smile.'),
-        reason:
-            'the stop-sequence-looking line inside the open <think> block '
-            'must survive — trimming it here is the pre-fix bug the '
-            'think-aware scan guard exists to prevent',
-      );
-      expect(
-        msg.thinkingContent,
-        contains('Jennifer: quick note'),
-        reason: 'the thought must still be extractable for the UI panel',
-      );
-      expect(
-        msg.displayText,
-        'Hey there! Glad you stopped by the porch.',
-        reason:
-            'the visible bubble must show only the post-</think> reply, '
-            'untouched by the stop scan that correctly fired AFTER the close',
-      );
-      expect(h.chat.isGenerating, isFalse);
-      expect(h.chat.isSettlingTurn, isFalse);
-      expect(
-        backend.chatRequests,
-        1,
-        reason: 'exactly one real generation call, no eval traffic',
-      );
-      expect(backend.unexpectedPaths, isEmpty);
-    },
-    timeout: const Timeout(Duration(minutes: 1)),
-  );
+    final msg = h.chat.messages.last;
+    expect(msg.isUser, isFalse);
+    expect(
+      msg.text,
+      contains('Jennifer: quick note - remember to smile.'),
+      reason:
+          'the stop-sequence-looking line inside the open <think> block '
+          'must survive — trimming it here is the pre-fix bug the '
+          'think-aware scan guard exists to prevent',
+    );
+    expect(
+      msg.thinkingContent,
+      contains('Jennifer: quick note'),
+      reason: 'the thought must still be extractable for the UI panel',
+    );
+    expect(
+      msg.displayText,
+      'Hey there! Glad you stopped by the porch.',
+      reason:
+          'the visible bubble must show only the post-</think> reply, '
+          'untouched by the stop scan that correctly fired AFTER the close',
+    );
+    expect(h.chat.isGenerating, isFalse);
+    expect(h.chat.isSettlingTurn, isFalse);
+    expect(
+      backend.chatRequests,
+      1,
+      reason: 'exactly one real generation call, no eval traffic',
+    );
+    expect(backend.unexpectedPaths, isEmpty);
+  }, timeout: const Timeout(Duration(minutes: 1)));
 
-  test(
-    'a reply that ends still inside an open <think> gets the closing tag '
-    'salvaged',
-    () async {
-      HttpOverrides.global = null;
-      _resetPrefs();
-      final backend = await FakeBackendServer.start(
-        // No </think> anywhere — models the backend's OWN stop sequence
-        // cutting the stream off mid-thought (comment at ~1612 in
-        // chat_service_generation.dart). mode == normal, so the Continue/
-        // call-mode strip (_stripThinkBlocks) never runs; the salvage at
-        // ~1617-1622 is the only thing standing between this and a message
-        // whose raw text is permanently an unbalanced <think>.
-        replyPieces: [
-          '<think>\n',
-          'Wondering how to phrase this, but the connection drops here...',
-        ],
-      );
-      final llm = OpenRouterService(
-        apiUrl: '${backend.baseUrl}/v1',
-        modelName: 'smoke-model',
-      );
-      final h = await _buildRealismOffChat(llm);
-      addTearDown(() async {
-        h.chat.dispose();
-        await backend.close();
-        await h.db.close();
-      });
+  test('a reply that ends still inside an open <think> gets the closing tag '
+      'salvaged', () async {
+    HttpOverrides.global = null;
+    _resetPrefs();
+    final backend = await FakeBackendServer.start(
+      // No </think> anywhere — models the backend's OWN stop sequence
+      // cutting the stream off mid-thought (comment at ~1612 in
+      // chat_service_generation.dart). mode == normal, so the Continue/
+      // call-mode strip (_stripThinkBlocks) never runs; the salvage at
+      // ~1617-1622 is the only thing standing between this and a message
+      // whose raw text is permanently an unbalanced <think>.
+      replyPieces: [
+        '<think>\n',
+        'Wondering how to phrase this, but the connection drops here...',
+      ],
+    );
+    final llm = OpenRouterService(
+      apiUrl: '${backend.baseUrl}/v1',
+      modelName: 'smoke-model',
+    );
+    final h = await _buildRealismOffChat(llm);
+    addTearDown(() async {
+      h.chat.dispose();
+      await backend.close();
+      await h.db.close();
+    });
 
-      await h.chat.sendMessage('Are you still with me?');
+    await h.chat.sendMessage('Are you still with me?');
 
-      final msg = h.chat.messages.last;
-      expect(msg.isUser, isFalse);
-      expect(
-        msg.text.trim(),
-        endsWith('</think>'),
-        reason:
-            'the persisted raw text must be balanced — an unclosed <think> '
-            'left as-is would strand the message empty on every future '
-            'render/reload',
-      );
-      expect(
-        '<think>'.allMatches(msg.text.toLowerCase()).length,
-        1,
-        reason: 'salvage must add exactly one closing tag, not double it up',
-      );
-      expect('</think>'.allMatches(msg.text.toLowerCase()).length, 1);
-      expect(
-        msg.thinkingContent,
-        contains('connection drops here'),
-        reason: 'the stranded thought must still render as the collapsible',
-      );
-      expect(
-        msg.displayText,
-        isEmpty,
-        reason: 'nothing followed the (now-closed) think block',
-      );
-      expect(h.chat.isGenerating, isFalse);
-      expect(h.chat.isSettlingTurn, isFalse);
-    },
-    timeout: const Timeout(Duration(minutes: 1)),
-  );
+    final msg = h.chat.messages.last;
+    expect(msg.isUser, isFalse);
+    expect(
+      msg.text.trim(),
+      endsWith('</think>'),
+      reason:
+          'the persisted raw text must be balanced — an unclosed <think> '
+          'left as-is would strand the message empty on every future '
+          'render/reload',
+    );
+    expect(
+      '<think>'.allMatches(msg.text.toLowerCase()).length,
+      1,
+      reason: 'salvage must add exactly one closing tag, not double it up',
+    );
+    expect('</think>'.allMatches(msg.text.toLowerCase()).length, 1);
+    expect(
+      msg.thinkingContent,
+      contains('connection drops here'),
+      reason: 'the stranded thought must still render as the collapsible',
+    );
+    expect(
+      msg.displayText,
+      isEmpty,
+      reason: 'nothing followed the (now-closed) think block',
+    );
+    expect(h.chat.isGenerating, isFalse);
+    expect(h.chat.isSettlingTurn, isFalse);
+  }, timeout: const Timeout(Duration(minutes: 1)));
 
-  test(
-    'an output-sanitizer rule that would wipe a non-empty reply keeps the '
-    'original text',
-    () async {
-      HttpOverrides.global = null;
-      _resetPrefs();
-      final backend = await FakeBackendServer.start(
-        replyPieces: ['The porch swing creaks softly in the evening breeze.'],
-      );
-      final llm = OpenRouterService(
-        apiUrl: '${backend.baseUrl}/v1',
-        modelName: 'smoke-model',
-      );
-      final h = await _buildRealismOffChat(llm);
-      addTearDown(() async {
-        h.chat.dispose();
-        await backend.close();
-        await h.db.close();
-      });
+  test('an output-sanitizer rule that would wipe a non-empty reply keeps the '
+      'original text', () async {
+    HttpOverrides.global = null;
+    _resetPrefs();
+    final backend = await FakeBackendServer.start(
+      replyPieces: ['The porch swing creaks softly in the evening breeze.'],
+    );
+    final llm = OpenRouterService(
+      apiUrl: '${backend.baseUrl}/v1',
+      modelName: 'smoke-model',
+    );
+    final h = await _buildRealismOffChat(llm);
+    addTearDown(() async {
+      h.chat.dispose();
+      await backend.close();
+      await h.db.close();
+    });
 
-      // A rule that matches the WHOLE printable reply and deletes it — the
-      // "runaway rule" scenario the wipe-guard at chat_service_generation.dart
-      // ~1633 exists to catch.
-      await h.storage.generationSettings.setOutputSanitizerEnabled(true);
-      await h.storage.generationSettings.setOutputSanitizerRules(const [
-        OutputSanitizerRule(id: 0, find: r'\a+', replace: ''),
-      ]);
+    // A rule that matches the WHOLE printable reply and deletes it — the
+    // "runaway rule" scenario the wipe-guard at chat_service_generation.dart
+    // ~1633 exists to catch.
+    await h.storage.generationSettings.setOutputSanitizerEnabled(true);
+    await h.storage.generationSettings.setOutputSanitizerRules(const [
+      OutputSanitizerRule(id: 0, find: r'\a+', replace: ''),
+    ]);
 
-      await h.chat.sendMessage('Tell me about the porch.');
+    await h.chat.sendMessage('Tell me about the porch.');
 
-      final msg = h.chat.messages.last;
-      expect(msg.isUser, isFalse);
-      expect(
-        msg.text,
-        'The porch swing creaks softly in the evening breeze.',
-        reason:
-            'a sanitizer rule that reduces the whole reply to nothing must '
-            'be overridden — the user must never lose an entire reply to a '
-            'runaway find/replace rule',
-      );
-      expect(h.chat.isGenerating, isFalse);
-      expect(h.chat.isSettlingTurn, isFalse);
-    },
-    timeout: const Timeout(Duration(minutes: 1)),
-  );
+    final msg = h.chat.messages.last;
+    expect(msg.isUser, isFalse);
+    expect(
+      msg.text,
+      'The porch swing creaks softly in the evening breeze.',
+      reason:
+          'a sanitizer rule that reduces the whole reply to nothing must '
+          'be overridden — the user must never lose an entire reply to a '
+          'runaway find/replace rule',
+    );
+    expect(h.chat.isGenerating, isFalse);
+    expect(h.chat.isSettlingTurn, isFalse);
+  }, timeout: const Timeout(Duration(minutes: 1)));
 
-  test(
-    'a backend failure maps to its friendly message, not the raw exception, '
-    'and the turn fully settles',
-    () async {
-      HttpOverrides.global = null;
-      _resetPrefs();
-      const rawFailure = 'Request timed out waiting for the model to respond.';
-      final server = await _startAlwaysFailingBackend(rawFailure);
-      final llm = OpenRouterService(
-        apiUrl: 'http://127.0.0.1:${server.port}/v1',
-        modelName: 'smoke-model',
-      );
-      final h = await _buildRealismOffChat(llm);
-      addTearDown(() async {
-        h.chat.dispose();
-        await server.close(force: true);
-        await h.db.close();
-      });
+  test('a backend failure maps to its friendly message, not the raw exception, '
+      'and the turn fully settles', () async {
+    HttpOverrides.global = null;
+    _resetPrefs();
+    const rawFailure = 'Request timed out waiting for the model to respond.';
+    final server = await _startAlwaysFailingBackend(rawFailure);
+    final llm = OpenRouterService(
+      apiUrl: 'http://127.0.0.1:${server.port}/v1',
+      modelName: 'smoke-model',
+    );
+    final h = await _buildRealismOffChat(llm);
+    addTearDown(() async {
+      h.chat.dispose();
+      await server.close(force: true);
+      await h.db.close();
+    });
 
-      await h.chat.sendMessage('Hello? Anyone home?');
+    await h.chat.sendMessage('Hello? Anyone home?');
 
-      final msg = h.chat.messages.last;
-      expect(msg.sender, 'System');
-      expect(
-        msg.text,
-        'Request timed out. The model may be too large or the server too '
-        'slow.',
-        reason:
-            'the raw "API error: $rawFailure" text must be MAPPED to the '
-            'friendly copy before it reaches the chat — a user with zero '
-            'technical knowledge must be able to read this',
-      );
-      expect(msg.text, isNot(contains('API error')));
-      expect(msg.text, isNot(contains('Exception')));
-      expect(
-        h.chat.isGenerating,
-        isFalse,
-        reason: 'a failed generation must not leave the send button dead',
-      );
-      expect(
-        h.chat.isSettlingTurn,
-        isFalse,
-        reason:
-            'a failed generation must fully release the settling hold — a '
-            'latched flag here would wedge every later action',
-      );
-    },
-    timeout: const Timeout(Duration(minutes: 1)),
-  );
+    final msg = h.chat.messages.last;
+    expect(msg.sender, 'System');
+    expect(
+      msg.text,
+      'Request timed out. The model may be too large or the server too '
+      'slow.',
+      reason:
+          'the raw "API error: $rawFailure" text must be MAPPED to the '
+          'friendly copy before it reaches the chat — a user with zero '
+          'technical knowledge must be able to read this',
+    );
+    expect(msg.text, isNot(contains('API error')));
+    expect(msg.text, isNot(contains('Exception')));
+    expect(
+      h.chat.isGenerating,
+      isFalse,
+      reason: 'a failed generation must not leave the send button dead',
+    );
+    expect(
+      h.chat.isSettlingTurn,
+      isFalse,
+      reason:
+          'a failed generation must fully release the settling hold — a '
+          'latched flag here would wedge every later action',
+    );
+  }, timeout: const Timeout(Duration(minutes: 1)));
 }

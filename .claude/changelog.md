@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-26 — test(chat): think-stream pins need reasoning wrap on
+- **Why:** f2cf39e7 peels content-side `<think>` when wrap is off. The
+  generation-stream stop-scan / salvage pins and Continue promptText pin
+  never saw tags, so CI unit tests on that commit (and P0 on top) were red.
+- **What:** those harnesses turn reasoning on so ingest keeps the tags the
+  ChatService scan is supposed to see.
+- **Files:** generation_stream_behavior_test, continue_finalize_test
+
 ## 2026-08-25 — fix(pockets): invert buried give instead of tail-rewinding
 - **Why:** Review: applying a buried turn's before-kit to giver+recipients
   clobbered later ops (Sam's sandwich vanished; unique keys could exist
