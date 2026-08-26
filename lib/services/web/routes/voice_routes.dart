@@ -28,6 +28,7 @@ import 'package:front_porch_ai/services/web/util/util.dart';
 class WebVoiceRoutes {
   WebVoiceRoutes(this._facade, Router router) {
     router.get('/api/voice/status', _status);
+    router.post('/api/voice/settings', _settings);
     router.post('/api/tts/speak', _speak);
     router.post('/api/stt/transcribe', _transcribe);
   }
@@ -35,6 +36,16 @@ class WebVoiceRoutes {
   final VoiceFacade _facade;
 
   shelf.Response _status(shelf.Request r) => JsonResponse.ok(_facade.status());
+
+  Future<shelf.Response> _settings(shelf.Request r) async {
+    Map<String, dynamic> body;
+    try {
+      body = await RequestBody.readJsonMap(r);
+    } catch (_) {
+      body = const {};
+    }
+    return JsonResponse.ok(await _facade.apply(body));
+  }
 
   Future<shelf.Response> _speak(shelf.Request r) async {
     Map<String, dynamic> body;
@@ -52,10 +63,7 @@ class WebVoiceRoutes {
     }
     return shelf.Response.ok(
       audio.bytes,
-      headers: {
-        'Content-Type': audio.contentType,
-        'Cache-Control': 'no-store',
-      },
+      headers: {'Content-Type': audio.contentType, 'Cache-Control': 'no-store'},
     );
   }
 

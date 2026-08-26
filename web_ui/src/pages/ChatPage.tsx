@@ -474,6 +474,17 @@ export function ChatPage() {
     await api.post('/api/chat/continue');
     await refresh();
   }, [refresh]);
+  const fork = useCallback(async (index: number) => {
+    if (
+      !window.confirm(
+        `Create a new branch from message #${index + 1}?\n\nThe current chat will remain unchanged. A new conversation will be created with messages up to this point.`,
+      )
+    ) {
+      return;
+    }
+    await api.post('/api/chat/fork', { index });
+    await refresh();
+  }, [refresh]);
   const swipe = useCallback(async (messageIndex: number, direction: number) => {
     await api.post('/api/chat/swipe', { messageIndex, direction });
     await refresh();
@@ -781,6 +792,7 @@ export function ChatPage() {
           onSwipe={swipe}
           onRegenerate={regenerate}
           onContinue={continueGen}
+          onFork={fork}
           onDelete={del}
           onReprocess={setReprocessIndex}
           onRevert={revertNeeds}

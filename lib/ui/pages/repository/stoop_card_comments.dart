@@ -17,8 +17,9 @@ import 'package:front_porch_ai/ui/pages/repository/stoop_report.dart';
 ///
 /// Default OFF: renders nothing unless this card opted in
 /// ([commentsEnabled] or a [StoopCommentsOptIn] published/live flag).
-/// Off hides the composer AND the list. Owner can turn comments off live
-/// without wiping rows in the mock client.
+/// Off hides the composer AND the list. The card owner always sees the
+/// switch so they can turn discussion on after upload. Turning off locks
+/// (hides) without wiping hub rows.
 class StoopCardDiscussionSection extends StatefulWidget {
   final String cardId;
   final String? cardOwnerId;
@@ -32,7 +33,8 @@ class StoopCardDiscussionSection extends StatefulWidget {
   final Future<({bool commentsEnabled, bool commentsLocked})> Function({
     bool? commentsEnabled,
     bool? commentsLocked,
-  })? persistFlags;
+  })?
+  persistFlags;
 
   const StoopCardDiscussionSection({
     super.key,
@@ -87,7 +89,12 @@ class _StoopCardDiscussionSectionState
     final persist = widget.persistFlags;
     if (persist == null) return;
     try {
-      final flags = await persist(commentsLocked: !next);
+      // First-time on: persist the opt-in. Later off: lock (hide, keep rows).
+      final flags = next
+          ? await persist(commentsEnabled: true, commentsLocked: false)
+          : (_published
+                ? await persist(commentsLocked: true)
+                : await persist(commentsEnabled: false));
       if (!mounted) return;
       if (flags.commentsEnabled != true) {
         setState(() {
@@ -96,7 +103,10 @@ class _StoopCardDiscussionSectionState
         });
         return;
       }
-      setState(() => _live = flags.commentsLocked != true);
+      setState(() {
+        _published = true;
+        _live = flags.commentsLocked != true;
+      });
     } on BackporchApiException catch (e) {
       if (!mounted) return;
       if (e.statusCode == 404) {
@@ -121,7 +131,7 @@ class _StoopCardDiscussionSectionState
 
   @override
   Widget build(BuildContext context) {
-    final showSwitch = _isOwner && _published;
+    final showSwitch = _isOwner;
     if (!showSwitch && !_live) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

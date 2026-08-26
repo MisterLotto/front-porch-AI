@@ -504,50 +504,6 @@ class BackporchApi {
     return _meResult(await _get('/auth/me', accessToken));
   }
 
-  // --- comments (sketched; MOCK pass — do not call against prod) ---
-
-  /// List comments on a card. Not wired this pass.
-  Future<List<dynamic>> listComments(String accessToken, String cardId) {
-    throw UnsupportedError(
-      'Stoop comments are mock-only this pass; inject StoopCommentsClient.',
-    );
-  }
-
-  /// Create a comment. Not wired this pass.
-  Future<Map<String, dynamic>> createComment(
-    String accessToken,
-    String cardId,
-    String body,
-  ) {
-    throw UnsupportedError(
-      'Stoop comments are mock-only this pass; inject StoopCommentsClient.',
-    );
-  }
-
-  /// Soft-delete a comment. Not wired this pass.
-  Future<Map<String, dynamic>> deleteComment(
-    String accessToken,
-    String cardId,
-    String commentId,
-  ) {
-    throw UnsupportedError(
-      'Stoop comments are mock-only this pass; inject StoopCommentsClient.',
-    );
-  }
-
-  /// Report a comment. Not wired this pass.
-  Future<void> reportComment(
-    String accessToken,
-    String cardId,
-    String commentId, {
-    required String category,
-    required String reason,
-  }) {
-    throw UnsupportedError(
-      'Stoop comments are mock-only this pass; inject StoopCommentsClient.',
-    );
-  }
-
   /// Owner-only PATCH for `commentsEnabled` / `commentsLocked`.
   /// 404 is fail-closed at the call site (hide Discussion).
   Future<({bool commentsEnabled, bool commentsLocked})> patchCardComments(

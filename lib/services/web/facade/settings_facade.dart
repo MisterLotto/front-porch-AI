@@ -198,6 +198,7 @@ class SettingsFacade {
         'maxLength': g.maxLength,
         'minLength': g.minLength,
         'dynamicTempEnabled': g.dynamicTempEnabled,
+        'dynamicTempRange': g.dynamicTempRange,
         'dynamicResponses': g.dynamicResponses,
         'dynamicResponseInterval': g.dynamicResponseInterval,
         'dynamicResponseMaxMessages': g.dynamicResponseMaxMessages,
@@ -205,10 +206,15 @@ class SettingsFacade {
         'dynamicResponsePacePeriods': g.dynamicResponsePacePeriods,
         // Output Sanitizer (audit P2.13) — additive; older PWAs ignore.
         'outputSanitizerEnabled': g.outputSanitizerEnabled,
+        'sanitiseExistingHistory': g.sanitiseExistingHistory,
         'outputSanitizerRules': [
           for (final r in g.outputSanitizerRules) r.toJson(),
         ],
+        'stopSequences': g.stopSequences,
       },
+      // General-tab extras the Generation card on web also hosts.
+      'systemPrompt': g.systemPrompt,
+      'bannedPhrases': _storage.bannedPhrases,
       // Ambitions + the promise ledger. Both work with the Realism Engine off,
       // so they are the two realism-adjacent settings the web needs first.
       // Additive and nullable-safe: an older web client ignores the key.
@@ -451,6 +457,8 @@ class SettingsFacade {
       if (mn is num) await g.setMinLength(mn.toInt());
       final dt = gen['dynamicTempEnabled'];
       if (dt is bool) await g.setDynamicTempEnabled(dt);
+      final dtr = gen['dynamicTempRange'];
+      if (dtr is num) await g.setDynamicTempRange(dtr.toDouble());
       final dr = gen['dynamicResponses'];
       if (dr is bool) await g.setDynamicResponses(dr);
       final dri = gen['dynamicResponseInterval'];
@@ -467,6 +475,30 @@ class SettingsFacade {
       if (osr is List) {
         await g.setOutputSanitizerRules(OutputSanitizerRule.listFromJson(osr));
       }
+      final seh = gen['sanitiseExistingHistory'];
+      // Apply AFTER the enable flag: turning sanitizer off clears this in
+      // setOutputSanitizerEnabled, and a stale true from the PWA must not
+      // re-arm a history rewrite without the confirm dialog.
+      if (seh is bool && g.outputSanitizerEnabled) {
+        await g.setSanitiseExistingHistory(seh);
+      }
+      final stops = gen['stopSequences'];
+      if (stops is List) {
+        await g.setStopSequences([
+          for (final s in stops)
+            if (s is String && s.isNotEmpty) s,
+        ]);
+      }
+    }
+
+    final prompt = body['systemPrompt']?.toString();
+    if (prompt != null) await g.setSystemPrompt(prompt);
+    final bans = body['bannedPhrases'];
+    if (bans is List) {
+      await _storage.setBannedPhrases([
+        for (final s in bans)
+          if (s is String && s.isNotEmpty) s,
+      ]);
     }
   }
 

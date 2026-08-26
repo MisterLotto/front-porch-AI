@@ -47,6 +47,7 @@ class WebChatRoutes {
     router.post('/api/chat/regenerate', _regenerate);
     router.post('/api/chat/cancel-realism', _cancelRealism);
     router.post('/api/chat/continue', _continue);
+    router.post('/api/chat/fork', _fork);
     router.post('/api/chat/impersonate', _impersonate);
     router.post('/api/chat/swipe', _swipe);
     router.get('/api/chat/variants', _variants);
@@ -272,6 +273,17 @@ class WebChatRoutes {
   shelf.Response _continue(shelf.Request request) {
     _facade.continueGeneration();
     return JsonResponse.ok({'status': 'ok'});
+  }
+
+  Future<shelf.Response> _fork(shelf.Request request) async {
+    final body = await _json(request);
+    final index = body['index'];
+    if (index is! int) return JsonResponse.badRequest('index is required');
+    final sessionId = await _facade.fork(index);
+    if (sessionId == null) {
+      return JsonResponse.error(409, 'Cannot fork at that message');
+    }
+    return JsonResponse.ok({'status': 'ok', 'sessionId': sessionId});
   }
 
   Future<shelf.Response> _impersonate(shelf.Request request) async {

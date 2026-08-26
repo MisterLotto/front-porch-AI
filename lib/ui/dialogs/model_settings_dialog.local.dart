@@ -33,9 +33,10 @@ extension _ModelSettingsLocalSection on _ModelSettingsDialogState {
 
     // Auto-select first model if none selected and models exist.
     // Skip when a kcpps preset with a valid model is active (use "Managed by kcpps")
+    final kcppsModelExists = _kcppsModelExists.of(storage.kcppsModelPath);
     if (_selectedModelPath == null &&
         modelManager.models.isNotEmpty &&
-        !(storage.kcppsHasModel && storage.kcppsModelFileExists)) {
+        !(storage.kcppsHasModel && kcppsModelExists)) {
       _selectedModelPath = modelManager.models.first.path;
     }
 
@@ -47,8 +48,7 @@ extension _ModelSettingsLocalSection on _ModelSettingsDialogState {
         ModelSelector(
           models: modelManager.models,
           selectedModelPath: _selectedModelPath,
-          showManagedByKcpps:
-              storage.kcppsHasModel && storage.kcppsModelFileExists,
+          showManagedByKcpps: storage.kcppsHasModel && kcppsModelExists,
           onChanged: (val) {
             if (val == null) {
               rebuildState(() {
@@ -62,7 +62,7 @@ extension _ModelSettingsLocalSection on _ModelSettingsDialogState {
               final savedPreset = storage.modelPresetMap[val];
               if (savedPreset != null &&
                   savedPreset.isNotEmpty &&
-                  File(savedPreset).existsSync()) {
+                  _presetFileExists.of(savedPreset)) {
                 storage.setActiveKcppsPath(savedPreset);
               } else {
                 storage.setActiveKcppsPath(null);
@@ -113,7 +113,7 @@ extension _ModelSettingsLocalSection on _ModelSettingsDialogState {
                     }
                     if (val != null &&
                         storage.kcppsHasModel &&
-                        storage.kcppsModelFileExists) {
+                        _kcppsModelExists.of(storage.kcppsModelPath)) {
                       rebuildState(() {
                         _selectedModelPath = null;
                       });
@@ -130,7 +130,8 @@ extension _ModelSettingsLocalSection on _ModelSettingsDialogState {
                       storage.setModelPreset(_selectedModelPath!, path);
                     }
                     _scanLocalPresets();
-                    if (storage.kcppsHasModel && storage.kcppsModelFileExists) {
+                    if (storage.kcppsHasModel &&
+                        _kcppsModelExists.of(storage.kcppsModelPath)) {
                       rebuildState(() {
                         _selectedModelPath = null;
                       });

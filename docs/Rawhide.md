@@ -5,6 +5,16 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- ⑂ **Fork a chat from the phone** — same “new branch from this message” as desktop. The old conversation stays put.
+
+- 🎛️ **Phone Settings now has the rest of the sampler row** — Top-P, Top-K, DRY, dynatemp range, stop sequences, banned phrases, sanitise-history, and the global system prompt. Voice & Media can turn speech on without opening the desktop tab.
+
+- 👥 **Stoop groups and places show their real contents on the phone** — member carousel and greetings for groups; climate, traits, and lore for worlds.
+
+- 💬 **Stoop comments go to the hub now** — desktop and phone. They used to vanish when you quit the app. The card owner can turn discussion on from the listing.
+
+- 🔐 **Only the Vite dev server may use cookies from localhost** — a random local page on another port cannot ride your session.
+
 - 🧼 **Filthy means they reek and hate it — not that they magically freshen up** — hitting rock-bottom hygiene, they notice and feel awful, but the meter stays down until they actually wash. Characters who enjoy being musky still like it. Same on the phone.
 
 - 🎭 **Alternate greetings now seed Needs the same way they seed bond and mood** — same section cards as the Realism editor, including hunger and the rest. Blank still inherits the card. Same on the phone.

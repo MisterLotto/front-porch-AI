@@ -18,39 +18,39 @@
 
 import 'package:shelf/shelf.dart' as shelf;
 
+import 'package:front_porch_ai/services/web/util/util.dart';
+
 /// Tightened, credential-aware CORS.
 ///
 /// The production SPA is served same-origin, so no CORS is needed there. The
-/// only legitimate cross-origin caller is the Vite dev server, so we reflect a
-/// localhost dev `Origin` and allow credentials (cookies). We never emit
+/// only legitimate cross-origin caller is the Vite dev server on a known
+/// loopback port ([kViteDevPorts]), so we reflect that `Origin` and allow
+/// credentials (cookies). Arbitrary localhost ports are refused — reflecting
+/// them would let any local page ride the session cookie. We never emit
 /// `Access-Control-Allow-Origin: *` — that is invalid with credentials and was a
 /// security smell in the legacy server.
 class CorsMiddleware {
   const CorsMiddleware();
 
-  static final RegExp _devOrigin =
-      RegExp(r'^https?://(localhost|127\.0\.0\.1)(:\d+)?$');
-
   shelf.Middleware get middleware => (shelf.Handler inner) {
-        return (shelf.Request request) async {
-          final origin = request.headers['origin'];
-          final allow = origin != null && _devOrigin.hasMatch(origin);
-          final headers = allow
-              ? <String, String>{
-                  'Access-Control-Allow-Origin': origin,
-                  'Access-Control-Allow-Credentials': 'true',
-                  'Access-Control-Allow-Methods':
-                      'GET, POST, PUT, DELETE, OPTIONS',
-                  'Access-Control-Allow-Headers': 'Content-Type',
-                  'Vary': 'Origin',
-                }
-              : const <String, String>{};
+    return (shelf.Request request) async {
+      final origin = request.headers['origin'];
+      final allow = origin != null && isAllowedViteDevOrigin(origin);
+      final headers = allow
+          ? <String, String>{
+              'Access-Control-Allow-Origin': origin,
+              'Access-Control-Allow-Credentials': 'true',
+              'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+              'Access-Control-Allow-Headers': 'Content-Type',
+              'Vary': 'Origin',
+            }
+          : const <String, String>{};
 
-          if (request.method == 'OPTIONS') {
-            return shelf.Response.ok(null, headers: headers);
-          }
-          final response = await inner(request);
-          return headers.isEmpty ? response : response.change(headers: headers);
-        };
-      };
+      if (request.method == 'OPTIONS') {
+        return shelf.Response.ok(null, headers: headers);
+      }
+      final response = await inner(request);
+      return headers.isEmpty ? response : response.change(headers: headers);
+    };
+  };
 }

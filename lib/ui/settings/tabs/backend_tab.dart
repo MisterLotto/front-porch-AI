@@ -51,6 +51,7 @@ class BackendTab extends StatelessWidget {
     required this.onKcppsModelStatusChanged,
     required this.onGenerateKcppsDone,
     required this.onToggleBackend,
+    required this.kcppsModelExists,
   });
 
   final TextEditingController apiUrlController;
@@ -68,6 +69,7 @@ class BackendTab extends StatelessWidget {
   final ValueChanged<bool> onKcppsModelStatusChanged;
   final VoidCallback onGenerateKcppsDone;
   final VoidCallback onToggleBackend;
+  final bool kcppsModelExists;
 
   @override
   Widget build(BuildContext context) {
@@ -105,6 +107,7 @@ class BackendTab extends StatelessWidget {
               onKcppsModelStatusChanged: onKcppsModelStatusChanged,
               onGenerateKcppsDone: onGenerateKcppsDone,
               onToggleBackend: onToggleBackend,
+              kcppsModelExists: kcppsModelExists,
             ),
         ],
       ),

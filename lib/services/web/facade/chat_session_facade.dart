@@ -77,4 +77,16 @@ class ChatSessionFacade {
     _notify();
     return _chat.currentSessionId;
   }
+
+  /// Fork the open chat at [messageIndex] (inclusive). Returns the new
+  /// session id, or null when there is no chat / the index is out of range
+  /// (ChatService no-ops those). Broadcasts so the PWA refetches state.
+  Future<String?> fork(int messageIndex) async {
+    final before = _chat.currentSessionId;
+    await _chat.forkFromMessage(messageIndex);
+    final after = _chat.currentSessionId;
+    if (after == null || after == before) return null;
+    _notify();
+    return after;
+  }
 }

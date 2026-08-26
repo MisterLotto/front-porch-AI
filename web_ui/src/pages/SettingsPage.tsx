@@ -7,7 +7,6 @@ import { PersonaManager } from '../components/PersonaManager';
 import { ModelPicker } from '../components/ModelPicker';
 import { ChatColorsSettings } from '../components/ChatColorsSettings';
 import { PorchLifeSettings } from '../components/PorchLifeSettings';
-import { spellCheckLabel, sortedByLabel } from '../spellCheckLabels';
 import { applySpellCheckLang } from '../spellCheckLang';
 import {
   StepUpFields,
@@ -15,12 +14,10 @@ import {
   remotePreviewNeedsStepUp,
 } from '../components/StepUpFields';
 import {
-  reasoningEffortBlurb,
-  reasoningEffortChipsFor,
-  reasoningEffortDisplayedSelection,
-  reasoningEffortMappingCaption,
-  reasoningEffortTitle,
-} from '../utils/reasoningEffort';
+  GenerationSettingsFields,
+  type GenSettings,
+} from '../components/GenerationSettingsFields';
+import { VoiceMediaSettings } from '../components/VoiceMediaSettings';
 
 // A single backend picker (replacing the old Backend + Provider dropdowns,
 // which overlapped). Each entry maps to a real BackendType; the OpenAI-compatible
@@ -44,30 +41,7 @@ const BACKEND_OPTIONS: BackendOption[] = [
   { id: 'custom', label: 'Custom API (OpenAI-compatible)', backend: 'openRouter', url: '', kind: 'api' },
 ];
 
-interface SanitizerRule {
-  id: number;
-  find: string;
-  replace: string;
-  stop_after_match?: boolean;
-}
-interface Gen {
-  temperature: number;
-  minP: number;
-  repeatPenalty: number;
-  repeatPenaltyTokens: number;
-  xtcThreshold: number;
-  xtcProbability: number;
-  maxLength: number;
-  minLength: number;
-  dynamicTempEnabled: boolean;
-  dynamicResponses: boolean;
-  dynamicResponseInterval: number;
-  /** Away pace (Living Time, additive): story periods per AFK scene. */
-  dynamicResponsePacePeriods?: number;
-  /** Host-side find/replace on model output (audit P2.13). */
-  outputSanitizerEnabled?: boolean;
-  outputSanitizerRules?: SanitizerRule[];
-}
+type Gen = GenSettings;
 interface Settings {
   backend: string;
   backends: string[];
@@ -94,6 +68,8 @@ interface Settings {
   spellCheckLanguage?: string;
   /** Dictionary tags the host can check. Optional for the same reason. */
   spellCheckLanguages?: string[];
+  systemPrompt?: string;
+  bannedPhrases?: string[];
 }
 
 // Legacy-engine model files still on the host (desktop parity: the Reclaim
@@ -216,6 +192,8 @@ export function SettingsPage() {
         reasoningEnabled: s.reasoningEnabled,
         reasoningEffort: s.reasoningEffort,
         generation: s.generation,
+        systemPrompt: s.systemPrompt,
+        bannedPhrases: s.bannedPhrases,
       };
       if (s.spellCheckLanguage !== undefined) {
         body.spellCheckLanguage = s.spellCheckLanguage;
@@ -429,198 +407,26 @@ export function SettingsPage() {
         )}
       </section>
 
-      <section className="card">
-        <h3>Generation</h3>
-        <SliderField label="Temperature" value={s.generation.temperature} min={0} max={2} step={0.05}
-          onChange={(v) => patchGen({ temperature: v })} />
-        <SliderField label="Min-P" value={s.generation.minP} min={0} max={1} step={0.01}
-          onChange={(v) => patchGen({ minP: v })} />
-        <SliderField label="Repeat penalty" value={s.generation.repeatPenalty} min={1} max={3} step={0.01}
-          onChange={(v) => patchGen({ repeatPenalty: v })} />
-        <SliderField label="Rep pen tokens" value={s.generation.repeatPenaltyTokens} min={0} max={2048} step={8}
-          onChange={(v) => patchGen({ repeatPenaltyTokens: Math.round(v) })} />
-        {/* XTC is a llama.cpp sampler — only the KoboldCpp backend honors it,
-            so it is hidden entirely on oMLX/remote (desktop parity). */}
-        {s.backend === 'kobold' && (<>
-        <SliderField label="XTC threshold" value={s.generation.xtcThreshold} min={0} max={0.5} step={0.01}
-          onChange={(v) => patchGen({ xtcThreshold: v })} />
-        <SliderField label="XTC probability" value={s.generation.xtcProbability} min={0} max={1} step={0.05}
-          onChange={(v) => patchGen({ xtcProbability: v })} />
-        </>)}
-        <SliderField label="Max output tokens" value={s.generation.maxLength} min={16} max={16384} step={16}
-          onChange={(v) => patchGen({ maxLength: Math.round(v) })} />
-        <SliderField label="Min output tokens" value={s.generation.minLength} min={0} max={512} step={1}
-          onChange={(v) => patchGen({ minLength: Math.round(v) })} />
-        <SliderField label="Context size" value={s.contextSize} min={512} max={500000} step={512}
-          onChange={(v) => patch({ contextSize: Math.round(v) })} />
-        <label className="row-label">
-          <span>Dynamic temperature</span>
-          <input
-            type="checkbox"
-            checked={s.generation.dynamicTempEnabled}
-            onChange={(e) => patchGen({ dynamicTempEnabled: e.target.checked })}
-          />
-        </label>
-        {s.spellCheckLanguage !== undefined && (
-          <label>
-            Spell check language
-            <select
-              value={s.spellCheckLanguage}
-              onChange={(e) => patch({ spellCheckLanguage: e.target.value })}
-            >
-              <option value="off">Off</option>
-              {sortedByLabel([
-                ...(s.spellCheckLanguages ?? []),
-                // Keep the saved value selectable even if the host no longer
-                // reports it, or the select would show a value not in its list.
-                ...(s.spellCheckLanguage !== 'off' ? [s.spellCheckLanguage] : []),
-              ]).map((tag) => (
-                <option key={tag} value={tag}>{spellCheckLabel(tag)}</option>
-              ))}
-            </select>
-            <p className="muted small">
-              The language you write in — not your device's language. If your phone or
-              computer is set to one language but you chat with characters in another,
-              set this to the one you chat in.
-            </p>
-          </label>
-        )}
-        <label className="row-label">
-          <span>Request thinking</span>
-          <input
-            type="checkbox"
-            checked={Boolean(s.reasoningEnabled) || Boolean(s.reasoningMandatory)}
-            disabled={Boolean(s.reasoningMandatory) || s.reasoningLocalSupport === 'none'}
-            onChange={(e) => {
-              if (!s.reasoningMandatory && s.reasoningLocalSupport !== 'none') {
-                patch({ reasoningEnabled: e.target.checked })
-              }
-            }}
-          />
-        </label>
-        {Boolean(s.reasoningMandatory) && (
-          <p className="muted small">This model always thinks — Off is not available.</p>
-        )}
-        {s.reasoningLocalSupport === 'none' && (
-          <p className="muted small">
-            This model has no thinking mode — its chat template never produces
-            think-steps, so this switch would do nothing.
-          </p>
-        )}
-        {s.reasoningLocalSupport === 'toggle' && (
-          <p className="muted small">
-            This model thinks on or off only — it has no strength levels, so
-            there are no chips to pick.
-          </p>
-        )}
-        {(s.reasoningEnabled || Boolean(s.reasoningMandatory)) &&
-          s.reasoningLocalSupport !== 'none' &&
-          ((s.reasoningEfforts?.length ?? 0) > 0 ||
-            !s.reasoningLocalSupport) && (
-          <div className="thinking-strength">
-            <div className="thinking-strength-label">Thinking strength</div>
-            <div className="thinking-strength-chips" role="group" aria-label="Thinking strength">
-              {(s.reasoningEfforts?.length
-                ? s.reasoningEfforts
-                : s.reasoningLocalSupport
-                  ? []
-                  : reasoningEffortChipsFor(s.isLocal ? '' : (s.remoteModelName ?? ''))
-              ).map((id) => {
-                const model = s.isLocal ? '' : (s.remoteModelName ?? '')
-                const row = s.reasoningEfforts?.length
-                  ? s.reasoningEfforts
-                  : undefined
-                const on = reasoningEffortDisplayedSelection(
-                  model,
-                  s.reasoningEffort || 'medium',
-                  row,
-                ) === id
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    className={`thinking-strength-chip${on ? ' on' : ''}`}
-                    onClick={() => patch({ reasoningEffort: id })}
-                  >
-                    <span className="thinking-strength-chip-title">
-                      {reasoningEffortTitle(id)}
-                    </span>
-                    <span className="thinking-strength-chip-sub">
-                      {reasoningEffortBlurb(id)}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-            <p className="muted small thinking-strength-caption">
-              {reasoningEffortMappingCaption(
-                s.isLocal ? '' : (s.remoteModelName ?? ''),
-                s.reasoningEffort || 'medium',
-                s.reasoningEfforts,
-                s.reasoningMandatory,
-              )}
-            </p>
-          </div>
-        )}
-        {!s.reasoningEnabled && !s.reasoningMandatory && (
-          <p className="muted small">
-            Turn on for reasoning models so their think-steps are captured under each reply.
-            The chips then show this model's real levels.
-          </p>
-        )}
-        <label className="row-label">
-          <span>Provide periodic responses when user is AFK?</span>
-          <input
-            type="checkbox"
-            checked={s.generation.dynamicResponses}
-            onChange={(e) => patchGen({ dynamicResponses: e.target.checked })}
-          />
-        </label>
-        {s.generation.dynamicResponses && (
-          <>
-            <SliderField label="Idle timeout (s)" value={s.generation.dynamicResponseInterval} min={30} max={300} step={10}
-              onChange={(v) => patchGen({ dynamicResponseInterval: Math.round(v) })} />
-            <label className="field">
-              <span>Story time per away scene</span>
-              <select
-                value={s.generation.dynamicResponsePacePeriods ?? 1}
-                onChange={(e) =>
-                  patchGen({ dynamicResponsePacePeriods: Number(e.target.value) })
-                }
-              >
-                <option value={1}>a few hours</option>
-                <option value={3}>half the day</option>
-                <option value={6}>a full day</option>
-              </select>
-            </label>
-          </>
-        )}
-        {/* Output Sanitizer (audit P2.13) — host-side find/replace before
-            chat history is saved. Desktop Generation tab parity. */}
-        {s.generation.outputSanitizerEnabled !== undefined && (
-          <>
-            <h4 style={{ marginTop: 16, marginBottom: 4 }}>Output Sanitizer</h4>
-            <p className="muted small">
-              Replace specific character sequences in model output before saving
-              to chat history (e.g. em dash → &quot; - &quot;).
-            </p>
-            <label className="row-label">
-              <span>Enable Output Sanitizer</span>
-              <input
-                type="checkbox"
-                checked={!!s.generation.outputSanitizerEnabled}
-                onChange={(e) => patchGen({ outputSanitizerEnabled: e.target.checked })}
-              />
-            </label>
-            {s.generation.outputSanitizerEnabled && (
-              <SanitizerRulesEditor
-                rules={s.generation.outputSanitizerRules ?? []}
-                onChange={(rules) => patchGen({ outputSanitizerRules: rules })}
-              />
-            )}
-          </>
-        )}
-      </section>
+      <GenerationSettingsFields
+        backend={s.backend}
+        isLocal={s.isLocal}
+        remoteModelName={s.remoteModelName}
+        contextSize={s.contextSize}
+        generation={s.generation}
+        systemPrompt={s.systemPrompt}
+        bannedPhrases={s.bannedPhrases}
+        spellCheckLanguage={s.spellCheckLanguage}
+        spellCheckLanguages={s.spellCheckLanguages}
+        reasoningEnabled={s.reasoningEnabled}
+        reasoningEffort={s.reasoningEffort}
+        reasoningMandatory={s.reasoningMandatory}
+        reasoningEfforts={s.reasoningEfforts}
+        reasoningLocalSupport={s.reasoningLocalSupport}
+        patch={(p) => patch(p as Partial<Settings>)}
+        patchGen={patchGen}
+      />
+
+      <VoiceMediaSettings />
 
       {legacy && legacy.totalBytes > 0 && (
         <section className="card">
@@ -695,113 +501,6 @@ export function SettingsPage() {
           </a>
         </div>
       </section>
-    </div>
-  );
-}
-
-// A labelled slider with an editable value box (mirrors the desktop sampler
-// sliders): label + value on top, range below; the box accepts exact typing.
-function SliderField({
-  label,
-  value,
-  step,
-  min,
-  max,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  step: number;
-  min: number;
-  max: number;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <div className="slider-field">
-      <div className="slider-head">
-        <span>{label}</span>
-        <input
-          type="number"
-          className="slider-val"
-          value={value}
-          step={step}
-          min={min}
-          max={max}
-          onChange={(e) => {
-            const n = Number(e.target.value);
-            if (Number.isFinite(n)) onChange(n);
-          }}
-        />
-      </div>
-      <input
-        type="range"
-        value={value}
-        step={step}
-        min={min}
-        max={max}
-        onChange={(e) => onChange(Number(e.target.value))}
-      />
-    </div>
-  );
-}
-
-/** Compact find/replace rule list for Output Sanitizer (desktop parity). */
-function SanitizerRulesEditor({
-  rules,
-  onChange,
-}: {
-  rules: SanitizerRule[];
-  onChange: (rules: SanitizerRule[]) => void;
-}) {
-  const nextId = () =>
-    rules.reduce((m, r) => Math.max(m, r.id), -1) + 1;
-  const patch = (i: number, p: Partial<SanitizerRule>) => {
-    const next = rules.map((r, idx) => (idx === i ? { ...r, ...p } : r));
-    onChange(next);
-  };
-  return (
-    <div className="sanitizer-rules" style={{ marginTop: 8 }}>
-      {rules.map((r, i) => (
-        <div key={r.id} className="tool-row" style={{ gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
-          <input
-            style={{ flex: 1, minWidth: 80 }}
-            placeholder="Find"
-            value={r.find}
-            onChange={(e) => patch(i, { find: e.target.value })}
-          />
-          <span className="muted small">→</span>
-          <input
-            style={{ flex: 1, minWidth: 80 }}
-            placeholder="Replace"
-            value={r.replace}
-            onChange={(e) => patch(i, { replace: e.target.value })}
-          />
-          <label className="muted small" title="Stop applying later rules after this one changes the text">
-            <input
-              type="checkbox"
-              checked={!!r.stop_after_match}
-              onChange={(e) => patch(i, { stop_after_match: e.target.checked })}
-            />{' '}
-            stop
-          </label>
-          <button
-            className="icon-btn"
-            title="Remove rule"
-            onClick={() => onChange(rules.filter((_, idx) => idx !== i))}
-          >
-            🗑
-          </button>
-        </div>
-      ))}
-      <button
-        className="small"
-        type="button"
-        onClick={() =>
-          onChange([...rules, { id: nextId(), find: '', replace: '', stop_after_match: false }])
-        }
-      >
-        Add rule
-      </button>
     </div>
   );
 }

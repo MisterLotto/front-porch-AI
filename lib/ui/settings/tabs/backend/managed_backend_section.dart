@@ -50,6 +50,7 @@ class ManagedBackendSection extends StatelessWidget {
     required this.onKcppsModelStatusChanged,
     required this.onGenerateKcppsDone,
     required this.onToggleBackend,
+    required this.kcppsModelExists,
   });
 
   final String? selectedModelPath;
@@ -64,6 +65,10 @@ class ManagedBackendSection extends StatelessWidget {
   final VoidCallback onGenerateKcppsDone;
   final VoidCallback onToggleBackend;
 
+  /// Parent-memoized "does the .kcpps model file still exist?" so this
+  /// section (which rebuilds on every Kobold log line) never stats a GGUF.
+  final bool kcppsModelExists;
+
   @override
   Widget build(BuildContext context) {
     final storageService = Provider.of<StorageService>(context);
@@ -74,7 +79,7 @@ class ManagedBackendSection extends StatelessWidget {
 
     final anyRunning = koboldService.isRunning || koboldService.isStarting;
     final canStart =
-        (storageService.kcppsHasModel && storageService.kcppsModelFileExists) ||
+        (storageService.kcppsHasModel && kcppsModelExists) ||
         selectedModelPath != null;
 
     return Column(
@@ -168,9 +173,7 @@ class ManagedBackendSection extends StatelessWidget {
         // Flutter's ink-visibility assertion.
         SwitchListTile(
           tileColor: AppColors.cardOf(context),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           title: const Text(
             'Auto-start model on launch',
             style: TextStyle(fontSize: 14),
@@ -191,9 +194,7 @@ class ManagedBackendSection extends StatelessWidget {
         const SizedBox(height: 8),
         SwitchListTile(
           tileColor: AppColors.cardOf(context),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           title: const Text(
             'Auto-start on chat open',
             style: TextStyle(fontSize: 14),
@@ -217,9 +218,7 @@ class ManagedBackendSection extends StatelessWidget {
         ModelSelector(
           models: modelManager.models,
           selectedModelPath: selectedModelPath,
-          showManagedByKcpps:
-              storageService.kcppsHasModel &&
-              storageService.kcppsModelFileExists,
+          showManagedByKcpps: storageService.kcppsHasModel && kcppsModelExists,
           onChanged: onModelSelected,
         ),
         // Vision projector (mmproj) for the selected model — the same

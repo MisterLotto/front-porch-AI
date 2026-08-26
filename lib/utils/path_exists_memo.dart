@@ -16,20 +16,28 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with Front Porch AI. If not, see <https://www.gnu.org/licenses/>.
 
-import 'package:shelf/shelf.dart' as shelf;
+import 'dart:io';
 
-import 'package:front_porch_ai/services/web/util/dev_origin.dart';
-
-/// Origin allowlist for WebSocket upgrades, shared by every WS endpoint.
+/// Memoizes [File.existsSync] per path so a widget that rebuilds on every
+/// Kobold log line does not stat a multi-GB GGUF (or projector) each time.
 ///
-/// Because the session cookie is sent automatically, a missing check would let
-/// a malicious page open a cross-site socket (WS-CSRF/hijack). Allow
-/// same-origin (origin host == request host) and the Vite loopback origins
-/// in [kViteDevPorts]. Arbitrary localhost ports are refused.
-bool wsOriginAllowed(shelf.Request request, String origin) {
-  final o = Uri.tryParse(origin);
-  if (o == null) return false;
-  final req = request.requestedUri;
-  if (o.host == req.host && o.port == req.port) return true;
-  return isAllowedViteDevOrigin(origin);
+/// Same contract as the Advanced Launch `_launchModelExists` cache: one disk
+/// trip when the path changes, reuse after that. A missing file that later
+/// appears at the same path stays cached-absent until [of] is called with a
+/// different path (or a new memo is created).
+class PathExistsMemo {
+  String? _path;
+  bool _exists = false;
+
+  bool of(String? path) {
+    if (path == null || path.isEmpty) {
+      _path = path;
+      _exists = false;
+      return false;
+    }
+    if (_path == path) return _exists;
+    _path = path;
+    _exists = File(path).existsSync();
+    return _exists;
+  }
 }

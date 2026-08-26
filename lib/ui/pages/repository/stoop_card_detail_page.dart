@@ -90,9 +90,9 @@ class _StoopDetailPanel extends StatefulWidget {
 
 class _StoopDetailPanelState extends State<_StoopDetailPanel> {
   final _api = BackporchApi();
-  // Mock-only this pass — never the live Backporch comments API.
-  final _commentsClient = MemoryStoopCommentsClient(
-    optIn: StoopCommentsOptIn.instance,
+  late final HttpStoopCommentsClient _commentsClient = HttpStoopCommentsClient(
+    _api,
+    () => _token,
   );
   StoopCardDetail? _detail;
   bool _loading = true;
@@ -137,7 +137,6 @@ class _StoopDetailPanelState extends State<_StoopDetailPanel> {
     try {
       final d = await _api.cardDetail(_token, widget.cardId);
       if (!mounted) return;
-      _commentsClient.setCardCommentsEnabled(d.id, d.commentsEnabled);
       setState(() {
         _detail = d;
         _score = d.score;

@@ -19,4 +19,5 @@ export 'stoop_report_gate.dart';
 export 'stoop_comment.dart';
 export 'stoop_comment_gate.dart';
 export 'stoop_comments_client.dart';
+export 'http_stoop_comments_client.dart';
 export 'stoop_comments_opt_in.dart';

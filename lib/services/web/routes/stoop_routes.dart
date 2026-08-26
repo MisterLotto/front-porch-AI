@@ -99,6 +99,32 @@ class WebStoopRoutes {
     router.post('/api/stoop/cards/<id>/vote', _cardCall('POST', '/vote'));
     router.post('/api/stoop/cards/<id>/download', _download);
     router.post('/api/stoop/cards/<id>/report', _report);
+    router.get('/api/stoop/cards/<id>/comments', _cardCall('GET', '/comments'));
+    router.post(
+      '/api/stoop/cards/<id>/comments',
+      _cardCall('POST', '/comments'),
+    );
+    router.post('/api/stoop/cards/<id>/comment-flags', _commentFlags);
+    router.delete(
+      '/api/stoop/cards/<id>/comments/<cid>',
+      _commentCall('DELETE', ''),
+    );
+    router.post(
+      '/api/stoop/cards/<id>/comments/<cid>/report',
+      _commentCall('POST', '/report'),
+    );
+    router.post(
+      '/api/stoop/cards/<id>/comments/<cid>/reply',
+      _commentCall('POST', '/reply'),
+    );
+    router.delete(
+      '/api/stoop/cards/<id>/comments/<cid>/reply',
+      _commentCall('DELETE', '/reply'),
+    );
+    router.post(
+      '/api/stoop/cards/<id>/comments/<cid>/reply/report',
+      _commentCall('POST', '/reply/report'),
+    );
     router.get('/api/stoop/creators/<id>', _creatorCall('GET', ''));
     router.post('/api/stoop/creators/<id>/follow', _follow);
 
@@ -203,7 +229,21 @@ class WebStoopRoutes {
         request,
         method,
         '/characters/${Uri.encodeComponent(id)}$suffix',
+        query: method == 'GET' ? request.url.query : null,
       );
+
+  Future<shelf.Response> Function(shelf.Request, String, String) _commentCall(
+    String method,
+    String suffix,
+  ) =>
+      (request, id, cid) => _relay(
+        request,
+        method,
+        '/characters/${Uri.encodeComponent(id)}/comments/${Uri.encodeComponent(cid)}$suffix',
+      );
+
+  Future<shelf.Response> _commentFlags(shelf.Request request, String id) =>
+      _relay(request, 'PATCH', '/characters/${Uri.encodeComponent(id)}');
 
   Future<shelf.Response> Function(shelf.Request, String) _creatorCall(
     String method,
@@ -242,7 +282,13 @@ class WebStoopRoutes {
       return JsonResponse.error(503, 'library_unavailable');
     }
     try {
-      final result = await _facade.downloadAndImport(token, id);
+      final body = await _jsonBody(request);
+      final clientType = body?['type']?.toString();
+      final result = await _facade.downloadAndImport(
+        token,
+        id,
+        clientType: clientType,
+      );
       final ok = result['ok'] == true;
       if (!ok) return JsonResponse.error(422, '${result['error']}');
       return JsonResponse.ok(result);

@@ -2027,6 +2027,17 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
   text-transform: uppercase;
   color: var(--muted);
 }
+.stoop-member-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.stoop-lore-entry + .stoop-lore-entry { margin-top: 12px; }
+.stoop-comment { margin: 0 0 14px; }
+.stoop-comment-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 4px 0; }
+.stoop-comment-reply { margin: 8px 0 0 12px; padding-left: 10px; border-left: 2px solid var(--border); }
+.stoop-comment-report { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 [data-layout='phone'] .stoop-detail-head { flex-direction: column; }
 [data-layout='phone'] .stoop-detail-art { width: 110px; }
 

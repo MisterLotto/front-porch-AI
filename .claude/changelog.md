@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-08-26 — fix(stoop): comments talk to the hub, not a notepad
+- **Why:** Discussion on a card used an in-memory fake, so comments vanished
+  on quit. The phone hid the block for that reason. Users expected a real
+  thread.
+- **What:** HttpStoopCommentsClient hits /characters/:id/comments. Desktop
+  uses it. Web relay + Discussion UI. Owner can turn discussion on from the
+  listing. Memory client stays for tests.
+- **Files:** http_stoop_comments_client, stoop_card_detail_page,
+  stoop_card_comments, stoop_routes, StoopDiscussion, tests
+
+## 2026-08-26 — fix: audit P2.11–15 (web fork, settings, Stoop, CORS, GGUF memo)
+- **Why:** Phone/web could not fork a chat, could not set Top-P/K / DRY /
+  dynatemp / stops / bans / sanitise-history / system prompt or enable
+  Voice, showed only solo Stoop fields, reflected any localhost Origin
+  with cookies, and re-stat'd GGUFs on every Kobold log line.
+- **What:** POST /api/chat/fork + Fork button. Generation extras + Voice
+  enable. Group carousel + world climate/lore; relay forwards type query;
+  payload type wins, SOLO is upgraded by world/group shape (the PWA always
+  sends type, so a naive client-wins order never reached the fallback).
+  Sanitise-history cannot re-arm after sanitizer-off. Discussion stays
+  hidden (desktop comments are still an in-memory mock). CORS/WS only Vite
+  5173/5174/4173. PathExistsMemo on Managed Backend + model dialog +
+  projector.
+- **Files:** chat_session_facade/routes, MessageActions/ChatPage,
+  settings_facade, GenerationSettingsFields, VoiceMediaSettings,
+  stoop_import_kind, stoop_routes, StoopCardSections, cors/ws/dev_origin,
+  PathExistsMemo, tests, assets/web_app
+
 ## 2026-08-26 — fix(needs): hygiene catastrophe does not rebound the meter
 - **Why:** Hitting 0 hygiene fired a canon scene event AND bounced the
   meter to 55, so they dropped the pan and magically smelled better.

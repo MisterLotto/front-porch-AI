@@ -7,25 +7,23 @@
 // asks and reports the outcome.
 
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { StoopBadges, StoopCardArt } from '../../components/stoop/StoopCardTile';
-import {
-  type InventoryRecord,
-  inventoryToChips,
-} from '../../components/realism/realismTypes';
 import { stoop, stoopErrorText } from '../../stoop/stoopApi';
 import { useStoop } from '../../stoop/StoopContext';
+import { stoopCardKind, type CardMap } from '../../stoop/stoopCardBody';
 import { REPORT_CATEGORIES, type StoopCardDetail } from '../../stoop/stoopTypes';
-
-const CARD_SECTIONS: { key: string; label: string }[] = [
-  { key: 'description', label: 'Description' },
-  { key: 'personality', label: 'Personality' },
-  { key: 'scenario', label: 'Scenario' },
-  { key: 'first_mes', label: 'Greeting' },
-];
+import { StoopCardSections } from './StoopCardSections';
+import { StoopDiscussion } from './StoopDiscussion';
 
 export function StoopCardPage() {
   const { id = '' } = useParams();
+  const [params] = useSearchParams();
+  const hintedType = params.get('type');
+  const typeHint =
+    hintedType === 'GROUP' || hintedType === 'WORLD' || hintedType === 'SOLO'
+      ? hintedType
+      : undefined;
   const { user } = useStoop();
   const canReport = !!user && user.emailVerified !== false;
   const [detail, setDetail] = useState<StoopCardDetail | null>(null);
@@ -41,7 +39,7 @@ export function StoopCardPage() {
     setDetail(null);
     setError('');
     stoop
-      .cardDetail(id)
+      .cardDetail(id, typeHint)
       .then((d) => {
         if (cancelled) return;
         setDetail(d);
@@ -54,7 +52,7 @@ export function StoopCardPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, typeHint]);
 
   const vote = async (value: number) => {
     const next = myVote === value ? 0 : value;
@@ -77,11 +75,12 @@ export function StoopCardPage() {
     setNote('');
     setError('');
     try {
-      const r = await stoop.download(id, detail.type);
+      const kind = stoopCardKind(detail.type, detail.card as CardMap);
+      const r = await stoop.download(id, kind);
       setNote(
-        detail.type === 'GROUP'
+        kind === 'GROUP'
           ? `“${r.name}” was added to your groups.`
-          : detail.type === 'WORLD'
+          : kind === 'WORLD'
             ? `“${r.name}” was added to your places.`
             : `“${r.name}” was added to your library.`,
       );
@@ -94,49 +93,6 @@ export function StoopCardPage() {
 
   if (error && !detail) return <p className="error">{error}</p>;
   if (!detail) return <div className="spinner" aria-label="Loading" />;
-
-  const cardText = (key: string): string => {
-    const v = detail.card[key];
-    return typeof v === 'string' ? v.trim() : '';
-  };
-
-  // One reader for every card-authored phrase list, straight out of the card
-  // the relay already hands us — `extensions.front_porch.realism_engine.<key>`,
-  // the same path the desktop panel walks. No backend field is involved: the
-  // card blob travels verbatim, so these sections are display-only additions.
-  //
-  // Mirrors the Dart stoopPhrases(). Array.isArray rather than a cast, and
-  // defensive at every hop, because old cards have no extensions at all and a
-  // malformed field on a stranger's upload must cost that field, not the page.
-  const realismBlock = (): Record<string, unknown> | undefined => {
-    const ext = detail.card.extensions as Record<string, unknown> | undefined;
-    const fp = ext?.front_porch as Record<string, unknown> | undefined;
-    return fp?.realism_engine as Record<string, unknown> | undefined;
-  };
-  const cardPhrases = (key: string): string[] => {
-    const raw = realismBlock()?.[key];
-    if (!Array.isArray(raw)) return [];
-    return raw.filter((a): a is string => typeof a === 'string' && a.trim() !== '').map((a) => a.trim());
-  };
-  const ambitions = cardPhrases('ambitions');
-  const likes = cardPhrases('likes');
-  const dislikes = cardPhrases('dislikes');
-  // Starting Pockets & Wardrobe. NOT readable through cardPhrases: this field
-  // is a map of two lists whose entries may each be a bare string or a
-  // {name, state} object, so the phrase reader returns [] for every card
-  // forever — and silently, since an absent section looks identical to a card
-  // whose author wrote no wardrobe. inventoryToChips is the same converter the
-  // web editor uses, so the Stoop shows exactly what a download would produce,
-  // caps and all (mirrors stoopWardrobeSection on desktop).
-  const inventoryRaw = realismBlock()?.inventory;
-  const wardrobe =
-    inventoryRaw && typeof inventoryRaw === 'object' && !Array.isArray(inventoryRaw)
-      ? inventoryToChips(inventoryRaw as InventoryRecord)
-      : { worn: [], carrying: [] };
-  // The 18+ pair is deliberately NOT read here: the card page is browsed by
-  // anyone signed in, and opening a card is not opting into 18+ content. The
-  // data still travels with the card and works once downloaded (mirrors
-  // stoopPreferencesSection on desktop).
 
   return (
     <div className="stoop-detail">
@@ -215,79 +171,8 @@ export function StoopCardPage() {
         </div>
       </div>
 
-      {CARD_SECTIONS.map(({ key, label }) => {
-        const text = cardText(key);
-        if (!text) return null;
-        return (
-          <section key={key} className="card stoop-section">
-            <h4>{label}</h4>
-            <p className="stoop-pre">{text}</p>
-          </section>
-        );
-      })}
-
-      {ambitions.length > 0 && (
-        <section className="card stoop-section">
-          <h4>Ambitions ({ambitions.length})</h4>
-          <ul className="stoop-ambitions">
-            {ambitions.map((a, i) => (
-              <li key={i}>🧭 {a}</li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      {(likes.length > 0 || dislikes.length > 0) && (
-        <section className="card stoop-section">
-          <h4>Likes &amp; Dislikes ({likes.length + dislikes.length})</h4>
-          {likes.length > 0 && (
-            <>
-              <h5 className="stoop-sublabel">Drawn to</h5>
-              <ul className="stoop-ambitions">
-                {likes.map((a, i) => (
-                  <li key={i}>♥ {a}</li>
-                ))}
-              </ul>
-            </>
-          )}
-          {dislikes.length > 0 && (
-            <>
-              <h5 className="stoop-sublabel">Put off by</h5>
-              <ul className="stoop-ambitions">
-                {dislikes.map((a, i) => (
-                  <li key={i}>✕ {a}</li>
-                ))}
-              </ul>
-            </>
-          )}
-        </section>
-      )}
-
-      {(wardrobe.worn.length > 0 || wardrobe.carrying.length > 0) && (
-        <section className="card stoop-section">
-          <h4>Pockets &amp; Wardrobe ({wardrobe.worn.length + wardrobe.carrying.length})</h4>
-          {wardrobe.worn.length > 0 && (
-            <>
-              <h5 className="stoop-sublabel">Wearing</h5>
-              <ul className="stoop-ambitions">
-                {wardrobe.worn.map((a, i) => (
-                  <li key={i}>🧥 {a}</li>
-                ))}
-              </ul>
-            </>
-          )}
-          {wardrobe.carrying.length > 0 && (
-            <>
-              <h5 className="stoop-sublabel">Carrying</h5>
-              <ul className="stoop-ambitions">
-                {wardrobe.carrying.map((a, i) => (
-                  <li key={i}>🎒 {a}</li>
-                ))}
-              </ul>
-            </>
-          )}
-        </section>
-      )}
+      <StoopCardSections detail={detail} />
+      <StoopDiscussion detail={detail} />
 
       {reporting && canReport && (
         <ReportDialog

@@ -1,8 +1,8 @@
 // Copyright (C) 2026 Front Porch AI
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //
-// Per-message action toolbar (swipe / regenerate / continue / edit / delete /
-// speak). Extracted verbatim from ChatPage to keep that page under the file-size
+// Per-message action toolbar (swipe / regenerate / continue / edit / fork /
+// delete / speak). Extracted from ChatPage to keep that page under the file-size
 // cap.
 
 import { useState } from 'react';
@@ -22,6 +22,7 @@ export function MessageActions({
   onSwipe,
   onRegenerate,
   onContinue,
+  onFork,
   onEdit,
   onDelete,
   onVariantPicked,
@@ -36,6 +37,7 @@ export function MessageActions({
   onSwipe: (index: number, direction: number) => void;
   onRegenerate: () => void;
   onContinue: () => void;
+  onFork: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onVariantPicked?: () => void;
@@ -106,6 +108,9 @@ export function MessageActions({
         <button className="icon-btn" title="Generate reply" disabled={busy} onClick={onRegenerate}>⟳</button>
       )}
       {canSpeak && !m.isUser && m.text.trim() !== '' && <SpeakButton text={m.text} />}
+      {m.sender !== 'System' && (
+        <button className="icon-btn" title="Fork from here" disabled={busy} onClick={onFork}>⑂</button>
+      )}
       <button className="icon-btn" title="Edit" disabled={busy} onClick={onEdit}>✎</button>
       <button className="icon-btn" title="Delete" disabled={busy} onClick={onDelete}>🗑</button>
       {picker && (

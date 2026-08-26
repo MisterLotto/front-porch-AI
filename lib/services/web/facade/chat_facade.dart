@@ -714,6 +714,9 @@ class ChatFacade {
     startReplacement: startReplacement,
   );
 
+  /// Fork at [messageIndex]. See [ChatSessionFacade.fork].
+  Future<String?> fork(int messageIndex) => _sessions.fork(messageIndex);
+
   String? get currentSessionId => _chat.currentSessionId;
 
   /// The chat-scoped lorebook as web editor rows (full-fidelity via `ext`).

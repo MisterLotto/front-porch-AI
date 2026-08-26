@@ -101,6 +101,7 @@ type TranscriptProps = {
   onSwipe: (index: number, direction: number) => void;
   onRegenerate: () => void;
   onContinue: () => void;
+  onFork: (index: number) => void;
   onDelete: (index: number) => void;
   onReprocess: (index: number) => void;
   onRevert: (index: number) => void;
@@ -125,6 +126,7 @@ const TranscriptRows = memo(function TranscriptRows({
   onSwipe,
   onRegenerate,
   onContinue,
+  onFork,
   onDelete,
   onReprocess,
   onRevert,
@@ -200,6 +202,7 @@ const TranscriptRows = memo(function TranscriptRows({
               onSwipe={onSwipe}
               onRegenerate={onRegenerate}
               onContinue={onContinue}
+              onFork={() => onFork(m.index)}
               onEdit={() => onBeginEdit(m)}
               onDelete={() => onDelete(m.index)}
               onVariantPicked={onVariantPicked}
