@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-08-26 — docs: v1.3.1 Clock In on the long-form release notes
+- **Why:** Promoting Rawhide to main as v1.3.1. release-notes.md still
+  called 1.2 the current stable.
+- **What:** Clock In headlines + 1.3 Pockets section. Current stable is
+  1.3.1. Flutter 3.47 called out.
+- **Files:** docs/release-notes.md
+
 ## 2026-08-26 — fix(settings): don't stat a GGUF when no preset owns one
 - **Why:** P2 memoized the model-exists check but always read
   kcppsModelPath on Model Settings paint. That broke the old

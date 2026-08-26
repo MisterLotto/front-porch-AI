@@ -2,7 +2,7 @@
 
 Front Porch AI ships often: a stable release every few weeks, patch releases in between, and a nightly Rawhide build most days.
 
-**The current stable release is v1.2.0, "Occupy Mars", released 2026-08-01.**
+**The current stable release is v1.3.1, "Clock In", released 2026-08-26.**
 
 This page is the long-form history — the headlines of every release, newest first. The [GitHub Releases page](https://github.com/linux4life1/front-porch-ai/releases) is always the complete and most up-to-date record, and it is also where the nightly builds live.
 
@@ -12,6 +12,8 @@ This page is the long-form history — the headlines of every release, newest fi
 
 ## Table of Contents
 
+- [v1.3.1 — Clock In](#v131--clock-in)
+- [v1.3 — Check Your Pockets](#v13--check-your-pockets)
 - [v1.2 — Occupy Mars](#v12--occupy-mars)
 - [v1.1 Series](#v11-series)
 - [v1.0 — Stay Awhile and Listen](#v10--stay-awhile-and-listen)
@@ -28,9 +30,39 @@ This page is the long-form history — the headlines of every release, newest fi
 
 ---
 
+## v1.3.1 — Clock In
+
+**Released:** 2026-08-26 (v1.3.1) — current stable
+
+- 🕘 **They clock in** — occupation, which weekdays, hours on the job. Skip a turn and the banner says they're at work. A night skip lets them rest.
+- 🕰️ **Time is said first, then they write** — the prompt tells them what time it is; after the reply the clock decides how much passed. Continue does not tick.
+- 👤 **With you is a yes or a no** — scored after they speak, not assumed.
+- 🛠️ **Built on Flutter 3.47** — current stable Flutter. macOS 12 Monterey is the floor.
+
+Fixes and improvements in the same cut: Chat History rename no longer wipes Porch Life; Continue keeps the speaker; group gifts rewind on both sides; deleting a group or character takes diary, growth, and Data Bank with them; custom seasons on Places; gist-first memory; alternate greetings seed Realism and Needs; phone fork, sampler row, and honest Stoop groups/worlds; Tailscale login asks for the web password; light-mode paper is readable; filthy stays filthy until they wash.
+
+---
+
+## v1.3 — Check Your Pockets
+
+**Released:** 2026-08-16 (v1.3.0)
+
+- 🎁 **Pockets & Wardrobe** — they have pockets, clothes, and a set-aside pile. Hand them something, take it back, they can pass it to someone else. Authors can send them into a chat already dressed and carrying things. The Journal keeps a Belongings tab of where things went. Own switch — does not need the Realism Engine.
+- ✨ **AI Enhance** — grow a character from a real chat. Walks you through it, and can bring those chats along.
+- 🏡 **Porch Life** — one Settings home for every living-character switch, instead of hunting them across the app.
+- 🎛️ **À la carte** — Journal, Chaos / Chance Time, the story clock, Pockets, and Objectives each have their own switch. Turn on what you want. Realism Engine is no longer the master key.
+- 💛 **Likes & Dislikes** — give them tastes (thunderstorms, being interrupted) and they act on them.
+- 🔥 **Intimate preferences get said** — not just scored in the background.
+- 🌱 **Ambitions drive their quests** — long-term goals pick the next quest instead of sitting unused on the card.
+- 🌧️ **A bad day that isn't about you** — optional, off by default. They can arrive tired, hungry, or weather-beaten from their own life.
+- 📦 **Take a chat with you** — export as a Front Porch chat file or SillyTavern JSONL.
+- ✍️ **Impersonate on the phone** — the same wand as desktop.
+
+---
+
 ## v1.2 — Occupy Mars
 
-**Released:** 2026-08-01 (v1.2.0) — current stable
+**Released:** 2026-08-01 (v1.2.0)
 
 - 🌍 **Worlds you can author, then share.** Places have been in the app since 1.0 — what 1.2 adds is a real climate and a way to move them between installs. Rename a place's weather conditions, give them emoji and flavor, set the temperature bands, and choose the **atmosphere and gravity**. Mars no longer comes with breathable air; volcano heat and Martian cold are real to the engine, and characters feel them, dress for them, and complain about them. Finished a place? Post it to The Stoop just like a character — upload and download both work — and a new chat inherits its character's world automatically. Places travel as `.fpworld` packages, and **opening one needs Front Porch AI 1.2 or newer**; older installs can't import them.
 
