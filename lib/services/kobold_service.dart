@@ -427,6 +427,7 @@ class KoboldService extends ChangeNotifier
         _baseUrl,
         params,
         tools,
+        thinkingModelKey: _storageService.lastUsedModelPath,
         foldSystemIntoUser: _systemRole.foldSystemIntoUser,
         registerClient: (client) {
           mine = client;
@@ -477,6 +478,7 @@ class KoboldService extends ChangeNotifier
       yield* streamOpenAiChat(
         _baseUrl,
         params,
+        thinkingModelKey: _storageService.lastUsedModelPath,
         foldSystemIntoUser: _systemRole.foldSystemIntoUser,
         registerClient: (client) {
           mine = client;

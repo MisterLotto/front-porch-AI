@@ -95,9 +95,12 @@ class OpenRouterService extends LLMService {
   bool get isReachable => _health.isReachable;
   bool get isCheckingReachability => _health.isChecking;
 
-  /// Local backends (LM Studio, vLLM, etc.) are usable without an API key.
-  bool get _isLocalUrl =>
-      _apiUrl.contains('localhost') || _apiUrl.contains('127.0.0.1');
+  /// Local backends (oMLX, LM Studio, llama.cpp, vLLM on LAN / Tailscale)
+  /// are usable without an API key. Same predicate the effort probe uses so
+  /// a 192.168 LM Studio still gets `enable_thinking` — the old
+  /// `contains('localhost')` gate left those servers on the OpenRouter
+  /// `reasoning` object, which they ignore.
+  bool get _isLocalUrl => isLocalRemoteUrl(_apiUrl);
 
   /// Credentials + model are filled in. Not a live ping.
   bool get isConfigured =>
@@ -417,10 +420,21 @@ class OpenRouterService extends LLMService {
     // vLLM/MLX endpoint would also want this, but that's not the localhost case
     // this fixes; extend the gate if that need appears.)
     if (_isLocalUrl) {
-      payload['chat_template_kwargs'] = {
-        'enable_thinking':
-            params.reasoningEnabled && params.reasoningMaxTokens != 0,
-      };
+      final thinkOn = params.reasoningEnabled && params.reasoningMaxTokens != 0;
+      payload['chat_template_kwargs'] = {'enable_thinking': thinkOn};
+      // Heretic / uncensored templates `{% set enable_thinking = true %}`
+      // overwrite the kwarg. oMLX and llama.cpp honour thinking_budget: 0
+      // as a decode-time force-close (mlx-lm handles budget=0; oMLX's
+      // Gemma parser supplies the `<channel|>` end token). Same thinkOn
+      // bit as above, so Continue / call mode / evals clamp and a normal
+      // reply with Request thinking on does not. Omitted on stock
+      // templates — sending 0 on Gemma-4 that already honours the kwarg
+      // attaches the closer processor and can leak into the answer.
+      final clamp = thinkingBudgetClampForThinkOff(
+        _modelName,
+        thinkOn: thinkOn,
+      );
+      if (clamp != null) payload['thinking_budget'] = clamp;
     }
 
     // Add stop sequences if present

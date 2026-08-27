@@ -24,6 +24,7 @@ import 'package:front_porch_ai/services/chat/chat.dart'
     show kMaxLocalServerStops;
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/llm_tool_parsing.dart';
+import 'package:front_porch_ai/services/reasoning_effort.dart';
 import 'package:front_porch_ai/services/reasoning_stream_wrapper.dart';
 import 'package:front_porch_ai/services/system_role_probe.dart';
 
@@ -65,6 +66,7 @@ Map<String, dynamic> _chatPayload(
   required String modelName,
   required bool stream,
   bool foldSystemIntoUser = false,
+  String? thinkingModelKey,
 }) {
   // Object-valued so the user content can be a plain string (text-only —
   // byte-identical to the pre-vision payload) or a multimodal array when
@@ -139,6 +141,15 @@ Map<String, dynamic> _chatPayload(
   payload['reasoning_effort'] = thinkOn
       ? (params.reasoningEffort.isEmpty ? 'high' : params.reasoningEffort)
       : 'none';
+  // Same clamp as OpenRouterService for heretic templates that `{% set
+  // enable_thinking = true %}`. llama.cpp / recent Kobold honour
+  // thinking_budget: 0 as a force-close; omitted when the GGUF actually
+  // reads the kwarg (stock Gemma-4).
+  final clamp = thinkingBudgetClampForThinkOff(
+    thinkingModelKey ?? modelName,
+    thinkOn: thinkOn,
+  );
+  if (clamp != null) payload['thinking_budget'] = clamp;
 
   if (params.stopSequences != null && params.stopSequences!.isNotEmpty) {
     // This transport only ever talks to KoboldCpp (managed local +
@@ -169,6 +180,7 @@ Future<LlmToolResponse?> postOpenAiChatWithTools(
   GenerationParams params,
   List<Map<String, dynamic>> tools, {
   String modelName = 'koboldcpp',
+  String? thinkingModelKey,
   bool foldSystemIntoUser = false,
   void Function(http.Client client)? registerClient,
   void Function()? onDone,
@@ -179,6 +191,7 @@ Future<LlmToolResponse?> postOpenAiChatWithTools(
           modelName: modelName,
           stream: false,
           foldSystemIntoUser: foldSystemIntoUser,
+          thinkingModelKey: thinkingModelKey,
         )
         ..['tools'] = tools
         ..['tool_choice'] = 'auto';
@@ -229,6 +242,7 @@ Stream<String> streamOpenAiChat(
   String baseUrl,
   GenerationParams params, {
   String modelName = 'koboldcpp',
+  String? thinkingModelKey,
   bool foldSystemIntoUser = false,
   void Function(http.Client client)? registerClient,
   void Function()? onDone,
@@ -239,6 +253,7 @@ Stream<String> streamOpenAiChat(
     modelName: modelName,
     stream: true,
     foldSystemIntoUser: foldSystemIntoUser,
+    thinkingModelKey: thinkingModelKey,
   );
 
   // In jinja mode Kobold splits thinking into `reasoning_content`; re-wrap it in

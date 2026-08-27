@@ -5,6 +5,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🧠 **Evals and Continue on heretic / uncensored local models no longer think until the cap** — journal, objectives, and Needs checks were burning the token budget mid-thought and coming back empty; Continue was dumping a think block into the middle of the line. Character replies still think when Request thinking is on. Same on oMLX, LM Studio, llama.cpp, and Kobold. Same on the phone.
+
 - ✅ **Verified Stoop creators now wear the gold or blue check** — owner gold, trusted blue, same shape as the hub. Same on the phone.
 
 - ↻ **Regenerate no longer ignores you while needs is still scoring the last reply** — it kills that eval and starts the new swipe on the spot. Same on the phone.

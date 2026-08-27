@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-08-27 — fix(llm): heretic jinja was ignoring think-off on evals and Continue
+- **Why:** Forks that `{% set enable_thinking = true %}` overwrite the
+  request `enable_thinking:false` Continue, call mode, and every eval
+  already send. Evals thought until max_tokens and parsed empty;
+  Continue dumped a think block into the middle of the line.
+- **What:** Detect the `{% set %}` from templates we already read (oMLX
+  jinja, LMS GGUF, Kobold GGUF). When thinkOn is false, send
+  `thinking_budget: 0` (oMLX / llama.cpp force-close). Stock Gemma that
+  honours the kwarg does not get the field. Local URLs use
+  isLocalRemoteUrl so LAN LM Studio / llama.cpp get enable_thinking.
+  Kick the template read at backend sync. Request thinking on is
+  untouched.
+- **Files:** reasoning_support, reasoning_effort, open_router_service,
+  openai_chat_stream, kobold_service, llm_provider,
+  thinking_budget_clamp_test, reasoning_support_test
+
 ## 2026-08-26 — feat(stoop): Twitter/X verified silhouette on creator handles
 - **Why:** Backend now sends additive `verification: gold|blue|null` on
   creator + `/auth/me`. The hub website already draws the Twitter/X
