@@ -1972,9 +1972,31 @@ button.danger:hover { background: rgba(255, 107, 107, 0.12); filter: none; }
 .stoop-tab.active { color: var(--text); border-bottom-color: var(--accent); }
 /* The personal tab wears the user's @name — cap it so it can't stretch the bar. */
 .stoop-tab-name {
-  display: inline-block; max-width: 140px;
+  display: inline-flex; align-items: baseline; max-width: 160px;
+  overflow: hidden; white-space: nowrap; vertical-align: bottom;
+}
+.stoop-tab-name-text {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  vertical-align: bottom;
+}
+
+/* Twitter/X verified silhouette — same path/fills as hub `.hub-check`. */
+.stoop-check {
+  display: inline-block;
+  width: 1.15em;
+  height: 1.15em;
+  margin-left: 0.22em;
+  vertical-align: -0.18em;
+  line-height: 0;
+  flex: none;
+}
+.stoop-check svg { width: 100%; height: 100%; display: block; }
+.stoop-check-gold svg { fill: #e8b923; }
+.stoop-check-blue svg { fill: #1d9bf0; }
+.stoop-creator-head h3 .stoop-check,
+.stoop-tab-name .stoop-check {
+  width: 1.05em;
+  height: 1.05em;
+  vertical-align: -0.12em;
 }
 
 .stoop-auth { max-width: 420px; margin: 40px auto; display: flex; flex-direction: column; gap: 10px; }

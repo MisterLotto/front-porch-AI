@@ -5,6 +5,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- ✅ **Verified Stoop creators now wear the gold or blue check** — owner gold, trusted blue, same shape as the hub. Same on the phone.
+
 - ↻ **Regenerate no longer ignores you while needs is still scoring the last reply** — it kills that eval and starts the new swipe on the spot. Same on the phone.
 
 - ⏳ **Sending while the last reply is still being scored no longer looks like the message vanished** — a strip above the box says it is queued. Same on the phone.

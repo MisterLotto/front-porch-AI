@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-08-26 — feat(stoop): Twitter/X verified silhouette on creator handles
+- **Why:** Backend now sends additive `verification: gold|blue|null` on
+  creator + `/auth/me`. The hub website already draws the Twitter/X
+  starburst+check; in-app Dart and web_ui still showed a bare handle.
+- **What:** Parse gold/blue (anything else = none). CustomPainter + the
+  same SVG path/fills as `website/src/stoop/ui.js` `verifiedMark`. Badge
+  next to handles on profile, creator page, tiles, detail, browse hero,
+  following chips, signed-in tab. Comments skipped (JSON has no field).
+  Web PWA matches. No flutter_svg.
+- **Files:** backporch_user/stoop_card/stoop_creator, AppColors
+  stoopCheckGold/Blue, stoop_verified_badge, StoopVerifiedBadge.tsx,
+  stoop handle call sites, stoop_verification_test
+
 ## 2026-08-26 — fix(chat): show when a send is held behind post-gen evals
 - **Why:** Send during needs/climax/pockets scoring clears the composer
   immediately and only appends the bubble after settle, so the line looks

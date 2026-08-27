@@ -8,6 +8,7 @@
 import { useNavigate } from 'react-router-dom';
 import { stoop } from '../../stoop/stoopApi';
 import type { StoopCard } from '../../stoop/stoopTypes';
+import { StoopVerifiedBadge } from './StoopVerifiedBadge';
 
 export function StoopCardArt({
   assetId,
@@ -72,7 +73,12 @@ export function StoopCardTile({ card }: { card: StoopCard }) {
           <div className="stoop-tile-meta">
             <span title="Score">▲ {card.score}</span>
             <span title="Downloads">⬇ {card.downloadCount}</span>
-            {card.creator && <span className="muted">{card.creator.displayName}</span>}
+            {card.creator && (
+              <span className="muted">
+                {card.creator.displayName}
+                <StoopVerifiedBadge verification={card.creator.verification} />
+              </span>
+            )}
             {card.originalCreator && (
               <span className="muted" title="Original creator (credited repost)">
                 ✎ {card.originalCreator}

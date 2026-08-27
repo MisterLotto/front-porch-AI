@@ -8,6 +8,8 @@
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 
+import 'backporch_user.dart';
+
 /// Worlds on The Stoop — client readiness flag.
 ///
 /// Portable places (.fpworld packages) ride the SAME card endpoints as a third
@@ -33,11 +35,19 @@ const String kStoopWorldTypes = 'solo,group,world';
 class StoopCreatorRef {
   final String id;
   final String displayName;
-  const StoopCreatorRef({required this.id, required this.displayName});
+
+  /// Hub verification badge: `gold`, `blue`, or null (none / older server).
+  final String? verification;
+  const StoopCreatorRef({
+    required this.id,
+    required this.displayName,
+    this.verification,
+  });
 
   factory StoopCreatorRef.fromJson(Map<String, dynamic> j) => StoopCreatorRef(
     id: j['id'] as String? ?? '',
     displayName: j['displayName'] as String? ?? '',
+    verification: stoopVerificationOf(j['verification']),
   );
 }
 
