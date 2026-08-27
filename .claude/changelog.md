@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-08-27 — fix(evals): skip tools for the rest of a send after an empty miss
+- **Why:** An aborted/empty tools attempt left the probe untested, so every
+  remaining eval of the turn (and the next turn) paid tools PLUS JSON.
+- **What:** noteInconclusive sets skip-this-send only (three empty judges
+  in one send do not pause). endUserSend counts consecutive skipped
+  SENDS and pauses at 2. Regen retries because skip is cleared and is
+  only honored while a send is open. stillWantTools after Kobold FIFO
+  is shouldPostAfterIdle, never live prefer-text (the ping shares the
+  door). Journal/Growth honest-empty is not skip.
+- **Files:** pass_support (already in the named-choice PR), kobold_service,
+  tool_skip_pause_test
+
 ## 2026-08-27 — fix(evals): identical tools list on the three prefix-sharing judges
 - **Why:** Dart prompts shared judgePrefix, but each judge sent a different
   one-tool `tools` array. Kobold jinja injects tools at the start of the
