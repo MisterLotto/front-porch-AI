@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-08-27 — fix(evals): identical tools list on the three prefix-sharing judges
+- **Why:** Dart prompts shared judgePrefix, but each judge sent a different
+  one-tool `tools` array. Kobold jinja injects tools at the start of the
+  rendered prompt, so calls 2 and 3 re-prefilled the whole dossier.
+- **What:** kJudgeEvalTools = relationship + emotional + narrative. Selector
+  remains spec.toolChoice. One-shot / post-gen unchanged. Wire test pins
+  list identity, call sites, both-door HTTP payload, and three distinct
+  EvalTraffic names.
+- **Files:** realism_tools, realism_evals.calls, judge_tools_wire_test
+
 ## 2026-08-27 — fix(evals): named tool_choice on the in-flight eval callback
 - **Why:** Scalar evals sent `tool_choice: auto` with a 4000-token
   non-streaming budget; Kobold prefix-cache could not hit across judges,
