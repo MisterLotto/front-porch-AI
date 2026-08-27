@@ -66,6 +66,7 @@ export interface StoopCard {
 export interface StoopCommentReply {
   authorId: string;
   displayName: string;
+  verification?: 'gold' | 'blue' | null;
   authorAvatarAssetId?: string | null;
   createdAt: string;
   body: string;
@@ -77,6 +78,7 @@ export interface StoopComment {
   cardId: string;
   authorId: string;
   displayName: string;
+  verification?: 'gold' | 'blue' | null;
   authorAvatarAssetId?: string | null;
   createdAt: string;
   body: string;
