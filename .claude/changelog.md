@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-08-27 — fix(needs): scoped reprocess evals only ticked needs
+- **Why:** Ticking Energy still ran the full seven-need tools+text+retry
+  stack (four oMLX jobs).
+- **What:** Scoped reprocess asks only for those `_delta` keys, skips the
+  tools transport (fixed 7-field schema), one text eval.
+- **Files:** llm_eval_engine, needs_impact_evaluator, llm_eval_engine_test,
+  needs_impact_evaluator_test
+
 ## 2026-08-27 — fix(llm): heretic jinja was ignoring think-off on evals and Continue
 - **Why:** Forks that `{% set enable_thinking = true %}` overwrite the
   request `enable_thinking:false` Continue, call mode, and every eval

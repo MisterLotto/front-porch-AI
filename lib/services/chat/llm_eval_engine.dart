@@ -23,6 +23,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/chat/eval_traffic.dart';
+import 'package:front_porch_ai/services/chat/needs_simulation.dart';
 import 'package:front_porch_ai/services/chat/pass_support.dart';
 import 'package:front_porch_ai/services/chat/realism_tools.dart';
 import 'package:front_porch_ai/services/chat/relationship_service.dart';
@@ -586,6 +587,7 @@ class LlmEvalEngine {
     Map<String, int>? previousDeltas,
     Map<String, int>? currentNeeds,
     int? decayTurns,
+    Set<String> onlyNeeds = const {},
   }) async {
     if (!getRealismEnabled()) return null;
     if (getActiveCharacter() == null && getActiveGroup() == null) return null;
@@ -627,6 +629,15 @@ class LlmEvalEngine {
                     'do not subtract any baseline drift.\n\n')
         : '';
 
+    final scoped = {
+      for (final k in onlyNeeds)
+        if (NeedsSimulation.needKeys.contains(k)) k,
+    };
+    final askedKeys = scoped.isEmpty
+        ? NeedsSimulation.needKeys
+        : scoped.toList();
+    final deltaAsk = askedKeys.map((k) => '"${k}_delta": <int>').join(', ');
+
     String buildPrompt({required bool toolsMode}) {
       // The format sections below are the ONLY difference between the tools
       // and text transports — every guideline/magnitude line is shared, so
@@ -645,7 +656,7 @@ class LlmEvalEngine {
           ? 'Report the result by calling the $kNeedsImpactTool tool. '
                 'Use ONLY the tool — no plain-text reply.\n'
           : 'Respond with ONLY a flat JSON object. Do NOT use markdown code blocks — return raw JSON only:\n'
-                '{"hunger_delta": <int>, "energy_delta": <int>, "hygiene_delta": <int>, "fun_delta": <int>, "social_delta": <int>, "bladder_delta": <int>, "comfort_delta": <int>, ';
+                '{$deltaAsk, ';
       if (decayTurns != null) {
         // ── AFK auto-response simplified prompt ──────────────────────────
         // The normal evaluator prompt (~2000 chars) is too complex for
@@ -694,11 +705,9 @@ class LlmEvalEngine {
                 'USER CRITIQUE (The user noticed an issue with the deltas that MUST be fixed):\n"$userCritique"\n\n'
                 'Analyze what actually occurred and output a corrected set of net signed effects (deltas) on each need.\n\n'
                 'User has set Needs delta strength to ${strength}x. Emit deltas with magnitude scaled by this factor.\n\n'
-                'Even if the critique suggests little/no change, you MUST output the complete flat JSON with all seven _delta keys (0 is valid). Do not omit fields.\n\n'
+                '${scoped.isEmpty ? 'Even if the critique suggests little/no change, you MUST output the complete flat JSON with all seven _delta keys (0 is valid). Do not omit fields.\n\n' : 'Reconsider ONLY ${scoped.join(', ')}. Do not emit any other need — those values are already correct and will be kept. Output ONLY {$deltaAsk, "reason": "<brief>"}.\n\n'}'
                 'MAGNITUDE: needs run 0–100 (100 = fully satisfied); ±8 BARELY registers. When the scene SATISFIES/RESTORES a need, use a LARGE positive delta so it actually fills — using the bathroom → bladder +60 to +100; a full meal → hunger +50 to +90; sleeping / a long rest → energy +60 to +100; cozy solitude, lounging, drowsing → comfort +20 to +45, energy +10 to +30; a thorough wash → hygiene +50 to +90. Reserve small numbers for incidental effects, never a complete relief. (1x baselines; scale by the strength above.)\n\n'
-                'Examples of valid correction output:\n'
-                '{"hunger_delta": 8, "energy_delta": 0, "hygiene_delta": -2, "fun_delta": 5, "social_delta": 0, "bladder_delta": 0, "comfort_delta": 1, "reason": "ate snack per critique"}\n'
-                '{"hunger_delta": 0, "energy_delta": 0, "hygiene_delta": 0, "fun_delta": 0, "social_delta": 0, "bladder_delta": 0, "comfort_delta": 0, "reason": "no notable need impact"}\n\n' +
+                '${scoped.isEmpty ? 'Examples of valid correction output:\n{"hunger_delta": 8, "energy_delta": 0, "hygiene_delta": -2, "fun_delta": 5, "social_delta": 0, "bladder_delta": 0, "comfort_delta": 1, "reason": "ate snack per critique"}\n{"hunger_delta": 0, "energy_delta": 0, "hygiene_delta": 0, "fun_delta": 0, "social_delta": 0, "bladder_delta": 0, "comfort_delta": 0, "reason": "no notable need impact"}\n\n' : 'Example: {$deltaAsk, "reason": "rested per critique"}\n\n'}' +
             flatJsonAsk +
             (toolsMode
                 ? ''
@@ -772,7 +781,12 @@ class LlmEvalEngine {
       // Tools transport when wired (the shared negotiation — one probe per
       // backend identity per run, shared app-wide); plain text path otherwise
       // (tests / hosts without the tools door).
-      final raw = fireToolEval != null && probe != null
+      // A scoped reprocess (user ticked Energy, not all seven) skips the
+      // tools+text pair: the tool schema is the fixed seven-field contract,
+      // and falling back after an empty tool call is how one Energy click
+      // became four oMLX jobs.
+      final useTools = scoped.isEmpty && fireToolEval != null && probe != null;
+      final raw = useTools
           ? await fireStructuredEval(
               probe: probe!,
               backendIdentity: getBackendIdentity?.call() ?? '',
