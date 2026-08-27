@@ -65,6 +65,7 @@ export 'presence_derive.dart';
 export 'with_user_eval.dart';
 export 'pockets_eval.dart';
 export 'pass_support.dart';
+export 'tool_eval_spec.dart';
 export 'preference_scoring.dart';
 export 'porch_memory_import.dart';
 export 'porch_memory_mailbox.dart';

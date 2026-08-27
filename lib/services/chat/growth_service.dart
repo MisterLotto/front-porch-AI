@@ -29,6 +29,7 @@ import 'growth_review.dart';
 import 'growth_store.dart';
 import 'journal_physics.dart';
 import 'pass_support.dart';
+import 'tool_eval_spec.dart';
 
 /// Pass-window start index: clamp [cursor] into [messageCount], then cap the
 /// open window at [JournalPhysics.kFirstPassCap] (audit P1.9 — Journal twin).
@@ -76,11 +77,8 @@ class GrowthService {
   final ToolTransportProbe probe;
 
   final Future<String?> Function(String prompt) fireLLMEval;
-  final Future<LlmToolResponse?> Function(
-    String prompt,
-    List<Map<String, dynamic>> tools,
-  )
-  fireToolEval;
+  final Object fireToolEval;
+  final bool Function() getPreferTextEvals;
   final String Function(String) stripThinkBlocks;
   final String Function() getBackendIdentity;
 
@@ -118,6 +116,7 @@ class GrowthService {
     required this.probe,
     required this.fireLLMEval,
     required this.fireToolEval,
+    this.getPreferTextEvals = preferTextEvalsOff,
     required this.stripThinkBlocks,
     required this.getBackendIdentity,
     required this.getSessionId,
@@ -190,8 +189,10 @@ class GrowthService {
     final legacy = store.legacyBlobFor(session, charId);
     if (legacy != null && legacy.$1.isNotEmpty) return legacy.$1;
     return GrowthPhysics.injectionSelection(
-      store.activeRingsFor(session, charId),
-    ).map((r) => GrowthPhysics.injectionLine(r, charName: card.name)).join('\n');
+          store.activeRingsFor(session, charId),
+        )
+        .map((r) => GrowthPhysics.injectionLine(r, charName: card.name))
+        .join('\n');
   }
 
   // ── The growth pass (§4.2) ───────────────────────────────────────────
@@ -265,9 +266,10 @@ class GrowthService {
                 if (legacy.$2.isNotEmpty) legacy.$2,
               ].join('\n\n');
 
-        final journalCards = (await getJournalCards(sessionToken, ownerId))
-            .where(JournalPhysics.isHot)
-            .toList();
+        final journalCards = (await getJournalCards(
+          sessionToken,
+          ownerId,
+        )).where(JournalPhysics.isHot).toList();
 
         final ops = await _runExchange(
           owner: owner,
@@ -383,11 +385,19 @@ class GrowthService {
     );
 
     final backend = getBackendIdentity();
-    if (!probe.isXmlOnly(backend)) {
+    if (probe.shouldFireTools(backend, preferTextEvals: getPreferTextEvals())) {
       LlmToolResponse? resp;
       var transportFailure = false;
       try {
-        resp = await fireToolEval(prompt(toolsMode: true), kGrowthTools);
+        resp = await invokeToolEval(
+          fireToolEval,
+          ToolEvalSpec(
+            prompt: prompt(toolsMode: true),
+            tools: kGrowthTools,
+            maxLength: kProseToolMaxTokens,
+            repeatPenalty: kProseToolRepeatPenalty,
+          ),
+        );
       } catch (e) {
         // Transport failure (unreachable backend, the call torn down by an
         // app-side abortGeneration, a whole-call timeout, or a busy/5xx
@@ -415,15 +425,16 @@ class GrowthService {
           // ANSWERED and chose words over tools — real capability evidence.
           probe.markXmlOnly(backend);
           debugPrint('[Growth] Tools unavailable on $backend — using XML');
+        } else {
+          probe.noteInconclusive(backend);
         }
-        // Empty resp (no calls, no text): never a verdict — the clean empty
-        // 200 a server-side abort produces (the Scene Guest "pill falls
-        // off" bug). Fall back to XML for THIS round only; the next pass
-        // probes tools again. Mirrors the Journal's handling exactly.
-      } else if (!transportFailure) {
-        // Null resp: answered but nothing usable — same ambiguity; no
-        // verdict. The ToolSupportTester ping brands tool-less models.
-        debugPrint('[Growth] Tools inconclusive on $backend — XML this round');
+      } else {
+        probe.noteInconclusive(backend);
+        if (!transportFailure) {
+          debugPrint(
+            '[Growth] Tools inconclusive on $backend — XML this round',
+          );
+        }
       }
     }
 
@@ -444,11 +455,8 @@ class GrowthService {
     required bool distillMode,
     required String ownerName,
   }) {
-    String named(String text) => resolveGrowthMacros(
-      text,
-      charName: ownerName,
-      userName: getUserName(),
-    );
+    String named(String text) =>
+        resolveGrowthMacros(text, charName: ownerName, userName: getUserName());
     final resolved = <GrowthProposedOp>[];
     for (final op in ops) {
       switch (op.action) {

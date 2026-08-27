@@ -165,6 +165,7 @@ extension ChatServiceAccessors on ChatService {
     // A live voice call upgrades Off to Auto's fuse-where-safe rule — one
     // eval call instead of three before the character can speak.
     callMode: _callMode,
+    preferTextEvals: _storageService.realismSettings.preferTextEvals,
   );
 
   /// The story clock advances on its OWN eval this turn: the engine is off and
@@ -207,6 +208,7 @@ extension ChatServiceAccessors on ChatService {
 
   void _onBackendIdentityMaybeChanged() {
     if (_disposed) return;
+    ToolChoiceStyleProbe.instance.reset(_evalBackendIdentity);
     _toolSupportTester.onBackendMaybeChanged();
   }
 

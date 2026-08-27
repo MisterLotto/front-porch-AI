@@ -5,6 +5,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- ⚡ **Realism / Journal / Growth tool calls are no longer the slow path** — they ask for the one function they need, use an eval-sized budget, and the overlay starts immediately. If your model still hates tools, Porch Life → Native tool calling off keeps the pill honest ("supported — using JSON") instead of pretending the model cannot. Same on the phone.
+
 - 🧠 **Evals and Continue on heretic / uncensored local models no longer think until the cap** — journal, objectives, and Needs checks were burning the token budget mid-thought and coming back empty; Continue was dumping a think block into the middle of the line. Character replies still think when Request thinking is on. Same on oMLX, LM Studio, llama.cpp, and Kobold. Same on the phone.
 
 - 🔋 **Reprocess Needs only scores the needs you tick** — Energy (or Energy + Hunger) is one short eval, not a full seven-need pass and not four oMLX jobs. Unticked needs keep the numbers they already had. Same on the phone.

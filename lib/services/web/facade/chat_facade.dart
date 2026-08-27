@@ -272,10 +272,7 @@ class ChatFacade {
       'imagePromptReview': ?_chat.pendingImagePromptReview,
       // Tool-calling verdict for the current backend+model (desktop sidebar
       // pill parity). Retest via POST /api/chat/tool-test. Additive field.
-      'toolSupport': {
-        'state': _chat.toolCallSupport.name,
-        'testing': _chat.isTestingToolSupport,
-      },
+      'toolSupport': _chat.toolSupportJson,
       // Per-chat theme overrides (preset + font/color/background/border).
       'themeOverrides': _chat.sessionThemeOverrides.toJson(),
       // LLM backend connection (not a one-off request). Additive; older
@@ -296,10 +293,7 @@ class ChatFacade {
   /// pill's tap-to-retest). Returns the fresh verdict.
   Future<Map<String, dynamic>> testToolCalling() async {
     await _chat.testToolCalling();
-    return {
-      'state': _chat.toolCallSupport.name,
-      'testing': _chat.isTestingToolSupport,
-    };
+    return _chat.toolSupportJson;
   }
 
   /// The unified cast as JSON. Each entry carries enough to render a roster

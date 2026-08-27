@@ -256,13 +256,10 @@ class LlmEvalEngine {
   // host without the tools door stay on the text path; the god wires the
   // same _fireToolEval/_toolProbe/_evalBackendIdentity the Journal, Growth,
   // and realism evals share, so the probe answers once per run app-wide).
-  final Future<LlmToolResponse?> Function(
-    String prompt,
-    List<Map<String, dynamic>> tools,
-  )?
-  fireToolEval;
+  final Object? fireToolEval;
   final ToolTransportProbe? probe;
   final String Function()? getBackendIdentity;
+  final bool Function()? getPreferTextEvals;
 
   // LLM readiness + cancel (honors test overrides via live closure in god)
   final LLMService Function() getLlmService;
@@ -308,6 +305,7 @@ class LlmEvalEngine {
     this.fireToolEval,
     this.probe,
     this.getBackendIdentity,
+    this.getPreferTextEvals,
     this.streamChunkTimeout = kEvalStreamChunkTimeout,
     required this.getLlmService,
     required this.getIsLocal,
@@ -796,6 +794,8 @@ class LlmEvalEngine {
               callToText: (resp) =>
                   realismToolCallToJson(kNeedsImpactTool, resp.calls),
               fireToolEval: fireToolEval!,
+              toolChoice: kNeedsImpactTool,
+              getPreferTextEvals: getPreferTextEvals,
               fireTextEval: (p, {onChunk}) => fireLLMEval(
                 p,
                 onChunk: onChunk,

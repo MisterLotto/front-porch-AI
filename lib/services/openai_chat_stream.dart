@@ -24,9 +24,11 @@ import 'package:front_porch_ai/services/chat/chat.dart'
     show kMaxLocalServerStops;
 import 'package:front_porch_ai/services/llm_service.dart';
 import 'package:front_porch_ai/services/llm_tool_parsing.dart';
+import 'package:front_porch_ai/services/openai_tool_payload.dart';
 import 'package:front_porch_ai/services/reasoning_effort.dart';
 import 'package:front_porch_ai/services/reasoning_stream_wrapper.dart';
 import 'package:front_porch_ai/services/system_role_probe.dart';
+import 'package:front_porch_ai/services/tool_choice_style_probe.dart';
 
 /// Streams an OpenAI-compatible `/v1/chat/completions` response token by token.
 ///
@@ -184,18 +186,9 @@ Future<LlmToolResponse?> postOpenAiChatWithTools(
   bool foldSystemIntoUser = false,
   void Function(http.Client client)? registerClient,
   void Function()? onDone,
+  String? toolChoice,
+  ToolChoiceStyleProbe? styleProbe,
 }) async {
-  final payload =
-      _chatPayload(
-          params,
-          modelName: modelName,
-          stream: false,
-          foldSystemIntoUser: foldSystemIntoUser,
-          thinkingModelKey: thinkingModelKey,
-        )
-        ..['tools'] = tools
-        ..['tool_choice'] = 'auto';
-
   final client = http.Client();
   registerClient?.call(client);
   try {
@@ -204,10 +197,28 @@ Future<LlmToolResponse?> postOpenAiChatWithTools(
     // token budget, or a reasoning pass). A dead/crashed backend closes the
     // socket (which throws and is handled), and the user's Cancel aborts an
     // in-flight call — so a fixed cap only ever killed work that was fine.
-    final response = await client.post(
-      Uri.parse('$baseUrl/v1/chat/completions'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode(payload),
+    // Local HTTP max_tokens stays params.maxLength — do NOT add remote
+    // think headroom via reasoningCannotDisable(path).
+    final identity = params.backendIdentity.isEmpty
+        ? (thinkingModelKey ?? modelName)
+        : params.backendIdentity;
+    final response = await attachToolsWithStyleRetry(
+      identity: identity,
+      tools: tools,
+      toolChoice: toolChoice ?? params.toolChoice,
+      basePayload: _chatPayload(
+        params,
+        modelName: modelName,
+        stream: false,
+        foldSystemIntoUser: foldSystemIntoUser,
+        thinkingModelKey: thinkingModelKey,
+      ),
+      probe: styleProbe,
+      post: (payload) => client.post(
+        Uri.parse('$baseUrl/v1/chat/completions'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(payload),
+      ),
     );
     if (response.statusCode == 429 || response.statusCode >= 500) {
       // Busy/unavailable is transient (e.g. a non-multiuser KoboldCpp mid-
@@ -223,6 +234,11 @@ Future<LlmToolResponse?> postOpenAiChatWithTools(
         'falling back to text transport',
       );
       return null;
+    }
+    if (RegExp(r'"finish_reason"\s*:\s*"length"').hasMatch(response.body)) {
+      debugPrint(
+        '[OpenAiChat] tool call hit max_tokens (finish_reason=length)',
+      );
     }
     return parseOpenAiToolResponse(response.body);
   } catch (e) {

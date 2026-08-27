@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-08-27 — fix(evals): named tool_choice on the in-flight eval callback
+- **Why:** Scalar evals sent `tool_choice: auto` with a 4000-token
+  non-streaming budget; Kobold prefix-cache could not hit across judges,
+  and empty tools attempts retried forever. SAMF needed a JSON override
+  that did not lie about capability.
+- **What:** ToolEvalSpec carries toolChoice; one attachTools builder +
+  style probe (named→required→auto on tool_choice 400s, unrelated 400
+  returned to the door). Scalar 512/1.0, Journal/Growth 4000/1.15/auto,
+  ping 64 + report_ping, chargen named set_porch_life. preferTextEvals
+  (default off) + pill "supported — using JSON". One-shot Auto treats
+  override as tools-not-in-use. Overlay start chunk from
+  fireStructuredEval. beginUserSend/endUserSend around sendMessage turn
+  body. Existing (p,t) tests kept compiling via invokeToolEval.
+- **Files:** openai_tool_payload, tool_choice_style_probe, tool_eval_spec,
+  pass_support, wiring_evals, journal/growth, tester, chargen, Porch Life
+  Model transport row, ChatInsight pill, settings/chat facades
+
 ## 2026-08-27 — fix(needs): scoped reprocess evals only ticked needs
 - **Why:** Ticking Energy still ran the full seven-need tools+text+retry
   stack (four oMLX jobs).
