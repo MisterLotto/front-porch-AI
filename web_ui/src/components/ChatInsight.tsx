@@ -63,7 +63,7 @@ function ToolCallingPill({ support }: { support?: ToolSupport }) {
     : paused
       ? 'Empty answers this session — click to retry'
       : skipped
-        ? 'You turned native tool calls off in Porch Life'
+        ? 'You turned native tool calls off in Generation settings'
         : s === 'supported'
           ? 'Realism, Journal & Growth use native tool calls'
           : s === 'unsupported'

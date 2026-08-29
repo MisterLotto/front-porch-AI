@@ -433,27 +433,6 @@ class PorchLifeTab extends StatelessWidget {
             ],
           ),
 
-        FeatureGroupCard(
-          title: 'Model transport',
-          subtitle: 'how evals talk to this model',
-          rows: [
-            FeatureRow(
-              icon: Icons.build_circle_outlined,
-              label: 'Native tool calling',
-              need: FeatureNeed.alone,
-              blurb:
-                  'When on, Realism, Journal and Growth use native tool '
-                  'calls if this model supports them — cleaner structured '
-                  'results, and on the common local templates no slower '
-                  'than the JSON floor. When off, every eval uses the '
-                  'JSON/XML floor even if the model can speak tools. The '
-                  'sidebar pill still shows whether the model can. Default on.',
-              value: !realism.preferTextEvals,
-              onChanged: (v) => realism.setPreferTextEvals(!v),
-            ),
-          ],
-        ),
-
         const PorchLifeDefaultsNote(),
       ],
     );

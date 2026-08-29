@@ -21,8 +21,9 @@ import 'package:flutter/material.dart';
 import 'package:front_porch_ai/services/services.dart';
 import 'package:front_porch_ai/ui/settings/widgets/widgets.dart';
 
-/// "The Engine" group — extracted so Porch Life can add Model transport
-/// without growing past 500.
+/// "The Engine" group — extracted when the tab grew past its comfort size
+/// (it once also held the Model transport card, since moved to Generation
+/// settings on both surfaces).
 class PorchLifeEngineCard extends StatelessWidget {
   const PorchLifeEngineCard({
     super.key,

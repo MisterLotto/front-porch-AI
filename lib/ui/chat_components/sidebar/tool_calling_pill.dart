@@ -59,7 +59,7 @@ class ToolCallingPill extends StatelessWidget {
       accent = AppColors.porchAmberOf(context);
       icon = Icons.check_circle_outline;
       label = 'Tool calling: supported — using JSON';
-      detail = 'You turned native tool calls off in Porch Life';
+      detail = 'You turned native tool calls off in Generation settings';
     } else {
       switch (support) {
         case ToolCallSupport.supported:
@@ -86,9 +86,9 @@ class ToolCallingPill extends StatelessWidget {
           '(Realism, Journal, Growth Rings) with native tool calls. Models '
           'without tool calling automatically use a text fallback — chats '
           'still work, structured results are just a bit less reliable. '
-          'Turn Native tool calling off in Porch Life to prefer JSON even '
-          'when tools work. Tap to retest; retests also run automatically '
-          'when you switch models or backends.',
+          'Turn Native tool calling off under Generation settings to prefer '
+          'JSON even when tools work. Tap to retest; retests also run '
+          'automatically when you switch models or backends.',
       waitDuration: const Duration(milliseconds: 400),
       child: Material(
         color: Colors.transparent,
