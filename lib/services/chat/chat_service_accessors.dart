@@ -284,8 +284,9 @@ extension ChatServiceAccessors on ChatService {
     // self-guards on the token, so a stale resolve can't write the wrong chat.
     final token = _currentSessionId;
     scheduleMicrotask(() {
-      if (_sceneChanged(token) || _sceneGuest.busy || _sceneGuest.ids.isEmpty)
+      if (_sceneChanged(token) || _sceneGuest.busy || _sceneGuest.ids.isEmpty) {
         return;
+      }
       _resolveSceneGuestCards();
     });
   }
@@ -449,6 +450,15 @@ extension ChatServiceAccessors on ChatService {
   /// web facade — one source.
   DailyWeather? get _currentWeatherImpl {
     if (!_clockRunning || !_storageService.weatherEnabled) {
+      return null;
+    }
+    // Per-world plug: lorebook-only attached worlds silence the weather
+    // machine. Upcoming + segment getters already return null when this
+    // does, so one gate covers the whole pipeline.
+    final attached = <World>[
+      for (final id in _chatWorldIds) ?_worldRepository.resolveWorld(id),
+    ];
+    if (!attachedWorldsAllowClimate(attached)) {
       return null;
     }
     final seed = _currentSessionId;
