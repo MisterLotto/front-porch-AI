@@ -54,6 +54,7 @@ List<Widget> stoopStandardSections(
   Map<String, dynamic> card,
   String name, {
   Widget? firstMessage,
+  DateTime? asOf,
 }) {
   String s(String key) =>
       stoopResolveMacros((card[key] ?? '').toString(), name);
@@ -70,6 +71,7 @@ List<Widget> stoopStandardSections(
     stoopTextSection(context, 'Scenario', s('scenario')),
     firstMessage ?? _defaultFirstMessage(context, card, name),
     stoopTextSection(context, 'Example dialogue', s('mes_example')),
+    stoopBirthdaySection(context, re, asOf: asOf),
     stoopAmbitionsSection(context, re),
     stoopPreferencesSection(context, re),
     // Kept with the other two card-authored identity sections and ahead of the
