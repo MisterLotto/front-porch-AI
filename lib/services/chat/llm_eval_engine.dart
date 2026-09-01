@@ -37,6 +37,16 @@ import 'package:front_porch_ai/utils/reasoning_markers.dart';
 /// purpose: slow local prefill on a big journal window must still fit.
 const Duration kEvalStreamChunkTimeout = Duration(seconds: 180);
 
+/// Settle before retrying a completed-but-empty eval stream. Local thinking
+/// models often return nothing during `<think>` prefill; this pause plus an
+/// idle wait is usually enough. Injectable so tests do not wait out 2s.
+const Duration kEvalEmptyStreamSettle = Duration(seconds: 2);
+
+/// Pause after a thrown stream error before the one retry. Separate from
+/// [kEvalEmptyStreamSettle]: empty is not a connection drop. Injectable so
+/// tests do not wait out 3s.
+const Duration kEvalConnectionDropSettle = Duration(seconds: 3);
+
 /// Hang guard for the non-streaming tools-transport call (the journal/
 /// realism tool calls and the one-shot capability probe). Whole-call
 /// deadline, so it must cover a full slow-hardware generation — a timed-out
@@ -295,6 +305,12 @@ class LlmEvalEngine {
   /// can prove the guard without waiting out the production value.
   final Duration streamChunkTimeout;
 
+  /// See [kEvalEmptyStreamSettle].
+  final Duration emptyStreamSettle;
+
+  /// See [kEvalConnectionDropSettle].
+  final Duration connectionDropSettle;
+
   LlmEvalEngine({
     required this.getActiveCharacter,
     required this.getActiveGroup,
@@ -307,6 +323,8 @@ class LlmEvalEngine {
     this.getBackendIdentity,
     this.getPreferTextEvals,
     this.streamChunkTimeout = kEvalStreamChunkTimeout,
+    this.emptyStreamSettle = kEvalEmptyStreamSettle,
+    this.connectionDropSettle = kEvalConnectionDropSettle,
     required this.getLlmService,
     required this.getIsLocal,
     required this.getKoboldService,
@@ -436,34 +454,16 @@ class LlmEvalEngine {
 
     final trafficWatch = Stopwatch()..start();
     String response = '';
-    // Retry loop: thinking models can cause KoboldCPP to drop the connection
-    // briefly (OOM during dense thinking sessions). One retry after a short
-    // pause is enough to recover without user-visible impact.
+    // Retry loop: one extra attempt. Empty completed streams retry only on
+    // a local backend (thinking-model <think> prefill). Thrown stream errors
+    // retry after [connectionDropSettle] on any backend (the oMLX hang
+    // guard). The empty path used to `continue` into the drop delay as well,
+    // so every unmatched ScriptedLlm eval stalled 5s.
     for (int attempt = 0; attempt < 2; attempt++) {
-      // If cancellation has been requested, abort before attempting a new stream
       if (getIsCancellingRealismEval() || getRealismEvalCancelled()) {
         debugPrint(
           '[Realism] evaluation cancelled before attempt ${attempt + 1}',
         );
-        return null;
-      }
-      if (attempt > 0) {
-        debugPrint(
-          '[Realism:Eval] Retrying after connection drop (attempt ${attempt + 1})...',
-        );
-        await Future.delayed(const Duration(seconds: 3));
-        final bool retryIsLocal = getIsLocal();
-        if (retryIsLocal) {
-          final k = getKoboldService();
-          if (k != null) {
-            await ensureServerIdle();
-          }
-        }
-        response = ''; // reset for clean retry
-      }
-      // If cancellation occurred during setup, bail out before streaming
-      if (getIsCancellingRealismEval() || getRealismEvalCancelled()) {
-        debugPrint('[Realism] eval cancelled before streaming');
         return null;
       }
       try {
@@ -507,19 +507,26 @@ class LlmEvalEngine {
           return null;
         }
 
-        // Handle empty responses (common with local thinking models during <think> prefill).
-        // Retry once after a short settle + idle wait. Critical for reliable manual
-        // Needs reprocess and other evals on Kobold thinking setups.
+        // Empty completed stream: common with local thinking models during
+        // <think> prefill. Remote APIs and test fakes returning "" is a real
+        // empty — retrying them is how With-you (and any other unmatched
+        // eval) stalled every ScriptedLlm chat test 5s per call.
         if (response.trim().isEmpty && attempt < 1) {
           if (getIsCancellingRealismEval() || getRealismEvalCancelled()) {
             debugPrint('[Realism] eval cancelled on empty stream; no retry');
             return null;
           }
+          if (!effectiveIsLocal) {
+            debugPrint(
+              '[Realism:Eval] Empty stream on non-local backend; no retry',
+            );
+            break;
+          }
           debugPrint(
             '[Realism:Eval] Empty stream response, retrying after settle...',
           );
-          await Future.delayed(const Duration(seconds: 2));
-          if (effectiveIsLocal) await ensureServerIdle();
+          await Future.delayed(emptyStreamSettle);
+          await ensureServerIdle();
           response = '';
           continue;
         }
@@ -547,7 +554,15 @@ class LlmEvalEngine {
           // Second failure — give up silently; don't surface to UI
           return null;
         }
-        // else: fall through to retry
+        debugPrint(
+          '[Realism:Eval] Retrying after connection drop (attempt ${attempt + 2})...',
+        );
+        await Future.delayed(connectionDropSettle);
+        if (getIsLocal()) {
+          final k = getKoboldService();
+          if (k != null) await ensureServerIdle();
+        }
+        response = '';
       }
     }
 

@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-08-31 — fix(evals): empty non-local streams fail fast
+- **Why:** `fireLLMEval` retried a completed-but-empty stream for every
+  backend, then `continue`d into the 3s connection-drop delay. Each
+  unmatched eval (With-you on ScriptedLlm, posture on a fake that does
+  not answer it) stalled 5s. Chat wiring tests hit the 2-minute timeout.
+- **What:** Empty retry is local-only (thinking-model `<think>` prefill).
+  Thrown stream errors still retry after the drop pause on any backend.
+  Settle durations are injectable. New guard proven red (calls==2, ~5s)
+  then green (calls==1, <800ms).
+- **Files:** llm_eval_engine.dart, eval_empty_stream_retry_test.dart
+- **Verification:** posture_after_reply_test + regen_cancel_state_restore_test
+  + llm_eval_engine_test + the new file; flutter analyze --no-pub clean.
+
 ## 2026-08-31 — fix(worlds): keep lore-only climate data behind wire boundaries
 - **Why:** Stoop list rows can omit the full `.fpworld` envelope, which made
   the old-package missing-key default label every lore-only listing CLIMATE.
