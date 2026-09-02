@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-09-01 — fix(needs): all-zero tools JSON retries text
+- **Why:** Tools models fill the seven required needs `*_delta` ints with
+  0. That counted as a successful call, so the text path never ran and
+  chips were only tickDecay (Jennifer custom rates −1/−2). Other swipes
+  on the same reply had bladder +60..+73 from the text-shaped answers.
+  All-zero is not a valid scene reading — there is always some movement
+  past the tick.
+- **What:** After a tools needs call, if every delta is 0, fire one text
+  retry, then one repair pass. Prompt no longer invites all-zero.
+  Director rejects all-zero needs_impact. Guard proven red then green.
+- **Files:** needs_impact_zero.dart, llm_eval_engine.dart,
+  realism_verification.dart, chat.dart, needs_zero_tools_retry_test.dart,
+  director_rewrite_omission_test.dart, docs/Rawhide.md
+- **Verification:** needs_zero_tools_retry_test +
+  director_rewrite_omission_test + llm_eval_engine_test;
+  flutter analyze on touched paths.
+
+## 2026-09-01 — fix(realism): Director rewrite no longer wipes regen chips
+- **Why:** Jennifer's last two regens (bond already 300) had
+  `realism_verification: corrected/reprocessed` and no bond/trust/arousal
+  chips. One-shot Auto on a tools model + Director: a |delta|>12 at high
+  bond always reprocesses; the text rewrite often omitted
+  `relationship_delta`; missing was treated as 0 so the rule check PASSES
+  and the incomplete JSON replaced the original. Same class as the
+  narrative "a field omitted here is a field the parse never sees" comment.
+- **What:** Overlay the rewrite onto the original JSON (omitted ≠ 0;
+  explicit 0 still wins). Rule-check the merge. oneShot structHint now
+  asks to keep the full shape. Guard proven red (relationship_delta null)
+  then green.
+- **Files:** eval_json_merge.dart, realism_verification.dart, chat.dart,
+  director_rewrite_omission_test.dart, docs/Rawhide.md
+- **Verification:** director_rewrite_omission_test + realism_verification_test
+  + director_rules_reachable_test; flutter analyze on touched paths clean.
+
 ## 2026-08-31 — fix(evals): empty non-local streams fail fast
 - **Why:** `fireLLMEval` retried a completed-but-empty stream for every
   backend, then `continue`d into the 3s connection-drop delay. Each

@@ -23,6 +23,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:front_porch_ai/models/models.dart';
 import 'package:front_porch_ai/services/chat/eval_traffic.dart';
+import 'package:front_porch_ai/services/chat/needs_impact_zero.dart';
 import 'package:front_porch_ai/services/chat/needs_simulation.dart';
 import 'package:front_porch_ai/services/chat/pass_support.dart';
 import 'package:front_porch_ai/services/chat/realism_tools.dart';
@@ -779,9 +780,9 @@ class LlmEvalEngine {
                 'Partial or interrupted versions get proportionally smaller deltas. Reserve small numbers (±1 to ±8) for INCIDENTAL effects, never for a complete relief or restoration. (These are 1x baselines — scale by the strength factor above.)\n\n' +
             flatJsonAsk +
             (toolsMode
-                ? 'If the scene had little or no notable effect on needs, use small numbers or zeros and a short reason.'
+                ? 'Individual needs may be 0. All seven 0 is a failed eval — score what the beat did to her body and mood.'
                 : '"reason": "<brief grounded reason for the deltas>" }\n'
-                      'If the scene had little or no notable effect on needs, use small numbers or zeros and a short reason.');
+                      'Individual needs may be 0. All seven 0 is a failed eval — score what the beat did to her body and mood.');
       }
     }
 
@@ -833,8 +834,39 @@ class LlmEvalEngine {
       // mandatory-reasoning model that parked its JSON in the think channel,
       // or was cut mid-think) must still reach the regex parse rather than
       // silently skipping the needs turn.
-      final text = searchText.trim().isNotEmpty ? searchText : raw;
+      var text = searchText.trim().isNotEmpty ? searchText : raw;
       if (text.trim().isEmpty) return null;
+      if (scoped.isEmpty && !needsImpactHasNonZeroDelta(text)) {
+        final usedTools =
+            useTools &&
+            (probe?.shouldFireTools(
+                  getBackendIdentity?.call() ?? '',
+                  preferTextEvals: getPreferTextEvals?.call() ?? false,
+                ) ??
+                false);
+        final recovered = await recoverNeedsImpactIfAllZero(
+          first: text,
+          retryText: usedTools
+              ? () => fireLLMEval(
+                  buildPrompt(toolsMode: false),
+                  onChunk: onChunk,
+                  repeatPenalty: kScalarEvalRepeatPenalty,
+                  label: 'needs',
+                )
+              : () async => null,
+          repair: () => fireLLMEval(
+            needsImpactAllZeroRepairPrompt(responseText, strength),
+            onChunk: onChunk,
+            repeatPenalty: kScalarEvalRepeatPenalty,
+            label: 'needs',
+          ),
+          stripThink: stripThinkBlocks,
+        );
+        if (recovered != text) {
+          debugPrint('[Realism:Needs] all-zero rejected; using recovered JSON');
+          text = recovered;
+        }
+      }
       return text;
     } catch (e) {
       debugPrint('[Realism:Needs] Engine impact call failed: $e');

@@ -5,6 +5,10 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 ## Recent improvements (unreleased — ships in the next build)
 
+- 🎭 **Regen chips no longer vanish when the Director rewrites a tool-call eval** — a partial correction used to throw away bond, trust, and arousal. Same on the phone.
+
+- 🍽️ **Needs scene chips come back on tool-call models** — a needs eval that scores every need as 0 is treated as a failed read (not a quiet scene) and retried. Bathroom, a meal, a beat — they land again. Same on the phone.
+
 - ⚡ **Empty evals on a remote model no longer wait five seconds to give up** — if the model returns nothing, the next check runs immediately instead of sitting on a local-thinking retry. Local models still pause and try once. Same on the phone.
 
 - 📚 **Lorebook-only worlds** — a place can be facts without weather. Flip off Climate, weather, and place traits and the world is description + lore only: no forecast, no sidebar chip, no atmosphere or gravity. Exports and Stoop listings no longer reveal leftover climate data. Existing worlds stay as they were. Same on the phone.
