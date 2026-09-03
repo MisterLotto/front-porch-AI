@@ -37,6 +37,11 @@ extension ChatServiceGenerationRag on ChatService {
 
     if (_isNewChat) {
       debugPrint('[RAG:Chat] Skipping memory retrieval - new chat in progress');
+    } else if (t.mode == GenerationMode.continue_) {
+      // Continue extends the same beat. Zeroing droppedMessages used to
+      // skip retrieval; tail-open ORs basePosition, so that skip was a
+      // no-op on a long chat. Mode itself is the skip.
+      debugPrint('[RAG:Chat] Skipping memory retrieval — Continue');
     } else if (t.guestSpeaker != null) {
       // Guest turns answer THIS beat. Guest RAG resurfaces dropped Magus
       // Q&As; a reasoning model treats those as the live question

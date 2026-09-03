@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-09-02 — fix(chat): recap and Continue RAG honor tail-open
+- **Why:** Opening a long chat loads the last 24 rows. Recap suppression
+  treated droppedMessages == 0 as "the whole chat is visible", so a
+  fitted tail-open dropped the recap covering the unseen start. Continue
+  skipped RAG by zeroing droppedMessages; the same tail-open OR of
+  basePosition made that skip a no-op.
+- **What:** recapIsRedundant is dropped==0 AND basePosition==0. Continue
+  RAG skip is a mode branch before retrieve. Guard proven red (redundant
+  at base 976; scan without the mode branch) then green.
+- **Files:** recap_injection.dart, chat_service_generation_plan.dart,
+  chat_service_generation_rag.dart, recap_tail_open_test.dart,
+  docs/Rawhide.md
+- **Verification:** recap_tail_open_test proven red then green.
+
 ## 2026-09-02 — fix(pockets): fork 1:1 to group copies live pockets
 - **Why:** Collapse copies the survivor's kit back onto `_pockets`. Fork
   captured realism, flags, journal, rings, and quests, then setActiveGroup
