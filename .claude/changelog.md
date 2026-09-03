@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-02 — fix(pockets): eraser drops pending just-noticed intros
+- **Why:** Adding an item queues a one-shot surprise or gift reaction.
+  Erasing it before they speak left that intro queued, so the next reply
+  still noticed or accepted keys that were already gone.
+- **What:** removePocketItem drops matching pending intros for this chat
+  (name or display). Web uses the same ChatService method. Guard proven
+  red (surprise still in the prompt) then green.
+- **Files:** chat_service_pockets.dart, pocket_eraser_intro_test.dart,
+  docs/Rawhide.md
+- **Verification:** pocket_eraser_intro_test proven red then green.
+
 ## 2026-09-02 — fix(afk): group idle stamps the chosen speaker's needs
 - **Why:** Group AFK captured needs_pre_turn_vector from the live scalar
   (whoever last spoke) before picking who would write. The chip then
