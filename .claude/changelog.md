@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-09-02 — fix(web): Objectives NSFW switch, task count, and add-task
+- **Why:** Desktop Objectives sidebar has NSFW Tasks, a generate count
+  (3–10), and a manual add-task row. The phone POSTed generate with
+  neither nsfw nor taskCount (route defaulted to 5 SFW) and had no
+  add-task field even though /task action=add already existed.
+- **What:** Extracted ObjectivesPanel; generate sends taskCount + nsfw;
+  Add posts /task action=add. Guard proven red then green.
+- **Files:** ObjectivesPanel.tsx, ObjectivesPanel.test.tsx, ChatTools.tsx,
+  docs/Rawhide.md
+- **Verification:** vitest ObjectivesPanel proven red then green; npm
+  lint + test; vite build (bundle the PWA).
+
 ## 2026-09-02 — fix(ui): Group Settings X/Close warn instead of discarding General
 - **Why:** Header X and footer Close did a bare Navigator.pop. General holds
   name / scenario / opening / turn rules in controllers until apply, so

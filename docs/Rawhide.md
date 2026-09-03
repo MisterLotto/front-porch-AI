@@ -35,6 +35,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 - 👥 **Group Settings X and Close no longer throw away a rename** — if General still has unapplied name, scenario, opening, or turn-rule edits, you get a chance to Save or Discard. Same on the phone for the in-chat dialog.
 
+- 🎯 **Objectives on the phone: NSFW tasks, how many to generate, and add a task by hand** — the same controls as the desktop sidebar, including Generate with a count.
+
 - 🎭 **Regen chips no longer vanish when the Director rewrites a tool-call eval** — a partial correction used to throw away bond, trust, and arousal. Same on the phone.
 
 - 🍽️ **Needs scene chips come back on tool-call models** — a needs eval that scores every need as 0 is treated as a failed read (not a quiet scene) and retried. Bathroom, a meal, a beat — they land again. Same on the phone.
