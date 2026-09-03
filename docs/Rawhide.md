@@ -25,6 +25,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 - 💤 **AFK no longer stacks extra minutes on the hours that already passed** — the away skip owns the clock, so the reply after it does not add another slice of time. Same on the phone.
 
+- 👥 **Group AFK chips belong to the person who actually wrote** — the idle turn picks the speaker first, then measures their needs, not whoever spoke last. Same on the phone.
+
 - 🎭 **Regen chips no longer vanish when the Director rewrites a tool-call eval** — a partial correction used to throw away bond, trust, and arousal. Same on the phone.
 
 - 🍽️ **Needs scene chips come back on tool-call models** — a needs eval that scores every need as 0 is treated as a failed read (not a quiet scene) and retried. Bathroom, a meal, a beat — they land again. Same on the phone.

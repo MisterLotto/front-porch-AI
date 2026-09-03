@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-02 — fix(afk): group idle stamps the chosen speaker's needs
+- **Why:** Group AFK captured needs_pre_turn_vector from the live scalar
+  (whoever last spoke) before picking who would write. The chip then
+  subtracted the previous speaker from the idle speaker.
+- **What:** After the AFK clock snap, pick the present speaker, load that
+  member's scalars, then stamp the baseline. Generate is forced onto that
+  same member. Guard proven red (scan without pick-before-stamp) then green.
+- **Files:** chat_service_idle_autonomous.dart,
+  group_afk_needs_baseline_test.dart, docs/Rawhide.md
+- **Verification:** group_afk_needs_baseline_test proven red then green.
+
 ## 2026-09-02 — fix(time): AFK skip owns the clock before the post-reply eval
 - **Why:** AFK snaps the clock by the away pace, then generates a reply.
   The post-reply time eval added minutes on top because advanceTimePeriods
