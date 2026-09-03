@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-02 — fix(time): AFK skip owns the clock before the post-reply eval
+- **Why:** AFK snaps the clock by the away pace, then generates a reply.
+  The post-reply time eval added minutes on top because advanceTimePeriods
+  never set the skip-owns-clock flag OOC skip uses. Away hours plus
+  another 5–15 minutes stacked every idle turn.
+- **What:** advanceTimePeriods sets _oocSkipMovedClockThisTurn when it
+  actually moves. Guard proven red (11:30 became 11:35) then green.
+- **Files:** time_service.dart, afk_clock_ownership_test.dart,
+  docs/Rawhide.md
+- **Verification:** afk_clock_ownership_test proven red then green.
+
 ## 2026-09-02 — fix(chat): recap and Continue RAG honor tail-open
 - **Why:** Opening a long chat loads the last 24 rows. Recap suppression
   treated droppedMessages == 0 as "the whole chat is visible", so a

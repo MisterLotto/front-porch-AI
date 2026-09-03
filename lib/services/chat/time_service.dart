@@ -529,12 +529,18 @@ class TimeService {
   /// Advance the clock by [count] period-steps (skip LLM eval).
   /// Used during AFK auto-response mode to simulate hours passing.
   /// Respects the passageOfTimeEnabled toggle.
+  ///
+  /// Owns the turn the same way an OOC skip does: the post-reply time
+  /// eval must not add minutes on top of the AFK snap.
   void advanceTimePeriods(int count) {
     if (!_passageOfTimeEnabled) return;
     for (var i = 0; i < count; i++) {
       _clock = StoryClock.snapToNextPeriod(_clock);
     }
-    if (count > 0) _turnsSinceClockMoved = 0;
+    if (count > 0) {
+      _turnsSinceClockMoved = 0;
+      _oocSkipMovedClockThisTurn = true;
+    }
   }
 
   // ── OOC Time-Skip Detector ────────────────────────────────────────────────
