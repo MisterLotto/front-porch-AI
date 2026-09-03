@@ -29,6 +29,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 - ✕ **Taking an item back before they speak no longer makes them notice it anyway** — the surprise or "you just handed this to me" line is dropped with the item. Same on the phone.
 
+- 🪪 **Stoop card pictures on the phone stay with the person who signed in** — logging out (or a second browser on the same computer) no longer keeps loading the previous account's avatars.
+
 - 🎭 **Regen chips no longer vanish when the Director rewrites a tool-call eval** — a partial correction used to throw away bond, trust, and arousal. Same on the phone.
 
 - 🍽️ **Needs scene chips come back on tool-call models** — a needs eval that scores every need as 0 is treated as a failed read (not a quiet scene) and retried. Bathroom, a meal, a beat — they land again. Same on the phone.

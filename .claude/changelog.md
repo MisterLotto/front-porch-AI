@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-09-02 — fix(stoop): asset token is per web session, cleared on logout
+- **Why:** <img> tags cannot send X-Stoop-Token, so the relay remembered
+  the last authenticated Stoop token on StoopFacade as a single process-wide
+  field. Two browsers on the same host shared it, and logout never forgot
+  it — avatars kept loading as the previous account.
+- **What:** Remember/lookup/clear by fpa_session cookie. Cookie-less calls
+  never store. Stoop logout and web logout both clear. Guard proven red
+  (session B used tok-A; logout left 200) then green.
+- **Files:** stoop_facade.dart, stoop_routes.dart, auth_routes.dart,
+  stoop_asset_token_session_test.dart, stoop_routes_test.dart (existing
+  remember test now sends the session cookie — the old assertion was the
+  process-wide bug), docs/Rawhide.md
+- **Verification:** stoop_asset_token_session_test proven red then green.
+
 ## 2026-09-02 — fix(pockets): eraser drops pending just-noticed intros
 - **Why:** Adding an item queues a one-shot surprise or gift reaction.
   Erasing it before they speak left that intro queued, so the next reply
