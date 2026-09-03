@@ -170,6 +170,11 @@ bool _realismEvalCancelled = false;
 /// once settling has exited.
 bool _postGenAbortRequested = false;
 
+/// Bumped on regen / settling abort so a fire-and-forget Journal or Growth
+/// pass started against the rejected window cannot apply (or fall through
+/// to XML) after abortGeneration tore the tools call down.
+int _memoryPassEpoch = 0;
+
 /// True while [sendMessage] is holding a typed line behind post-gen evals.
 /// The composer already cleared; the bubble is not in the list yet.
 bool _sendWaitingOnSettle = false;

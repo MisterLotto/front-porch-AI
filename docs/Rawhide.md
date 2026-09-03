@@ -11,6 +11,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 - 🔑 **"Where are my keys?" stays in the diary** — the Journal pass can no longer retire item or promise cards the app wrote itself. Same on the phone.
 
+- ↻ **Regenerate no longer lets a leftover Journal or Growth pass rewrite the rejected turn** — hitting regen cancels that background pass instead of letting it fall through to a second apply. Same on the phone.
+
 - 🎭 **Regen chips no longer vanish when the Director rewrites a tool-call eval** — a partial correction used to throw away bond, trust, and arousal. Same on the phone.
 
 - 🍽️ **Needs scene chips come back on tool-call models** — a needs eval that scores every need as 0 is treated as a failed read (not a quiet scene) and retried. Bathroom, a meal, a beat — they land again. Same on the phone.

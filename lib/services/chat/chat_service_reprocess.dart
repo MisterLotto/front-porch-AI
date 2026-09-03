@@ -46,6 +46,7 @@ extension ChatServiceReprocess on ChatService {
   Future<void> regenerateMainCharacter() async {
     if (_messages.isEmpty || _sceneGuest.busy) return;
     if (!await _yieldSettlingTurn()) return;
+    _memoryPassEpoch++;
     // Backend gate BEFORE any guest-tail splice — same restore problem as
     // regenerateLastMessage (see _abortIfBackendDown).
     if (await _abortIfBackendDown()) return;
@@ -98,6 +99,7 @@ extension ChatServiceReprocess on ChatService {
   Future<void> regenerateLastMessage() async {
     if (_messages.isEmpty || _sceneGuest.busy) return;
     if (!await _yieldSettlingTurn()) return;
+    _memoryPassEpoch++;
     // Hold the settling flag across the WHOLE regen — the realism revert +
     // eval replay before generation and the swipe-merge after it both run
     // outside _generateResponse, and used to run with every guard open: a

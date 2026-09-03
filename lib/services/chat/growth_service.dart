@@ -79,6 +79,7 @@ class GrowthService {
   final Future<String?> Function(String prompt) fireLLMEval;
   final Object fireToolEval;
   final bool Function() getPreferTextEvals;
+  final int Function() getPassEpoch;
   final String Function(String) stripThinkBlocks;
   final String Function() getBackendIdentity;
 
@@ -117,6 +118,7 @@ class GrowthService {
     required this.fireLLMEval,
     required this.fireToolEval,
     this.getPreferTextEvals = preferTextEvalsOff,
+    this.getPassEpoch = passEpochNeverStale,
     required this.stripThinkBlocks,
     required this.getBackendIdentity,
     required this.getSessionId,
@@ -206,6 +208,7 @@ class GrowthService {
     // used to clear it BEFORE calling, so a pass blocked by a parked review
     // (or an already-running pass) silently ate the kick.
     eventKickPending = false;
+    final epoch = getPassEpoch();
     setIsPassRunning(true);
     onNotify();
 
@@ -278,8 +281,9 @@ class GrowthService {
           window: window,
           windowStart: start,
           legacyBlob: legacyText,
+          startedEpoch: epoch,
         );
-        if (ops == null) {
+        if (ops == null || getPassEpoch() != epoch) {
           debugPrint('[Growth] ✗ ${owner.name}: empty eval response');
           continue;
         }
@@ -367,6 +371,7 @@ class GrowthService {
     required List<ChatMessage> window,
     required int windowStart,
     required String legacyBlob,
+    required int startedEpoch,
   }) async {
     String prompt({required bool toolsMode}) => buildGrowthPrompt(
       ownerName: owner.name,
@@ -438,6 +443,7 @@ class GrowthService {
       }
     }
 
+    if (getPassEpoch() != startedEpoch) return null;
     final raw = await fireLLMEval(prompt(toolsMode: false));
     if (raw == null || raw.trim().isEmpty) return null;
     return parseGrowthOps(stripThinkBlocks(raw));

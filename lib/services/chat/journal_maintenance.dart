@@ -79,6 +79,10 @@ class JournalMaintenance {
   final Object fireToolEval;
   final bool Function() getPreferTextEvals;
 
+  /// Regen bumps this; a pass started against the rejected window must not
+  /// apply, and must not fall through to XML after tools abort.
+  final int Function() getPassEpoch;
+
   final String Function(String) stripThinkBlocks;
 
   final String? Function() getSessionId;
@@ -127,6 +131,7 @@ class JournalMaintenance {
     required this.fireLLMEval,
     required this.fireToolEval,
     this.getPreferTextEvals = preferTextEvalsOff,
+    this.getPassEpoch = passEpochNeverStale,
     required this.stripThinkBlocks,
     required this.getSessionId,
     required this.getActiveCharacter,
@@ -172,6 +177,7 @@ class JournalMaintenance {
     // used to clear it BEFORE calling, so a pass blocked by a parked review
     // (or an already-running pass) silently ate the kick.
     eventKickPending = false;
+    final epoch = getPassEpoch();
     // Set synchronously before the first await — the only re-entrancy guard
     // for this fire-and-forget per-turn hook.
     setIsPassRunning(true);
@@ -260,8 +266,9 @@ class JournalMaintenance {
           window: window,
           windowStart: start,
           includeRecap: recapOwed,
+          startedEpoch: epoch,
         );
-        if (exchange == null) {
+        if (exchange == null || getPassEpoch() != epoch) {
           debugPrint('[Journal] ✗ ${owner.name}: empty eval response');
           continue;
         }
@@ -354,6 +361,7 @@ class JournalMaintenance {
     required List<ChatMessage> window,
     required int windowStart,
     required bool includeRecap,
+    required int startedEpoch,
   }) async {
     String prompt({required bool toolsMode}) => buildJournalPrompt(
       ownerName: owner.name,
@@ -423,6 +431,7 @@ class JournalMaintenance {
       }
     }
 
+    if (getPassEpoch() != startedEpoch) return null;
     final raw = await fireLLMEval(prompt(toolsMode: false));
     if (raw == null || raw.trim().isEmpty) return null;
     final text = stripThinkBlocks(raw);

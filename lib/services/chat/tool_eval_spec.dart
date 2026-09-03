@@ -40,6 +40,10 @@ const double kProseToolRepeatPenalty = 1.15;
 /// Default for optional `getPreferTextEvals` callbacks — tear-off is const.
 bool preferTextEvalsOff() => false;
 
+/// Default for optional `getPassEpoch` — a constant 0 never goes stale, so
+/// unit tests that don't simulate regen keep the XML-fallback behaviour.
+int passEpochNeverStale() => 0;
+
 /// In-flight tool-eval request. Carries `toolChoice` as an argument so the
 /// three staggered judges cannot race a ChatService field, and so a shared
 /// `tools` list cannot silently name `tools.first`.

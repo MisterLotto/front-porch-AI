@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-09-02 — fix(journal): regen cancels in-flight Journal/Growth apply
+- **Why:** Journal/Growth passes are fire-and-forget after a reply. Regen
+  aborts the tools call; that abort was treated as "try XML instead," so
+  the old pass could still cool cards, apply edits, and write recap on
+  the rejected window.
+- **What:** Regen bumps `_memoryPassEpoch`. Both passes capture the epoch
+  at start and skip XML + apply when it changes. Generic transport
+  failure without a regen still XML-falls-back (existing tests). Guard
+  proven red (XML prompt list non-empty) then green.
+- **Files:** journal_maintenance.dart, growth_service.dart,
+  chat_service_reprocess.dart, chat_service_defaults.dart,
+  chat_service_wiring_memory.dart, tool_eval_spec.dart,
+  journal_pass_epoch_test.dart, docs/Rawhide.md
+- **Verification:** journal_pass_epoch_test + journal_test + growth_test.
+
 ## 2026-09-02 — fix(journal): pass cannot retire item or ledger cards
 - **Why:** Item-memory and ledger cards are written deterministically from
   pockets / promises. The periodic pass listed them as editable and would
