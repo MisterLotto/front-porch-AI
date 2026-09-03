@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-09-02 — fix(rag): group Data Bank/Sources key by library filename
+- **Why:** Group members are copies whose private avatar is named after the
+  member UUID. Retrieve added that UUID as a Data Bank source and looked
+  up memorySources via getCharacterById(member UUID), which is not a
+  library row. 1:1 Data Bank and Sources never matched in a group.
+- **What:** libraryRagIdentity prefers originStableId / originLibraryDbId
+  (unique-name fallback for legacy). Group retrieve uses those ids and
+  session-scopes them so 1:1 embeddings cannot bleed. Guard proven red
+  (member UUID miss / call site still walked _getCharacterIdFromCard)
+  then green.
+- **Files:** member_origin_resolver.dart, chat_service_generation_rag.dart,
+  group_rag_identity_test.dart, docs/Rawhide.md
+- **Verification:** group_rag_identity_test proven red then green.
+
 ## 2026-09-02 — fix(rag): embed windows use persist positions, not the tail 0..N
 - **Why:** A send during the 24-row tail-load numbered embed windows from
   the in-memory list (0, 1, 2…). Those ranges were treated as already
