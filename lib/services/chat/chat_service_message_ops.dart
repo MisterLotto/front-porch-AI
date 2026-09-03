@@ -67,14 +67,23 @@ extension ChatServiceMessageOps on ChatService {
     // post-turn record, or the shared pre-turn base when this variant's
     // pass changed nothing (hostile review 2026-08-11).
     if (isTip) _restorePocketsFromStamp(msg, after: true);
-    // Timeline integrity: the active variant at this position changed —
-    // cards journaled from the other swipe are now phantom. Item-memory
-    // cards that THIS swipe planted are re-sown after the purge so
-    // swipe-back restores the diary with the kit.
-    _invalidateJournalFrom(
-      persistMessagePosition(base: _history.basePosition, index: messageIndex),
-      thenReplantPlanted: isTip ? msg : null,
-    );
+    // Timeline integrity follows the same tip-only rule pockets/realism
+    // already use. A TIP swipe is a suffix rewrite: Journal/Growth/RAG
+    // citing this position and later describe events that no longer
+    // happened, then this variant's item cards are re-sown. A buried
+    // swipe is navigation — later memories stay on screen AND in the
+    // diary; only this variant's item cards are re-sown.
+    if (isTip) {
+      _invalidateJournalFrom(
+        persistMessagePosition(
+          base: _history.basePosition,
+          index: messageIndex,
+        ),
+        thenReplantPlanted: msg,
+      );
+    } else {
+      unawaited(_replantItemCards(msg, key: 'item_cards_planted'));
+    }
     await _saveChat();
     notifyListeners();
   }

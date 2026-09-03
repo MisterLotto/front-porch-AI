@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-09-02 — fix(swipe): buried swipe no longer deletes later Journal/Growth/RAG
+- **Why:** Swiping an older (not-last) reply is navigation: pockets and bond
+  stay put. Journal/Growth/RAG still treated it as a suffix rewrite and
+  hard-deleted receipt-backed memories of later messages that stayed on
+  screen. Item cards planted by that swipe were not replanted unless it
+  was the tip.
+- **What:** `_commitSwipeIndex` gates `_invalidateJournalFrom` on `isTip`
+  (same rule pockets/realism already use). Buried swipe only replants that
+  variant's item cards. Tip swipe still purges + replants.
+- **Files:** chat_service_message_ops.dart, swipe_buried_journal_test.dart,
+  docs/Rawhide.md
+- **Verification:** swipe_buried_journal_test proven red (later diary empty
+  without the gate) then green.
+
 ## 2026-09-02 — fix(identity): replace portrait no longer wipes Journal/Growth/quests/RAG
 - **Why:** Gallery "Replace portrait" wrote a new `Name_<timestamp>.png` and
   stored that filename as the character's portable ID. Objectives, RAG
