@@ -37,6 +37,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 - 🎯 **Objectives on the phone: NSFW tasks, how many to generate, and add a task by hand** — the same controls as the desktop sidebar, including Generate with a count.
 
+- 📥 **A failed Whisper or Photo Understanding download no longer blocks the next try** — a truncated file or an error page is thrown away instead of pretending to be the model.
+
 - 🎭 **Regen chips no longer vanish when the Director rewrites a tool-call eval** — a partial correction used to throw away bond, trust, and arousal. Same on the phone.
 
 - 🍽️ **Needs scene chips come back on tool-call models** — a needs eval that scores every need as 0 is treated as a failed read (not a quiet scene) and retried. Bathroom, a meal, a beat — they land again. Same on the phone.

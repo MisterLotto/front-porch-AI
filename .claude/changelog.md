@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-09-02 — fix(models): reject truncated/tiny downloads; delete the bad file
+- **Why:** ModelFetch skipped any dest with length > 0, so a 2 KB CDN
+  error page (or a truncated stream) became "the model" and poisoned
+  every retry. Whisper and Caption had the same skip. Verify-fail left
+  the junk on disk.
+- **What:** validateDownload (Content-Length vs received + size floor).
+  Undersized dest is deleted before fetch. Whisper ONNX floor 1 MB;
+  Caption floor 1/4 advertised size. Verify fail purges implausible
+  files. Guard proven red (skip-if-present returned success on a 20-byte
+  "onnx") then green.
+- **Files:** model_fetch.dart, sherpa_whisper_engine.dart, stt_service.dart,
+  local_caption_service.dart, model_fetch_validation_test.dart,
+  docs/Rawhide.md
+- **Verification:** model_fetch_validation_test proven red then green.
+
 ## 2026-09-02 — fix(web): Objectives NSFW switch, task count, and add-task
 - **Why:** Desktop Objectives sidebar has NSFW Tasks, a generate count
   (3–10), and a manual add-task row. The phone POSTed generate with
