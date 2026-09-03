@@ -234,7 +234,21 @@ extension ChatServiceTurnFlow on ChatService {
   /// accepted. The durable signal the web surface uses to show — and, after a
   /// phone wakes and reconnects, re-show — the reveal modal.
   bool get isAwaitingChanceTime =>
-      _chanceTimeCompleter != null && !_chanceTimeCompleter!.isCompleted;
+      _webChanceTimeEvent != null ||
+      (_chanceTimeCompleter != null && !_chanceTimeCompleter!.isCompleted);
+
+  /// Manual SPIN NOW. Parks a pre-picked event until accept. No-op when
+  /// chaos is off, an event is already queued, or a park is already live.
+  bool requestManualChanceTime() {
+    if (!_chaosModeService.chaosModeEnabled) return false;
+    if (_chaosModeService.hasPendingChaosEvent) return false;
+    if (_webChanceTimeEvent != null) return false;
+    final wheel = _chaosModeService.spinWheelEvents();
+    if (wheel.isEmpty) return false;
+    _webChanceTimeEvent = wheel.first;
+    notifyListeners();
+    return true;
+  }
 
   /// The speaker a Chance Time event is attributed to: the upcoming group
   /// speaker, else the 1:1 host. Shared by the desktop wheel overlay and the

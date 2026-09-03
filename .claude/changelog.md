@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-09-02 — fix: medium follow-ups (image step-up, SPIN NOW, Discussion, expression nag, reunification members)
+- **Why:** Five leftovers from the 1.3 medium wave: (1) POST /api/image/config
+  did not step-up local A1111/Comfy/Draw Things hosts; (2) web Chaos had no
+  SPIN NOW; (3) Discussion treated a failed comments fetch as an empty
+  thread; (4) expression ONNX download failed silently with no retry nag;
+  (5) reunification copied the groups row but not group_members.
+- **What:** imageConfigWriteNeedsStepUp + web StepUpFields for local hosts;
+  POST /api/chat/chance-time/spin + SPIN NOW; Discussion fail-closed on
+  === true and 403; triggerOnnxDownload awaits and nags; reunification
+  copies group_members. Guard proven red (A1111 URL skipped step-up) then
+  green.
+- **Files:** step_up.dart, backend_routes.dart, ImageGen.tsx, ChatTools.tsx,
+  chat_routes.dart, chat_facade.dart, chat_service_controls.dart,
+  chat_service_turn_flow.dart, StoopDiscussion.tsx, expression_classifier.dart,
+  onnx_emotion_classifier.dart, voice_media_tab.expressions.dart,
+  db_reunification_service.dart, db_reunification_insert.dart, tests,
+  docs/Rawhide.md
+- **Verification:** image_config_step_up_test + medium_followups_scan_test
+  proven red then green; npm lint/test; vite build.
+
 ## 2026-09-02 — fix(models): reject truncated/tiny downloads; delete the bad file
 - **Why:** ModelFetch skipped any dest with length > 0, so a 2 KB CDN
   error page (or a truncated stream) became "the model" and poisoned

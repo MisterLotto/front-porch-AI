@@ -628,6 +628,14 @@ export function ChatTools({
             <>
               <div className="stat-line"><span>Pressure</span><span className="muted">{t.chaos.pressure}%{t.chaos.hasPendingEvent ? ' · event ready' : ''}</span></div>
               <Toggle label="Allow NSFW events" value={t.chaos.nsfwEnabled} onChange={(v) => toggle('chaosNsfw', v)} />
+              <button
+                disabled={t.chaos.hasPendingEvent}
+                onClick={() => {
+                  void api.post('/api/chat/chance-time/spin').catch(() => {});
+                }}
+              >
+                {t.chaos.hasPendingEvent ? 'EVENT PENDING' : 'SPIN NOW'}
+              </button>
             </>
           )}
         </div>

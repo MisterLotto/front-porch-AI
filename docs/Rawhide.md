@@ -39,6 +39,16 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 - 📥 **A failed Whisper or Photo Understanding download no longer blocks the next try** — a truncated file or an error page is thrown away instead of pretending to be the model.
 
+- 🎰 **SPIN NOW on the phone** — Chaos mode has the same manual spin as the desktop sidebar. The Chance Time card still pops to accept.
+
+- 🔒 **Changing a local image-gen address on the phone asks for your password** — same as the remote API URL, so a stolen session cannot redirect A1111, Comfy, or Draw Things.
+
+- 💬 **Stoop Discussion stays off unless the card really opted in** — a missing flag or a failed comments load does not open the thread.
+
+- 😊 **A failed expression-model download says so and lets you tap again**
+
+- 👥 **Bringing a group over from the old stable library brings its members too**
+
 - 🎭 **Regen chips no longer vanish when the Director rewrites a tool-call eval** — a partial correction used to throw away bond, trust, and arousal. Same on the phone.
 
 - 🍽️ **Needs scene chips come back on tool-call models** — a needs eval that scores every need as 0 is treated as a failed read (not a quiet scene) and retried. Bathroom, a meal, a beat — they land again. Same on the phone.

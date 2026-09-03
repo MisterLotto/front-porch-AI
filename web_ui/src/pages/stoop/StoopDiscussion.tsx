@@ -28,8 +28,8 @@ function itemsOf(
 export function StoopDiscussion({ detail }: { detail: StoopCardDetail }) {
   const { user } = useStoop();
   const isOwner = !!user && user.id === detail.creator?.id;
-  const [enabled, setEnabled] = useState(!!detail.commentsEnabled);
-  const [locked, setLocked] = useState(!!detail.commentsLocked);
+  const [enabled, setEnabled] = useState(detail.commentsEnabled === true);
+  const [locked, setLocked] = useState(detail.commentsLocked === true);
   const live = enabled && !locked;
   const [comments, setComments] = useState<StoopComment[]>([]);
   const [loading, setLoading] = useState(live);
@@ -50,7 +50,11 @@ export function StoopDiscussion({ detail }: { detail: StoopCardDetail }) {
         if (!cancelled) setComments(itemsOf(r));
       })
       .catch((e) => {
-        if (!cancelled) setError(stoopErrorText(e));
+        if (!cancelled) {
+          // Fail-closed: a 403/error is "discussion is not on", not an empty thread.
+          setEnabled(false);
+          setError(stoopErrorText(e));
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
