@@ -31,6 +31,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 - 🪪 **Stoop card pictures on the phone stay with the person who signed in** — logging out (or a second browser on the same computer) no longer keeps loading the previous account's avatars.
 
+- ☀️ **Light mode: New Chat Cancel and Advanced Prompts are readable again** — those labels were white on cream paper. Same on the phone for New Chat.
+
 - 🎭 **Regen chips no longer vanish when the Director rewrites a tool-call eval** — a partial correction used to throw away bond, trust, and arousal. Same on the phone.
 
 - 🍽️ **Needs scene chips come back on tool-call models** — a needs eval that scores every need as 0 is treated as a failed read (not a quiet scene) and retried. Bathroom, a meal, a beat — they land again. Same on the phone.

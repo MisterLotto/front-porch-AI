@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-02 — fix(ui): New Chat Cancel and Advanced Prompts readable in light mode
+- **Why:** New Chat's Cancel was Colors.white54 and Create Character's
+  Advanced Prompts tile was white38/white54. Both vanish on warm paper.
+- **What:** Cancel/confirm use warmDialog helpers; Advanced Prompts uses
+  AppColors.textSecondary/iconSecondary. Guard proven red (white54 still
+  in those files) then green.
+- **Files:** chat_page.session_dialogs.dart,
+  create_character_page.steps_core.dart, light_mode_labels_test.dart,
+  docs/Rawhide.md
+- **Verification:** light_mode_labels_test proven red then green.
+
 ## 2026-09-02 — fix(stoop): asset token is per web session, cleared on logout
 - **Why:** <img> tags cannot send X-Stoop-Token, so the relay remembered
   the last authenticated Stoop token on StoopFacade as a single process-wide

@@ -258,23 +258,15 @@ extension _ChatPageSessionDialogs on _ChatPageState {
           'This will clear the current conversation and start fresh. This can\'t be undone. Are you sure?',
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Colors.white54),
-            ),
-          ),
-          ElevatedButton(
+          warmDialogCancel(context),
+          warmDialogConfirm(
+            context,
+            label: 'New Chat',
+            destructive: true,
             onPressed: () {
               chatService.startNewChat();
               Navigator.of(context).pop();
             },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-            child: const Text(
-              'New Chat',
-              style: TextStyle(color: Colors.white),
-            ),
           ),
         ],
       ),
