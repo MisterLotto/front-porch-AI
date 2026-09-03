@@ -137,6 +137,13 @@ class JournalPhysics {
   static bool isBirthdayCard(JournalMemoryData card) =>
       cardKind(card) == 'birthday';
 
+  /// Cards the periodic pass must not revise or retire (pin is still allowed).
+  /// Birthday is identity. Item and ledger cards are written deterministically
+  /// from pockets / milestones / promises — the model would never author
+  /// "keys on the table" and must not delete it on the next interval.
+  static bool isPassLockedCard(JournalMemoryData card) =>
+      isBirthdayCard(card) || isItemCard(card) || isLedgerCard(card);
+
   static String? birthdayOwnerOf(JournalMemoryData card) {
     final raw = card.metadata;
     if (raw == null || raw.isEmpty) return null;

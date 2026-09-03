@@ -464,7 +464,7 @@ class JournalMaintenance {
         case JournalOpAction.pin:
           final card = _cardForHandle(cards, op.handle);
           if (card == null) continue;
-          if (JournalPhysics.isBirthdayCard(card) &&
+          if (JournalPhysics.isPassLockedCard(card) &&
               op.action != JournalOpAction.pin) {
             continue;
           }

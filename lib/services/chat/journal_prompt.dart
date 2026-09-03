@@ -75,7 +75,7 @@ String buildJournalPrompt({
       b.writeln(
         '[${i + 1}] (${c.category}$feeling'
         '${c.pinned ? ', pinned' : ''}'
-        '${JournalPhysics.isBirthdayCard(c) ? ', locked calendar' : ''}) '
+        '${JournalPhysics.isPassLockedCard(c) ? ', locked' : ''}) '
         '${c.content}',
       );
     }
@@ -97,8 +97,8 @@ String buildJournalPrompt({
     '- Edit in place: add new entries, revise entries that changed, retire '
     'entries that became wrong or irrelevant. Never restate an existing '
     'entry as a new one — revise it instead. Do not retire or rewrite '
-    'locked calendar birthday entries — the date is identity, not a memory '
-    'of something that happened.',
+    'locked entries (calendar birthdays, item placements, promises and '
+    'milestones) — those are written by the app, not remembered as plot.',
   );
   b.writeln(
     '- Capture what mattered: add a memory for each promise made, thing '

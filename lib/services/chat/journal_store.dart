@@ -127,9 +127,7 @@ class JournalStore {
       // history would evaporate on long diaries.
       JournalMemoryData? coldest;
       for (final card in existing) {
-        if (card.pinned ||
-            JournalPhysics.isLedgerCard(card) ||
-            JournalPhysics.isBirthdayCard(card)) {
+        if (card.pinned || JournalPhysics.isPassLockedCard(card)) {
           continue;
         }
         if (coldest == null || card.heat < coldest.heat) coldest = card;

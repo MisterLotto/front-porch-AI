@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-09-02 — fix(journal): pass cannot retire item or ledger cards
+- **Why:** Item-memory and ledger cards are written deterministically from
+  pockets / promises. The periodic pass listed them as editable and would
+  apply LLM retire/revise. Only birthday was locked. After the next
+  interval, pockets still held the item while the diary no longer knew
+  where it was.
+- **What:** `JournalPhysics.isPassLockedCard` covers birthday + item +
+  ledger. Resolve, apply, prompt, and cap trim all skip those for
+  revise/retire (pin still allowed). Guard proven red (keys card gone)
+  then green.
+- **Files:** journal_physics.dart, journal_maintenance.dart,
+  journal_review.dart, journal_store.dart, journal_prompt.dart,
+  journal_pass_lock_test.dart, docs/Rawhide.md
+- **Verification:** journal_pass_lock_test proven red then green.
+
 ## 2026-09-02 — fix(swipe): buried swipe no longer deletes later Journal/Growth/RAG
 - **Why:** Swiping an older (not-last) reply is navigation: pockets and bond
   stay put. Journal/Growth/RAG still treated it as a suffix rewrite and

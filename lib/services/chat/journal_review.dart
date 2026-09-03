@@ -181,13 +181,13 @@ class JournalReview {
         case JournalOpAction.revise:
           final card = byId[op.cardId];
           if (card == null) continue;
-          if (JournalPhysics.isBirthdayCard(card)) continue;
+          if (JournalPhysics.isPassLockedCard(card)) continue;
           await store.reviseCard(card, content: op.text, feeling: op.feeling);
           break;
         case JournalOpAction.retire:
           if (op.cardId == null || !byId.containsKey(op.cardId)) continue;
           final retiring = byId[op.cardId];
-          if (retiring != null && JournalPhysics.isBirthdayCard(retiring)) {
+          if (retiring != null && JournalPhysics.isPassLockedCard(retiring)) {
             continue;
           }
           await store.retireCard(op.cardId!);

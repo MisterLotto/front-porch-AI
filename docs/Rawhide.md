@@ -9,6 +9,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 - ↺ **Swiping an older reply no longer erases later diary pages** — Journal, Growth, and RAG stay with the messages still on screen. The selected variant's "where are my keys?" card still comes back. Same on the phone.
 
+- 🔑 **"Where are my keys?" stays in the diary** — the Journal pass can no longer retire item or promise cards the app wrote itself. Same on the phone.
+
 - 🎭 **Regen chips no longer vanish when the Director rewrites a tool-call eval** — a partial correction used to throw away bond, trust, and arousal. Same on the phone.
 
 - 🍽️ **Needs scene chips come back on tool-call models** — a needs eval that scores every need as 0 is treated as a failed read (not a quiet scene) and retried. Bathroom, a meal, a beat — they land again. Same on the phone.
