@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-09-02 — fix(pockets): fork 1:1 to group copies live pockets
+- **Why:** Collapse copies the survivor's kit back onto `_pockets`. Fork
+  captured realism, flags, journal, rings, and quests, then setActiveGroup
+  cleared the 1:1 scalar and never planted it on the host member. She
+  walked into the group empty-handed.
+- **What:** Capture `_pockets` in hostState regardless of realism; carry
+  writes it through setPocketsFor onto the host member. Guard proven red
+  (carried null without the apply) then green.
+- **Files:** chat_service_group_membership.dart, chat_service_cast.dart,
+  fork_pockets_carry_test.dart, docs/Rawhide.md
+- **Verification:** fork_pockets_carry_test proven red then green.
+
 ## 2026-09-02 — fix(rag): group Data Bank/Sources key by library filename
 - **Why:** Group members are copies whose private avatar is named after the
   member UUID. Retrieve added that UUID as a Data Bank source and looked
