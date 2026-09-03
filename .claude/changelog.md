@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-02 — fix(growth): rejecting distill adds keeps the legacy blob
+- **Why:** Distill is supposed to keep injecting the legacy personality blob
+  until starter rings actually land. Review-first Apply with every add
+  unchecked still archived the blob. Injection then had neither blob nor
+  rings.
+- **What:** archiveLegacyBlob only runs when at least one distill add was
+  accepted (`adds > 0`). Guard proven red (blob null) then green.
+- **Files:** growth_review.dart, growth_distill_reject_test.dart,
+  docs/Rawhide.md
+- **Verification:** growth_distill_reject_test proven red then green.
+
 ## 2026-09-02 — fix(journal): regen cancels in-flight Journal/Growth apply
 - **Why:** Journal/Growth passes are fire-and-forget after a reply. Regen
   aborts the tools call; that abort was treated as "try XML instead," so
