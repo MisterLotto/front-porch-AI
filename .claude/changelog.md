@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-09-02 — fix(ui): Group Settings X/Close warn instead of discarding General
+- **Why:** Header X and footer Close did a bare Navigator.pop. General holds
+  name / scenario / opening / turn rules in controllers until apply, so
+  renaming a group and hitting X threw the rename away with no warning.
+  Done already commits; this was the remaining discard path.
+- **What:** Dirty X/Close warn (Keep editing / Discard / Save). Save applies
+  then closes. Discard closes without applying. Clean Close pops immediately.
+  Outside tap is no longer dismissible. Web Group settings saves on blur —
+  no close button. Guard proven red then green.
+- **Files:** group_settings_dialog.dart, general_tab.dart,
+  chat_page.session_dialogs.dart, group_settings_close_commits_test.dart,
+  docs/Rawhide.md
+- **Verification:** group_settings_close_commits_test proven red then green.
+
 ## 2026-09-02 — fix(ui): New Chat Cancel and Advanced Prompts readable in light mode
 - **Why:** New Chat's Cancel was Colors.white54 and Create Character's
   Advanced Prompts tile was white38/white54. Both vanish on warm paper.

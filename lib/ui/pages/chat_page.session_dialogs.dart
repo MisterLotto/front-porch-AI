@@ -27,6 +27,8 @@ extension _ChatPageSessionDialogs on _ChatPageState {
     final groupRepo = Provider.of<GroupChatRepository>(context, listen: false);
     showDialog(
       context: context,
+      // Outside tap used to discard General the same way X/Close did.
+      barrierDismissible: false,
       builder: (dialogContext) =>
           GroupSettingsDialog(chatService: chatService, groupRepo: groupRepo),
     );
