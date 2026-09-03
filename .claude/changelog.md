@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-09-02 — fix(rag): embed windows use persist positions, not the tail 0..N
+- **Why:** A send during the 24-row tail-load numbered embed windows from
+  the in-memory list (0, 1, 2…). Those ranges were treated as already
+  embedded, so the real start of a long chat was never stored, and old
+  lines got today's story-day.
+- **What:** Live embed waits for history backfill (Journal already does)
+  and passes `_history.basePosition` as positionOffset. Import backfill
+  does the same. Guard proven red (stored 0) then green (stored 976).
+- **Files:** memory_service.dart, chat_service_turn_flow.dart,
+  chat_service_chat_package.dart, memory_embed_position_offset_test.dart,
+  docs/Rawhide.md
+- **Verification:** memory_embed_position_offset_test proven red then green.
+
 ## 2026-09-02 — fix(growth): rejecting distill adds keeps the legacy blob
 - **Why:** Distill is supposed to keep injecting the legacy personality blob
   until starter rings actually land. Review-first Apply with every add

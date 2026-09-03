@@ -341,25 +341,32 @@ extension ChatServiceTurnFlow on ChatService {
       return;
     }
     if (_currentSessionId == null) return;
-    if (_messages.length < _storageService.memorySettings.ragWindowSize) return;
 
+    final sessionId = _currentSessionId!;
     final characterId = characterIdOverride ?? _getCharacterId();
-
-    // One formatter shared with import backfill (fpchat) so the corpus text
-    // is identical whether a window was first written live or after reimport.
-    final formatted = _formatMessagesForRagEmbedding(_messages);
-
-    debugPrint(
-      '[RAG:Chat] ▶ Triggering background embedding (session: $_currentSessionId, char: $characterId, ${formatted.length} msgs)',
-    );
-
-    // Fire and forget — don't await
-    _memoryService!.embedMessageWindow(
-      sessionId: _currentSessionId!,
-      characterId: characterId,
-      formattedMessages: formatted,
-      totalMessageCount: _messages.length,
-    );
+    // Fire and forget — wait for the tail backfill first so we never store
+    // a 24-row snapshot as positions 0..N (that permanently skips the real
+    // start of a long chat, and stamps today's story-day on old lines).
+    unawaited(() async {
+      await _awaitHistoryHydrated();
+      if (_currentSessionId != sessionId || _memoryService == null) return;
+      if (_messages.length < _storageService.memorySettings.ragWindowSize) {
+        return;
+      }
+      final formatted = _formatMessagesForRagEmbedding(_messages);
+      debugPrint(
+        '[RAG:Chat] ▶ Triggering background embedding (session: $sessionId, '
+        'char: $characterId, ${formatted.length} msgs, '
+        'base=${_history.basePosition})',
+      );
+      await _memoryService!.embedMessageWindow(
+        sessionId: sessionId,
+        characterId: characterId,
+        formattedMessages: formatted,
+        totalMessageCount: formatted.length,
+        positionOffset: _history.basePosition,
+      );
+    }());
   }
 
   /// Canonical RAG message lines for [MemoryService.embedMessageWindow].

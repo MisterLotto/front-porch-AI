@@ -15,6 +15,8 @@ These notes feed the in-app "Update Available" dialog for Rawhide / cutting-edge
 
 - 🌱 **Turning down every Growth distill suggestion no longer erases who they were** — the old personality stays until at least one new ring is actually accepted. Same on the phone.
 
+- 📚 **Opening a long chat no longer loses the beginning of their memory** — RAG now waits for history to finish loading before numbering those windows, so the first days stay stored and dated correctly. Same on the phone.
+
 - 🎭 **Regen chips no longer vanish when the Director rewrites a tool-call eval** — a partial correction used to throw away bond, trust, and arousal. Same on the phone.
 
 - 🍽️ **Needs scene chips come back on tool-call models** — a needs eval that scores every need as 0 is treated as a failed read (not a quiet scene) and retried. Bathroom, a meal, a beat — they land again. Same on the phone.
