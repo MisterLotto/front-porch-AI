@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-09-03 — fix(gallery): portrait replacement preserves card data
+- **Why:** Gallery Replace portrait overwrote the right file, then ran the full
+  character writer. Repository cards do not hydrate PNG-only credits, so that
+  second write rebuilt `chara` without creator fields and could flush stale
+  name, description, personality, or lore values into SQLite.
+- **What:** Carry the original raw `chara` payload onto the new pixels and
+  persist only the normalized image path while retaining the existing large
+  portrait size cap. A genuine basename change still re-keys Journal, Growth,
+  quests, Data Bank, and RAG rows transactionally.
+- **Files:** `lib/services/v2_card_service.dart`,
+  `lib/services/character_repository.crud.dart`,
+  `lib/database/database.queries.library.dart`,
+  `lib/services/portrait_promotion.dart`,
+  `lib/ui/dialogs/avatar_gallery/avatar_gallery_controller.dart`,
+  `test/ui/avatar_gallery_replace_portrait_test.dart`, `docs/Rawhide.md`.
+- **Verification:** New controller guard proven red on the stale name, then
+  green; existing portrait identity/re-key suite also green.
+- **Commits:** `98db6a55` (main guard), `11d71bae` (implementation),
+  `63e68c76` (shared encoder cleanup), `6645be5d` (basename-change guard),
+  `1d0f4f36` (size-cap preservation).
+
 ## 2026-09-02 — fix: medium follow-ups (image step-up, SPIN NOW, Discussion, expression nag, reunification members)
 - **Why:** Five leftovers from the 1.3 medium wave: (1) POST /api/image/config
   did not step-up local A1111/Comfy/Draw Things hosts; (2) web Chaos had no
