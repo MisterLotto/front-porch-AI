@@ -127,11 +127,122 @@ extension AppDatabaseLibraryQueries on AppDatabase {
   }
 
   /// Update ONLY the imagePath for a character (preserves all other data).
+  ///
+  /// Callers that change the *basename* (not just strip a full path down to
+  /// the same file) MUST also [rekeyStableCharacterId]. Gallery replace
+  /// overwrites in place so this path stays a basename-only strip.
   Future<void> updateCharacterImagePath(String id, String newPath) async {
     await (update(characters)..where((c) => c.id.equals(id))).write(
       CharactersCompanion(imagePath: Value(newPath)),
     );
     await bumpSyncVersion();
+  }
+
+  /// Rewrite every filename-keyed row from [fromId] to [toId].
+  ///
+  /// `objectives`, `message_embeddings`, `data_bank_entries`, Journal, and
+  /// Growth key `character_id` by the portrait basename (stableGroupId), not
+  /// the UUID. Gallery "Replace portrait" used to mint `Name_<epoch>.png` and
+  /// store that as the new identity — lookups missed, then Database Cleanup
+  /// deleted the old-filename rows. The gallery now overwrites in place; this
+  /// is the backstop for any remaining basename change (first in-app
+  /// portrait, setCharacterImagePath, external import).
+  Future<void> rekeyStableCharacterId(String fromId, String toId) async {
+    if (fromId == toId || fromId.isEmpty || toId.isEmpty) return;
+    await customUpdate(
+      'UPDATE objectives SET character_id = ? WHERE character_id = ?',
+      variables: [Variable(toId), Variable(fromId)],
+      updates: {objectives},
+    );
+    await customUpdate(
+      'UPDATE data_bank_entries SET character_id = ? WHERE character_id = ?',
+      variables: [Variable(toId), Variable(fromId)],
+      updates: {dataBankEntries},
+    );
+    await customUpdate(
+      'UPDATE message_embeddings SET character_id = ? WHERE character_id = ?',
+      variables: [Variable(toId), Variable(fromId)],
+      updates: {messageEmbeddings},
+    );
+    await customUpdate(
+      'UPDATE journal_memories SET character_id = ? WHERE character_id = ?',
+      variables: [Variable(toId), Variable(fromId)],
+      updates: {journalMemories},
+    );
+    await customUpdate(
+      'UPDATE growth_rings SET character_id = ? WHERE character_id = ?',
+      variables: [Variable(toId), Variable(fromId)],
+      updates: {growthRings},
+    );
+    await _rekeyJsonIdList('characters', 'memory_sources', fromId, toId);
+    await _rekeyJsonIdList('groups', 'character_ids', fromId, toId);
+    await _rekeyOriginStableId(fromId, toId);
+    await bumpSyncVersion();
+  }
+
+  Future<void> _rekeyJsonIdList(
+    String table,
+    String column,
+    String fromId,
+    String toId,
+  ) async {
+    final rows = await customSelect(
+      'SELECT id, $column FROM $table '
+      "WHERE $column IS NOT NULL AND $column != '[]'",
+    ).get();
+    for (final row in rows) {
+      final raw = row.data[column] as String?;
+      if (raw == null || raw.isEmpty) continue;
+      try {
+        final ids = List<String>.from(jsonDecode(raw));
+        var changed = false;
+        final next = <String>[];
+        for (final id in ids) {
+          if (id == fromId) {
+            next.add(toId);
+            changed = true;
+          } else {
+            next.add(id);
+          }
+        }
+        if (!changed) continue;
+        await customUpdate(
+          'UPDATE $table SET $column = ? WHERE id = ?',
+          variables: [
+            Variable(jsonEncode(next)),
+            Variable(row.data['id'] as String),
+          ],
+          updates: table == 'characters' ? {characters} : {groups},
+        );
+      } catch (e) {
+        debugPrint('[DB] Failed to re-key $column in $table: $e');
+      }
+    }
+  }
+
+  Future<void> _rekeyOriginStableId(String fromId, String toId) async {
+    final rows = await customSelect(
+      'SELECT id, member_state FROM group_members',
+    ).get();
+    for (final row in rows) {
+      final raw = row.data['member_state'] as String?;
+      if (raw == null || raw.isEmpty) continue;
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is! Map || decoded['originStableId'] != fromId) continue;
+        decoded['originStableId'] = toId;
+        await customUpdate(
+          'UPDATE group_members SET member_state = ? WHERE id = ?',
+          variables: [
+            Variable(jsonEncode(decoded)),
+            Variable(row.data['id'] as String),
+          ],
+          updates: {groupMembers},
+        );
+      } catch (e) {
+        debugPrint('[DB] Failed to re-key originStableId: $e');
+      }
+    }
   }
 
   /// Delete everything that hangs off a character's chats, before the

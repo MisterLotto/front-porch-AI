@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-09-02 — fix(identity): replace portrait no longer wipes Journal/Growth/quests/RAG
+- **Why:** Gallery "Replace portrait" wrote a new `Name_<timestamp>.png` and
+  stored that filename as the character's portable ID. Objectives, RAG
+  embeddings, Data Bank, Journal, and Growth all key off that filename.
+  Lookups missed immediately; Database Cleanup then deleted the old-filename
+  rows as orphans. The chat transcript survived (UUID). The memories did not.
+  The creator already overwrites portraits in place; gallery replace did not.
+- **What:** Gallery replace now uses `portraitWriteTarget` (overwrite in
+  place). `updateCharacter` re-keys every filename-keyed table when the
+  basename actually changes (first in-app portrait / setCharacterImagePath).
+  Guard proven red (orphans=1 without the call site) then green.
+- **Files:** avatar_gallery_dialog.dart, avatar_gallery_controller.dart,
+  character_repository.crud.dart, character_repository.dart,
+  database.queries.library.dart, portrait_replace_identity_test.dart,
+  docs/Rawhide.md
+- **Verification:** portrait_replace_identity_test (3 cases); call-site test
+  red without rekey then green with it.
+
 ## 2026-09-01 — fix(needs): all-zero tools JSON retries text
 - **Why:** Tools models fill the seven required needs `*_delta` ints with
   0. That counted as a successful call, so the text path never ran and
