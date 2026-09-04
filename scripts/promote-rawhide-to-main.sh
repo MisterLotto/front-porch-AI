@@ -26,7 +26,7 @@ REMOTE="${REMOTE:-origin}"
 
 # Stable-facing files that MUST keep main's version (never overwritten by Rawhide).
 # Override by exporting GUARD_PATHS="README.md docs/main.md docs/other.md".
-read -r -a GUARD_PATHS <<< "${GUARD_PATHS:-README.md docs/main.md}"
+read -r -a GUARD_PATHS <<< "${GUARD_PATHS:-README.md docs/main.md .claude/changelog.md}"
 
 # Colors only when writing to a terminal (keep logs/pipes clean).
 if [ -t 1 ]; then R=$'\033[31m'; G=$'\033[32m'; C=$'\033[36m'; Z=$'\033[0m'; else R=; G=; C=; Z=; fi
